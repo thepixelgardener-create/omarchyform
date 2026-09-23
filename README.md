@@ -1,6 +1,8 @@
 # Omarchyform
 
-An infinite canvas for Omarchy. Sticky notes on a board you can pan and zoom,
+A visual idea platform native to Omarchy.
+
+An infinite canvas. Sticky notes on a board you can pan and zoom,
 driven from the keyboard, stored as a plain JSON file on your own disk.
 
 Think Apple Freeform, except it is keyboard-first, it matches your Omarchy
@@ -16,7 +18,7 @@ closed.
 ## Install
 
 ```bash
-omarchy plugin add https://github.com/YOURNAME/omarchyform.git --enable
+omarchy plugin add https://github.com/thepixelgardener-create/omarchyform.git --enable
 ```
 
 Then bind a key in `~/.config/hypr/bindings.lua`:
@@ -75,7 +77,7 @@ elevated privileges, no background process.
 ## Development
 
 ```bash
-git clone https://github.com/YOURNAME/omarchyform.git
+git clone https://github.com/thepixelgardener-create/omarchyform.git
 cp -r omarchyform ~/.config/omarchy/plugins/omarchyform
 omarchy-shell shell rescanPlugins
 omarchy plugin enable omarchyform
