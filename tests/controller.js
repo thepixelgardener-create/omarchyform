@@ -6,31 +6,38 @@ const { loadStore, FakeModel } = require('./harness')
 const source = fs.readFileSync(require('path').join(__dirname, '../Omarchyform.qml'), 'utf8')
 function controller() {
   const items = new FakeModel(), links = new FakeModel()
-  const root = { boardLoaded: true, damaged: false, pendingBoard: null, currentBoard: 'a.json',
-    lastSavedCount: 0, lastSavedText: '', nextId: 1, nextColor: 0, windowMode: false,
-    undoStack: [], redoStack: [], selectedIndex: -1, editIndex: -1, saveError: '',
+  const root = { currentBoard: 'a.json', items, links, nextId: 1, nextColor: 0, windowMode: false,
+    undoStack: [], redoStack: [], selectedIndex: -1, editIndex: -1,
     camX: 0, camY: 0, zoom: 1, activeBoard: null }
-  Object.defineProperties(root, {
-    canEdit: { get: () => root.boardLoaded && !root.damaged && root.pendingBoard === null },
-    boardPath: { get: () => '/boards/' + root.currentBoard }
+  const session = { ctl: root, boardLoaded: true, damaged: false, pendingBoard: null,
+    lastSavedCount: 0, lastSavedText: '', saveError: '' }
+  Object.defineProperty(session, 'canEdit', {
+    get: () => session.boardLoaded && !session.damaged && session.pendingBoard === null
   })
+  for (const key of ['boardLoaded', 'damaged', 'pendingBoard', 'saveError', 'canEdit'])
+    Object.defineProperty(root, key, { get: () => session[key] })
+  Object.defineProperty(root, 'boardPath', { get: () => '/boards/' + root.currentBoard })
   const writes = []
   const persistence = { busy: false, save(path, text) { this.busy = true; writes.push({path,text}) } }
-  const context = vm.createContext({ root, Store: loadStore(), itemModel: items, linkModel: links,
+  const context = vm.createContext({ root, session, Store: loadStore(), itemModel: items, linkModel: links,
     persistence, saveTimer: { running: false, stop() {}, restart() {} }, stateFile: {setText() {}} })
-  for (const match of source.matchAll(/^  function (\w+)\((.*?)\) \{\n([\s\S]*?)^  }/gm))
-    root[match[1]] = vm.runInContext(`(function(${match[2]}) {${match[3]}})`, context)
-  for (const match of source.matchAll(/^  function (\w+)\((.*?)\) \{ (.*?) }$/gm))
-    root[match[1]] = vm.runInContext(`(function(${match[2]}) {${match[3]}})`, context)
-  return { root, items, links, writes, persistence, complete() {
+  function loadFunctions(target, qml) {
+    for (const match of qml.matchAll(/^  function (\w+)\((.*?)\) \{\n([\s\S]*?)^  }/gm))
+      target[match[1]] = vm.runInContext(`(function(${match[2]}) {${match[3]}})`, context)
+    for (const match of qml.matchAll(/^  function (\w+)\((.*?)\) \{ (.*?) }$/gm))
+      target[match[1]] = vm.runInContext(`(function(${match[2]}) {${match[3]}})`, context)
+  }
+  loadFunctions(root, source)
+  loadFunctions(session, fs.readFileSync(require('path').join(__dirname, '../BoardSession.qml'), 'utf8'))
+  return { root, session, items, links, writes, persistence, complete() {
     const write = writes[writes.length - 1]
     persistence.busy = false
-    root.savedBoard(write.path, write.text)
+    session.savedBoard(write.path, write.text)
   } }
 }
 {
   const c = controller()
-  c.root.loadBoard('{broken', false)
+  c.session.loadBoard('{broken', false)
   c.root.addItem('note', 0, 0)
   c.root.addLink(1, 2)
   c.root.save(true)
@@ -61,21 +68,21 @@ function controller() {
   c.root.addItem('note', 0, 0)
   c.root.openBoard('b.json')
   c.persistence.busy = false
-  c.root.failedSave('disk full')
+  c.session.failedSave('disk full')
   assert.equal(c.root.currentBoard, 'a.json')
   assert.equal(c.root.pendingBoard, null)
-  assert.equal(c.root.lastSavedCount, 0)
+  assert.equal(c.session.lastSavedCount, 0)
   assert.match(c.root.saveError, /disk full/)
   c.root.save()
   c.complete()
-  assert.equal(c.root.lastSavedCount, 1)
+  assert.equal(c.session.lastSavedCount, 1)
   assert.equal(c.root.saveError, '')
 }
 {
   const c = controller()
-  c.root.loadBoard('{"items":[null]}', false)
+  c.session.loadBoard('{"items":[null]}', false)
   assert.equal(c.root.damaged, true)
-  c.root.loadBoard('', true)
+  c.session.loadBoard('', true)
   assert.equal(c.root.canEdit, true)
   assert.equal(c.root.nextId, 1)
 }

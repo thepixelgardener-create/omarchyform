@@ -162,11 +162,12 @@ luminance.
 
 | File | Holds |
 |------|-------|
-| `Omarchyform.qml` | Controller: state, storage, and the two surfaces |
+| `Omarchyform.qml` | Controller: editing, navigation, and the two surfaces |
 | `Board.qml` | The canvas surface — grid, connectors, keys, cheat sheet |
 | `Node.qml` | One item: note, box, ellipse or diamond |
 | `Browser.qml` | The board browser |
 | `BoardStore.js` | Pure logic: parsing, marshalling, geometry. No QML |
+| `BoardSession.qml` | Loading, autosave state, and board-switch coordination |
 | `BoardPersistence.qml` | Serialized backup and atomic write, with completion/failure signals |
 
 ## Tests
@@ -186,10 +187,11 @@ it is a diagnostic, not a CI failure threshold.
 
 Controller tests evaluate the actual QML JavaScript functions with delayed I/O
 completion to cover damaged files, queued edits, board switching, and retry.
-The separate `test:qml` suite runs the real persistence component in an isolated
-headless Quickshell instance with temporary files. It checks backup contents,
-write ordering, failure handling, and retry; it does not interact with the
-running desktop shell. CI runs the Node tests; run `test:qml` on a machine with
+The separate `test:qml` suite runs the real persistence and session components
+in isolated headless Quickshell instances with temporary files. It checks backup
+contents, write ordering, failure handling, retry, queued edits, and switching
+between fresh, saved, and damaged boards. It does not interact with the running
+desktop shell. CI runs the Node tests; run `test:qml` on a machine with
 Quickshell before release.
 
 ## Notes on the platform

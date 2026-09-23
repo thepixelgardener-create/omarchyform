@@ -105,19 +105,13 @@ Item {
   property bool helpVisible: false
   property bool windowMode: false
 
-  // save() is a no-op until the file has been read, and refuses to shrink a
-  // non-empty board to nothing unless a delete asked for it.
-  property bool boardLoaded: false
-  // Set when the board file exists but could not be parsed. Saving stays off
-  // for as long as it is true, so the file on disk is left alone.
-  property bool damaged: false
-  property string saveError: ""
-  property string lastSavedText: ""
-  property var pendingBoard: null
-  property bool createWhenLoaded: false
-  readonly property bool canEdit: boardLoaded && !damaged && pendingBoard === null
+  // Views consume session state; loading and save coordination live together.
+  readonly property bool boardLoaded: session.boardLoaded
+  readonly property bool damaged: session.damaged
+  readonly property string saveError: session.saveError
+  readonly property var pendingBoard: session.pendingBoard
+  readonly property bool canEdit: session.canEdit
   property bool stateReady: false
-  property int lastSavedCount: -1
 
   property var undoStack: []
   property var redoStack: []
@@ -521,7 +515,7 @@ Item {
       mkdirProc.running = true
     } else if (action === "rename") {
       root.flushSave()
-      if (persistence.busy || root.saveError !== "") {
+      if (session.busy || root.saveError !== "") {
         root.browserMessage = "finish saving before renaming; try again"
         return
       }
@@ -635,41 +629,12 @@ Item {
   }
 
   // ------------------------------------------------------------------ storage
-  // Autosave: structural edits write straight away, typing settles first so a
-  // long sentence is one write rather than forty.
-  function scheduleSave() {
-    if (!root.boardLoaded) return
-    saveTimer.restart()
-  }
+  BoardSession { id: session; ctl: root }
 
-  function flushSave() {
-    if (saveTimer.running) saveTimer.stop()
-    root.save()
-  }
-
-  // Switching boards: flush the old one, then point the view at the new file.
-  // boardLoaded drops so the reload is allowed through the guard.
-  function openBoard(path, fresh) {
-    if (path === root.currentBoard && !fresh) return
-    root.flushSave()
-    if (persistence.busy || root.saveError !== "") {
-      root.pendingBoard = { path: path, fresh: fresh === true }
-      if (root.saveError !== "") root.pendingBoard = null
-      return
-    }
-    root.createWhenLoaded = fresh === true
-    root.boardLoaded = false
-    root.damaged = false
-    root.lastSavedCount = -1
-    root.undoStack = []
-    root.redoStack = []
-    root.selectedIndex = -1
-    root.editIndex = -1
-    root.linkingFrom = -1
-    root.currentBoard = path
-    root.resetView()
-    root.writeState()
-  }
+  function scheduleSave() { session.scheduleSave() }
+  function flushSave() { session.flushSave() }
+  function save(allowEmpty) { session.save(allowEmpty) }
+  function openBoard(path, fresh) { session.openBoard(path, fresh) }
 
   function writeState() {
     stateFile.setText(JSON.stringify({
@@ -677,47 +642,6 @@ Item {
       lastBoard: root.currentBoard,
       windowMode: root.windowMode
     }, null, 2) + "\n")
-  }
-
-  function save(allowEmpty) {
-    if (!root.boardLoaded) return
-    if (itemModel.count === 0 && root.lastSavedCount > 0 && allowEmpty !== true) return
-    if (persistence.busy) return
-    var text = Store.writeFile(itemModel, linkModel, root.nextId, root.windowMode)
-    root.saveError = ""
-    if (text === root.lastSavedText) return
-    persistence.save(root.boardPath, text)
-  }
-
-  function savedBoard(path, text) {
-    root.lastSavedText = text
-    root.lastSavedCount = JSON.parse(text).items.length
-    // Edits made during the write are coalesced into the next save.
-    root.save(true)
-    if (!persistence.busy && root.pendingBoard !== null) {
-      var next = root.pendingBoard
-      root.pendingBoard = null
-      root.openBoard(next.path, next.fresh)
-    }
-  }
-
-  function failedSave(message) {
-    root.saveError = message + " — ctrl+s to retry"
-    if (root.browserVisible) root.browserMessage = message + " — esc, then ctrl+s to retry"
-    root.pendingBoard = null
-  }
-
-  BoardPersistence {
-    id: persistence
-    onCompleted: function(path, text) { root.savedBoard(path, text) }
-    onFailed: function(message) { root.failedSave(message) }
-  }
-
-  Timer {
-    id: saveTimer
-    interval: 700
-    repeat: false
-    onTriggered: root.save()
   }
 
   // Which board was open last time, and whether it was windowed. Kept out of
@@ -729,42 +653,6 @@ Item {
     if (st && st.lastBoard) root.currentBoard = String(st.lastBoard)
     if (st) root.windowMode = st.windowMode === true
     root.stateReady = true
-  }
-
-  // `missing` distinguishes a board that is not there yet, which is a normal
-  // empty board, from one that is there but could not be parsed. The second
-  // must never be written over: the file on disk may still be recoverable by
-  // hand, and an autosave would destroy it.
-  function loadBoard(raw, missing) {
-    var data = Store.readFile(raw)
-    itemModel.clear()
-    linkModel.clear()
-    root.damaged = !data && !missing
-    root.saveError = ""
-    root.nextId = 1
-    root.nextColor = 0
-    if (data) {
-      Store.fillItems(itemModel, data.items)
-      Store.fillLinks(linkModel, itemModel, data.links)
-      root.nextId = Store.nextFreeId(itemModel, data.nextId)
-      root.nextColor = itemModel.count
-    }
-    root.selectedIndex = -1
-    root.undoStack = []
-    root.redoStack = []
-    root.lastSavedCount = itemModel.count
-    // A damaged board is displayed empty but stays read-only.
-    root.lastSavedText = data ? Store.writeFile(itemModel, linkModel, root.nextId, root.windowMode) : ""
-    root.boardLoaded = !root.damaged
-    if (root.createWhenLoaded && root.boardLoaded) root.save(true)
-    root.createWhenLoaded = false
-    // Remember which board this was, so the next session opens it again.
-    root.writeState()
-    root.repaintLinks()
-    // Filling the model tears down every delegate and takes the keyboard with
-    // it. The load lands after the browser has closed, so without this a board
-    // switch leaves nothing listening.
-    if (!root.browserVisible) root.focusKeys()
   }
 
   // ----------------------------------------------------------------- lifecycle
@@ -903,25 +791,6 @@ Item {
   // editing the file a watcher is holding. The shell updates its own colours
   // on every theme change, so follow that instead.
   onCanvasBackgroundChanged: themeFile.reload()
-
-  FileView {
-    id: boardFile
-    // Empty until the state file has said which board to open: loading too
-    // early would mark an empty board as loaded, and the next save would write
-    // that emptiness over a real file.
-    path: root.stateReady ? root.boardPath : ""
-    watchChanges: false
-    atomicWrites: true
-    printErrors: false
-    // Loading and writing use separate FileViews. Ignore duplicate load
-    // notifications once this board has been initialized.
-    onLoaded: { if (root.boardLoaded) return; root.loadBoard(text(), false) }
-    // Nothing to read is a new board; unreadable content is not.
-    onLoadFailed: function(error) {
-      if (root.boardLoaded) return
-      root.loadBoard("", error === FileViewError.FileNotFound)
-    }
-  }
 
   // ----------------------------------------------------------------- surfaces
   // Built through Variants so the surface is constructed with its screen
