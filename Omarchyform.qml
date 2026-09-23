@@ -277,7 +277,7 @@ Item {
     root.selectedIndex = -1
     root.editIndex = -1
     if (root.shell && typeof root.shell.hide === "function")
-      root.shell.hide((root.manifest && root.manifest.id) || "omarchyform")
+      root.shell.hide((root.manifest && root.manifest.id) || "thepixelgardener.omarchyform")
   }
 
   function toggle() {

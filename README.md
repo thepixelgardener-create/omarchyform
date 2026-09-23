@@ -33,7 +33,7 @@ omarchy plugin add https://github.com/thepixelgardener-create/omarchyform.git --
 Then bind a key in `~/.config/hypr/bindings.lua`:
 
 ```lua
-o.bind("SUPER + SHIFT + I", "Omarchyform", "omarchy-shell shell toggle omarchyform")
+o.bind("SUPER + SHIFT + I", "Omarchyform", "omarchy-shell shell toggle thepixelgardener.omarchyform")
 ```
 
 Check the key is free first with `omarchy menu keybindings --print`, and
@@ -88,9 +88,9 @@ elevated privileges, no background process.
 
 ```bash
 git clone https://github.com/thepixelgardener-create/omarchyform.git
-cp -r omarchyform ~/.config/omarchy/plugins/omarchyform
+cp -r omarchyform ~/.config/omarchy/plugins/thepixelgardener.omarchyform
 omarchy-shell shell rescanPlugins
-omarchy plugin enable omarchyform
+omarchy plugin enable thepixelgardener.omarchyform
 ```
 
 Validate before publishing:
