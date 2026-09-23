@@ -2,8 +2,8 @@
 
 A visual idea platform native to Omarchy.
 
-An infinite canvas. Sticky notes on a board you can pan and zoom,
-driven from the keyboard, stored as a plain JSON file on your own disk.
+An infinite canvas. Notes, shapes and connectors on a board you can pan and
+zoom, driven from the keyboard, stored as a plain JSON file on your own disk.
 
 Think Apple Freeform, except it is keyboard-first, it matches your Omarchy
 theme, and nothing leaves the machine.
@@ -46,12 +46,17 @@ Press `?` or `F1` on the board for this list.
 | Key | Does |
 |-----|------|
 | `n` | New note beside the selected one, ready to type |
+| `r` / `e` | New box / ellipse |
+| `s` | Cycle the shape: note, box, ellipse, diamond |
+| `x` | Connect: press on one item, then on another |
+| `X` | Remove every connector on this item |
+| `u` / `ctrl+r` | Undo / redo |
 | `enter` / `i` | Type in the selected note |
 | `esc` | Stop typing; again to close the board |
 | `h` `j` `k` `l` | Move the selection to the nearest note that way |
 | `H` `J` `K` `L` | Push the selected note around |
 | `tab` | Cycle through every note |
-| `d` / `del` | Delete the selected note |
+| `d` / `del` | Delete the selected item |
 | `c` | Cycle its colour |
 | `w` | Switch between fullscreen and windowed |
 | `f` | Fit the whole board on screen |
@@ -67,17 +72,26 @@ it, drag the bottom-right corner to resize, middle-click to delete.
 
 `~/.local/share/omarchyform/board.json`
 
-Plain JSON, one entry per note, written atomically on every change. Back it
-up, sync it, edit it by hand, put it in git — it is your file.
+Plain JSON, written atomically on every change, with one generation kept
+beside it as `board.json.bak`. Back it up, sync it, edit it by hand, put it in
+git — it is your file. A v1 board from before shapes is migrated on load.
 
 ```json
 {
-  "version": 1,
-  "notes": [
-    { "x": 0, "y": 0, "w": 180, "h": 140, "color": "#F7D794", "text": "hello" }
-  ]
+  "version": 2,
+  "nextId": 3,
+  "items": [
+    { "id": 1, "kind": "note", "x": 0, "y": 0, "w": 180, "h": 140,
+      "color": "#F7D794", "text": "hello" },
+    { "id": 2, "kind": "ellipse", "x": 300, "y": 0, "w": 160, "h": 110,
+      "color": "#A8D8B9", "text": "there" }
+  ],
+  "links": [ { "from": 1, "to": 2 } ]
 }
 ```
+
+Connectors reference item ids rather than positions, so they survive
+deletions, reordering and hand-editing.
 
 ## Dependencies
 
@@ -109,8 +123,8 @@ that is already loaded. Use `omarchy restart shell` to pick up changes.
 
 ## Not there yet
 
-Freehand drawing, images, shapes, connectors between notes, multiple boards,
-undo. Notes and the canvas are the foundation those sit on.
+Freehand drawing, images, multiple boards, and selecting more than one item
+at a time.
 
 ## License
 
