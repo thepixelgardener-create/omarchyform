@@ -10,10 +10,19 @@ theme, and nothing leaves the machine.
 
 ## What it is
 
-A native Quickshell `overlay` plugin. It runs inside the long-running
-`omarchy-shell` process on a Hyprland layer-shell surface — no webview, no
-Electron, no second Quickshell instance, nothing running when the board is
-closed.
+A native Quickshell plugin. It runs inside the long-running `omarchy-shell`
+process — no webview, no Electron, no second Quickshell instance, nothing
+running when the board is closed.
+
+It has two surfaces, and `w` switches between them:
+
+- **Fullscreen** — a Hyprland layer-shell overlay above everything, with its
+  own keyboard grab. Summon it, think, dismiss it.
+- **Windowed** — an ordinary toplevel, so Hyprland tiles it beside your editor
+  and browser like any other app.
+
+The camera, the notes and the selection are shared, so toggling never loses
+your place. The mode is remembered between sessions.
 
 ## Install
 
@@ -44,6 +53,7 @@ Press `?` or `F1` on the board for this list.
 | `tab` | Cycle through every note |
 | `d` / `del` | Delete the selected note |
 | `c` | Cycle its colour |
+| `w` | Switch between fullscreen and windowed |
 | `f` | Fit the whole board on screen |
 | `0` | Reset the view |
 | `+` / `-` | Zoom |

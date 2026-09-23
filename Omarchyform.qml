@@ -43,6 +43,24 @@ Item {
   property int editIndex: -1
   property bool helpVisible: false
 
+  // false: fullscreen layer-shell overlay. true: an ordinary Hyprland window
+  // that tiles and floats like any other app.
+  property bool windowMode: false
+
+  // Whichever board is currently instantiated, overlay or window. The camera
+  // and key handling are shared state; only the surface hosting them changes.
+  property var activeBoard: null
+  readonly property real viewW: root.activeBoard ? root.activeBoard.width : 1920
+  readonly property real viewH: root.activeBoard ? root.activeBoard.height : 1080
+
+  function repaintGrid() { if (root.activeBoard) root.activeBoard.repaintGrid() }
+  function focusKeys() { if (root.activeBoard) root.activeBoard.focusKeys() }
+
+  function toggleWindowMode() {
+    root.windowMode = !root.windowMode
+    root.save()
+  }
+
   readonly property int minNoteSize: 80
   readonly property int nudgeStep: 40
 
@@ -125,10 +143,10 @@ Item {
     var sh = n.nh * root.zoom
     var m = 60
     if (sx < m) root.camX += m - sx
-    else if (sx + sw > panel.width - m) root.camX -= (sx + sw) - (panel.width - m)
+    else if (sx + sw > root.viewW - m) root.camX -= (sx + sw) - (root.viewW - m)
     if (sy < m) root.camY += m - sy
-    else if (sy + sh > panel.height - m) root.camY -= (sy + sh) - (panel.height - m)
-    grid.requestPaint()
+    else if (sy + sh > root.viewH - m) root.camY -= (sy + sh) - (root.viewH - m)
+    root.repaintGrid()
   }
 
   function nudgeSelected(dx, dy) {
@@ -143,7 +161,7 @@ Item {
   function pan(dx, dy) {
     root.camX -= dx * 120
     root.camY -= dy * 120
-    grid.requestPaint()
+    root.repaintGrid()
   }
 
   function editSelected() {
@@ -153,7 +171,7 @@ Item {
 
   function stopEditing() {
     root.editIndex = -1
-    keyCatcher.forceActiveFocus()
+    root.focusKeys()
     root.save()
   }
 
@@ -161,7 +179,7 @@ Item {
   // just n, n, n without touching the mouse.
   function addNoteRelative() {
     if (root.selectedIndex < 0) {
-      root.addNote(root.toWorldX(panel.width / 2), root.toWorldY(panel.height / 2))
+      root.addNote(root.toWorldX(root.viewW / 2), root.toWorldY(root.viewH / 2))
     } else {
       var n = notes.get(root.selectedIndex)
       root.addNote(n.nx + n.nw + 30 + 90, n.ny + 70)
@@ -179,14 +197,14 @@ Item {
     root.zoom = next
     root.camX = sx - wx * root.zoom
     root.camY = sy - wy * root.zoom
-    grid.requestPaint()
+    root.repaintGrid()
   }
 
   function resetView() {
     root.camX = 0
     root.camY = 0
     root.zoom = 1
-    grid.requestPaint()
+    root.repaintGrid()
   }
 
   // Centre the camera on everything that exists, so a board is never lost
@@ -204,10 +222,10 @@ Item {
     var pad = 80
     var w = (maxX - minX) + pad * 2
     var h = (maxY - minY) + pad * 2
-    root.zoom = Math.max(root.minZoom, Math.min(1, Math.min(panel.width / w, panel.height / h)))
-    root.camX = panel.width / 2 - ((minX + maxX) / 2) * root.zoom
-    root.camY = panel.height / 2 - ((minY + maxY) / 2) * root.zoom
-    grid.requestPaint()
+    root.zoom = Math.max(root.minZoom, Math.min(1, Math.min(root.viewW / w, root.viewH / h)))
+    root.camX = root.viewW / 2 - ((minX + maxX) / 2) * root.zoom
+    root.camY = root.viewH / 2 - ((minY + maxY) / 2) * root.zoom
+    root.repaintGrid()
   }
 
   function save() {
@@ -216,14 +234,16 @@ Item {
       var n = notes.get(i)
       out.push({ x: n.nx, y: n.ny, w: n.nw, h: n.nh, color: n.ncolor, text: n.ntext })
     }
-    boardFile.setText(JSON.stringify({ version: 1, notes: out }, null, 2) + "\n")
+    boardFile.setText(JSON.stringify({ version: 1, windowMode: root.windowMode, notes: out }, null, 2) + "\n")
   }
 
   function loadBoard(raw) {
     notes.clear()
     var parsed
     try { parsed = JSON.parse(raw) } catch (e) { return }
-    if (!parsed || !parsed.notes) return
+    if (!parsed) return
+    root.windowMode = parsed.windowMode === true
+    if (!parsed.notes) return
     for (var i = 0; i < parsed.notes.length; i++) {
       var n = parsed.notes[i]
       notes.append({
@@ -242,8 +262,8 @@ Item {
   function open(payloadJson) {
     root.opened = true
     Qt.callLater(function () {
-      keyCatcher.forceActiveFocus()
-      grid.requestPaint()
+      root.focusKeys()
+      root.repaintGrid()
     })
   }
 
@@ -281,10 +301,386 @@ Item {
     onLoaded: root.loadBoard(text())
     onLoadFailed: root.loadBoard("{}")
   }
+  Component {
+    id: boardContent
 
+    FocusScope {
+      id: board
+      anchors.fill: parent
+      focus: true
+
+      function repaintGrid() { grid.requestPaint() }
+      function focusKeys() { keyCatcher.forceActiveFocus() }
+
+      // A real window hands focus to its content item, not to whatever is
+      // nested inside a Loader, so claim it explicitly on both surfaces.
+      Component.onCompleted: {
+        root.activeBoard = board
+        Qt.callLater(board.focusKeys)
+      }
+      Component.onDestruction: if (root.activeBoard === board) root.activeBoard = null
+
+      Rectangle {
+        anchors.fill: parent
+        color: root.canvasBackground
+      }
+
+      // The dot grid. Drawn in screen space and repainted as the camera moves,
+      // so the dots stay crisp instead of scaling into mush.
+      Canvas {
+        id: grid
+        anchors.fill: parent
+        onPaint: {
+          var ctx = getContext("2d")
+          ctx.reset()
+          var step = 40 * root.zoom
+          if (step < 8) return
+          var ox = root.camX % step
+          var oy = root.camY % step
+          ctx.fillStyle = root.dotColor
+          var r = Math.max(1, 1.2 * root.zoom)
+          for (var x = ox; x < width; x += step) {
+            for (var y = oy; y < height; y += step) {
+              ctx.beginPath()
+              ctx.arc(x, y, r, 0, Math.PI * 2)
+              ctx.fill()
+            }
+          }
+        }
+        onWidthChanged: requestPaint()
+        onHeightChanged: requestPaint()
+      }
+
+      // Background interaction: drag to pan, wheel to zoom, double-click for a note.
+      MouseArea {
+        id: canvasArea
+        anchors.fill: parent
+        acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+        property real lastX: 0
+        property real lastY: 0
+        property bool panning: false
+
+        onPressed: function (mouse) {
+          lastX = mouse.x
+          lastY = mouse.y
+          panning = true
+          root.selectedIndex = -1
+          root.editIndex = -1
+          keyCatcher.forceActiveFocus()
+        }
+        onReleased: panning = false
+        onPositionChanged: function (mouse) {
+          if (!panning) return
+          root.camX += mouse.x - lastX
+          root.camY += mouse.y - lastY
+          lastX = mouse.x
+          lastY = mouse.y
+          grid.requestPaint()
+        }
+        onDoubleClicked: function (mouse) {
+          root.addNote(root.toWorldX(mouse.x), root.toWorldY(mouse.y))
+        }
+        onWheel: function (wheel) {
+          root.zoomAt(wheel.x, wheel.y, wheel.angleDelta.y > 0 ? 1.12 : 1 / 1.12)
+        }
+      }
+
+      // The world. Everything inside is positioned in canvas coordinates.
+      Item {
+        id: world
+        anchors.fill: parent
+        transform: [
+          Scale { xScale: root.zoom; yScale: root.zoom },
+          Translate { x: root.camX; y: root.camY }
+        ]
+
+        Repeater {
+          model: notes
+
+          Rectangle {
+            id: note
+
+            required property int index
+            required property real nx
+            required property real ny
+            required property real nw
+            required property real nh
+            required property color ncolor
+            required property string ntext
+
+            readonly property bool selected: root.selectedIndex === note.index
+
+            x: note.nx
+            y: note.ny
+            width: note.nw
+            height: note.nh
+            color: note.ncolor
+            radius: 6
+            antialiasing: true
+            border.width: note.selected ? 2 : 0
+            border.color: root.noteInk
+
+            // Header strip: a visual grab handle. The whole note is draggable,
+            // but the strip tells you so at a glance.
+            Rectangle {
+              id: header
+              anchors { top: parent.top; left: parent.left; right: parent.right }
+              height: 24
+              radius: parent.radius
+              color: Qt.darker(note.ncolor, 1.12)
+            }
+
+            TextEdit {
+              id: body
+              anchors.fill: parent
+              anchors.margins: 10
+              anchors.topMargin: header.height + 8
+              text: note.ntext
+              color: root.noteInk
+              font.family: root.fontFamily
+              font.pixelSize: 14
+              wrapMode: TextEdit.Wrap
+              selectByMouse: true
+              // Guarded so the model write cannot bounce back and reset the caret.
+              onTextChanged: if (text !== note.ntext) notes.setProperty(note.index, "ntext", text)
+              onActiveFocusChanged: if (!activeFocus) root.save()
+              Keys.onEscapePressed: root.stopEditing()
+
+              // Entering edit mode from the keyboard focuses this editor and puts
+              // the caret at the end, ready to type.
+              readonly property bool wantsEdit: root.editIndex === note.index
+              onWantsEditChanged: if (wantsEdit) {
+                forceActiveFocus()
+                cursorPosition = length
+              }
+
+            }
+
+            // Drag anywhere on the note. Sits above the text but steps aside the
+            // moment this note is being edited, so the caret still works.
+            MouseArea {
+              id: dragArea
+              anchors.fill: parent
+              enabled: root.editIndex !== note.index
+              acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+              cursorShape: dragging ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+
+              property real pressX: 0
+              property real pressY: 0
+              property bool dragging: false
+
+              onPressed: function (mouse) {
+                pressX = mouse.x
+                pressY = mouse.y
+                dragging = false
+                root.selectedIndex = note.index
+                root.editIndex = -1
+                keyCatcher.forceActiveFocus()
+              }
+              onPositionChanged: function (mouse) {
+                if (!pressed || mouse.buttons !== Qt.LeftButton) return
+                var ddx = mouse.x - pressX
+                var ddy = mouse.y - pressY
+                // A few pixels of slack so a click to select never nudges a note.
+                if (!dragging && Math.abs(ddx) + Math.abs(ddy) < 3) return
+                dragging = true
+                notes.setProperty(note.index, "nx", note.nx + ddx)
+                notes.setProperty(note.index, "ny", note.ny + ddy)
+              }
+              onReleased: {
+                if (dragging) root.save()
+                dragging = false
+              }
+              onClicked: function (mouse) {
+                if (mouse.button === Qt.MiddleButton) root.removeNote(note.index)
+              }
+              onDoubleClicked: function (mouse) {
+                root.editIndex = note.index
+              }
+            }
+
+            // Resize grip, bottom-right.
+            MouseArea {
+              width: 16
+              height: 16
+              anchors { right: parent.right; bottom: parent.bottom }
+              cursorShape: Qt.SizeFDiagCursor
+              property real pressX: 0
+              property real pressY: 0
+
+              onPressed: function (mouse) {
+                pressX = mouse.x
+                pressY = mouse.y
+                root.selectedIndex = note.index
+              }
+              onPositionChanged: function (mouse) {
+                if (!pressed) return
+                notes.setProperty(note.index, "nw", Math.max(root.minNoteSize, note.nw + (mouse.x - pressX)))
+                notes.setProperty(note.index, "nh", Math.max(root.minNoteSize, note.nh + (mouse.y - pressY)))
+              }
+              onReleased: root.save()
+
+              Rectangle {
+                anchors.centerIn: parent
+                width: 8
+                height: 2
+                rotation: -45
+                color: root.noteInk
+                opacity: 0.35
+              }
+            }
+          }
+        }
+      }
+
+      // Keyboard owner. Lives above the canvas so Escape always lands here.
+      Item {
+        id: keyCatcher
+        anchors.fill: parent
+        focus: true
+        Keys.onPressed: function (event) {
+          var shift = (event.modifiers & Qt.ShiftModifier) !== 0
+          var k = event.key
+
+          // Movement keys do double duty: bare keys move the selection, shifted
+          // keys carry the selected note along with them.
+          var dx = 0, dy = 0
+          if (k === Qt.Key_H || k === Qt.Key_Left) dx = -1
+          else if (k === Qt.Key_L || k === Qt.Key_Right) dx = 1
+          else if (k === Qt.Key_K || k === Qt.Key_Up) dy = -1
+          else if (k === Qt.Key_J || k === Qt.Key_Down) dy = 1
+
+          if (dx !== 0 || dy !== 0) {
+            if (shift) root.nudgeSelected(dx, dy)
+            else if (root.selectedIndex < 0) root.pan(dx, dy)
+            else root.selectDirection(dx, dy)
+            event.accepted = true
+            return
+          }
+
+          if (k === Qt.Key_Question || k === Qt.Key_F1) {
+            root.helpVisible = !root.helpVisible
+          } else if (k === Qt.Key_Escape) {
+            // Escape backs out of the cheat sheet before it closes the board.
+            if (root.helpVisible) root.helpVisible = false
+            else root.dismiss()
+          } else if (k === Qt.Key_N) {
+            root.addNoteRelative()
+          } else if (k === Qt.Key_Return || k === Qt.Key_Enter || k === Qt.Key_I) {
+            root.editSelected()
+          } else if (k === Qt.Key_Tab) {
+            root.selectNext(1)
+          } else if (k === Qt.Key_Backtab) {
+            root.selectNext(-1)
+          } else if (k === Qt.Key_D || k === Qt.Key_Delete || k === Qt.Key_Backspace) {
+            root.removeNote(root.selectedIndex)
+          } else if (k === Qt.Key_C) {
+            root.recolorNote(root.selectedIndex)
+          } else if (k === Qt.Key_W) {
+            root.toggleWindowMode()
+          } else if (k === Qt.Key_F) {
+            root.fitToNotes()
+          } else if (k === Qt.Key_0) {
+            root.resetView()
+          } else if (k === Qt.Key_Plus || k === Qt.Key_Equal) {
+            root.zoomAt(board.width / 2, board.height / 2, 1.2)
+          } else if (k === Qt.Key_Minus) {
+            root.zoomAt(board.width / 2, board.height / 2, 1 / 1.2)
+          } else if (k === Qt.Key_S && (event.modifiers & Qt.ControlModifier)) {
+            root.save()
+          } else {
+            return
+          }
+          event.accepted = true
+        }
+      }
+
+      // Keybinding cheat sheet, on ? or F1.
+      Rectangle {
+        anchors.centerIn: parent
+        visible: root.helpVisible
+        width: helpColumn.width + Style.space(56)
+        height: helpColumn.height + Style.space(48)
+        color: root.canvasBackground
+        border.width: 1
+        border.color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.25)
+        radius: Style.cornerRadius
+
+        Column {
+          id: helpColumn
+          anchors.centerIn: parent
+          spacing: Style.space(6)
+
+          Text {
+            text: "Omarchyform"
+            color: root.foreground
+            font.family: root.fontFamily
+            font.pixelSize: 16
+            bottomPadding: Style.space(8)
+          }
+
+          Repeater {
+            model: [
+              ["n", "new note beside the selected one"],
+              ["enter / i", "type in the selected note"],
+              ["esc", "stop typing, then close the board"],
+              ["h j k l", "move the selection around"],
+              ["H J K L", "push the selected note"],
+              ["tab", "cycle through every note"],
+              ["d", "delete the selected note"],
+              ["c", "change its colour"],
+              ["w", "fullscreen or windowed"],
+            ["f", "fit the whole board on screen"],
+              ["0", "reset the view"],
+              ["+ / -", "zoom"],
+              ["? / F1", "this list"],
+              ["drag", "move a note, or the canvas"],
+              ["wheel", "zoom at the pointer"]
+            ]
+
+            Row {
+              required property var modelData
+              spacing: Style.space(16)
+
+              Text {
+                width: Style.space(90)
+                text: parent.modelData[0]
+                color: root.foreground
+                font.family: root.fontFamily
+                font.pixelSize: 13
+              }
+              Text {
+                text: parent.modelData[1]
+                color: root.foreground
+                opacity: 0.7
+                font.family: root.fontFamily
+                font.pixelSize: 13
+              }
+            }
+          }
+        }
+      }
+
+      Text {
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: Style.space(16)
+        color: root.foreground
+        opacity: 0.55
+        font.family: root.fontFamily
+        font.pixelSize: 12
+        visible: !root.helpVisible
+        text: root.editIndex >= 0
+          ? "esc: done typing"
+          : "n: new  ·  hjkl: move around  ·  enter: type  ·  d: delete  ·  w: " + (root.windowMode ? "fullscreen" : "windowed") + "  ·  ?: all keys  ·  esc: close"
+      }
+    }
+  }
+
+  // Fullscreen overlay, above everything, its own keyboard grab.
   PanelWindow {
     id: panel
-    visible: root.opened
+    visible: root.opened && !root.windowMode
     anchors { top: true; bottom: true; left: true; right: true }
     color: "transparent"
     WlrLayershell.namespace: "omarchyform"
@@ -292,356 +688,35 @@ Item {
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
     exclusionMode: ExclusionMode.Ignore
 
-    Rectangle {
-      anchors.fill: parent
-      color: root.canvasBackground
-    }
-
-    // The dot grid. Drawn in screen space and repainted as the camera moves,
-    // so the dots stay crisp instead of scaling into mush.
-    Canvas {
-      id: grid
-      anchors.fill: parent
-      onPaint: {
-        var ctx = getContext("2d")
-        ctx.reset()
-        var step = 40 * root.zoom
-        if (step < 8) return
-        var ox = root.camX % step
-        var oy = root.camY % step
-        ctx.fillStyle = root.dotColor
-        var r = Math.max(1, 1.2 * root.zoom)
-        for (var x = ox; x < width; x += step) {
-          for (var y = oy; y < height; y += step) {
-            ctx.beginPath()
-            ctx.arc(x, y, r, 0, Math.PI * 2)
-            ctx.fill()
-          }
-        }
-      }
-      onWidthChanged: requestPaint()
-      onHeightChanged: requestPaint()
-    }
-
-    // Background interaction: drag to pan, wheel to zoom, double-click for a note.
-    MouseArea {
-      id: canvasArea
-      anchors.fill: parent
-      acceptedButtons: Qt.LeftButton | Qt.MiddleButton
-      property real lastX: 0
-      property real lastY: 0
-      property bool panning: false
-
-      onPressed: function (mouse) {
-        lastX = mouse.x
-        lastY = mouse.y
-        panning = true
-        root.selectedIndex = -1
-        root.editIndex = -1
-        keyCatcher.forceActiveFocus()
-      }
-      onReleased: panning = false
-      onPositionChanged: function (mouse) {
-        if (!panning) return
-        root.camX += mouse.x - lastX
-        root.camY += mouse.y - lastY
-        lastX = mouse.x
-        lastY = mouse.y
-        grid.requestPaint()
-      }
-      onDoubleClicked: function (mouse) {
-        root.addNote(root.toWorldX(mouse.x), root.toWorldY(mouse.y))
-      }
-      onWheel: function (wheel) {
-        root.zoomAt(wheel.x, wheel.y, wheel.angleDelta.y > 0 ? 1.12 : 1 / 1.12)
-      }
-    }
-
-    // The world. Everything inside is positioned in canvas coordinates.
-    Item {
-      id: world
-      anchors.fill: parent
-      transform: [
-        Scale { xScale: root.zoom; yScale: root.zoom },
-        Translate { x: root.camX; y: root.camY }
-      ]
-
-      Repeater {
-        model: notes
-
-        Rectangle {
-          id: note
-
-          required property int index
-          required property real nx
-          required property real ny
-          required property real nw
-          required property real nh
-          required property color ncolor
-          required property string ntext
-
-          readonly property bool selected: root.selectedIndex === note.index
-
-          x: note.nx
-          y: note.ny
-          width: note.nw
-          height: note.nh
-          color: note.ncolor
-          radius: 6
-          antialiasing: true
-          border.width: note.selected ? 2 : 0
-          border.color: root.noteInk
-
-          // Header strip: a visual grab handle. The whole note is draggable,
-          // but the strip tells you so at a glance.
-          Rectangle {
-            id: header
-            anchors { top: parent.top; left: parent.left; right: parent.right }
-            height: 24
-            radius: parent.radius
-            color: Qt.darker(note.ncolor, 1.12)
-          }
-
-          TextEdit {
-            id: body
-            anchors.fill: parent
-            anchors.margins: 10
-            anchors.topMargin: header.height + 8
-            text: note.ntext
-            color: root.noteInk
-            font.family: root.fontFamily
-            font.pixelSize: 14
-            wrapMode: TextEdit.Wrap
-            selectByMouse: true
-            // Guarded so the model write cannot bounce back and reset the caret.
-            onTextChanged: if (text !== note.ntext) notes.setProperty(note.index, "ntext", text)
-            onActiveFocusChanged: if (!activeFocus) root.save()
-            Keys.onEscapePressed: root.stopEditing()
-
-            // Entering edit mode from the keyboard focuses this editor and puts
-            // the caret at the end, ready to type.
-            readonly property bool wantsEdit: root.editIndex === note.index
-            onWantsEditChanged: if (wantsEdit) {
-              forceActiveFocus()
-              cursorPosition = length
-            }
-
-          }
-
-          // Drag anywhere on the note. Sits above the text but steps aside the
-          // moment this note is being edited, so the caret still works.
-          MouseArea {
-            id: dragArea
-            anchors.fill: parent
-            enabled: root.editIndex !== note.index
-            acceptedButtons: Qt.LeftButton | Qt.MiddleButton
-            cursorShape: dragging ? Qt.ClosedHandCursor : Qt.OpenHandCursor
-
-            property real pressX: 0
-            property real pressY: 0
-            property bool dragging: false
-
-            onPressed: function (mouse) {
-              pressX = mouse.x
-              pressY = mouse.y
-              dragging = false
-              root.selectedIndex = note.index
-              root.editIndex = -1
-              keyCatcher.forceActiveFocus()
-            }
-            onPositionChanged: function (mouse) {
-              if (!pressed || mouse.buttons !== Qt.LeftButton) return
-              var ddx = mouse.x - pressX
-              var ddy = mouse.y - pressY
-              // A few pixels of slack so a click to select never nudges a note.
-              if (!dragging && Math.abs(ddx) + Math.abs(ddy) < 3) return
-              dragging = true
-              notes.setProperty(note.index, "nx", note.nx + ddx)
-              notes.setProperty(note.index, "ny", note.ny + ddy)
-            }
-            onReleased: {
-              if (dragging) root.save()
-              dragging = false
-            }
-            onClicked: function (mouse) {
-              if (mouse.button === Qt.MiddleButton) root.removeNote(note.index)
-            }
-            onDoubleClicked: function (mouse) {
-              root.editIndex = note.index
-            }
-          }
-
-          // Resize grip, bottom-right.
-          MouseArea {
-            width: 16
-            height: 16
-            anchors { right: parent.right; bottom: parent.bottom }
-            cursorShape: Qt.SizeFDiagCursor
-            property real pressX: 0
-            property real pressY: 0
-
-            onPressed: function (mouse) {
-              pressX = mouse.x
-              pressY = mouse.y
-              root.selectedIndex = note.index
-            }
-            onPositionChanged: function (mouse) {
-              if (!pressed) return
-              notes.setProperty(note.index, "nw", Math.max(root.minNoteSize, note.nw + (mouse.x - pressX)))
-              notes.setProperty(note.index, "nh", Math.max(root.minNoteSize, note.nh + (mouse.y - pressY)))
-            }
-            onReleased: root.save()
-
-            Rectangle {
-              anchors.centerIn: parent
-              width: 8
-              height: 2
-              rotation: -45
-              color: root.noteInk
-              opacity: 0.35
-            }
-          }
-        }
-      }
-    }
-
-    // Keyboard owner. Lives above the canvas so Escape always lands here.
-    Item {
-      id: keyCatcher
+    Loader {
       anchors.fill: parent
       focus: true
-      Keys.onPressed: function (event) {
-        var shift = (event.modifiers & Qt.ShiftModifier) !== 0
-        var k = event.key
+      active: panel.visible
+      sourceComponent: boardContent
+    }
+  }
 
-        // Movement keys do double duty: bare keys move the selection, shifted
-        // keys carry the selected note along with them.
-        var dx = 0, dy = 0
-        if (k === Qt.Key_H || k === Qt.Key_Left) dx = -1
-        else if (k === Qt.Key_L || k === Qt.Key_Right) dx = 1
-        else if (k === Qt.Key_K || k === Qt.Key_Up) dy = -1
-        else if (k === Qt.Key_J || k === Qt.Key_Down) dy = 1
+  // An ordinary toplevel, so Hyprland tiles it beside your other windows.
+  FloatingWindow {
+    id: boardWindow
+    visible: root.opened && root.windowMode
+    title: "Omarchyform"
+    color: root.canvasBackground
+    implicitWidth: 1100
+    implicitHeight: 750
+    minimumSize: Qt.size(480, 360)
 
-        if (dx !== 0 || dy !== 0) {
-          if (shift) root.nudgeSelected(dx, dy)
-          else if (root.selectedIndex < 0) root.pan(dx, dy)
-          else root.selectDirection(dx, dy)
-          event.accepted = true
-          return
-        }
-
-        if (k === Qt.Key_Question || k === Qt.Key_F1) {
-          root.helpVisible = !root.helpVisible
-        } else if (k === Qt.Key_Escape) {
-          // Escape backs out of the cheat sheet before it closes the board.
-          if (root.helpVisible) root.helpVisible = false
-          else root.dismiss()
-        } else if (k === Qt.Key_N) {
-          root.addNoteRelative()
-        } else if (k === Qt.Key_Return || k === Qt.Key_Enter || k === Qt.Key_I) {
-          root.editSelected()
-        } else if (k === Qt.Key_Tab) {
-          root.selectNext(1)
-        } else if (k === Qt.Key_Backtab) {
-          root.selectNext(-1)
-        } else if (k === Qt.Key_D || k === Qt.Key_Delete || k === Qt.Key_Backspace) {
-          root.removeNote(root.selectedIndex)
-        } else if (k === Qt.Key_C) {
-          root.recolorNote(root.selectedIndex)
-        } else if (k === Qt.Key_F) {
-          root.fitToNotes()
-        } else if (k === Qt.Key_0) {
-          root.resetView()
-        } else if (k === Qt.Key_Plus || k === Qt.Key_Equal) {
-          root.zoomAt(panel.width / 2, panel.height / 2, 1.2)
-        } else if (k === Qt.Key_Minus) {
-          root.zoomAt(panel.width / 2, panel.height / 2, 1 / 1.2)
-        } else if (k === Qt.Key_S && (event.modifiers & Qt.ControlModifier)) {
-          root.save()
-        } else {
-          return
-        }
-        event.accepted = true
-      }
+    // Closing the window from the titlebar or a compositor keybind should end
+    // the session the same way Escape does.
+    onVisibleChanged: {
+      if (!visible && root.opened && root.windowMode) root.dismiss()
     }
 
-    // Keybinding cheat sheet, on ? or F1.
-    Rectangle {
-      anchors.centerIn: parent
-      visible: root.helpVisible
-      width: helpColumn.width + Style.space(56)
-      height: helpColumn.height + Style.space(48)
-      color: root.canvasBackground
-      border.width: 1
-      border.color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.25)
-      radius: Style.cornerRadius
-
-      Column {
-        id: helpColumn
-        anchors.centerIn: parent
-        spacing: Style.space(6)
-
-        Text {
-          text: "Omarchyform"
-          color: root.foreground
-          font.family: root.fontFamily
-          font.pixelSize: 16
-          bottomPadding: Style.space(8)
-        }
-
-        Repeater {
-          model: [
-            ["n", "new note beside the selected one"],
-            ["enter / i", "type in the selected note"],
-            ["esc", "stop typing, then close the board"],
-            ["h j k l", "move the selection around"],
-            ["H J K L", "push the selected note"],
-            ["tab", "cycle through every note"],
-            ["d", "delete the selected note"],
-            ["c", "change its colour"],
-            ["f", "fit the whole board on screen"],
-            ["0", "reset the view"],
-            ["+ / -", "zoom"],
-            ["? / F1", "this list"],
-            ["drag", "move a note, or the canvas"],
-            ["wheel", "zoom at the pointer"]
-          ]
-
-          Row {
-            required property var modelData
-            spacing: Style.space(16)
-
-            Text {
-              width: Style.space(90)
-              text: parent.modelData[0]
-              color: root.foreground
-              font.family: root.fontFamily
-              font.pixelSize: 13
-            }
-            Text {
-              text: parent.modelData[1]
-              color: root.foreground
-              opacity: 0.7
-              font.family: root.fontFamily
-              font.pixelSize: 13
-            }
-          }
-        }
-      }
-    }
-
-    Text {
-      anchors.horizontalCenter: parent.horizontalCenter
-      anchors.bottom: parent.bottom
-      anchors.bottomMargin: Style.space(16)
-      color: root.foreground
-      opacity: 0.55
-      font.family: root.fontFamily
-      font.pixelSize: 12
-      visible: !root.helpVisible
-      text: root.editIndex >= 0
-        ? "esc: done typing"
-        : "n: new  ·  hjkl: move around  ·  enter: type  ·  d: delete  ·  ?: all keys  ·  esc: close"
+    Loader {
+      anchors.fill: parent
+      focus: true
+      active: boardWindow.visible
+      sourceComponent: boardContent
     }
   }
 }
