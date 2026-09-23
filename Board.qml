@@ -290,7 +290,11 @@ FocusScope {
     font.family: board.ctl.fontFamily
     font.pixelSize: board.ctl.fontBody
     visible: !board.ctl.helpVisible && !board.ctl.browserVisible
-    text: board.ctl.editIndex >= 0
+    text: board.ctl.saveError !== "" ? board.ctl.saveError
+      : board.ctl.pendingBoard !== null ? "saving before switching boards…"
+      : board.ctl.damaged
+      ? board.ctl.boardTitle + " could not be read — not saving over it"
+      : board.ctl.editIndex >= 0
       ? "esc: done typing"
       : board.ctl.linkingFrom >= 0
         ? "pick the other end, then x to connect  ·  esc: cancel"

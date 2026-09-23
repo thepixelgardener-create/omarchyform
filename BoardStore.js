@@ -65,21 +65,45 @@ function linkRows(links) {
   return out
 }
 
+// A board file can be hand-edited, copied between machines or half-written by
+// something else. Everything coming in is coerced to something the canvas can
+// actually draw: a string where a number belongs would otherwise become NaN
+// geometry and be written straight back out.
+function num(value, fallback) {
+  var n = typeof value === "number" ? value : parseFloat(value)
+  return isFinite(n) ? n : fallback
+}
+
 function fillItems(items, rows) {
   items.clear()
   if (!rows) return
+  var used = {}
+  var reserved = {}
+  for (var r = 0; r < rows.length; r++) {
+    var existing = num(rows[r].id, 0)
+    if (existing > 0 && existing < 2147483647 && Math.floor(existing) === existing) reserved[existing] = true
+  }
   var nextId = 1
   for (var i = 0; i < rows.length; i++) {
     var n = rows[i]
+    // Ids have to be unique: connectors reference them, so a duplicate would
+    // silently join the wrong things.
+    var id = num(n.id, 0)
+    id = (id > 0 && id < 2147483647 && Math.floor(id) === id && !used[id]) ? id : 0
+    while (id === 0) {
+      if (!used[nextId] && !reserved[nextId]) id = nextId
+      nextId++
+    }
+    used[id] = true
     items.append({
-      iid: n.id ? n.id : nextId++,
-      kind: n.kind ? n.kind : "note",
-      ix: n.x || 0,
-      iy: n.y || 0,
-      iw: Math.max(MIN_SIZE, n.w || 180),
-      ih: Math.max(MIN_SIZE, n.h || 140),
+      iid: id,
+      kind: KINDS.indexOf(n.kind) >= 0 ? n.kind : "note",
+      ix: num(n.x, 0),
+      iy: num(n.y, 0),
+      iw: Math.max(MIN_SIZE, num(n.w, 180)),
+      ih: Math.max(MIN_SIZE, num(n.h, 140)),
       itint: normalizeTint(n.tint || n.color),
-      itext: n.text || ""
+      itext: typeof n.text === "string" ? n.text : ""
     })
   }
 }
@@ -89,10 +113,17 @@ function fillItems(items, rows) {
 function fillLinks(links, items, rows) {
   links.clear()
   if (!rows) return
+  var seen = {}
   for (var i = 0; i < rows.length; i++) {
     var l = rows[i]
-    if (indexOfId(items, l.from) >= 0 && indexOfId(items, l.to) >= 0)
-      links.append({ lfrom: l.from, lto: l.to })
+    // Both ends must exist, an item cannot be joined to itself, and the same
+    // pair cannot appear twice — a connector is undirected.
+    if (l.from === l.to) continue
+    if (indexOfId(items, l.from) < 0 || indexOfId(items, l.to) < 0) continue
+    var key = Math.min(l.from, l.to) + ":" + Math.max(l.from, l.to)
+    if (seen[key]) continue
+    seen[key] = true
+    links.append({ lfrom: l.from, lto: l.to })
   }
 }
 
@@ -109,7 +140,8 @@ function idIndex(items) {
 }
 
 function nextFreeId(items, stored) {
-  var id = stored ? stored : 1
+  var id = num(stored, 1)
+  if (id < 1 || id >= 2147483647 || Math.floor(id) !== id) id = 1
   for (var i = 0; i < items.count; i++) id = Math.max(id, items.get(i).iid + 1)
   return id
 }
@@ -118,7 +150,16 @@ function nextFreeId(items, stored) {
 function readFile(raw) {
   var parsed
   try { parsed = JSON.parse(raw) } catch (e) { return null }
-  if (!parsed) return null
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null
+  if (parsed.version !== undefined && [1, 2, 3].indexOf(parsed.version) < 0) return null
+  var fields = ["items", "notes", "links"]
+  for (var f = 0; f < fields.length; f++) {
+    var rows = parsed[fields[f]]
+    if (rows === undefined) continue
+    if (!Array.isArray(rows)) return null
+    for (var i = 0; i < rows.length; i++)
+      if (!rows[i] || typeof rows[i] !== "object" || Array.isArray(rows[i])) return null
+  }
   return {
     windowMode: parsed.windowMode === true,
     items: parsed.items ? parsed.items : (parsed.notes ? parsed.notes : []),

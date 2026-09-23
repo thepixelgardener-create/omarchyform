@@ -114,9 +114,10 @@ Item {
     horizontalAlignment: node.isNote ? TextEdit.AlignLeft : TextEdit.AlignHCenter
     verticalAlignment: node.isNote ? TextEdit.AlignTop : TextEdit.AlignVCenter
     selectByMouse: true
+    readOnly: !node.ctl.canEdit
     // Guarded so the model write cannot bounce back and reset the caret.
     onTextChanged: {
-      if (text === node.itext) return
+      if (!node.ctl.canEdit || text === node.itext) return
       node.set("itext", text)
       node.ctl.scheduleSave()
     }
@@ -149,7 +150,7 @@ Item {
       node.ctl.selectOnly(node.index)
     }
     onPositionChanged: function (mouse) {
-      if (!pressed || mouse.buttons !== Qt.LeftButton) return
+      if (!node.ctl.canEdit || !pressed || mouse.buttons !== Qt.LeftButton) return
       var dx = mouse.x - pressX
       var dy = mouse.y - pressY
       // A few pixels of slack so a click to select never nudges it.
@@ -167,6 +168,7 @@ Item {
       if (mouse.button === Qt.MiddleButton) node.ctl.removeItem(node.index)
     }
     onDoubleClicked: {
+      if (!node.ctl.canEdit) return
       node.ctl.pushUndo()
       node.ctl.editIndex = node.index
     }
@@ -178,6 +180,7 @@ Item {
     height: 16
     anchors { right: parent.right; bottom: parent.bottom }
     cursorShape: Qt.SizeFDiagCursor
+    enabled: node.ctl.canEdit
 
     property real pressX: 0
     property real pressY: 0
