@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "omarchyform",
+  "name": "Omarchyform",
+  "version": "0.1.0",
+  "author": "frueh",
+  "description": "An infinite canvas for Omarchy: pan, zoom, and sticky notes you can drag anywhere.",
+  "kinds": [
+    "overlay"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "overlay": "Omarchyform.qml"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/YOURNAME/omarchyform"
+}
