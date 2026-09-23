@@ -93,6 +93,18 @@ git — it is your file. A v1 board from before shapes is migrated on load.
 Connectors reference item ids rather than positions, so they survive
 deletions, reordering and hand-editing.
 
+## Notes on the platform
+
+Omarchy is pre-release and the shell's `qs.Commons` / `qs.Ui` singletons are
+internals, not a versioned API. Every read of them here goes through a guard
+with a hardcoded fallback, so a rename upstream costs a wrong colour rather
+than a board that will not open. An import disappearing entirely is still
+fatal — QML has no optional imports.
+
+The overlay is built through `Variants` so its surface is constructed with its
+screen already set, and it opens on whichever output Hyprland has focused.
+Assigning `screen` to a window that already exists leaves it unmapped.
+
 ## Dependencies
 
 None beyond Omarchy itself. No network access, no external services, no

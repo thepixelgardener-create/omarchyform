@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import Quickshell
 import Quickshell.Io
+import Quickshell.Hyprland
 import Quickshell.Wayland
 import QtQuick
 import qs.Commons
@@ -16,10 +17,44 @@ Item {
   property bool opened: false
 
   // Shares the [menu] surface tokens so themes style the canvas chrome too.
-  property color canvasBackground: Color.menu.background
-  property color foreground: Color.menu.text
+  // Every read of the shell's internal singletons goes through a guard: they
+  // are not a versioned API, and a rename upstream should cost a wrong colour,
+  // not a board that refuses to open. (An import that disappears entirely is
+  // still fatal — QML has no optional imports.)
+  readonly property color fallbackBackground: "#12131A"
+  readonly property color fallbackForeground: "#E6E6E6"
+
+  function token(read, fallback) {
+    try {
+      var v = read()
+      return v === undefined || v === null ? fallback : v
+    } catch (e) {
+      return fallback
+    }
+  }
+
+  function sp(n) { return root.token(function () { return Style.space(n) }, n) }
+
+  property color canvasBackground: root.token(function () { return Color.menu.background }, root.fallbackBackground)
+  property color foreground: root.token(function () { return Color.menu.text }, root.fallbackForeground)
   property color dotColor: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.18)
-  property string fontFamily: Style.font.menuFamily
+  property string fontFamily: root.token(function () { return Style.font.menuFamily }, "monospace")
+  readonly property int cornerRadius: root.token(function () { return Style.cornerRadius }, 8)
+
+  // The output Hyprland has focused, which is where a keyboard-summoned board
+  // belongs. Without this the overlay lands on whichever screen Quickshell
+  // picks, which on a two-monitor desk is rarely the one being used.
+  property var boardScreen: null
+
+  function focusedScreen() {
+    var monitor = root.token(function () { return Hyprland.focusedMonitor }, null)
+    var wanted = monitor ? String(monitor.name || "") : ""
+    var screens = Quickshell.screens
+    if (!screens || screens.length === 0) return null
+    for (var i = 0; i < screens.length; i++)
+      if (String(screens[i].name) === wanted) return screens[i]
+    return screens[0]
+  }
 
   // Item colors are deliberately fixed rather than themed: a board reads as a
   // board because the paper stays the same when the desktop theme changes.
@@ -474,6 +509,7 @@ Item {
   }
 
   function open(payloadJson) {
+    root.boardScreen = root.focusedScreen()
     root.opened = true
     Qt.callLater(function () {
       root.focusKeys()
@@ -789,6 +825,9 @@ Item {
               font.family: root.fontFamily
               font.pixelSize: 14
               wrapMode: TextEdit.Wrap
+              // Pinned: board files are shareable, and RichText here would let
+              // someone else's board inject markup into yours.
+              textFormat: TextEdit.PlainText
               horizontalAlignment: node.isNote ? TextEdit.AlignLeft : TextEdit.AlignHCenter
               verticalAlignment: node.isNote ? TextEdit.AlignTop : TextEdit.AlignVCenter
               selectByMouse: true
@@ -978,24 +1017,24 @@ Item {
       Rectangle {
         anchors.centerIn: parent
         visible: root.helpVisible
-        width: helpColumn.width + Style.space(56)
-        height: helpColumn.height + Style.space(48)
+        width: helpColumn.width + root.sp(56)
+        height: helpColumn.height + root.sp(48)
         color: root.canvasBackground
         border.width: 1
         border.color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.25)
-        radius: Style.cornerRadius
+        radius: root.cornerRadius
 
         Column {
           id: helpColumn
           anchors.centerIn: parent
-          spacing: Style.space(6)
+          spacing: root.sp(6)
 
           Text {
             text: "Omarchyform"
             color: root.foreground
             font.family: root.fontFamily
             font.pixelSize: 16
-            bottomPadding: Style.space(8)
+            bottomPadding: root.sp(8)
           }
 
           Repeater {
@@ -1024,10 +1063,10 @@ Item {
 
             Row {
               required property var modelData
-              spacing: Style.space(16)
+              spacing: root.sp(16)
 
               Text {
-                width: Style.space(96)
+                width: root.sp(96)
                 text: parent.modelData[0]
                 color: root.foreground
                 font.family: root.fontFamily
@@ -1048,7 +1087,7 @@ Item {
       Text {
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
-        anchors.bottomMargin: Style.space(16)
+        anchors.bottomMargin: root.sp(16)
         color: root.foreground
         opacity: 0.55
         font.family: root.fontFamily
@@ -1064,21 +1103,33 @@ Item {
   }
 
   // Fullscreen overlay, above everything, its own keyboard grab.
-  PanelWindow {
-    id: panel
-    visible: root.opened && !root.windowMode
-    anchors { top: true; bottom: true; left: true; right: true }
-    color: "transparent"
-    WlrLayershell.namespace: "omarchyform"
-    WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
-    exclusionMode: ExclusionMode.Ignore
+  //
+  // Built through Variants rather than as a bare PanelWindow so the surface is
+  // constructed with its screen already set: assigning `screen` to a window
+  // that already exists leaves it unmapped, which on a two-monitor desk looks
+  // exactly like the board failing to open.
+  Variants {
+    model: root.opened && !root.windowMode && root.boardScreen ? [root.boardScreen] : []
 
-    Loader {
-      anchors.fill: parent
-      focus: true
-      active: panel.visible
-      sourceComponent: boardContent
+    delegate: Component {
+      PanelWindow {
+        required property var modelData
+
+        screen: modelData
+        visible: true
+        color: "transparent"
+        WlrLayershell.namespace: "omarchyform"
+        WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
+        exclusionMode: ExclusionMode.Ignore
+        anchors { top: true; bottom: true; left: true; right: true }
+
+        Loader {
+          anchors.fill: parent
+          focus: true
+          sourceComponent: boardContent
+        }
+      }
     }
   }
 
