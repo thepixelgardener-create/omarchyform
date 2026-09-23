@@ -44,6 +44,30 @@ function tests(S) {
     eq(S.readFile("{}").windowMode, false, "absent")
   })
 
+  test("readFile rejects invalid structures and unsupported versions", () => {
+    for (const raw of ['[]', 'true', '42', '{"version":99}', '{"items":{}}',
+      '{"items":[null]}', '{"links":[[]]}', '{"notes":"bad"}'])
+      eq(S.readFile(raw), null, raw)
+  })
+
+  test("ID repair reserves IDs used by later items", () => {
+    const items = new FakeModel(), links = new FakeModel()
+    S.fillItems(items, [{id:1}, {id:1}, {id:2}, {id:3}])
+    eq(items.rows.map(r => r.iid), [1,4,2,3], "only duplicate changes")
+    S.fillLinks(links, items, [{from:2,to:3}])
+    eq(S.indexOfId(items, links.get(0).lfrom), 2, "original source survives")
+    eq(S.indexOfId(items, links.get(0).lto), 3, "original target survives")
+    S.fillItems(items, [{}, {id:1}, {id:2}])
+    eq(items.rows.map(r => r.iid), [3,1,2], "missing ID does not steal a later ID")
+  })
+
+  test("nextFreeId repairs invalid stored counters", () => {
+    for (const value of ["oops", -1, 1.5, Infinity, 2147483648]) {
+      eq(S.nextFreeId(new FakeModel(), value), 1, "invalid counter")
+      eq(S.nextFreeId(new FakeModel([item({iid:9})]), value), 10, "existing IDs respected")
+    }
+  })
+
   // ------------------------------------------------------------------ filling
   test("fillItems assigns ids to rows that lack them", () => {
     const m = new FakeModel()
@@ -72,6 +96,75 @@ function tests(S) {
     eq(m.get(0).kind, "note", "default kind")
     eq(m.get(0).itint, S.TINTS[0], "default tint")
     eq(m.get(0).itext, "", "default text")
+  })
+
+  test("num coerces anything unusable to the fallback", () => {
+    eq(S.num(5, 99), 5, "a number is itself")
+    eq(S.num("50", 99), 50, "a numeric string is read")
+    eq(S.num("abc", 99), 99, "a word falls back")
+    eq(S.num(null, 99), 99, "null falls back")
+    eq(S.num(undefined, 99), 99, "missing falls back")
+    eq(S.num(NaN, 99), 99, "NaN falls back")
+    eq(S.num(Infinity, 99), 99, "infinity is not a position")
+    eq(S.num(-12.5, 99), -12.5, "negatives and fractions are fine")
+  })
+
+  test("fillItems never produces unusable geometry", () => {
+    const m = new FakeModel()
+    S.fillItems(m, [{ x: "50", y: null, w: "abc", h: undefined }])
+    const n = m.get(0)
+    for (const k of ["ix", "iy", "iw", "ih"])
+      ok(typeof n[k] === "number" && isFinite(n[k]), `${k} is a real number, got ${JSON.stringify(n[k])}`)
+    eq(n.ix, 50, "a numeric string is read as a number")
+    eq(n.iw, 180, "an unreadable width falls back to the default")
+  })
+
+  test("fillItems gives every item its own id", () => {
+    const m = new FakeModel()
+    S.fillItems(m, [{ id: 1 }, { id: 1 }, { id: 1 }, { id: "x" }, { id: -4 }, { id: 2.5 }])
+    const ids = m.rows.map(r => r.iid)
+    eq(new Set(ids).size, ids.length, `ids must be unique, got ${ids}`)
+    for (const id of ids) ok(id > 0 && Math.floor(id) === id, `${id} is a positive whole number`)
+  })
+
+  test("fillItems refuses a shape it cannot draw", () => {
+    const m = new FakeModel()
+    S.fillItems(m, [{ kind: "hexagon" }, { kind: "ellipse" }])
+    eq(m.get(0).kind, "note", "unknown kind falls back")
+    eq(m.get(1).kind, "ellipse", "a real kind is kept")
+  })
+
+  test("fillLinks drops self-links and duplicates", () => {
+    const items = new FakeModel([item({ iid: 1 }), item({ iid: 2 })])
+    const links = new FakeModel()
+    S.fillLinks(links, items, [
+      { from: 1, to: 1 },   // an item joined to itself
+      { from: 1, to: 2 },
+      { from: 2, to: 1 },   // the same pair, drawn the other way
+      { from: 1, to: 2 }    // and again
+    ])
+    eq(links.count, 1, "one connector survives")
+    eq(links.get(0), { lfrom: 1, lto: 2 }, "the first one wins")
+  })
+
+  test("fillLinks keeps going past every kind of bad row", () => {
+    // The rows that must be skipped sit in the middle, so a mistake that
+    // stops the loop instead of skipping one row shows up here.
+    const items = new FakeModel([item({ iid: 1 }), item({ iid: 2 }), item({ iid: 3 })])
+    const links = new FakeModel()
+    S.fillLinks(links, items, [
+      { from: 2, to: 1 },   // keep — points at the first item
+      { from: 1, to: 1 },   // self
+      { from: 9, to: 1 },   // end that does not exist
+      { from: 1, to: 2 },   // the first pair again, reversed
+      { from: 1, to: 3 },   // keep — starts at the first item
+      { from: 2, to: 3 }    // keep — shares the other end
+    ])
+    eq(links.rows, [
+      { lfrom: 2, lto: 1 },
+      { lfrom: 1, lto: 3 },
+      { lfrom: 2, lto: 3 }
+    ], "three distinct connectors survive, in order")
   })
 
   test("fillItems replaces rather than appends", () => {
@@ -153,7 +246,7 @@ function tests(S) {
     eq(back.windowMode, true, "windowMode")
   })
 
-  test("writeFile emits version 2 and a trailing newline", () => {
+  test("writeFile emits the current version and a trailing newline", () => {
     const raw = S.writeFile(new FakeModel(), new FakeModel(), 1, false)
     eq(JSON.parse(raw).version, 3, "version")
     ok(raw.endsWith("\n"), "trailing newline")

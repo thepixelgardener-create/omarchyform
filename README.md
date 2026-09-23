@@ -82,7 +82,7 @@ it, drag the bottom-right corner to resize, middle-click to delete.
 | `a` | New board here |
 | `A` | New folder here |
 | `r` | Rename |
-| `x` | Delete (refuses the board you have open) |
+| `x` twice | Delete (refuses the open board and folders containing it) |
 | `g` / `G` | First / last |
 | `esc` | Leave the search, then close the browser |
 
@@ -98,7 +98,10 @@ on is marked `·open`.
 There is no save key, though `ctrl+s` works if you want one. Structural
 changes — adding, deleting, moving, connecting — are written immediately.
 Typing settles for 700ms first, so a sentence is one write rather than forty.
-Switching boards or closing flushes whatever is pending.
+Switching boards or closing flushes whatever is pending. Board switching waits
+for writes to finish. A failed backup or write leaves the board open in memory
+and shows an error; use `ctrl+s` to retry. Closing the surface keeps an in-flight
+save running in the shell; it does not wait for disk completion.
 
 Which board you had open is remembered in `state.json` and reopened next time.
 
@@ -114,8 +117,10 @@ Which board you had open is remembered in `state.json` and reopened next time.
 ```
 
 Each board is plain JSON, written atomically, with one generation kept beside
-it as `<board>.json.bak`. Back it up, sync it, edit it by hand, put it in
-git — it is your file. Older boards are migrated on load: v1 had no ids or
+it as `<board>.json.bak`. The backup completes before replacement, and saves
+with unchanged contents do not rotate it. Malformed or unsupported board files
+open read-only; no edits or saves are allowed over them. Back it up, sync it,
+edit it by hand, put it in git — it is your file. Older boards are migrated on load: v1 had no ids or
 shapes, v2 stored fixed pastel hexes which are mapped onto theme roles.
 
 ```json
@@ -157,11 +162,13 @@ luminance.
 
 | File | Holds |
 |------|-------|
-| `Omarchyform.qml` | Controller: state, storage, and the two surfaces |
+| `Omarchyform.qml` | Controller: editing, navigation, and the two surfaces |
 | `Board.qml` | The canvas surface — grid, connectors, keys, cheat sheet |
 | `Node.qml` | One item: note, box, ellipse or diamond |
 | `Browser.qml` | The board browser |
 | `BoardStore.js` | Pure logic: parsing, marshalling, geometry. No QML |
+| `BoardSession.qml` | Loading, autosave state, and board-switch coordination |
+| `BoardPersistence.qml` | Serialized backup and atomic write, with completion/failure signals |
 
 ## Tests
 
@@ -169,26 +176,23 @@ The pure logic lives in plain JavaScript so it can be tested without Qt, and
 the suite loads the very file the plugin loads — there is no copy to drift.
 
 ```bash
-npm test        # 60 unit and property tests, no dependencies
+npm test        # pure logic and controller regression tests, no dependencies
 npm run mutate  # mutation testing
+npm run test:qml # headless persistence tests; requires installed Quickshell
 ```
 
 `npm run mutate` breaks `BoardStore.js` on purpose, one edit at a time, and
-checks the suite notices. It currently kills 107 of 113.
+checks the suite notices. The command reports its current score and survivors;
+it is a diagnostic, not a CI failure threshold.
 
-The six survivors are equivalent mutants — each differs only in a case the
-code's preconditions rule out, so no honest test can tell them apart:
-
-- `parentOf` / `parseListing`: a boundary at index 0 that produces the same
-  answer either way, since a relative path cannot begin with a separator.
-- the two sort comparators: they differ only when two entries compare equal,
-  and a directory cannot hold two things with the same name.
-- `fuzzyScore`'s loop bound: reading one past the end returns `""`, which
-  matches nothing, so the result is unchanged.
-- `nearest`'s off-axis term: it is only ever called with a unit axis vector,
-  so one of the two products is always zero.
-
-They are left in the report rather than silenced, so the number stays honest.
+Controller tests evaluate the actual QML JavaScript functions with delayed I/O
+completion to cover damaged files, queued edits, board switching, and retry.
+The separate `test:qml` suite runs the real persistence and session components
+in isolated headless Quickshell instances with temporary files. It checks backup
+contents, write ordering, failure handling, retry, queued edits, and switching
+between fresh, saved, and damaged boards. It does not interact with the running
+desktop shell. CI runs the Node tests; run `test:qml` on a machine with
+Quickshell before release.
 
 ## Notes on the platform
 

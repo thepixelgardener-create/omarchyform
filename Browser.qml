@@ -62,11 +62,13 @@ FocusScope {
         color: browser.ctl.foreground
         font.family: browser.ctl.fontFamily
         font.pixelSize: browser.ctl.fontSubtitle
-        text: browser.prompting
-          ? browser.ctl.browserPrompt + " " + browser.ctl.browserInput + "▏"
-          : browser.searching
-            ? "/" + browser.ctl.browserQuery + "▏"
-            : browser.here
+        text: browser.ctl.browserMessage !== ""
+          ? browser.ctl.browserMessage
+          : browser.prompting
+            ? browser.ctl.browserPrompt + " " + browser.ctl.browserInput + "▏"
+            : browser.searching
+              ? "/" + browser.ctl.browserQuery + "▏"
+              : browser.here
       }
 
       Rectangle {

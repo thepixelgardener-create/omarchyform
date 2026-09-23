@@ -15,7 +15,7 @@ function loadStore(source) {
   const exported = [
     "MIN_SIZE", "TINTS", "LEGACY_SWATCHES", "KINDS", "KEY_HELP", "normalizeTint",
     "itemRows", "linkRows", "fillItems", "fillLinks", "indexOfId", "idIndex",
-    "nextFreeId", "readFile", "writeFile", "parseThemeMode", "isLightColor",
+    "nextFreeId", "num", "readFile", "writeFile", "parseThemeMode", "isLightColor",
     "joinPath", "parentOf", "baseName", "displayName", "parseListing",
     "childrenOf", "fuzzyScore", "filterEntries", "nameIsValid", "uniquePath", "nearest", "bounds", "edgePoint", "cycle"
   ]

@@ -4,7 +4,8 @@
   "private": true,
   "description": "Tests for the pure board logic in BoardStore.js",
   "scripts": {
-    "test": "node tests/run.js",
-    "mutate": "node tests/mutate.js"
+    "test": "node tests/run.js && node tests/controller.js",
+    "mutate": "node tests/mutate.js",
+    "test:qml": "node tests/persistence.js"
   }
 }

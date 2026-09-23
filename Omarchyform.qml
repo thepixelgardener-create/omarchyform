@@ -105,11 +105,13 @@ Item {
   property bool helpVisible: false
   property bool windowMode: false
 
-  // save() is a no-op until the file has been read, and refuses to shrink a
-  // non-empty board to nothing unless a delete asked for it.
-  property bool boardLoaded: false
+  // Views consume session state; loading and save coordination live together.
+  readonly property bool boardLoaded: session.boardLoaded
+  readonly property bool damaged: session.damaged
+  readonly property string saveError: session.saveError
+  readonly property var pendingBoard: session.pendingBoard
+  readonly property bool canEdit: session.canEdit
   property bool stateReady: false
-  property int lastSavedCount: -1
 
   property var undoStack: []
   property var redoStack: []
@@ -125,6 +127,10 @@ Item {
   property string browserPrompt: ""
   property string browserInput: ""
   property string browserAction: ""
+  // Armed by the first x, cleared by anything else.
+  property string pendingDelete: ""
+  // A line of feedback shown in place of the path, cleared by the next key.
+  property string browserMessage: ""
 
   readonly property var browserRows: Store.filterEntries(root.browserEntries, root.browserDir, root.browserQuery)
 
@@ -158,6 +164,7 @@ Item {
   }
 
   function restore(snap) {
+    if (!root.canEdit) return
     Store.fillItems(itemModel, snap.items)
     Store.fillLinks(linkModel, itemModel, snap.links)
     root.nextId = snap.nextId
@@ -171,6 +178,7 @@ Item {
   }
 
   function undo() {
+    if (!root.canEdit) return
     if (root.undoStack.length === 0) return
     var from = root.undoStack.slice()
     var to = root.redoStack.slice()
@@ -183,6 +191,7 @@ Item {
   }
 
   function redo() {
+    if (!root.canEdit) return
     if (root.redoStack.length === 0) return
     var from = root.redoStack.slice()
     var to = root.undoStack.slice()
@@ -196,6 +205,7 @@ Item {
 
   // -------------------------------------------------------------------- items
   function addItem(kind, wx, wy) {
+    if (!root.canEdit) return
     root.pushUndo()
     var w = kind === "note" ? 180 : 160
     var h = kind === "note" ? 140 : 110
@@ -223,6 +233,7 @@ Item {
   }
 
   function removeItem(index) {
+    if (!root.canEdit) return
     if (index < 0 || index >= itemModel.count) return
     root.pushUndo()
     var id = itemModel.get(index).iid
@@ -238,6 +249,7 @@ Item {
   }
 
   function recolorItem() {
+    if (!root.canEdit) return
     var n = root.selected()
     if (!n) return
     root.pushUndo()
@@ -246,6 +258,7 @@ Item {
   }
 
   function cycleKind() {
+    if (!root.canEdit) return
     var n = root.selected()
     if (!n) return
     root.pushUndo()
@@ -264,6 +277,7 @@ Item {
   }
 
   function addLink(a, b) {
+    if (!root.canEdit) return
     root.pushUndo()
     for (var i = 0; i < linkModel.count; i++) {
       var l = linkModel.get(i)
@@ -281,6 +295,7 @@ Item {
   }
 
   function unlinkSelected() {
+    if (!root.canEdit) return
     var n = root.selected()
     if (!n) return
     var removed = false
@@ -319,6 +334,7 @@ Item {
   }
 
   function nudgeSelected(dx, dy) {
+    if (!root.canEdit) return
     var n = root.selected()
     if (!n) return
     root.pushUndo()
@@ -389,6 +405,7 @@ Item {
 
   // -------------------------------------------------------------------- modes
   function editSelected() {
+    if (!root.canEdit) return
     if (root.selectedIndex < 0) return
     root.pushUndo()
     root.editIndex = root.selectedIndex
@@ -419,6 +436,8 @@ Item {
     root.browserSearching = false
     root.browserPrompt = ""
     root.browserInput = ""
+    root.browserMessage = ""
+    root.pendingDelete = ""
     root.browserIndex = 0
     root.browserDir = Store.parentOf(root.currentBoard)
     root.browserVisible = true
@@ -495,6 +514,11 @@ Item {
       mkdirProc.command = ["mkdir", "-p", root.boardsDir + "/" + dir]
       mkdirProc.running = true
     } else if (action === "rename") {
+      root.flushSave()
+      if (session.busy || root.saveError !== "") {
+        root.browserMessage = "finish saving before renaming; try again"
+        return
+      }
       var e = root.browserCurrent()
       if (!e) return
       var target = Store.uniquePath(root.browserEntries, Store.parentOf(e.path), name, e.dir)
@@ -512,11 +536,29 @@ Item {
     root.closeBrowser()
   }
 
+  // True when this entry is, or contains, the board that is open.
+  function holdsOpenBoard(e) {
+    if (!e.dir) return e.path === root.currentBoard
+    return root.currentBoard.indexOf(e.path + "/") === 0
+  }
+
   function deleteCurrent() {
     var e = root.browserCurrent()
     if (!e) return
-    // Refuse to delete the board you are looking at; switch away first.
-    if (!e.dir && e.path === root.currentBoard) return
+    // Refuse to delete the open board, or the folder it lives in.
+    if (root.holdsOpenBoard(e)) {
+      root.browserMessage = "that is the board you have open — switch away first"
+      return
+    }
+    // rm -rf is not something to do on a single keystroke.
+    if (root.pendingDelete !== e.path) {
+      root.pendingDelete = e.path
+      root.browserMessage = "press x again to delete " + Store.displayName(e)
+                            + (e.dir ? "/ and everything in it" : "")
+      return
+    }
+    root.pendingDelete = ""
+    root.browserMessage = ""
     removeProc.command = e.dir
       ? ["rm", "-rf", "--", root.boardsDir + "/" + e.path]
       : ["rm", "-f", "--", root.boardsDir + "/" + e.path]
@@ -526,6 +568,12 @@ Item {
   function browserKey(event) {
     var text = event.text
     var shift = (event.modifiers & Qt.ShiftModifier) !== 0
+
+    // Arming a delete lasts exactly until the next keystroke.
+    if (text !== "x") {
+      root.pendingDelete = ""
+      root.browserMessage = ""
+    }
 
     // While typing a name, every printable key is input.
     if (root.browserPrompt !== "") {
@@ -581,36 +629,12 @@ Item {
   }
 
   // ------------------------------------------------------------------ storage
-  // Autosave: structural edits write straight away, typing settles first so a
-  // long sentence is one write rather than forty.
-  function scheduleSave() {
-    if (!root.boardLoaded) return
-    saveTimer.restart()
-  }
+  BoardSession { id: session; ctl: root }
 
-  function flushSave() {
-    if (saveTimer.running) saveTimer.stop()
-    root.save()
-  }
-
-  // Switching boards: flush the old one, then point the view at the new file.
-  // boardLoaded drops so the reload is allowed through the guard.
-  function openBoard(path, fresh) {
-    if (path === root.currentBoard && !fresh) return
-    root.flushSave()
-    root.boardLoaded = false
-    root.lastSavedCount = -1
-    root.undoStack = []
-    root.redoStack = []
-    root.selectedIndex = -1
-    root.editIndex = -1
-    root.linkingFrom = -1
-    root.currentBoard = path
-    root.resetView()
-    root.writeState()
-    // A board that does not exist yet loads as empty, then saves itself.
-    if (fresh) Qt.callLater(function () { root.save(true) })
-  }
+  function scheduleSave() { session.scheduleSave() }
+  function flushSave() { session.flushSave() }
+  function save(allowEmpty) { session.save(allowEmpty) }
+  function openBoard(path, fresh) { session.openBoard(path, fresh) }
 
   function writeState() {
     stateFile.setText(JSON.stringify({
@@ -618,20 +642,6 @@ Item {
       lastBoard: root.currentBoard,
       windowMode: root.windowMode
     }, null, 2) + "\n")
-  }
-
-  function save(allowEmpty) {
-    if (!root.boardLoaded) return
-    if (itemModel.count === 0 && root.lastSavedCount > 0 && allowEmpty !== true) return
-    boardFile.setText(Store.writeFile(itemModel, linkModel, root.nextId, root.windowMode))
-    root.lastSavedCount = itemModel.count
-  }
-
-  Timer {
-    id: saveTimer
-    interval: 700
-    repeat: false
-    onTriggered: root.save()
   }
 
   // Which board was open last time, and whether it was windowed. Kept out of
@@ -643,32 +653,6 @@ Item {
     if (st && st.lastBoard) root.currentBoard = String(st.lastBoard)
     if (st) root.windowMode = st.windowMode === true
     root.stateReady = true
-  }
-
-  function loadBoard(raw) {
-    var data = Store.readFile(raw)
-    if (data) {
-      Store.fillItems(itemModel, data.items)
-      Store.fillLinks(linkModel, itemModel, data.links)
-      root.nextId = Store.nextFreeId(itemModel, data.nextId)
-      root.nextColor = itemModel.count
-    } else {
-      itemModel.clear()
-      linkModel.clear()
-    }
-    root.selectedIndex = -1
-    root.undoStack = []
-    root.redoStack = []
-    root.lastSavedCount = itemModel.count
-    root.boardLoaded = true
-    if (itemModel.count > 0) backupProc.running = true
-    // Remember which board this was, so the next session opens it again.
-    root.writeState()
-    root.repaintLinks()
-    // Filling the model tears down every delegate and takes the keyboard with
-    // it. The load lands after the browser has closed, so without this a board
-    // switch leaves nothing listening.
-    if (!root.browserVisible) root.focusKeys()
   }
 
   // ----------------------------------------------------------------- lifecycle
@@ -762,10 +746,17 @@ Item {
     property string renamedFrom: ""
     property string renamedTo: ""
     onExited: function (code) {
-      // Follow the board if the thing we renamed was the open one.
-      if (code === 0 && root.currentBoard === moveProc.renamedFrom) {
-        root.currentBoard = moveProc.renamedTo
-        root.writeState()
+      // Follow the open board, whether it was renamed itself or sits inside a
+      // folder that was.
+      if (code === 0) {
+        var from = moveProc.renamedFrom
+        if (root.currentBoard === from) {
+          root.currentBoard = moveProc.renamedTo
+          root.writeState()
+        } else if (root.currentBoard.indexOf(from + "/") === 0) {
+          root.currentBoard = moveProc.renamedTo + root.currentBoard.slice(from.length)
+          root.writeState()
+        }
       }
       root.rescan()
     }
@@ -786,12 +777,6 @@ Item {
     onLoadFailed: root.applyState("")
   }
 
-  // One generation back on disk, so even a bad write is recoverable.
-  Process {
-    id: backupProc
-    command: ["cp", "-f", root.boardPath, root.boardPath + ".bak"]
-  }
-
   FileView {
     id: themeFile
     path: root.themePath
@@ -806,22 +791,6 @@ Item {
   // editing the file a watcher is holding. The shell updates its own colours
   // on every theme change, so follow that instead.
   onCanvasBackgroundChanged: themeFile.reload()
-
-  FileView {
-    id: boardFile
-    // Empty until the state file has said which board to open: loading too
-    // early would mark an empty board as loaded, and the next save would write
-    // that emptiness over a real file.
-    path: root.stateReady ? root.boardPath : ""
-    watchChanges: false
-    atomicWrites: true
-    printErrors: false
-    // setText() makes the view re-emit loaded. Without this guard every save
-    // would re-run loadBoard, throwing away the undo history and the
-    // selection. watchChanges is off, so our own writes are the only reloads.
-    onLoaded: { if (root.boardLoaded) return; root.loadBoard(text()) }
-    onLoadFailed: { if (root.boardLoaded) return; root.loadBoard("{}") }
-  }
 
   // ----------------------------------------------------------------- surfaces
   // Built through Variants so the surface is constructed with its screen
