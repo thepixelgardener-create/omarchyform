@@ -49,6 +49,12 @@ Item {
 
   // Whichever board is currently instantiated, overlay or window. The camera
   // and key handling are shared state; only the surface hosting them changes.
+  // Guards against writing an empty board over a good file. save() is a no-op
+  // until the file has actually been read, and refuses to shrink a non-empty
+  // board to nothing unless a delete asked for it.
+  property bool boardLoaded: false
+  property int lastSavedCount: -1
+
   property var activeBoard: null
   readonly property real viewW: root.activeBoard ? root.activeBoard.width : 1920
   readonly property real viewH: root.activeBoard ? root.activeBoard.height : 1080
@@ -87,7 +93,7 @@ Item {
     if (index < 0 || index >= notes.count) return
     notes.remove(index)
     if (root.selectedIndex >= notes.count) root.selectedIndex = notes.count - 1
-    root.save()
+    root.save(true)
   }
 
   function recolorNote(index) {
@@ -228,22 +234,25 @@ Item {
     root.repaintGrid()
   }
 
-  function save() {
+  function save(allowEmpty) {
+    if (!root.boardLoaded) return
     var out = []
     for (var i = 0; i < notes.count; i++) {
       var n = notes.get(i)
       out.push({ x: n.nx, y: n.ny, w: n.nw, h: n.nh, color: n.ncolor, text: n.ntext })
     }
+    if (out.length === 0 && root.lastSavedCount > 0 && allowEmpty !== true) return
     boardFile.setText(JSON.stringify({ version: 1, windowMode: root.windowMode, notes: out }, null, 2) + "\n")
+    root.lastSavedCount = out.length
   }
 
   function loadBoard(raw) {
     notes.clear()
     var parsed
-    try { parsed = JSON.parse(raw) } catch (e) { return }
-    if (!parsed) return
+    try { parsed = JSON.parse(raw) } catch (e) { root.boardLoaded = true; root.lastSavedCount = 0; return }
+    if (!parsed) { root.boardLoaded = true; root.lastSavedCount = 0; return }
     root.windowMode = parsed.windowMode === true
-    if (!parsed.notes) return
+    if (!parsed.notes) { root.boardLoaded = true; root.lastSavedCount = 0; return }
     for (var i = 0; i < parsed.notes.length; i++) {
       var n = parsed.notes[i]
       notes.append({
@@ -257,6 +266,10 @@ Item {
     }
     root.nextColor = notes.count
     root.selectedIndex = -1
+    root.lastSavedCount = notes.count
+    root.boardLoaded = true
+    // Keep one generation back on disk, so even a bad write is recoverable.
+    if (notes.count > 0) backupProc.running = true
   }
 
   function open(payloadJson) {
@@ -290,6 +303,11 @@ Item {
   Process {
     running: true
     command: ["mkdir", "-p", root.dataDir]
+  }
+
+  Process {
+    id: backupProc
+    command: ["cp", "-f", root.boardPath, root.boardPath + ".bak"]
   }
 
   FileView {
