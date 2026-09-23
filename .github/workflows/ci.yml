@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # No dependencies: the suite loads BoardStore.js directly.
+      - name: Unit tests
+        run: npm test
+
+      - name: Mutation testing
+        run: npm run mutate
+
+      # Catches a manifest that would be rejected at install time.
+      - name: Manifest shape
+        run: |
+          node -e '
+            const m = require("./manifest.json");
+            const req = ["schemaVersion","id","name","version","author","description","kinds","entryPoints"];
+            const missing = req.filter(k => !(k in m));
+            if (missing.length) { console.error("missing manifest fields:", missing); process.exit(1) }
+            for (const [kind, file] of Object.entries(m.entryPoints)) {
+              if (!require("fs").existsSync(file)) { console.error("missing entry point:", file); process.exit(1) }
+            }
+            console.log("manifest ok:", m.id);
+          '

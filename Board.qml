@@ -1,0 +1,290 @@
+pragma ComponentBehavior: Bound
+
+import QtQuick
+import "BoardStore.js" as Store
+
+// The canvas surface. Hosted by either the fullscreen overlay or the windowed
+// toplevel; both share one controller, so switching never loses your place.
+FocusScope {
+  id: board
+
+  required property var ctl
+
+  focus: true
+
+  function repaintGrid() { grid.requestPaint() }
+  function repaintLinks() { linkCanvas.requestPaint() }
+  function focusKeys() { keys.forceActiveFocus() }
+
+  // A real window hands focus to its content item, not to whatever is nested
+  // inside it, so claim it explicitly on both surfaces.
+  Component.onCompleted: {
+    board.ctl.activeBoard = board
+    Qt.callLater(board.focusKeys)
+  }
+  Component.onDestruction: if (board.ctl.activeBoard === board) board.ctl.activeBoard = null
+
+  Rectangle {
+    anchors.fill: parent
+    color: board.ctl.canvasBackground
+  }
+
+  // Dots and connectors are drawn in screen space so they keep their weight
+  // however far you zoom out, rather than scaling into mush.
+  Canvas {
+    id: grid
+    anchors.fill: parent
+    onPaint: {
+      var ctx = getContext("2d")
+      ctx.reset()
+      var step = 40 * board.ctl.zoom
+      if (step < 8) return
+      ctx.fillStyle = board.ctl.dotColor
+      var r = Math.max(1, 1.2 * board.ctl.zoom)
+      for (var x = board.ctl.camX % step; x < width; x += step)
+        for (var y = board.ctl.camY % step; y < height; y += step) {
+          ctx.beginPath()
+          ctx.arc(x, y, r, 0, Math.PI * 2)
+          ctx.fill()
+        }
+    }
+    onWidthChanged: requestPaint()
+    onHeightChanged: requestPaint()
+  }
+
+  Canvas {
+    id: linkCanvas
+    anchors.fill: parent
+    onPaint: {
+      var ctx = getContext("2d")
+      ctx.reset()
+      ctx.strokeStyle = board.ctl.foreground
+      ctx.lineWidth = Math.max(1, 1.5 * board.ctl.zoom)
+      ctx.globalAlpha = 0.55
+
+      var items = board.ctl.items
+      var links = board.ctl.links
+      var byId = Store.idIndex(items)
+
+      for (var i = 0; i < links.count; i++) {
+        var l = links.get(i)
+        var ai = byId[l.lfrom]
+        var bi = byId[l.lto]
+        if (ai === undefined || bi === undefined) continue
+        var a = items.get(ai)
+        var b = items.get(bi)
+        var acx = a.ix + a.iw / 2, acy = a.iy + a.ih / 2
+        var bcx = b.ix + b.iw / 2, bcy = b.iy + b.ih / 2
+        var p = Store.edgePoint(a, acx, acy, bcx, bcy)
+        var q = Store.edgePoint(b, bcx, bcy, acx, acy)
+        ctx.beginPath()
+        ctx.moveTo(board.ctl.toScreenX(p.x), board.ctl.toScreenY(p.y))
+        ctx.lineTo(board.ctl.toScreenX(q.x), board.ctl.toScreenY(q.y))
+        ctx.stroke()
+      }
+
+      // While picking the far end, trail a dashed line to the selection so it
+      // is obvious what is about to be joined.
+      var si = byId[board.ctl.linkingFrom]
+      if (si !== undefined && board.ctl.selectedIndex >= 0 && si !== board.ctl.selectedIndex) {
+        var s = items.get(si)
+        var t = items.get(board.ctl.selectedIndex)
+        ctx.globalAlpha = 0.9
+        ctx.setLineDash([6, 5])
+        ctx.beginPath()
+        ctx.moveTo(board.ctl.toScreenX(s.ix + s.iw / 2), board.ctl.toScreenY(s.iy + s.ih / 2))
+        ctx.lineTo(board.ctl.toScreenX(t.ix + t.iw / 2), board.ctl.toScreenY(t.iy + t.ih / 2))
+        ctx.stroke()
+        ctx.setLineDash([])
+      }
+    }
+    onWidthChanged: requestPaint()
+    onHeightChanged: requestPaint()
+  }
+
+  // Background: drag to pan, wheel to zoom, double-click for a note.
+  MouseArea {
+    anchors.fill: parent
+    acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+    property real lastX: 0
+    property real lastY: 0
+    property bool panning: false
+
+    onPressed: function (mouse) {
+      lastX = mouse.x
+      lastY = mouse.y
+      panning = true
+      board.ctl.selectOnly(-1)
+      board.focusKeys()
+    }
+    onReleased: panning = false
+    onPositionChanged: function (mouse) {
+      if (!panning) return
+      board.ctl.panBy(mouse.x - lastX, mouse.y - lastY)
+      lastX = mouse.x
+      lastY = mouse.y
+    }
+    onDoubleClicked: function (mouse) {
+      board.ctl.addItem("note", board.ctl.toWorldX(mouse.x), board.ctl.toWorldY(mouse.y))
+    }
+    onWheel: function (wheel) {
+      board.ctl.zoomAt(wheel.x, wheel.y, wheel.angleDelta.y > 0 ? 1.12 : 1 / 1.12)
+    }
+  }
+
+  // The world. Everything inside is positioned in canvas coordinates.
+  Item {
+    anchors.fill: parent
+    transform: [
+      Scale { xScale: board.ctl.zoom; yScale: board.ctl.zoom },
+      Translate { x: board.ctl.camX; y: board.ctl.camY }
+    ]
+
+    Repeater {
+      model: board.ctl.items
+      delegate: Node { ctl: board.ctl }
+    }
+  }
+
+  // Keyboard owner. Lives above the canvas so Escape always lands here.
+  Item {
+    id: keys
+    anchors.fill: parent
+    focus: true
+
+    // Printable keys are a table rather than a ladder of else-ifs: adding a
+    // command is one line, and the cheat sheet is the only other place to
+    // touch.
+    readonly property var commands: ({
+      "n": function () { board.ctl.addRelative("note") },
+      "r": function () { board.ctl.addRelative("rect") },
+      "e": function () { board.ctl.addRelative("ellipse") },
+      "s": function () { board.ctl.cycleKind() },
+      "c": function () { board.ctl.recolorItem() },
+      "d": function () { board.ctl.removeItem(board.ctl.selectedIndex) },
+      "u": function () { board.ctl.undo() },
+      "i": function () { board.ctl.editSelected() },
+      "x": function () { board.ctl.toggleLinking() },
+      "X": function () { board.ctl.unlinkSelected() },
+      "w": function () { board.ctl.toggleWindowMode() },
+      "f": function () { board.ctl.fitToItems() },
+      "0": function () { board.ctl.resetView() },
+      "+": function () { board.ctl.zoomCentre(1.2) },
+      "=": function () { board.ctl.zoomCentre(1.2) },
+      "-": function () { board.ctl.zoomCentre(1 / 1.2) },
+      "?": function () { board.ctl.helpVisible = !board.ctl.helpVisible }
+    })
+
+    readonly property var arrows: ({})
+
+    function direction(key, text) {
+      if (key === Qt.Key_Left || text === "h" || text === "H") return [-1, 0]
+      if (key === Qt.Key_Right || text === "l" || text === "L") return [1, 0]
+      if (key === Qt.Key_Up || text === "k" || text === "K") return [0, -1]
+      if (key === Qt.Key_Down || text === "j" || text === "J") return [0, 1]
+      return null
+    }
+
+    Keys.onPressed: function (event) {
+      var ctrl = (event.modifiers & Qt.ControlModifier) !== 0
+      var shift = (event.modifiers & Qt.ShiftModifier) !== 0
+
+      if (ctrl) {
+        if (event.key === Qt.Key_R) board.ctl.redo()
+        else if (event.key === Qt.Key_Z) shift ? board.ctl.redo() : board.ctl.undo()
+        else if (event.key === Qt.Key_S) board.ctl.save()
+        else return
+        event.accepted = true
+        return
+      }
+
+      // Movement does double duty: bare keys move the selection, shifted keys
+      // carry the selected item along with them.
+      var d = keys.direction(event.key, event.text)
+      if (d) {
+        board.ctl.move(d[0], d[1], shift)
+        event.accepted = true
+        return
+      }
+
+      if (event.key === Qt.Key_Escape) board.ctl.back()
+      else if (event.key === Qt.Key_F1) board.ctl.helpVisible = !board.ctl.helpVisible
+      else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) board.ctl.editSelected()
+      else if (event.key === Qt.Key_Tab) board.ctl.selectNext(1)
+      else if (event.key === Qt.Key_Backtab) board.ctl.selectNext(-1)
+      else if (event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) board.ctl.removeItem(board.ctl.selectedIndex)
+      else {
+        var run = keys.commands[event.text]
+        if (!run) return
+        run()
+      }
+      event.accepted = true
+    }
+  }
+
+  // Keybinding cheat sheet, on ? or F1.
+  Rectangle {
+    anchors.centerIn: parent
+    visible: board.ctl.helpVisible
+    width: helpColumn.width + board.ctl.sp(56)
+    height: helpColumn.height + board.ctl.sp(48)
+    color: board.ctl.canvasBackground
+    border.width: board.ctl.borderWidth
+    border.color: Qt.rgba(board.ctl.foreground.r, board.ctl.foreground.g, board.ctl.foreground.b, 0.35)
+    radius: board.ctl.cornerRadius
+
+    Column {
+      id: helpColumn
+      anchors.centerIn: parent
+      spacing: board.ctl.sp(6)
+
+      Text {
+        text: "Omarchyform"
+        color: board.ctl.foreground
+        font.family: board.ctl.fontFamily
+        font.pixelSize: board.ctl.fontHeading
+        bottomPadding: board.ctl.sp(8)
+      }
+
+      Repeater {
+        model: Store.KEY_HELP
+
+        Row {
+          required property var modelData
+          spacing: board.ctl.sp(16)
+
+          Text {
+            width: board.ctl.sp(96)
+            text: parent.modelData[0]
+            color: board.ctl.foreground
+            font.family: board.ctl.fontFamily
+            font.pixelSize: board.ctl.fontBody
+          }
+          Text {
+            text: parent.modelData[1]
+            color: board.ctl.foreground
+            opacity: 0.7
+            font.family: board.ctl.fontFamily
+            font.pixelSize: board.ctl.fontBody
+          }
+        }
+      }
+    }
+  }
+
+  Text {
+    anchors.horizontalCenter: parent.horizontalCenter
+    anchors.bottom: parent.bottom
+    anchors.bottomMargin: board.ctl.sp(16)
+    color: board.ctl.foreground
+    opacity: 0.55
+    font.family: board.ctl.fontFamily
+    font.pixelSize: board.ctl.fontBody
+    visible: !board.ctl.helpVisible
+    text: board.ctl.editIndex >= 0
+      ? "esc: done typing"
+      : board.ctl.linkingFrom >= 0
+        ? "pick the other end, then x to connect  ·  esc: cancel"
+        : "n: note  ·  r/e: shapes  ·  x: connect  ·  u: undo  ·  hjkl: move  ·  ?: all keys  ·  esc: close"
+  }
+}

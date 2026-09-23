@@ -57,7 +57,7 @@ Press `?` or `F1` on the board for this list.
 | `H` `J` `K` `L` | Push the selected note around |
 | `tab` | Cycle through every note |
 | `d` / `del` | Delete the selected item |
-| `c` | Cycle its colour |
+| `c` | Cycle its theme role: foreground, accent, urgent, muted |
 | `w` | Switch between fullscreen and windowed |
 | `f` | Fit the whole board on screen |
 | `0` | Reset the view |
@@ -74,17 +74,18 @@ it, drag the bottom-right corner to resize, middle-click to delete.
 
 Plain JSON, written atomically on every change, with one generation kept
 beside it as `board.json.bak`. Back it up, sync it, edit it by hand, put it in
-git — it is your file. A v1 board from before shapes is migrated on load.
+git — it is your file. Older boards are migrated on load: v1 had no ids or
+shapes, v2 stored fixed pastel hexes which are mapped onto theme roles.
 
 ```json
 {
-  "version": 2,
+  "version": 3,
   "nextId": 3,
   "items": [
     { "id": 1, "kind": "note", "x": 0, "y": 0, "w": 180, "h": 140,
-      "color": "#F7D794", "text": "hello" },
+      "tint": "foreground", "text": "hello" },
     { "id": 2, "kind": "ellipse", "x": 300, "y": 0, "w": 160, "h": 110,
-      "color": "#A8D8B9", "text": "there" }
+      "tint": "accent", "text": "there" }
   ],
   "links": [ { "from": 1, "to": 2 } ]
 }
@@ -92,6 +93,50 @@ git — it is your file. A v1 board from before shapes is migrated on load.
 
 Connectors reference item ids rather than positions, so they survive
 deletions, reordering and hand-editing.
+
+## It looks like Omarchy, because it asks Omarchy
+
+Nothing about the appearance is invented here. The board takes the theme's
+font family and its size tokens, so it follows `omarchy display text size`
+like the rest of the desktop. Corners come from `Style.cornerRadius` (square
+by default) and borders from `Style.normalBorderWidth`.
+
+Items carry a **theme role** — `foreground`, `accent`, `urgent` or `muted` —
+rather than a fixed colour, drawn as a translucent wash plus a hairline of the
+same role. Switch your theme and the board switches with it. `c` cycles the
+role.
+
+**Day and night** is not a setting here either. Omarchy themes declare
+`mode = "light"` or `mode = "dark"` in their `colors.toml`; the board reads
+that and adjusts the weight of its washes and its dot grid accordingly. A
+third-party theme that omits `mode` falls back to the background's Rec. 709
+luminance.
+
+## Layout
+
+| File | Holds |
+|------|-------|
+| `Omarchyform.qml` | Controller: state, storage, and the two surfaces |
+| `Board.qml` | The canvas surface — grid, connectors, keys, cheat sheet |
+| `Node.qml` | One item: note, box, ellipse or diamond |
+| `BoardStore.js` | Pure logic: parsing, marshalling, geometry. No QML |
+
+## Tests
+
+The pure logic lives in plain JavaScript so it can be tested without Qt, and
+the suite loads the very file the plugin loads — there is no copy to drift.
+
+```bash
+npm test      # 48 unit and property tests, no dependencies
+npm run mutate  # mutation testing
+```
+
+`npm run mutate` breaks `BoardStore.js` on purpose, one edit at a time, and
+checks the suite notices. It currently kills 74 of 75 mutants. The survivor is
+an equivalent mutant: `nearest()` is only ever called with a unit axis vector,
+so the sign inside its off-axis term cannot be observed. That is documented at
+the function rather than papered over with a test for behaviour the code does
+not have.
 
 ## Notes on the platform
 
