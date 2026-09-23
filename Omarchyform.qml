@@ -108,10 +108,25 @@ Item {
   // save() is a no-op until the file has been read, and refuses to shrink a
   // non-empty board to nothing unless a delete asked for it.
   property bool boardLoaded: false
+  property bool stateReady: false
   property int lastSavedCount: -1
 
   property var undoStack: []
   property var redoStack: []
+
+  // ------------------------------------------------------------------ browser
+  property bool browserVisible: false
+  property string browserDir: ""
+  property string browserQuery: ""
+  property int browserIndex: 0
+  property var browserEntries: []
+  // "" when navigating; otherwise the label of the line being typed into.
+  property bool browserSearching: false
+  property string browserPrompt: ""
+  property string browserInput: ""
+  property string browserAction: ""
+
+  readonly property var browserRows: Store.filterEntries(root.browserEntries, root.browserDir, root.browserQuery)
 
   property var activeBoard: null
   property var boardScreen: null
@@ -152,7 +167,7 @@ Item {
     root.repaintLinks()
     // Rebuilding the model tears down every delegate, which drops keyboard
     // focus; without this a second undo never reaches the key handler.
-    root.focusKeys()
+    if (!root.browserVisible) root.focusKeys()
   }
 
   function undo() {
@@ -387,7 +402,7 @@ Item {
 
   function toggleWindowMode() {
     root.windowMode = !root.windowMode
-    root.save()
+    root.writeState()
   }
 
   // Escape unwinds one layer at a time rather than closing outright.
@@ -397,7 +412,214 @@ Item {
     else root.dismiss()
   }
 
+  // ------------------------------------------------------------------ browser
+  function openBrowser() {
+    root.flushSave()
+    root.browserQuery = ""
+    root.browserSearching = false
+    root.browserPrompt = ""
+    root.browserInput = ""
+    root.browserIndex = 0
+    root.browserDir = Store.parentOf(root.currentBoard)
+    root.browserVisible = true
+    root.rescan()
+  }
+
+  function closeBrowser() {
+    root.browserVisible = false
+    root.browserPrompt = ""
+    root.browserQuery = ""
+    root.browserSearching = false
+    root.focusKeys()
+  }
+
+  function rescan() { scanProc.running = true }
+
+  function browserClamp() {
+    var n = root.browserRows.length
+    if (n === 0) root.browserIndex = 0
+    else if (root.browserIndex >= n) root.browserIndex = n - 1
+    else if (root.browserIndex < 0) root.browserIndex = 0
+  }
+
+  function browserCurrent() {
+    var rows = root.browserRows
+    if (root.browserIndex < 0 || root.browserIndex >= rows.length) return null
+    return rows[root.browserIndex]
+  }
+
+  // Enter descends into a folder or opens a board.
+  function browserEnter() {
+    var e = root.browserCurrent()
+    if (!e) return
+    if (e.dir) {
+      root.browserDir = e.path
+      root.browserQuery = ""
+      root.browserIndex = 0
+      return
+    }
+    root.openBoard(e.path)
+    root.closeBrowser()
+  }
+
+  function browserUp() {
+    if (root.browserSearching) { root.browserSearching = false; root.browserQuery = ""; root.browserIndex = 0; return }
+    if (root.browserDir === "") return
+    var leaving = root.browserDir
+    root.browserDir = Store.parentOf(leaving)
+    root.browserIndex = 0
+    // Land on the folder we just came out of, the way cd .. leaves you.
+    var rows = root.browserRows
+    for (var i = 0; i < rows.length; i++) if (rows[i].path === leaving) root.browserIndex = i
+  }
+
+  function prompt(action, label, initial) {
+    root.browserAction = action
+    root.browserPrompt = label
+    root.browserInput = initial || ""
+  }
+
+  function commitPrompt() {
+    var name = root.browserInput.trim()
+    var action = root.browserAction
+    root.browserPrompt = ""
+    root.browserInput = ""
+    root.browserAction = ""
+    if (!Store.nameIsValid(name)) return
+
+    if (action === "board") {
+      var path = Store.uniquePath(root.browserEntries, root.browserDir, name, false)
+      root.createBoard(path)
+    } else if (action === "folder") {
+      var dir = Store.uniquePath(root.browserEntries, root.browserDir, name, true)
+      mkdirProc.command = ["mkdir", "-p", root.boardsDir + "/" + dir]
+      mkdirProc.running = true
+    } else if (action === "rename") {
+      var e = root.browserCurrent()
+      if (!e) return
+      var target = Store.uniquePath(root.browserEntries, Store.parentOf(e.path), name, e.dir)
+      moveProc.command = ["mv", "-n", root.boardsDir + "/" + e.path, root.boardsDir + "/" + target]
+      moveProc.renamedFrom = e.path
+      moveProc.renamedTo = target
+      moveProc.running = true
+    }
+  }
+
+  // A new board is created by pointing at it and saving: the file appears with
+  // an empty board in it, which is also what makes it the open one.
+  function createBoard(path) {
+    root.openBoard(path, true)
+    root.closeBrowser()
+  }
+
+  function deleteCurrent() {
+    var e = root.browserCurrent()
+    if (!e) return
+    // Refuse to delete the board you are looking at; switch away first.
+    if (!e.dir && e.path === root.currentBoard) return
+    removeProc.command = e.dir
+      ? ["rm", "-rf", "--", root.boardsDir + "/" + e.path]
+      : ["rm", "-f", "--", root.boardsDir + "/" + e.path]
+    removeProc.running = true
+  }
+
+  function browserKey(event) {
+    var text = event.text
+    var shift = (event.modifiers & Qt.ShiftModifier) !== 0
+
+    // While typing a name, every printable key is input.
+    if (root.browserPrompt !== "") {
+      if (event.key === Qt.Key_Escape) { root.browserPrompt = ""; root.browserInput = ""; root.browserAction = "" }
+      else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) root.commitPrompt()
+      else if (event.key === Qt.Key_Backspace) root.browserInput = root.browserInput.slice(0, -1)
+      else if (text && text >= " ") root.browserInput += text
+      else return
+      event.accepted = true
+      return
+    }
+
+    // While searching, printable keys extend the query; the arrow keys and
+    // Enter still navigate the results.
+    if (root.browserSearching && text && text >= " ") {
+      root.browserQuery += text
+      root.browserIndex = 0
+      event.accepted = true
+      return
+    }
+
+    if (event.key === Qt.Key_Escape) {
+      if (root.browserSearching) {
+        root.browserSearching = false
+        root.browserQuery = ""
+        root.browserIndex = 0
+      } else root.closeBrowser()
+    }
+    else if (event.key === Qt.Key_Down || text === "j") { root.browserIndex += 1; root.browserClamp() }
+    else if (event.key === Qt.Key_Up || text === "k") { root.browserIndex -= 1; root.browserClamp() }
+    else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || text === "l"
+             || event.key === Qt.Key_Right) root.browserEnter()
+    else if (event.key === Qt.Key_Left || text === "h") root.browserUp()
+    else if (event.key === Qt.Key_Backspace) {
+      if (root.browserSearching) {
+        root.browserQuery = root.browserQuery.slice(0, -1)
+        if (root.browserQuery === "") root.browserSearching = false
+        root.browserIndex = 0
+      } else root.browserUp()
+    }
+    else if (text === "/") { root.browserSearching = true; root.browserQuery = ""; root.browserIndex = 0 }
+    else if (text === "a") root.prompt("board", "new board:", "")
+    else if (text === "A") root.prompt("folder", "new folder:", "")
+    else if (text === "r") {
+      var e = root.browserCurrent()
+      if (e) root.prompt("rename", "rename to:", Store.displayName(e))
+    }
+    else if (text === "x") root.deleteCurrent()
+    else if (text === "g") { root.browserIndex = 0 }
+    else if (text === "G") { root.browserIndex = root.browserRows.length - 1; root.browserClamp() }
+    else return
+    event.accepted = true
+  }
+
   // ------------------------------------------------------------------ storage
+  // Autosave: structural edits write straight away, typing settles first so a
+  // long sentence is one write rather than forty.
+  function scheduleSave() {
+    if (!root.boardLoaded) return
+    saveTimer.restart()
+  }
+
+  function flushSave() {
+    if (saveTimer.running) saveTimer.stop()
+    root.save()
+  }
+
+  // Switching boards: flush the old one, then point the view at the new file.
+  // boardLoaded drops so the reload is allowed through the guard.
+  function openBoard(path, fresh) {
+    if (path === root.currentBoard && !fresh) return
+    root.flushSave()
+    root.boardLoaded = false
+    root.lastSavedCount = -1
+    root.undoStack = []
+    root.redoStack = []
+    root.selectedIndex = -1
+    root.editIndex = -1
+    root.linkingFrom = -1
+    root.currentBoard = path
+    root.resetView()
+    root.writeState()
+    // A board that does not exist yet loads as empty, then saves itself.
+    if (fresh) Qt.callLater(function () { root.save(true) })
+  }
+
+  function writeState() {
+    stateFile.setText(JSON.stringify({
+      version: 1,
+      lastBoard: root.currentBoard,
+      windowMode: root.windowMode
+    }, null, 2) + "\n")
+  }
+
   function save(allowEmpty) {
     if (!root.boardLoaded) return
     if (itemModel.count === 0 && root.lastSavedCount > 0 && allowEmpty !== true) return
@@ -405,10 +627,27 @@ Item {
     root.lastSavedCount = itemModel.count
   }
 
+  Timer {
+    id: saveTimer
+    interval: 700
+    repeat: false
+    onTriggered: root.save()
+  }
+
+  // Which board was open last time, and whether it was windowed. Kept out of
+  // the board files so the same board can be opened on two machines without
+  // dragging one machine's window preference along with it.
+  function applyState(raw) {
+    var st = null
+    try { st = JSON.parse(raw) } catch (e) { st = null }
+    if (st && st.lastBoard) root.currentBoard = String(st.lastBoard)
+    if (st) root.windowMode = st.windowMode === true
+    root.stateReady = true
+  }
+
   function loadBoard(raw) {
     var data = Store.readFile(raw)
     if (data) {
-      root.windowMode = data.windowMode
       Store.fillItems(itemModel, data.items)
       Store.fillLinks(linkModel, itemModel, data.links)
       root.nextId = Store.nextFreeId(itemModel, data.nextId)
@@ -423,7 +662,13 @@ Item {
     root.lastSavedCount = itemModel.count
     root.boardLoaded = true
     if (itemModel.count > 0) backupProc.running = true
+    // Remember which board this was, so the next session opens it again.
+    root.writeState()
     root.repaintLinks()
+    // Filling the model tears down every delegate and takes the keyboard with
+    // it. The load lands after the browser has closed, so without this a board
+    // switch leaves nothing listening.
+    if (!root.browserVisible) root.focusKeys()
   }
 
   // ----------------------------------------------------------------- lifecycle
@@ -469,13 +714,76 @@ Item {
   }
 
   readonly property string dataDir: Quickshell.env("HOME") + "/.local/share/omarchyform"
-  readonly property string boardPath: root.dataDir + "/board.json"
+  readonly property string boardsDir: root.dataDir + "/boards"
+  readonly property string legacyPath: root.dataDir + "/board.json"
+  readonly property string statePath: root.dataDir + "/state.json"
 
-  // The data directory has to exist before the first atomic write, otherwise
-  // the board silently fails to save on a fresh install.
+  // Relative to boardsDir, e.g. "work/project-a.json".
+  property string currentBoard: "board.json"
+  readonly property string boardPath: root.boardsDir + "/" + root.currentBoard
+  readonly property string boardTitle: Store.displayName({ path: root.currentBoard, dir: false })
+
+  // The boards directory has to exist before the first atomic write, otherwise
+  // the board silently fails to save on a fresh install. A board from before
+  // there were folders is copied in rather than moved, so the old file stays
+  // put as a fallback.
   Process {
+    id: initProc
     running: true
-    command: ["mkdir", "-p", root.dataDir]
+    command: ["mkdir", "-p", root.boardsDir]
+    onExited: migrateProc.running = true
+  }
+
+  Process {
+    id: migrateProc
+    command: ["cp", "-n", root.legacyPath, root.boardsDir + "/board.json"]
+    onExited: stateFile.reload()
+  }
+
+  Process {
+    id: scanProc
+    command: ["find", root.boardsDir, "-mindepth", "1", "-printf", "%y\\t%P\\n"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        root.browserEntries = Store.parseListing(text)
+        root.browserClamp()
+      }
+    }
+  }
+
+  Process {
+    id: mkdirProc
+    onExited: root.rescan()
+  }
+
+  Process {
+    id: moveProc
+    property string renamedFrom: ""
+    property string renamedTo: ""
+    onExited: function (code) {
+      // Follow the board if the thing we renamed was the open one.
+      if (code === 0 && root.currentBoard === moveProc.renamedFrom) {
+        root.currentBoard = moveProc.renamedTo
+        root.writeState()
+      }
+      root.rescan()
+    }
+  }
+
+  Process {
+    id: removeProc
+    onExited: root.rescan()
+  }
+
+  FileView {
+    id: stateFile
+    path: root.statePath
+    watchChanges: false
+    atomicWrites: true
+    printErrors: false
+    onLoaded: root.applyState(text())
+    onLoadFailed: root.applyState("")
   }
 
   // One generation back on disk, so even a bad write is recoverable.
@@ -501,7 +809,10 @@ Item {
 
   FileView {
     id: boardFile
-    path: root.boardPath
+    // Empty until the state file has said which board to open: loading too
+    // early would mark an empty board as loaded, and the next save would write
+    // that emptiness over a real file.
+    path: root.stateReady ? root.boardPath : ""
     watchChanges: false
     atomicWrites: true
     printErrors: false

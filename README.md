@@ -58,6 +58,7 @@ Press `?` or `F1` on the board for this list.
 | `tab` | Cycle through every note |
 | `d` / `del` | Delete the selected item |
 | `c` | Cycle its theme role: foreground, accent, urgent, muted |
+| `b` | Boards: browse, open, create |
 | `w` | Switch between fullscreen and windowed |
 | `f` | Fit the whole board on screen |
 | `0` | Reset the view |
@@ -68,12 +69,52 @@ Mouse works too: drag a note to move it, drag the canvas to pan, wheel to
 zoom, double-click empty canvas for a new note, double-click a note to type in
 it, drag the bottom-right corner to resize, middle-click to delete.
 
+## Boards
+
+`b` opens the board browser: a shell-like walk through your boards directory.
+
+| Key | Does |
+|-----|------|
+| `j` `k` | Move the cursor |
+| `l` / `enter` | Enter a folder, or open a board |
+| `h` / `backspace` | Go up a level |
+| `/` | Search every board in the tree, not just this folder |
+| `a` | New board here |
+| `A` | New folder here |
+| `r` | Rename |
+| `x` | Delete (refuses the board you have open) |
+| `g` / `G` | First / last |
+| `esc` | Leave the search, then close the browser |
+
+Search is a subsequence match over the whole path, so `wpa` finds
+`work/project-a`. While you are searching, letters go into the query — press
+Escape first if you want `a`, `r` or `x`.
+
+The browser opens in the folder of the board you are on, and the board you are
+on is marked `·open`.
+
+## Saving
+
+There is no save key, though `ctrl+s` works if you want one. Structural
+changes — adding, deleting, moving, connecting — are written immediately.
+Typing settles for 700ms first, so a sentence is one write rather than forty.
+Switching boards or closing flushes whatever is pending.
+
+Which board you had open is remembered in `state.json` and reopened next time.
+
 ## Where your board lives
 
-`~/.local/share/omarchyform/board.json`
+```
+~/.local/share/omarchyform/
+├── boards/
+│   ├── board.json
+│   └── work/
+│       └── project-a.json
+└── state.json
+```
 
-Plain JSON, written atomically on every change, with one generation kept
-beside it as `board.json.bak`. Back it up, sync it, edit it by hand, put it in
+Each board is plain JSON, written atomically, with one generation kept beside
+it as `<board>.json.bak`. Back it up, sync it, edit it by hand, put it in
 git — it is your file. Older boards are migrated on load: v1 had no ids or
 shapes, v2 stored fixed pastel hexes which are mapped onto theme roles.
 
@@ -119,6 +160,7 @@ luminance.
 | `Omarchyform.qml` | Controller: state, storage, and the two surfaces |
 | `Board.qml` | The canvas surface — grid, connectors, keys, cheat sheet |
 | `Node.qml` | One item: note, box, ellipse or diamond |
+| `Browser.qml` | The board browser |
 | `BoardStore.js` | Pure logic: parsing, marshalling, geometry. No QML |
 
 ## Tests
@@ -127,16 +169,26 @@ The pure logic lives in plain JavaScript so it can be tested without Qt, and
 the suite loads the very file the plugin loads — there is no copy to drift.
 
 ```bash
-npm test      # 48 unit and property tests, no dependencies
+npm test        # 60 unit and property tests, no dependencies
 npm run mutate  # mutation testing
 ```
 
 `npm run mutate` breaks `BoardStore.js` on purpose, one edit at a time, and
-checks the suite notices. It currently kills 74 of 75 mutants. The survivor is
-an equivalent mutant: `nearest()` is only ever called with a unit axis vector,
-so the sign inside its off-axis term cannot be observed. That is documented at
-the function rather than papered over with a test for behaviour the code does
-not have.
+checks the suite notices. It currently kills 107 of 113.
+
+The six survivors are equivalent mutants — each differs only in a case the
+code's preconditions rule out, so no honest test can tell them apart:
+
+- `parentOf` / `parseListing`: a boundary at index 0 that produces the same
+  answer either way, since a relative path cannot begin with a separator.
+- the two sort comparators: they differ only when two entries compare equal,
+  and a directory cannot hold two things with the same name.
+- `fuzzyScore`'s loop bound: reading one past the end returns `""`, which
+  matches nothing, so the result is unchanged.
+- `nearest`'s off-axis term: it is only ever called with a unit axis vector,
+  so one of the two products is always zero.
+
+They are left in the report rather than silenced, so the number stays honest.
 
 ## Notes on the platform
 
@@ -180,8 +232,7 @@ that is already loaded. Use `omarchy restart shell` to pick up changes.
 
 ## Not there yet
 
-Freehand drawing, images, multiple boards, and selecting more than one item
-at a time.
+Freehand drawing, images, and selecting more than one item at a time.
 
 ## License
 

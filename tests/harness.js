@@ -15,7 +15,9 @@ function loadStore(source) {
   const exported = [
     "MIN_SIZE", "TINTS", "LEGACY_SWATCHES", "KINDS", "KEY_HELP", "normalizeTint",
     "itemRows", "linkRows", "fillItems", "fillLinks", "indexOfId", "idIndex",
-    "nextFreeId", "readFile", "writeFile", "parseThemeMode", "isLightColor", "nearest", "bounds", "edgePoint", "cycle"
+    "nextFreeId", "readFile", "writeFile", "parseThemeMode", "isLightColor",
+    "joinPath", "parentOf", "baseName", "displayName", "parseListing",
+    "childrenOf", "fuzzyScore", "filterEntries", "nameIsValid", "uniquePath", "nearest", "bounds", "edgePoint", "cycle"
   ]
   const factory = new Function(`${body}\nreturn {${exported.join(",")}}`)
   return factory()

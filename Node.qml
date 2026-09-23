@@ -115,8 +115,12 @@ Item {
     verticalAlignment: node.isNote ? TextEdit.AlignTop : TextEdit.AlignVCenter
     selectByMouse: true
     // Guarded so the model write cannot bounce back and reset the caret.
-    onTextChanged: if (text !== node.itext) node.set("itext", text)
-    onActiveFocusChanged: if (!activeFocus) node.ctl.save()
+    onTextChanged: {
+      if (text === node.itext) return
+      node.set("itext", text)
+      node.ctl.scheduleSave()
+    }
+    onActiveFocusChanged: if (!activeFocus) node.ctl.flushSave()
     Keys.onEscapePressed: node.ctl.stopEditing()
 
     readonly property bool wantsEdit: node.ctl.editIndex === node.index

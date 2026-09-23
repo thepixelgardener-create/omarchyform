@@ -29,6 +29,7 @@ var KEY_HELP = [
   ["x", "connect: press on one, then on another"],
   ["X", "remove every connector on this item"],
   ["u / ctrl+r", "undo / redo"],
+  ["b", "boards: browse, open, create"],
   ["enter / i", "type in the selected item"],
   ["esc", "back out, then close the board"],
   ["h j k l", "move the selection around"],
@@ -134,6 +135,129 @@ function writeFile(items, links, nextId, windowMode) {
     items: itemRows(items),
     links: linkRows(links)
   }, null, 2) + "\n"
+}
+
+// ------------------------------------------------------------------- library
+// Boards live in a real directory tree under the data dir. Paths here are
+// always relative to that root, use "/" and never start or end with one.
+
+function joinPath(a, b) {
+  if (!a) return b || ""
+  if (!b) return a
+  return a + "/" + b
+}
+
+function parentOf(path) {
+  var i = path.lastIndexOf("/")
+  return i < 0 ? "" : path.slice(0, i)
+}
+
+function baseName(path) {
+  var i = path.lastIndexOf("/")
+  return i < 0 ? path : path.slice(i + 1)
+}
+
+// What the browser shows: a board without its extension, a folder as it is.
+function displayName(entry) {
+  var b = baseName(entry.path)
+  if (entry.dir) return b
+  return b.slice(-5) === ".json" ? b.slice(0, -5) : b
+}
+
+// Output of: find <root> -mindepth 1 -printf "%y\t%P\n"
+// Anything that is neither a directory nor a .json board is ignored, so a
+// stray file in the tree cannot become a broken entry.
+function parseListing(out) {
+  var rows = []
+  if (!out) return rows
+  var lines = out.split("\n")
+  for (var i = 0; i < lines.length; i++) {
+    var tab = lines[i].indexOf("\t")
+    if (tab < 0) continue
+    var type = lines[i].slice(0, tab)
+    var path = lines[i].slice(tab + 1)
+    if (!path) continue
+    if (type === "d") rows.push({ path: path, dir: true })
+    else if (type === "f" && path.slice(-5) === ".json") rows.push({ path: path, dir: false })
+  }
+  return rows
+}
+
+// Directories first, then boards, each alphabetically — the order `ls` would
+// give you with --group-directories-first.
+function childrenOf(entries, dir) {
+  var out = []
+  for (var i = 0; i < entries.length; i++)
+    if (parentOf(entries[i].path) === dir) out.push(entries[i])
+  out.sort(function (a, b) {
+    if (a.dir !== b.dir) return a.dir ? -1 : 1
+    // Two entries in one directory cannot share a name, so there is no equal
+    // case to handle here.
+    var an = baseName(a.path).toLowerCase()
+    var bn = baseName(b.path).toLowerCase()
+    return an < bn ? -1 : 1
+  })
+  return out
+}
+
+// Subsequence match over the whole path, so "wpa" finds work/project-a.
+// Lower is better; -1 means no match.
+function fuzzyScore(text, query) {
+  if (!query) return 0
+  var t = text.toLowerCase()
+  var q = query.toLowerCase()
+  var ti = 0
+  var score = 0
+  for (var qi = 0; qi < q.length; qi++) {
+    var found = -1
+    while (ti < t.length) {
+      if (t.charAt(ti) === q.charAt(qi)) { found = ti; break }
+      ti++
+    }
+    if (found < 0) return -1
+    score += found
+    ti++
+  }
+  return score
+}
+
+// With no query this is just the current directory. With one it searches the
+// whole tree, which is the point of holding it all in memory.
+function filterEntries(entries, dir, query) {
+  if (!query) return childrenOf(entries, dir)
+  var scored = []
+  for (var i = 0; i < entries.length; i++) {
+    var s = fuzzyScore(entries[i].path, query)
+    if (s >= 0) scored.push({ entry: entries[i], score: s })
+  }
+  scored.sort(function (a, b) {
+    if (a.score !== b.score) return a.score - b.score
+    return a.entry.path < b.entry.path ? -1 : 1
+  })
+  var out = []
+  for (var j = 0; j < scored.length; j++) out.push(scored[j].entry)
+  return out
+}
+
+// A name typed by a person, on its way to becoming a path segment.
+function nameIsValid(name) {
+  if (!name) return false
+  if (name === "." || name === "..") return false
+  return !/[\/\\\0]/.test(name)
+}
+
+// "notes", "notes-2", "notes-3", ...
+function uniquePath(entries, dir, base, isDir) {
+  var taken = {}
+  for (var i = 0; i < entries.length; i++) taken[entries[i].path] = true
+  var suffix = isDir ? "" : ".json"
+  var candidate = joinPath(dir, base + suffix)
+  var n = 2
+  while (taken[candidate]) {
+    candidate = joinPath(dir, base + "-" + n + suffix)
+    n++
+  }
+  return candidate
 }
 
 // ----------------------------------------------------------------------- theme

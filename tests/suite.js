@@ -167,6 +167,116 @@ function tests(S) {
     eq(S.linkRows(links)[1], { from: 2, to: 1 }, "link shape")
   })
 
+  // ------------------------------------------------------------------- library
+  const listing = () => S.parseListing([
+    "d\twork",
+    "d\twork/old",
+    "f\twork/project-a.json",
+    "f\twork/project-b.json",
+    "f\twork/old/archive.json",
+    "f\tinbox.json",
+    "f\tnotes.json"
+  ].join("\n"))
+
+  test("paths join, split and name themselves", () => {
+    eq(S.joinPath("work", "a.json"), "work/a.json", "join")
+    eq(S.joinPath("", "a.json"), "a.json", "join at the root")
+    eq(S.joinPath("work", ""), "work", "join with nothing")
+    eq(S.parentOf("work/old/a.json"), "work/old", "parent")
+    eq(S.parentOf("a.json"), "", "parent at the root")
+    eq(S.baseName("work/old/a.json"), "a.json", "base")
+    eq(S.displayName({ path: "work/a.json", dir: false }), "a", "board drops its extension")
+    eq(S.displayName({ path: "work", dir: true }), "work", "folder keeps its name")
+  })
+
+  test("paths survive a leading slash", () => {
+    // Nothing should hand these an absolute path, but if something does it
+    // must not mistake the leading slash for a separator it can cut behind.
+    eq(S.parentOf("/a.json"), "", "an absolute path has no parent here")
+    eq(S.baseName("/a.json"), "a.json", "and still names itself")
+  })
+
+  test("parseListing steps over a malformed line and keeps going", () => {
+    const e = S.parseListing([
+      "f\tfirst.json",
+      "no-tab-at-all",       // nothing to split on
+      "\tleading-tab.json",  // no type
+      "d\t",                 // no path
+      "f\tlast.json"         // must still be reached
+    ].join("\n"))
+    eq(e.map(x => x.path), ["first.json", "last.json"], "bad lines skipped, not fatal")
+  })
+
+  test("parseListing keeps folders and boards, drops the rest", () => {
+    const e = S.parseListing("d\twork\nf\twork/a.json\nf\tnotes.txt\nf\t.hidden\nrubbish\n")
+    eq(e.length, 2, "only the folder and the board")
+    eq(e[0], { path: "work", dir: true }, "folder")
+    eq(e[1], { path: "work/a.json", dir: false }, "board")
+    eq(S.parseListing(""), [], "empty listing")
+    eq(S.parseListing(null), [], "no listing at all")
+  })
+
+  test("childrenOf shows one level, folders first", () => {
+    const root = S.childrenOf(listing(), "")
+    eq(root.map(e => e.path), ["work", "inbox.json", "notes.json"], "root level")
+    const work = S.childrenOf(listing(), "work")
+    eq(work.map(e => e.path), ["work/old", "work/project-a.json", "work/project-b.json"], "one level down")
+    eq(S.childrenOf(listing(), "nowhere"), [], "a directory with nothing in it")
+  })
+
+  test("fuzzyScore matches a subsequence and rejects the rest", () => {
+    ok(S.fuzzyScore("work/project-a.json", "wpa") >= 0, "initials match")
+    ok(S.fuzzyScore("work/project-a.json", "WPA") >= 0, "case does not matter")
+    eq(S.fuzzyScore("notes.json", "zz"), -1, "no match")
+    eq(S.fuzzyScore("notes.json", "ntoes"), -1, "out of order is not a match")
+    eq(S.fuzzyScore("anything", ""), 0, "an empty query matches everything equally")
+  })
+
+  test("fuzzyScore prefers the earlier match", () => {
+    ok(S.fuzzyScore("ab", "ab") < S.fuzzyScore("xxxab", "ab"), "earlier scores lower")
+  })
+
+  test("filterEntries searches the whole tree, not just the folder", () => {
+    const shallow = S.filterEntries(listing(), "", "")
+    eq(shallow.map(e => e.path), ["work", "inbox.json", "notes.json"], "no query: this folder only")
+
+    const deep = S.filterEntries(listing(), "", "archive")
+    eq(deep.map(e => e.path), ["work/old/archive.json"], "a query reaches into subfolders")
+
+    const none = S.filterEntries(listing(), "", "zzzz")
+    eq(none, [], "no matches")
+  })
+
+  test("filterEntries ranks by how early the match lands", () => {
+    // "z" hits immediately in z.json and late in azzz.json, so z.json comes
+    // first even though it sorts after alphabetically.
+    const e = S.parseListing("f\tazzz.json\nf\tz.json")
+    eq(S.filterEntries(e, "", "z").map(x => x.path), ["z.json", "azzz.json"], "score beats alphabet")
+  })
+
+  test("nameIsValid refuses anything that is not one path segment", () => {
+    ok(S.nameIsValid("project a"), "spaces are fine")
+    ok(S.nameIsValid("2026-plans"), "dashes and digits are fine")
+    ok(!S.nameIsValid(""), "empty")
+    ok(!S.nameIsValid("."), "dot")
+    ok(!S.nameIsValid(".."), "dot dot")
+    ok(!S.nameIsValid("work/a"), "a slash would make two segments")
+    ok(!S.nameIsValid("..\\escape"), "a backslash is refused too")
+  })
+
+  test("uniquePath never collides with something already there", () => {
+    const e = listing()
+    eq(S.uniquePath(e, "", "fresh", false), "fresh.json", "a free name is used as is")
+    eq(S.uniquePath(e, "", "notes", false), "notes-2.json", "a taken name gains a number")
+    eq(S.uniquePath(e, "work", "project-a", false), "work/project-a-2.json", "taken inside a folder")
+    eq(S.uniquePath(e, "", "work", true), "work-2", "folders collide too, without an extension")
+  })
+
+  test("uniquePath keeps counting past the second collision", () => {
+    const e = S.parseListing("f\ta.json\nf\ta-2.json\nf\ta-3.json")
+    eq(S.uniquePath(e, "", "a", false), "a-4.json", "skips every taken number")
+  })
+
   // --------------------------------------------------------------------- tints
   test("normalizeTint passes a real tint straight through", () => {
     for (const t of S.TINTS) eq(S.normalizeTint(t), t, t)

@@ -150,7 +150,9 @@ FocusScope {
   Item {
     id: keys
     anchors.fill: parent
-    focus: true
+    // Focus moves between the canvas and the browser declaratively. Leaving
+    // both claiming it strands the keyboard on whichever hid last.
+    focus: !board.ctl.browserVisible
 
     // Printable keys are a table rather than a ladder of else-ifs: adding a
     // command is one line, and the cheat sheet is the only other place to
@@ -168,6 +170,7 @@ FocusScope {
       "X": function () { board.ctl.unlinkSelected() },
       "w": function () { board.ctl.toggleWindowMode() },
       "f": function () { board.ctl.fitToItems() },
+      "b": function () { board.ctl.openBrowser() },
       "0": function () { board.ctl.resetView() },
       "+": function () { board.ctl.zoomCentre(1.2) },
       "=": function () { board.ctl.zoomCentre(1.2) },
@@ -220,6 +223,12 @@ FocusScope {
       }
       event.accepted = true
     }
+  }
+
+  // The board browser sits above the canvas and takes the keyboard while open.
+  Browser {
+    anchors.fill: parent
+    ctl: board.ctl
   }
 
   // Keybinding cheat sheet, on ? or F1.
@@ -280,11 +289,11 @@ FocusScope {
     opacity: 0.55
     font.family: board.ctl.fontFamily
     font.pixelSize: board.ctl.fontBody
-    visible: !board.ctl.helpVisible
+    visible: !board.ctl.helpVisible && !board.ctl.browserVisible
     text: board.ctl.editIndex >= 0
       ? "esc: done typing"
       : board.ctl.linkingFrom >= 0
         ? "pick the other end, then x to connect  ·  esc: cancel"
-        : "n: note  ·  r/e: shapes  ·  x: connect  ·  u: undo  ·  hjkl: move  ·  ?: all keys  ·  esc: close"
+        : board.ctl.boardTitle + "  ·  n: note  ·  r/e: shapes  ·  x: connect  ·  u: undo  ·  b: boards  ·  ?: all keys  ·  esc: close"
   }
 }
