@@ -152,8 +152,9 @@ on is marked `·open`.
 Deleting a board or a folder moves it to `~/.local/share/omarchyform/trash/`
 rather than destroying it, and records where it came from, so `t` and `enter`
 put it back exactly where it was. An occupied destination is refused and the
-item stays in the trash. Filesystem operations reject traversal and symlink
-paths. If the trash index cannot be saved, the browser keeps its pending state
+item stays in the trash. Filesystem operations reject traversal and symlinks
+inside the boards, backups and trash folders; those folders themselves may be
+symlinks. If the trash index cannot be saved, the browser keeps its pending state
 and shows `ctrl+s` to retry; keep the application running until that succeeds. Only `x` inside the trash actually destroys
 something, and it asks twice.
 

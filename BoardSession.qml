@@ -10,6 +10,8 @@ Item {
 
   property bool boardLoaded: false
   property bool damaged: false
+  // Why a damaged board is read-only, when it is not simply unreadable.
+  property string damageReason: ""
   property string saveError: ""
   property string lastSavedText: ""
   property int savingCount: 0
@@ -34,11 +36,13 @@ Item {
     if (!Store.safeRelative(path)) return
     if (path === session.ctl.currentBoard && !fresh) return
     session.flushSave()
-    if (persistence.busy || session.saveError !== "") {
+    // A slow write only delays the switch; it runs once the write completes.
+    // failedSave() drops the queued switch if the write fails instead.
+    if (persistence.busy) {
       session.pendingBoard = { path: path, fresh: fresh === true }
-      if (session.saveError !== "") session.pendingBoard = null
       return
     }
+    if (session.saveError !== "") return
     session.createWhenLoaded = fresh === true
     session.boardLoaded = false
     session.damaged = false
@@ -99,6 +103,7 @@ Item {
     session.ctl.items.clear()
     session.ctl.links.clear()
     session.damaged = !data && !missing
+    session.damageReason = ""
     session.saveError = ""
     session.ctl.nextId = 1
     session.ctl.nextColor = 0
@@ -142,21 +147,53 @@ Item {
     onTriggered: session.save()
   }
 
+  // Saving refuses a path that goes through a symlink inside the boards
+  // folder. Loading applies the same rule first: otherwise such a board opens
+  // and edits normally, and nothing typed into it can ever reach disk.
+  readonly property string wantedPath: session.ctl.stateReady ? session.ctl.boardPath : ""
+  property string checkedPath: ""
+  onWantedPathChanged: { session.checkedPath = ""; session.checkPath() }
+
+  function checkPath() {
+    if (session.wantedPath === "" || pathCheck.running) return
+    pathCheck.checking = session.wantedPath
+    pathCheck.command = ["bash", decodeURIComponent(Qt.resolvedUrl("BoardFiles.sh").toString().replace(/^file:\/\//, "")),
+      "check", session.ctl.boardsDir, session.ctl.currentBoard]
+    pathCheck.running = true
+  }
+
+  function refusePath() {
+    session.loadBoard("", false)
+    session.damageReason = "goes through a symlink"
+  }
+
+  Process {
+    id: pathCheck
+    property string checking: ""
+    onExited: function(code) {
+      // The board changed while this one was being checked: check the new one.
+      if (pathCheck.checking !== session.wantedPath) { session.checkPath(); return }
+      if (code === 0) session.checkedPath = pathCheck.checking
+      else if (!session.boardLoaded) session.refusePath()
+    }
+  }
+
   FileView {
     id: boardFile
-    // Empty until the state file has said which board to open: loading too
-    // early would mark an empty board as loaded, and the next save would write
-    // that emptiness over a real file.
-    path: session.ctl.stateReady ? session.ctl.boardPath : ""
+    // Empty until the state file has said which board to open, and until that
+    // board's path has been checked: loading too early would mark an empty
+    // board as loaded, and the next save would write that emptiness over a
+    // real file.
+    path: session.wantedPath !== "" && session.checkedPath === session.wantedPath ? session.wantedPath : ""
     watchChanges: false
     atomicWrites: true
     printErrors: false
     // Loading and writing use separate FileViews. Ignore duplicate load
     // notifications once this board has been initialized.
-    onLoaded: { if (session.boardLoaded) return; session.loadBoard(text(), false) }
+    onLoaded: { if (session.boardLoaded || path === "") return; session.loadBoard(text(), false) }
     // Nothing to read is a new board; unreadable content is not.
     onLoadFailed: function(error) {
-      if (session.boardLoaded) return
+      if (session.boardLoaded || path === "") return
       session.loadBoard("", error === FileViewError.FileNotFound)
     }
   }

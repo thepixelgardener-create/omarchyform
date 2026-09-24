@@ -54,6 +54,7 @@ Item {
     command: ["bash", decodeURIComponent(Qt.resolvedUrl("BoardFiles.sh").toString().replace(/^file:\/\//, "")),
       "backup", persistence.target, persistence.backupTarget, persistence.boardRoot, persistence.backupRoot]
     onExited: function(code) {
+      if (code === 3) { persistence.fail("Board path goes through a symlink; not saved"); return }
       if (code !== 0) { persistence.fail("Backup failed; board was not replaced"); return }
       writer.path = persistence.target
       writer.setText(persistence.contents)

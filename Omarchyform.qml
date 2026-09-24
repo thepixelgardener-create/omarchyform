@@ -131,6 +131,7 @@ Item {
   // Views consume session state; loading and save coordination live together.
   readonly property bool boardLoaded: session.boardLoaded
   readonly property bool damaged: session.damaged
+  readonly property string damageReason: session.damageReason
   readonly property string saveError: session.saveError
   readonly property bool saving: session.busy
   readonly property var pendingBoard: session.pendingBoard
@@ -712,7 +713,9 @@ Item {
 
   // Enter descends into a folder or opens a board.
   function browserEnter() {
-    if (!root.filesystemReady()) return
+    // Opening a board or folder does not touch the trash, so a broken trash
+    // index must not block it; restoreCurrent() checks the index itself.
+    if (root.browserBusy) { root.browserMessage = "finishing the previous operation…"; return }
     var e = root.browserCurrent()
     if (!e) return
     if (root.browserTrash) { root.restoreCurrent(); return }

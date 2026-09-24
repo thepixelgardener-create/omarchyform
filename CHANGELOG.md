@@ -46,6 +46,13 @@ since older boards are migrated on load rather than rejected.
 
 ### Fixed
 
+- Switching boards while a slow save is still running waits for the save
+  instead of being silently dropped.
+- A broken trash index no longer stops the browser opening folders and boards;
+  only restoring from the trash waits for it to be repaired.
+- A boards, backups or trash folder that is itself a symlink works again. A
+  board reached through a symlinked folder inside the boards folder is refused
+  on load and shown read-only, rather than opening and then never saving.
 - Restore refuses occupied destinations without discarding the trash entry.
   Filesystem operations reject traversal and symlink components, and browser
   mutations serialize their pending metadata. Trash index write failures are
