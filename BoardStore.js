@@ -26,7 +26,7 @@ var KEY_HELP = [
   ["n", "new note beside the selected one"],
   ["r / e", "new box / ellipse"],
   ["s", "cycle shape: note, box, ellipse, diamond"],
-  ["x", "connect: press on one, then on another"],
+  ["x", "connect: press on one, then on another; again to turn it round"],
   ["X", "remove every connector on this item"],
   ["u / ctrl+r", "undo / redo"],
   ["b", "boards: browse, open, create"],
