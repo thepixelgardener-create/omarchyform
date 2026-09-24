@@ -187,7 +187,9 @@ FocusScope {
       "e": function () { board.ctl.addRelative("ellipse") },
       "s": function () { board.ctl.cycleKind() },
       "c": function () { board.ctl.recolorItem() },
-      "d": function () { board.ctl.removeItem(board.ctl.selectedIndex) },
+      "d": function () { board.ctl.removeTargets() },
+      " ": function () { board.ctl.toggleMark() },
+      "a": function () { board.ctl.markAll() },
       "u": function () { board.ctl.undo() },
       "i": function () { board.ctl.editSelected() },
       "x": function () { board.ctl.toggleLinking() },
@@ -253,7 +255,8 @@ FocusScope {
       else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) board.ctl.editSelected()
       else if (event.key === Qt.Key_Tab) board.ctl.selectNext(1)
       else if (event.key === Qt.Key_Backtab) board.ctl.selectNext(-1)
-      else if (event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) board.ctl.removeItem(board.ctl.selectedIndex)
+      else if (event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) board.ctl.removeTargets()
+      else if (event.key === Qt.Key_Space) board.ctl.toggleMark()
       else {
         var run = keys.commands[event.text]
         if (!run) return

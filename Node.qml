@@ -18,7 +18,11 @@ Item {
   required property string itint
   required property string itext
 
-  readonly property bool selected: node.ctl.selectedIndex === node.index
+  readonly property bool cursor: node.ctl.selectedIndex === node.index
+  readonly property bool marked: node.ctl.isMarked(node.iid)
+  // The cursor and a mark both read as selected; the cursor keeps the heavier
+  // outline so you can still tell where the keyboard is.
+  readonly property bool selected: node.cursor || node.marked
   readonly property bool linkSource: node.ctl.linkingFrom === node.iid
   readonly property bool isNote: node.kind === "note"
   readonly property bool painted: node.kind === "ellipse" || node.kind === "diamond"
@@ -47,7 +51,7 @@ Item {
     color: node.fill
     radius: node.ctl.cornerRadius
     antialiasing: true
-    border.width: node.emphasised ? node.ctl.borderWidth * 2 : node.ctl.borderWidth
+    border.width: node.cursor || node.linkSource ? node.ctl.borderWidth * 2 : node.ctl.borderWidth
     border.color: node.outline
   }
 
@@ -71,7 +75,7 @@ Item {
       ctx.fillStyle = node.fill
       ctx.fill()
       ctx.strokeStyle = node.outline
-      ctx.lineWidth = node.emphasised ? node.ctl.borderWidth * 2 : node.ctl.borderWidth
+      ctx.lineWidth = node.cursor || node.linkSource ? node.ctl.borderWidth * 2 : node.ctl.borderWidth
       ctx.stroke()
     }
     onWidthChanged: requestPaint()
@@ -83,6 +87,8 @@ Item {
       function onOutlineChanged() { shape.requestPaint() }
       function onKindChanged() { shape.requestPaint() }
       function onSelectedChanged() { shape.requestPaint() }
+      function onCursorChanged() { shape.requestPaint() }
+      function onMarkedChanged() { shape.requestPaint() }
       function onLinkSourceChanged() { shape.requestPaint() }
     }
   }

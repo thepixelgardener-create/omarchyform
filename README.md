@@ -82,11 +82,13 @@ Press `?` or `F1` on the board for this list.
 | `X` | Remove every connector on this item |
 | `u` / `ctrl+r` | Undo / redo |
 | `enter` / `i` | Type in the selected note |
-| `esc` | Stop typing; again to close the board |
+| `esc` | Stop typing, drop the marks, then close the board |
 | `h` `j` `k` `l` | Move the selection to the nearest note that way |
 | `H` `J` `K` `L` | Push the selected note around |
 | `tab` | Cycle through every note |
-| `d` / `del` | Delete the selected item |
+| `space` | Mark this item as well, so the next command takes both |
+| `a` | Mark everything |
+| `d` / `del` | Delete what is marked, or the one under the cursor |
 | `c` | Cycle its theme role: foreground, accent, urgent, muted |
 | `b` | Boards: browse, open, create |
 | `w` | Switch between fullscreen and windowed |
@@ -94,6 +96,13 @@ Press `?` or `F1` on the board for this list.
 | `0` | Reset the view |
 | `+` / `-` | Zoom |
 | `?` / `F1` | Keybinding list |
+
+`space` marks the item under the cursor. Moving, resizing, recolouring,
+changing shape and deleting then apply to everything marked, and the cursor
+item decides what the rest become, so a mixed selection lands on one colour
+rather than each cycling from its own. With nothing marked, every command
+applies to the cursor alone, so the keys behave exactly as before until you
+ask for more.
 
 Mouse works too: drag a note to move it, drag the canvas to pan, wheel to
 zoom, double-click empty canvas for a new note, double-click a note to type in
