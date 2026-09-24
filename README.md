@@ -78,7 +78,7 @@ Press `?` or `F1` on the board for this list.
 | `n` | New note beside the selected one, ready to type |
 | `r` / `e` | New box / ellipse |
 | `s` | Cycle the shape: note, box, ellipse, diamond |
-| `x` | Connect: press on one item, then on another |
+| `x` | Connect: press on one, then on another; again to turn it round |
 | `X` | Remove every connector on this item |
 | `u` / `ctrl+r` | Undo / redo |
 | `enter` / `i` | Type in the selected note |
@@ -173,7 +173,8 @@ shapes, v2 stored fixed pastel hexes which are mapped onto theme roles.
 ```
 
 Connectors reference item ids rather than positions, so they survive
-deletions, reordering and hand-editing.
+deletions, reordering and hand-editing. They are directed: `from` and `to`
+decide which end carries the arrowhead, and only one runs between any pair.
 
 ## It looks like Omarchy, because it asks Omarchy
 

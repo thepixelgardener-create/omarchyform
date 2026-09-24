@@ -12,6 +12,20 @@ FocusScope {
 
   focus: true
 
+  // A filled head at the target end, pointing the way the connector runs.
+  function arrowHead(ctx, fromX, fromY, toX, toY) {
+    var angle = Math.atan2(toY - fromY, toX - fromX)
+    var size = Math.max(7, 7 * board.ctl.zoom)
+    var spread = 0.42
+    ctx.beginPath()
+    ctx.moveTo(toX, toY)
+    ctx.lineTo(toX - size * Math.cos(angle - spread), toY - size * Math.sin(angle - spread))
+    ctx.lineTo(toX - size * Math.cos(angle + spread), toY - size * Math.sin(angle + spread))
+    ctx.closePath()
+    ctx.fillStyle = board.ctl.foreground
+    ctx.fill()
+  }
+
   function repaintGrid() { grid.requestPaint() }
   function repaintLinks() { linkCanvas.requestPaint() }
   function focusKeys() { keys.forceActiveFocus() }
@@ -84,10 +98,13 @@ FocusScope {
         var bcx = b.ix + b.iw / 2, bcy = b.iy + b.ih / 2
         var p = Store.edgePoint(a, acx, acy, bcx, bcy)
         var q = Store.edgePoint(b, bcx, bcy, acx, acy)
+        var px = board.ctl.toScreenX(p.x), py = board.ctl.toScreenY(p.y)
+        var qx = board.ctl.toScreenX(q.x), qy = board.ctl.toScreenY(q.y)
         ctx.beginPath()
-        ctx.moveTo(board.ctl.toScreenX(p.x), board.ctl.toScreenY(p.y))
-        ctx.lineTo(board.ctl.toScreenX(q.x), board.ctl.toScreenY(q.y))
+        ctx.moveTo(px, py)
+        ctx.lineTo(qx, qy)
         ctx.stroke()
+        board.arrowHead(ctx, px, py, qx, qy)
       }
 
       // While picking the far end, trail a dashed line to the selection so it

@@ -22,6 +22,12 @@ ShellRoot {
     property int nextId: 1
     property int nextColor: 0
     property bool windowMode: false
+    // The session reads these off the controller; the stub has to carry the
+    // same contract or a missing one only shows up as a runtime TypeError.
+    property int autosaveMs: 700
+    // Somewhere other than beside the board, which is the point, but without
+    // needing a directory the app would have created at startup.
+    function backupPathFor(relative) { return test.dir + "/bak__" + String(relative).replace(/\//g, "__") + ".bak" }
     property var undoStack: []
     property var redoStack: []
     property int selectedIndex: -1
@@ -55,7 +61,7 @@ ShellRoot {
         test.stage = 1
       } else if (test.stage === 1 && ctl.currentBoard === "b.json" && session.boardLoaded && !session.busy) {
         test.check(JSON.parse(test.read(test.dir + "/a.json")).items.length === 2, "queued edits persisted")
-        test.check(JSON.parse(test.read(test.dir + "/a.json.bak")).items.length === 1, "previous snapshot backed up")
+        test.check(JSON.parse(test.read(ctl.backupPathFor("a.json"))).items.length === 1, "previous snapshot backed up")
         test.check(JSON.parse(test.read(test.dir + "/b.json")).items.length === 0, "fresh board saved after load")
         test.stage = 2
         session.openBoard("damaged.json")

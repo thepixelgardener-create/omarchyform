@@ -284,15 +284,24 @@ Item {
     root.repaintLinks()
   }
 
+  // Connectors point somewhere: an arrow carries a meaning a plain line
+  // cannot. Only one runs between any pair, so drawing the same pair again
+  // either turns it round or takes it away.
   function addLink(a, b) {
     if (!root.canEdit) return
     root.pushUndo()
     for (var i = 0; i < linkModel.count; i++) {
       var l = linkModel.get(i)
-      // A connector is undirected, so drawing it again removes it.
-      if ((l.lfrom === a && l.lto === b) || (l.lfrom === b && l.lto === a)) {
+      if (l.lfrom === a && l.lto === b) {
         linkModel.remove(i)
         root.save(true)
+        root.repaintLinks()
+        return
+      }
+      if (l.lfrom === b && l.lto === a) {
+        linkModel.setProperty(i, "lfrom", a)
+        linkModel.setProperty(i, "lto", b)
+        root.save()
         root.repaintLinks()
         return
       }
