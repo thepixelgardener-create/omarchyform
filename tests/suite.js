@@ -381,6 +381,58 @@ function tests(S) {
     eq(S.uniquePath(e, "", "a", false), "a-4.json", "skips every taken number")
   })
 
+  // -------------------------------------------------------------------- trash
+  test("readTrash keeps only entries it can act on", () => {
+    const raw = JSON.stringify({ version: 1, entries: [
+      { file: "a", path: "board.json", dir: false, at: "2026" },
+      { file: "b", path: "work", dir: true, at: "2026" },
+      { file: "", path: "x" },            // nowhere to restore from
+      { path: "y" },                      // no file at all
+      { file: "c" },                      // nowhere to restore to
+      null, "nonsense"
+    ]})
+    const e = S.readTrash(raw)
+    eq(e.map(x => x.file), ["a", "b"], "only the usable ones")
+    eq(e[1].dir, true, "a folder is marked as one")
+    eq(S.readTrash("{ broken"), [], "malformed")
+    eq(S.readTrash("{}"), [], "no entries")
+    eq(S.readTrash('{"entries":"no"}'), [], "entries that are not a list")
+  })
+
+  test("a trashed board round-trips through the index", () => {
+    const entries = [{ file: "f1", path: "work/a.json", dir: false, at: "20260924-1200" }]
+    eq(S.readTrash(S.writeTrash(entries)), entries, "what goes in comes back")
+  })
+
+  test("trashFile flattens the path and never collides", () => {
+    eq(S.trashFile([], "work/sprint.json", "S"), "S-work__sprint.json", "stamped and flattened")
+    const one = [{ file: "S-a.json", path: "a.json", dir: false, at: "S" }]
+    eq(S.trashFile(one, "a.json", "S"), "S-a.json-2", "a second one in the same second")
+    const two = one.concat([{ file: "S-a.json-2", path: "a.json", dir: false, at: "S" }])
+    eq(S.trashFile(two, "a.json", "S"), "S-a.json-3", "and a third")
+  })
+
+  test("entries can be found and removed by file", () => {
+    const e = [
+      { file: "f1", path: "a.json", dir: false, at: "1" },
+      { file: "f2", path: "b.json", dir: false, at: "2" }
+    ]
+    eq(S.trashEntry(e, "f2").path, "b.json", "found")
+    eq(S.trashEntry(e, "nope"), null, "absent")
+    eq(S.withoutTrash(e, "f1").map(x => x.file), ["f2"], "removed")
+    eq(S.withoutTrash(e, "nope").length, 2, "removing something absent changes nothing")
+  })
+
+  test("the trash lists what went in most recently first", () => {
+    const e = [
+      { file: "old", path: "a.json", dir: false, at: "20260101-0900" },
+      { file: "new", path: "b.json", dir: false, at: "20260924-1800" },
+      { file: "mid", path: "c.json", dir: false, at: "20260501-1200" }
+    ]
+    eq(S.sortedTrash(e).map(x => x.file), ["new", "mid", "old"], "newest first")
+    eq(e.map(x => x.file), ["old", "new", "mid"], "the original list is left alone")
+  })
+
   // --------------------------------------------------------------------- tints
   test("normalizeTint passes a real tint straight through", () => {
     for (const t of S.TINTS) eq(S.normalizeTint(t), t, t)

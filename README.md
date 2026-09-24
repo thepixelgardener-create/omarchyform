@@ -134,6 +134,11 @@ Escape first if you want `a`, `r` or `x`.
 The browser opens in the folder of the board you are on, and the board you are
 on is marked `·open`.
 
+Deleting a board or a folder moves it to `~/.local/share/omarchyform/trash/`
+rather than destroying it, and records where it came from, so `t` and `enter`
+put it back exactly where it was. Only `x` inside the trash actually destroys
+something, and it asks twice.
+
 ## Saving
 
 There is no save key, though `ctrl+s` works if you want one. Structural
@@ -154,6 +159,9 @@ Which board you had open is remembered in `state.json` and reopened next time.
 │   ├── board.json
 │   └── work/
 │       └── project-a.json
+├── trash/
+│   ├── index.json
+│   └── 20260924-133036-work__sprint.json
 ├── backups/
 │   ├── board.json.bak
 │   └── work__project-a.json.bak

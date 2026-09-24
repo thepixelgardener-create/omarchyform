@@ -16,7 +16,9 @@ FocusScope {
   readonly property bool prompting: browser.ctl.browserPrompt !== ""
 
   // The path line, in the shape a shell would print it.
-  readonly property string here: "~/boards/" + (browser.ctl.browserDir ? browser.ctl.browserDir + "/" : "")
+  readonly property string here: browser.ctl.browserTrash
+    ? "~/trash/   " + browser.rows.length + (browser.rows.length === 1 ? " item" : " items")
+    : "~/boards/" + (browser.ctl.browserDir ? browser.ctl.browserDir + "/" : "")
 
   visible: browser.ctl.browserVisible
   enabled: visible
@@ -119,11 +121,19 @@ FocusScope {
             font.family: browser.ctl.fontFamily
             font.pixelSize: browser.ctl.fontSubtitle
             // A folder wears a trailing slash; the open board is marked.
-            text: (parent.modelData.dir ? Store.displayName(parent.modelData) + "/"
-                                        : Store.displayName(parent.modelData))
+            // In the trash an entry carries where it came from, since that is
+            // what restoring it will put back.
+            text: browser.ctl.browserTrash
+              ? Store.baseName(parent.modelData.path).replace(/\.json$/, "")
+                + (parent.modelData.dir ? "/" : "")
+                + (Store.parentOf(parent.modelData.path)
+                   ? "   from " + Store.parentOf(parent.modelData.path) + "/" : "")
+              : (parent.modelData.dir ? Store.displayName(parent.modelData) + "/"
+                                      : Store.displayName(parent.modelData))
                   + (browser.searching && Store.parentOf(parent.modelData.path)
                      ? "   " + Store.parentOf(parent.modelData.path) + "/" : "")
-                  + (parent.modelData.path === browser.ctl.currentBoard ? "   ·open" : "")
+                  + (!browser.ctl.browserTrash && parent.modelData.path === browser.ctl.currentBoard
+                     ? "   ·open" : "")
           }
 
           MouseArea {
@@ -142,7 +152,8 @@ FocusScope {
           opacity: 0.5
           font.family: browser.ctl.fontFamily
           font.pixelSize: browser.ctl.fontBody
-          text: browser.searching ? "nothing matches" : "empty — a: new board   A: new folder"
+          text: browser.ctl.browserTrash ? "the trash is empty"
+            : browser.searching ? "nothing matches" : "empty — a: new board   A: new folder"
         }
       }
     }
@@ -165,7 +176,9 @@ FocusScope {
     font.pixelSize: browser.ctl.fontBody
     text: browser.prompting
       ? "enter: confirm   ·   esc: cancel"
-      : "jk: move   ·   l/enter: open   ·   h: up   ·   /: search   ·   a: board   ·   A: folder   ·   r: rename   ·   x: delete   ·   esc: close"
+      : browser.ctl.browserTrash
+        ? "jk: move   ·   l/enter: put it back   ·   x: destroy it   ·   t or esc: back to the boards"
+        : "jk: move   ·   l/enter: open   ·   h: up   ·   /: search   ·   a: board   ·   A: folder   ·   r: rename   ·   x: trash   ·   t: the trash"
   }
 
   Keys.onPressed: function (event) {
