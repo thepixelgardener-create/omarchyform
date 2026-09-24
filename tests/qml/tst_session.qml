@@ -77,6 +77,15 @@ ShellRoot {
         session.openBoard("a.json")
       } else if (test.stage === 3 && session.boardLoaded) {
         test.check(ctl.items.count === 2 && session.canEdit, "original board reopens")
+        test.stage = 4
+        session.openBoard("linked/a.json")
+      } else if (test.stage === 4 && session.damaged) {
+        test.check(session.damageReason !== "" && !session.canEdit, "board behind a symlink is refused")
+        test.check(ctl.items.count === 0, "board behind a symlink is not read")
+        test.stage = 5
+        session.openBoard("a.json")
+      } else if (test.stage === 5 && session.boardLoaded) {
+        test.check(session.damageReason === "" && session.canEdit, "a normal board opens after a refused one")
         console.log("SESSION_TESTS_PASSED")
         Qt.quit()
       }

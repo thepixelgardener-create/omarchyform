@@ -321,6 +321,8 @@ FocusScope {
       : board.ctl.statusText !== "" ? board.ctl.statusText
       : board.ctl.pendingBoard !== null ? "saving before switching boards…"
       : board.ctl.saving ? "saving…"
+      : board.ctl.damaged && board.ctl.damageReason !== ""
+      ? board.ctl.boardTitle + " " + board.ctl.damageReason + " — not opening it"
       : board.ctl.damaged
       ? board.ctl.boardTitle + " could not be read — not saving over it"
       : board.ctl.editIndex >= 0

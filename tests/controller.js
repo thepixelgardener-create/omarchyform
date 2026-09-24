@@ -80,6 +80,32 @@ function controller() {
   assert.equal(c.root.saveError, '')
 }
 {
+  // A slow write is only a delay: the switch waits for it instead of vanishing.
+  const c = controller()
+  c.root.addItem('note', 0, 0)
+  assert.equal(c.persistence.busy, true)
+  c.session.saveError = 'Saving is taking longer than expected; waiting for disk'
+  c.root.openBoard('b.json')
+  assert.equal(c.root.pendingBoard.path, 'b.json')
+  c.complete()
+  assert.equal(c.root.currentBoard, 'b.json')
+  assert.equal(c.root.saveError, '')
+}
+{
+  // A broken trash index must not stop the browser opening folders or boards.
+  const c = controller()
+  Object.assign(c.root, { browserBusy: false, browserTrash: false, browserIndex: 0, browserMessage: '',
+    trashIndexError: 'trash index is invalid', closeBrowser() {},
+    browserRows: [{ path: 'b.json', dir: false }] })
+  const opened = []
+  c.root.openBoard = path => opened.push(path)
+  c.root.browserEnter()
+  assert.deepEqual(opened, ['b.json'])
+  c.root.browserRows = [{ path: 'work', dir: true }]
+  c.root.browserEnter()
+  assert.equal(c.root.browserDir, 'work')
+}
+{
   const c = controller()
   c.session.loadBoard('{"items":[null]}', false)
   assert.equal(c.root.damaged, true)

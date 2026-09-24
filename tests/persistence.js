@@ -9,6 +9,9 @@ for (const scenario of ['persistence', 'session', 'timeout']) {
     fs.writeFileSync(path.join(dir, 'blocked.json'), 'original')
     fs.mkdirSync(path.join(dir, 'blocked.json.bak.tmp'))
     fs.writeFileSync(path.join(dir, 'damaged.json'), '{broken')
+    // A folder inside the boards folder that points back at it: a.json there
+    // is readable, but saving through it would be refused.
+    fs.symlinkSync(dir, path.join(dir, 'linked'))
     if (scenario === 'timeout') {
       const fifo = spawnSync('mkfifo', [path.join(dir, 'slow.json')])
       if (fifo.status !== 0) throw new Error('could not create delayed-backup fixture')
