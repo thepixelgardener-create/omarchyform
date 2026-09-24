@@ -66,6 +66,11 @@ Item {
                                             root.isLight ? 0.28 : 0.18)
   readonly property int minItemSize: Store.MIN_SIZE
 
+  // The step is what the eye sees, so it is divided by the zoom: otherwise one
+  // press moves an eighth of the distance when zoomed out and four times it
+  // when zoomed in.
+  readonly property real worldStep: root.step / root.zoom
+
   // An item is a translucent wash of a theme role plus a hairline of the same
   // role, which is how the rest of the shell draws a surface.
   function tintColor(tint) {
@@ -102,6 +107,14 @@ Item {
   property int editIndex: -1      // -1 means normal mode: every key is a command
   property int linkingFrom: -1    // id of the first end while connecting
   property bool helpVisible: false
+
+  // A line that says what just happened and then goes away. Deleting is one
+  // keystroke, so it should at least say so, and say how to take it back.
+  property string statusText: ""
+  function flash(text) {
+    root.statusText = text
+    statusTimer.restart()
+  }
 
   // Configurable from the bar widget's settings, and remembered in state.json
   // so opening from the keyboard uses the same values.
@@ -165,7 +178,11 @@ Item {
     if (!root.boardLoaded) return
     var s = root.undoStack.slice()
     s.push(root.snapshot())
-    if (s.length > 100) s.shift()
+    // A snapshot holds the whole board, so depth has to give way as boards
+    // grow: a hundred steps of three thousand items is twenty-four megabytes
+    // held in the shell. Ten steps of a large board, a hundred of a small one.
+    var maxSteps = Math.max(10, Math.floor(20000 / Math.max(1, itemModel.count)))
+    while (s.length > maxSteps) s.shift()
     root.undoStack = s
     root.redoStack = []   // a new edit drops the redo branch
   }
@@ -253,6 +270,7 @@ Item {
     if (root.selectedIndex >= itemModel.count) root.selectedIndex = itemModel.count - 1
     root.save(true)
     root.repaintLinks()
+    root.flash("deleted · u to undo")
     if (!root.browserVisible) root.focusKeys()
   }
 
@@ -296,6 +314,7 @@ Item {
         linkModel.remove(i)
         root.save(true)
         root.repaintLinks()
+        root.flash("connector removed · u to undo")
         return
       }
       if (l.lfrom === b && l.lto === a) {
@@ -323,7 +342,7 @@ Item {
         linkModel.remove(j)
       }
     }
-    if (removed) { root.save(true); root.repaintLinks() }
+    if (removed) { root.save(true); root.repaintLinks(); root.flash("connectors removed · u to undo") }
   }
 
   // --------------------------------------------------------------- navigation
@@ -355,8 +374,8 @@ Item {
     var n = root.selected()
     if (!n) return
     root.pushUndo()
-    itemModel.setProperty(root.selectedIndex, "ix", n.ix + dx * root.step)
-    itemModel.setProperty(root.selectedIndex, "iy", n.iy + dy * root.step)
+    itemModel.setProperty(root.selectedIndex, "ix", n.ix + dx * root.worldStep)
+    itemModel.setProperty(root.selectedIndex, "iy", n.iy + dy * root.worldStep)
     root.centerOnSelected()
     root.save()
   }
@@ -369,8 +388,8 @@ Item {
     if (!root.canEdit) return
     var n = root.selected()
     if (!n) return
-    var w = Math.max(root.minItemSize, n.iw + dx * root.step)
-    var h = Math.max(root.minItemSize, n.ih + dy * root.step)
+    var w = Math.max(root.minItemSize, n.iw + dx * root.worldStep)
+    var h = Math.max(root.minItemSize, n.ih + dy * root.worldStep)
     // Already at the minimum: nothing to record, and no undo step to spend.
     if (w === n.iw && h === n.ih) return
     root.pushUndo()
@@ -789,6 +808,13 @@ Item {
   property string currentBoard: "board.json"
   readonly property string boardPath: root.boardsDir + "/" + root.currentBoard
   readonly property string boardTitle: Store.displayName({ path: root.currentBoard, dir: false })
+
+  Timer {
+    id: statusTimer
+    interval: 2600
+    repeat: false
+    onTriggered: root.statusText = ""
+  }
 
   // The boards directory has to exist before the first atomic write, otherwise
   // the board silently fails to save on a fresh install. A board from before

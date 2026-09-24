@@ -296,6 +296,7 @@ FocusScope {
     font.pixelSize: board.ctl.fontBody
     visible: !board.ctl.helpVisible && !board.ctl.browserVisible
     text: board.ctl.saveError !== "" ? board.ctl.saveError
+      : board.ctl.statusText !== "" ? board.ctl.statusText
       : board.ctl.pendingBoard !== null ? "saving before switching boards…"
       : board.ctl.saving ? "saving…"
       : board.ctl.damaged
