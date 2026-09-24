@@ -74,9 +74,12 @@ declared twice.
 ## Removing it
 
 ```bash
-omarchy bar remove thepixelgardener.omarchyform
 omarchy plugin remove thepixelgardener.omarchyform
 ```
+
+That takes the bar icon with it. To put it away without uninstalling, use
+`omarchy plugin disable thepixelgardener.omarchyform`; enabling it again
+restores the icon where it was.
 
 Then delete the binding from `~/.config/hypr/bindings.lua` if you added one,
 and `~/.local/share/applications/omarchyform.desktop` if you installed the
