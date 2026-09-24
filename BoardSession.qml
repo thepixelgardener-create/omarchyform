@@ -12,6 +12,7 @@ Item {
   property bool damaged: false
   property string saveError: ""
   property string lastSavedText: ""
+  property int savingCount: 0
   property int lastSavedCount: -1
   property var pendingBoard: null
   property bool createWhenLoaded: false
@@ -58,12 +59,15 @@ Item {
     var text = Store.writeFile(session.ctl.items, session.ctl.links, session.ctl.nextId, session.ctl.windowMode)
     session.saveError = ""
     if (text === session.lastSavedText) return
+    // Remember what this write contains, so completing it does not have to
+    // parse the whole board back again just to count the items.
+    session.savingCount = session.ctl.items.count
     persistence.save(session.ctl.boardPath, text)
   }
 
   function savedBoard(path, text) {
     session.lastSavedText = text
-    session.lastSavedCount = JSON.parse(text).items.length
+    session.lastSavedCount = session.savingCount
     // Edits made during the write are coalesced into the next save.
     session.save(true)
     if (!persistence.busy && session.pendingBoard !== null) {
