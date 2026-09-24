@@ -165,17 +165,18 @@ function readFile(raw) {
       if (!rows[i] || typeof rows[i] !== "object" || Array.isArray(rows[i])) return null
   }
   return {
-    windowMode: parsed.windowMode === true,
     items: parsed.items ? parsed.items : (parsed.notes ? parsed.notes : []),
     links: parsed.links ? parsed.links : [],
     nextId: parsed.nextId ? parsed.nextId : 1
   }
 }
 
-function writeFile(items, links, nextId, windowMode) {
+// windowMode deliberately absent: which surface the board opens on is a
+// property of this machine, not of the board, and lives in state.json. A board
+// written before that split still carries the key; it is ignored on the way in.
+function writeFile(items, links, nextId) {
   return JSON.stringify({
     version: 3,
-    windowMode: windowMode,
     nextId: nextId,
     items: itemRows(items),
     links: linkRows(links)

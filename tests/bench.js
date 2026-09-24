@@ -38,8 +38,8 @@ for (const n of plan) {
   S.fillItems(items, raw.items)
   S.fillLinks(links, items, raw.links)
 
-  const write = time(20, () => S.writeFile(items, links, n + 1, false))
-  const text = S.writeFile(items, links, n + 1, false)
+  const write = time(20, () => S.writeFile(items, links, n + 1))
+  const text = S.writeFile(items, links, n + 1)
   const read = time(20, () => {
     const data = S.readFile(text)
     const i2 = new FakeModel()

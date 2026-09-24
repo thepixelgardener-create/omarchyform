@@ -56,13 +56,13 @@ Item {
     if (!session.boardLoaded) return
     if (session.ctl.items.count === 0 && session.lastSavedCount > 0 && allowEmpty !== true) return
     if (persistence.busy) return
-    var text = Store.writeFile(session.ctl.items, session.ctl.links, session.ctl.nextId, session.ctl.windowMode)
+    var text = Store.writeFile(session.ctl.items, session.ctl.links, session.ctl.nextId)
     session.saveError = ""
     if (text === session.lastSavedText) return
     // Remember what this write contains, so completing it does not have to
     // parse the whole board back again just to count the items.
     session.savingCount = session.ctl.items.count
-    persistence.save(session.ctl.boardPath, text)
+    persistence.save(session.ctl.boardPath, text, session.ctl.backupPathFor(session.ctl.currentBoard))
   }
 
   function savedBoard(path, text) {
@@ -103,7 +103,7 @@ Item {
     session.ctl.redoStack = []
     session.lastSavedCount = session.ctl.items.count
     // A damaged board is displayed empty but stays read-only.
-    session.lastSavedText = data ? Store.writeFile(session.ctl.items, session.ctl.links, session.ctl.nextId, session.ctl.windowMode) : ""
+    session.lastSavedText = data ? Store.writeFile(session.ctl.items, session.ctl.links, session.ctl.nextId) : ""
     session.boardLoaded = !session.damaged
     if (session.createWhenLoaded && session.boardLoaded) session.save(true)
     session.createWhenLoaded = false
