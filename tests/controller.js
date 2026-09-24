@@ -114,4 +114,78 @@ function controller() {
   const last = c.writes[c.writes.length - 1]
   assert.equal(last.path, '/boards/b.json', 'the new board is written')
 }
+{
+  // Saves, board switches and completions interleave, and the bug that
+  // reached main was an ordering one: a completion landing after a switch.
+  // Rather than hope a hand-written sequence finds the next one, drive random
+  // orders and assert what must hold however they land.
+  let seed = 20260924
+  const rnd = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648
+  const boards = ['a.json', 'b.json', 'c.json']
+
+  let totalWrites = 0, totalSwitches = 0
+  for (let run = 0; run < 200; run++) {
+    const c = controller()
+    const disk = {}
+    // Remember the board each write was serialised for, to catch a write
+    // landing on a path it was not meant for.
+    c.persistence.save = function (path, text) {
+      this.busy = true
+      c.writes.push({ path, text, forBoard: c.root.currentBoard })
+    }
+    c.session.loadBoard('{"version":3,"items":[],"links":[]}', false)
+
+    for (let step = 0; step < 24; step++) {
+      const pick = rnd()
+      if (pick < 0.45) {
+        c.root.addItem('note', rnd() * 100, rnd() * 100)
+      } else if (pick < 0.7) {
+        const next = boards[Math.floor(rnd() * boards.length)]
+        totalSwitches++
+        c.session.openBoard(next, disk[next] === undefined)
+        if (!c.session.pendingBoard && !c.session.boardLoaded)
+          c.session.loadBoard(disk[c.root.currentBoard] === undefined
+            ? '' : disk[c.root.currentBoard],
+            disk[c.root.currentBoard] === undefined)
+      } else if (c.persistence.busy) {
+        const w = c.writes[c.writes.length - 1]
+        assert.equal(w.path, '/boards/' + w.forBoard,
+          'a write must land on the board it was serialised for')
+        disk[w.forBoard] = w.text
+        c.persistence.busy = false
+        c.session.savedBoard(w.path, w.text)
+        if (!c.session.boardLoaded)
+          c.session.loadBoard(disk[c.root.currentBoard] === undefined
+            ? '' : disk[c.root.currentBoard],
+            disk[c.root.currentBoard] === undefined)
+      }
+    }
+
+    // Drain: deliver every outstanding completion.
+    for (let guard = 0; guard < 50 && c.persistence.busy; guard++) {
+      const w = c.writes[c.writes.length - 1]
+      disk[w.forBoard] = w.text
+      c.persistence.busy = false
+      c.session.savedBoard(w.path, w.text)
+      if (!c.session.boardLoaded)
+        c.session.loadBoard(disk[c.root.currentBoard] === undefined
+          ? '' : disk[c.root.currentBoard],
+          disk[c.root.currentBoard] === undefined)
+    }
+    totalWrites += c.writes.length
+    assert.equal(c.persistence.busy, false, `run ${run}: the writer must not stay busy`)
+
+    // Whatever the model holds now must be what a final save puts on disk.
+    c.session.save(true)
+    if (c.persistence.busy) {
+      const w = c.writes[c.writes.length - 1]
+      disk[w.forBoard] = w.text
+      c.persistence.busy = false
+      c.session.savedBoard(w.path, w.text)
+    }
+    assert.equal(disk[c.root.currentBoard] !== undefined || c.items.count === 0, true,
+      `run ${run}: the open board must have reached disk`)
+  }
+  console.log('   stress: ' + totalWrites + ' writes, ' + totalSwitches + ' board switches across 200 runs')
+}
 console.log('ok — controller: damaged boards, delayed saves, switching, failure and retry')
