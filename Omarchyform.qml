@@ -154,8 +154,13 @@ Item {
   property string pendingDelete: ""
   // A line of feedback shown in place of the path, cleared by the next key.
   property string browserMessage: ""
+  // The browser shows the trash instead of the boards while this is on.
+  property bool browserTrash: false
+  property var trashEntries: []
 
-  readonly property var browserRows: Store.filterEntries(root.browserEntries, root.browserDir, root.browserQuery)
+  readonly property var browserRows: root.browserTrash
+    ? Store.sortedTrash(root.trashEntries)
+    : Store.filterEntries(root.browserEntries, root.browserDir, root.browserQuery)
 
   property var activeBoard: null
   property var boardScreen: null
@@ -568,7 +573,9 @@ Item {
     root.pendingDelete = ""
     root.browserIndex = 0
     root.browserDir = Store.parentOf(root.currentBoard)
+    root.browserTrash = false
     root.browserVisible = true
+    trashIndexFile.reload()
     root.rescan()
   }
 
@@ -599,6 +606,7 @@ Item {
   function browserEnter() {
     var e = root.browserCurrent()
     if (!e) return
+    if (root.browserTrash) { root.restoreCurrent(); return }
     if (e.dir) {
       root.browserDir = e.path
       root.browserQuery = ""
@@ -673,24 +681,68 @@ Item {
   function deleteCurrent() {
     var e = root.browserCurrent()
     if (!e) return
+
+    if (root.browserTrash) {
+      // Inside the trash there is nowhere further to put something, so this
+      // one really does destroy it.
+      if (root.pendingDelete !== e.file) {
+        root.pendingDelete = e.file
+        root.browserMessage = "press x again to destroy " + Store.baseName(e.path) + " for good"
+        return
+      }
+      root.pendingDelete = ""
+      root.browserMessage = ""
+      purgeProc.entryFile = e.file
+      purgeProc.command = ["rm", "-rf", "--", root.trashDir + "/" + e.file]
+      purgeProc.running = true
+      return
+    }
+
     // Refuse to delete the open board, or the folder it lives in.
     if (root.holdsOpenBoard(e)) {
       root.browserMessage = "that is the board you have open — switch away first"
       return
     }
-    // rm -rf is not something to do on a single keystroke.
     if (root.pendingDelete !== e.path) {
       root.pendingDelete = e.path
-      root.browserMessage = "press x again to delete " + Store.displayName(e)
-                            + (e.dir ? "/ and everything in it" : "")
+      root.browserMessage = "press x again to move " + Store.displayName(e)
+                            + (e.dir ? "/ and everything in it" : "") + " to the trash"
       return
     }
     root.pendingDelete = ""
     root.browserMessage = ""
-    removeProc.command = e.dir
-      ? ["rm", "-rf", "--", root.boardsDir + "/" + e.path]
-      : ["rm", "-f", "--", root.boardsDir + "/" + e.path]
-    removeProc.running = true
+
+    var stamp = Qt.formatDateTime(new Date(), "yyyyMMdd-hhmmss")
+    var file = Store.trashFile(root.trashEntries, e.path, stamp)
+    trashProc.pending = { file: file, path: e.path, dir: e.dir, at: stamp }
+    trashProc.command = ["mv", "-n", "--", root.boardsDir + "/" + e.path, root.trashDir + "/" + file]
+    trashProc.running = true
+  }
+
+  function restoreCurrent() {
+    var e = root.browserCurrent()
+    if (!e || !root.browserTrash) return
+    restoreProc.entryFile = e.file
+    // mkdir first: the folder it came out of may have gone since.
+    restoreProc.command = ["sh", "-c",
+      'mkdir -p -- "$(dirname -- "$2")" && mv -n -- "$1" "$2"',
+      "omarchyform-restore", root.trashDir + "/" + e.file, root.boardsDir + "/" + e.path]
+    restoreProc.running = true
+  }
+
+  function toggleTrash() {
+    root.browserTrash = !root.browserTrash
+    root.browserIndex = 0
+    root.browserQuery = ""
+    root.browserSearching = false
+    root.pendingDelete = ""
+    root.browserMessage = ""
+    if (root.browserTrash) trashIndexFile.reload()
+  }
+
+  function saveTrashIndex(entries) {
+    root.trashEntries = entries
+    trashIndexFile.setText(Store.writeTrash(entries))
   }
 
   function browserKey(event) {
@@ -724,7 +776,8 @@ Item {
     }
 
     if (event.key === Qt.Key_Escape) {
-      if (root.browserSearching) {
+      if (root.browserTrash) { root.toggleTrash() }
+      else if (root.browserSearching) {
         root.browserSearching = false
         root.browserQuery = ""
         root.browserIndex = 0
@@ -750,6 +803,7 @@ Item {
       if (e) root.prompt("rename", "rename to:", Store.displayName(e))
     }
     else if (text === "x") root.deleteCurrent()
+    else if (text === "t") root.toggleTrash()
     else if (text === "g") { root.browserIndex = 0 }
     else if (text === "G") { root.browserIndex = root.browserRows.length - 1; root.browserClamp() }
     else return
@@ -872,6 +926,10 @@ Item {
   // all three. The relative path is flattened so one directory holds them all
   // without needing a folder created for every board folder.
   readonly property string backupsDir: root.dataDir + "/backups"
+  // Deleting moves a board aside rather than destroying it. The index records
+  // where each one came from, so putting it back is exact.
+  readonly property string trashDir: root.dataDir + "/trash"
+  readonly property string trashIndexPath: root.trashDir + "/index.json"
 
   function backupPathFor(relative) {
     return root.backupsDir + "/" + String(relative).replace(/\//g, "__") + ".bak"
@@ -898,7 +956,7 @@ Item {
   Process {
     id: initProc
     running: true
-    command: ["mkdir", "-p", root.boardsDir, root.backupsDir]
+    command: ["mkdir", "-p", root.boardsDir, root.backupsDir, root.trashDir]
     onExited: migrateProc.running = true
   }
 
@@ -944,6 +1002,57 @@ Item {
       }
       root.rescan()
     }
+  }
+
+  Process {
+    id: trashProc
+    property var pending: null
+    onExited: function (code) {
+      if (code === 0 && trashProc.pending) {
+        var next = root.trashEntries.slice()
+        next.push(trashProc.pending)
+        root.saveTrashIndex(next)
+        root.flash("moved to the trash · t in the browser to get it back")
+      } else if (code !== 0) {
+        root.browserMessage = "could not move that to the trash"
+      }
+      trashProc.pending = null
+      root.rescan()
+    }
+  }
+
+  Process {
+    id: restoreProc
+    property string entryFile: ""
+    onExited: function (code) {
+      if (code === 0) {
+        root.saveTrashIndex(Store.withoutTrash(root.trashEntries, restoreProc.entryFile))
+        root.browserMessage = "restored"
+      } else {
+        root.browserMessage = "could not restore that; something is in its place"
+      }
+      restoreProc.entryFile = ""
+      root.rescan()
+    }
+  }
+
+  Process {
+    id: purgeProc
+    property string entryFile: ""
+    onExited: function (code) {
+      if (code === 0) root.saveTrashIndex(Store.withoutTrash(root.trashEntries, purgeProc.entryFile))
+      purgeProc.entryFile = ""
+    }
+  }
+
+  FileView {
+    id: trashIndexFile
+    path: root.trashIndexPath
+    watchChanges: false
+    atomicWrites: true
+    printErrors: false
+    onLoaded: root.trashEntries = Store.readTrash(text())
+    onLoadFailed: root.trashEntries = []
   }
 
   Process {

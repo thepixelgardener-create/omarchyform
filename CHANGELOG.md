@@ -7,6 +7,10 @@ since older boards are migrated on load rather than rejected.
 
 ### Added
 
+- **A trash.** Deleting a board or a folder moves it aside and records where it
+  came from, so putting it back is exact rather than a guess. `t` in the
+  browser shows what is in there, `enter` restores, and only `x` inside the
+  trash destroys anything — asking twice, as deleting always has.
 - A contract check, run in CI, that reads the names the views and the session
   reach for on the controller and fails if one is missing — including from the
   stub the QML session test puts in the controller's place. QML resolves those

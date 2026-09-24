@@ -308,6 +308,59 @@ function uniquePath(entries, dir, base, isDir) {
   return candidate
 }
 
+// ------------------------------------------------------------------- trash
+// A deleted board is moved aside rather than destroyed. The index remembers
+// where each one came from, so putting it back is exact rather than a guess
+// from a flattened filename.
+
+function readTrash(raw) {
+  var parsed
+  try { parsed = JSON.parse(raw) } catch (e) { return [] }
+  if (!parsed || !Array.isArray(parsed.entries)) return []
+  var out = []
+  for (var i = 0; i < parsed.entries.length; i++) {
+    var e = parsed.entries[i]
+    if (!e || typeof e !== "object") continue
+    if (typeof e.file !== "string" || !e.file) continue
+    if (typeof e.path !== "string" || !e.path) continue
+    out.push({ file: e.file, path: e.path, dir: e.dir === true, at: typeof e.at === "string" ? e.at : "" })
+  }
+  return out
+}
+
+function writeTrash(entries) {
+  return JSON.stringify({ version: 1, entries: entries }, null, 2) + "\n"
+}
+
+// Flattened, stamped, and never colliding with something already in there.
+function trashFile(entries, relative, stamp) {
+  var base = String(stamp) + "-" + String(relative).replace(/\//g, "__")
+  var taken = {}
+  for (var i = 0; i < entries.length; i++) taken[entries[i].file] = true
+  var candidate = base
+  var n = 2
+  while (taken[candidate]) { candidate = base + "-" + n; n++ }
+  return candidate
+}
+
+function trashEntry(entries, file) {
+  for (var i = 0; i < entries.length; i++) if (entries[i].file === file) return entries[i]
+  return null
+}
+
+function withoutTrash(entries, file) {
+  var out = []
+  for (var i = 0; i < entries.length; i++) if (entries[i].file !== file) out.push(entries[i])
+  return out
+}
+
+// Newest first: what you just deleted is what you are most likely after.
+function sortedTrash(entries) {
+  var out = entries.slice()
+  out.sort(function (a, b) { return a.at < b.at ? 1 : (a.at > b.at ? -1 : 0) })
+  return out
+}
+
 // ----------------------------------------------------------------------- theme
 
 // Omarchy themes declare their own mode in colors.toml ("mode = \"light\"").

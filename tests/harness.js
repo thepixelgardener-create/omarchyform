@@ -16,6 +16,7 @@ function loadStore(source) {
     "MIN_SIZE", "TINTS", "LEGACY_SWATCHES", "KINDS", "KEY_HELP", "normalizeTint",
     "itemRows", "linkRows", "fillItems", "fillLinks", "indexOfId", "idIndex",
     "nextFreeId", "num", "readFile", "writeFile", "parseThemeMode", "isLightColor",
+    "readTrash", "writeTrash", "trashFile", "trashEntry", "withoutTrash", "sortedTrash",
     "joinPath", "parentOf", "baseName", "displayName", "parseListing",
     "childrenOf", "fuzzyScore", "filterEntries", "nameIsValid", "uniquePath", "nearest", "bounds", "edgePoint", "cycle"
   ]
