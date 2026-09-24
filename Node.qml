@@ -6,6 +6,7 @@ import QtQuick
 // Model roles arrive as required properties; everything else comes from ctl.
 Item {
   id: node
+  objectName: "board-item-" + iid
 
   required property var ctl
   required property int index
@@ -17,6 +18,7 @@ Item {
   required property real ih
   required property string itint
   required property string itext
+  required property bool ipinned
 
   readonly property bool cursor: node.ctl.selectedIndex === node.index
   readonly property bool marked: node.ctl.isMarked(node.iid)
@@ -121,7 +123,8 @@ Item {
     horizontalAlignment: node.isNote ? TextEdit.AlignLeft : TextEdit.AlignHCenter
     verticalAlignment: node.isNote ? TextEdit.AlignTop : TextEdit.AlignVCenter
     selectByMouse: true
-    readOnly: !node.ctl.canEdit
+    readOnly: !node.ctl.canEdit || node.ipinned
+    enabled: !node.ipinned && !node.ctl.showPinned
     // Guarded so the model write cannot bounce back and reset the caret.
     onTextChanged: {
       if (!node.ctl.canEdit || text === node.itext) return
@@ -148,9 +151,9 @@ Item {
   // caret still works.
   MouseArea {
     anchors.fill: parent
-    enabled: node.ctl.editIndex !== node.index
+    enabled: node.ctl.editIndex !== node.index && (node.ipinned ? node.ctl.showPinned : !node.ctl.showPinned)
     acceptedButtons: Qt.LeftButton | Qt.MiddleButton
-    cursorShape: dragging ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+    cursorShape: node.ipinned ? Qt.PointingHandCursor : dragging ? Qt.ClosedHandCursor : Qt.OpenHandCursor
 
     property real pressX: 0
     property real pressY: 0
@@ -160,18 +163,17 @@ Item {
       pressX = mouse.x
       pressY = mouse.y
       dragging = false
-      node.ctl.selectOnly(node.index)
+      node.ctl.pointerSelect(node.index, (mouse.modifiers & Qt.ShiftModifier) !== 0)
     }
     onPositionChanged: function (mouse) {
-      if (!node.ctl.canEdit || !pressed || mouse.buttons !== Qt.LeftButton) return
+      if (node.ipinned || !node.ctl.canEdit || !pressed || mouse.buttons !== Qt.LeftButton) return
       var dx = mouse.x - pressX
       var dy = mouse.y - pressY
       // A few pixels of slack so a click to select never nudges it.
       if (!dragging && Math.abs(dx) + Math.abs(dy) < 3) return
       if (!dragging) node.ctl.pushUndo()
       dragging = true
-      node.set("ix", node.ix + dx)
-      node.set("iy", node.iy + dy)
+      node.ctl.moveTargets(dx, dy)
     }
     onReleased: {
       if (dragging) node.ctl.save()
@@ -181,7 +183,7 @@ Item {
       if (mouse.button === Qt.MiddleButton) node.ctl.removeItem(node.index)
     }
     onDoubleClicked: {
-      if (!node.ctl.canEdit) return
+      if (node.ipinned || !node.ctl.canEdit) return
       node.ctl.pushUndo()
       node.ctl.editIndex = node.index
     }
@@ -193,7 +195,7 @@ Item {
     height: 16
     anchors { right: parent.right; bottom: parent.bottom }
     cursorShape: Qt.SizeFDiagCursor
-    enabled: node.ctl.canEdit
+    enabled: node.ctl.canEdit && !node.ipinned && !node.ctl.showPinned
 
     property real pressX: 0
     property real pressY: 0
@@ -203,19 +205,19 @@ Item {
       pressX = mouse.x
       pressY = mouse.y
       sizing = false
-      node.ctl.selectedIndex = node.index
+      node.ctl.pointerSelect(node.index, false)
     }
     onPositionChanged: function (mouse) {
       if (!pressed) return
       if (!sizing) { node.ctl.pushUndo(); sizing = true }
-      node.set("iw", Math.max(node.ctl.minItemSize, node.iw + (mouse.x - pressX)))
-      node.set("ih", Math.max(node.ctl.minItemSize, node.ih + (mouse.y - pressY)))
+      node.ctl.resizeTargets(mouse.x - pressX, mouse.y - pressY)
     }
     onReleased: {
       if (sizing) node.ctl.save()
       sizing = false
     }
 
+    visible: !node.ipinned
     Rectangle {
       anchors.centerIn: parent
       width: 8

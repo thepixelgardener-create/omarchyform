@@ -11,6 +11,14 @@ ShellRoot {
   property int ticks: 0
   property int hides: 0
   property int switchedAt: 0
+  function findItem(parent, name) {
+    if (parent.objectName === name) return parent
+    for (var i = 0; i < parent.children.length; i++) {
+      var found = test.findItem(parent.children[i], name)
+      if (found) return found
+    }
+    return null
+  }
   function pick(path) {
     for (var i = 0; i < plugin.browserRows.length; i++) {
       if (plugin.browserRows[i].path === path) { plugin.browserIndex = i; return true }
@@ -162,11 +170,30 @@ ShellRoot {
           test.stage = 6
         }), "overlay capture scheduled")
       } else if (test.stage === 6) {
+        // Pin an existing item after foreground items already exist.
+        plugin.selectOnly(0)
+        plugin.togglePin()
+        test.stage = 60
+      } else if (test.stage === 60 && !plugin.saving) {
+        var pinned = test.findItem(plugin.activeBoard, "board-item-1")
+        test.check(pinned && pinned.parent.objectName === "background-world", "pinned item renders in background")
+        test.check(test.boardData(plugin.currentBoard).items[0].pinned, "pin saved to disk")
+        plugin.markAll()
+        test.check(plugin.markedIds.length === 1, "mark-all skips backgrounds")
+        plugin.clearMarks()
+        plugin.togglePinnedSelection()
+        test.check(plugin.selectedIndex === 0, "background selection reaches pinned item")
+        plugin.togglePin()
+        test.stage = 61
+      } else if (test.stage === 61 && !plugin.saving) {
+        test.check(test.findItem(plugin.activeBoard, "board-item-1").parent.objectName === "foreground-world", "unpin restores foreground")
         plugin.openBrowser()
+        test.stage = 62
+      } else if (test.stage === 62 && !plugin.browserBusy) {
         plugin.prompt("folder", "new folder:", "test-folder")
         plugin.commitPrompt()
         test.stage = 7
-      } else if (test.stage === 7 && test.pick("test-folder")) {
+      } else if (test.stage === 7 && !plugin.browserBusy && test.pick("test-folder")) {
         plugin.browserEnter()
         plugin.prompt("board", "new board:", "scratch")
         plugin.commitPrompt()
@@ -177,7 +204,7 @@ ShellRoot {
       } else if (test.stage === 9 && test.boardData(plugin.currentBoard) && test.boardData(plugin.currentBoard).items.length === 1) {
         plugin.openBrowser()
         test.stage = 10
-      } else if (test.stage === 10 && test.pick("test-folder/scratch.json")) {
+      } else if (test.stage === 10 && !plugin.browserBusy && test.pick("test-folder/scratch.json")) {
         plugin.prompt("rename", "rename to:", "renamed")
         plugin.commitPrompt()
         test.stage = 11
@@ -185,7 +212,7 @@ ShellRoot {
         test.check(plugin.items.count === 1, "rename preserves open model")
         plugin.browserUp()
         test.stage = 12
-      } else if (test.stage === 12 && test.pick("test-folder")) {
+      } else if (test.stage === 12 && !plugin.browserBusy && test.pick("test-folder")) {
         plugin.deleteCurrent()
         test.check(plugin.pendingDelete === "", "open board's folder cannot be deleted")
         plugin.prompt("rename", "rename to:", "moved-folder")
@@ -200,7 +227,7 @@ ShellRoot {
         test.check(plugin.items.count === 2, "original board survives browser operations")
         plugin.openBrowser()
         test.stage = 15
-      } else if (test.stage === 15 && test.pick("moved-folder")) {
+      } else if (test.stage === 15 && !plugin.browserBusy && test.pick("moved-folder")) {
         plugin.deleteCurrent()
         test.check(plugin.pendingDelete === "moved-folder", "first delete arms confirmation")
         plugin.browserKey({key: Qt.Key_J, text: "j", modifiers: 0})
@@ -209,7 +236,21 @@ ShellRoot {
         plugin.deleteCurrent()
         plugin.deleteCurrent()
         test.stage = 16
-      } else if (test.stage === 16 && !test.pick("moved-folder")) {
+      } else if (test.stage === 16 && !plugin.browserBusy && !test.pick("moved-folder")) {
+        plugin.toggleTrash()
+        test.stage = 160
+      } else if (test.stage === 160 && plugin.browserRows.length > 0 && !plugin.browserBusy) {
+        plugin.browserIndex = 0
+        plugin.restoreCurrent()
+        test.stage = 161
+      } else if (test.stage === 161 && !plugin.browserBusy && plugin.trashEntries.length === 0) {
+        test.check(test.boardData("moved-folder/renamed.json").items.length === 1, "trash restore preserves board")
+        plugin.toggleTrash()
+        test.stage = 162
+      } else if (test.stage === 162 && !plugin.browserBusy && test.pick("moved-folder")) {
+        plugin.deleteCurrent(); plugin.deleteCurrent()
+        test.stage = 163
+      } else if (test.stage === 163 && !plugin.browserBusy && !test.pick("moved-folder")) {
         if (Quickshell.screens.length > 1) {
           var other = Quickshell.screens[0] === plugin.boardScreen ? Quickshell.screens[1] : Quickshell.screens[0]
           plugin.close()

@@ -1,6 +1,6 @@
 # Omarchyform
 
-A visual idea platform native to Omarchy.
+A local, keyboard-first board for arranging thoughts on Omarchy.
 
 An infinite canvas. Notes, shapes and connectors on a board you can pan and
 zoom, driven from the keyboard, stored as a plain JSON file on your own disk.
@@ -79,6 +79,7 @@ Press `?` or `F1` on the board for this list.
 |-----|------|
 | `n` | New note beside the selected one, ready to type |
 | `r` / `e` | New box / ellipse |
+| `p` / `Shift+P` | Pin as background / select backgrounds to unpin |
 | `s` | Cycle the shape: note, box, ellipse, diamond |
 | `x` | Connect: press on one, then on another; again to turn it round |
 | `X` | Remove every connector on this item |
@@ -87,6 +88,7 @@ Press `?` or `F1` on the board for this list.
 | `esc` | Stop typing, drop the marks, then close the board |
 | `h` `j` `k` `l` | Move the selection to the nearest note that way |
 | `H` `J` `K` `L` | Push the selected note around |
+| `Ctrl+HJKL` | Resize selected items |
 | `tab` | Cycle through every note |
 | `space` | Mark this item as well, so the next command takes both |
 | `a` | Mark everything |
@@ -106,9 +108,22 @@ rather than each cycling from its own. With nothing marked, every command
 applies to the cursor alone, so the keys behave exactly as before until you
 ask for more.
 
-Mouse works too: drag a note to move it, drag the canvas to pan, wheel to
+Mouse works too: Shift-click to mark items together, drag a marked item to move
+the set, drag the canvas to pan, wheel to
 zoom, double-click empty canvas for a new note, double-click a note to type in
-it, drag the bottom-right corner to resize, middle-click to delete.
+it, drag the bottom-right corner to resize marked items, middle-click to delete
+the clicked item.
+
+## Backgrounds
+
+Place and resize a shape, then press `p` to pin it. It stays behind notes and
+connectors, moves with the canvas, and leaves your mouse free to pan or create
+notes over it. Normal navigation, mark-all, editing and deletion skip pinned items.
+
+Press `Shift+P` to select backgrounds with Tab, HJKL or the mouse, then `p` to
+unpin the selected one. Escape leaves background selection. Pinning supports
+undo/redo and is saved with the board. Notes can be pinned as labels too; items
+inside a background remain independent.
 
 ## Boards
 
@@ -136,7 +151,10 @@ on is marked `·open`.
 
 Deleting a board or a folder moves it to `~/.local/share/omarchyform/trash/`
 rather than destroying it, and records where it came from, so `t` and `enter`
-put it back exactly where it was. Only `x` inside the trash actually destroys
+put it back exactly where it was. An occupied destination is refused and the
+item stays in the trash. Filesystem operations reject traversal and symlink
+paths. If the trash index cannot be saved, the browser keeps its pending state
+and shows `ctrl+s` to retry; keep the application running until that succeeds. Only `x` inside the trash actually destroys
 something, and it asks twice.
 
 ## Saving
@@ -146,7 +164,8 @@ changes — adding, deleting, moving, connecting — are written immediately.
 Typing settles for 700ms first, so a sentence is one write rather than forty.
 Switching boards or closing flushes whatever is pending. Board switching waits
 for writes to finish. A failed backup or write leaves the board open in memory
-and shows an error; use `ctrl+s` to retry. Closing the surface keeps an in-flight
+and shows an error; use `ctrl+s` to retry. A slow save stays in progress until
+the disk operation completes; retrying cannot replace its destination. Closing the surface keeps an in-flight
 save running in the shell; it does not wait for disk completion.
 
 Which board you had open is remembered in `state.json` and reopened next time.
@@ -163,29 +182,32 @@ Which board you had open is remembered in `state.json` and reopened next time.
 │   ├── index.json
 │   └── 20260924-133036-work__sprint.json
 ├── backups/
-│   ├── board.json.bak
-│   └── work__project-a.json.bak
+│   └── v2/
+│       ├── board.json.bak
+│       └── work/project-a.json.bak
 └── state.json
 ```
 
 Each board is plain JSON, written atomically. One generation back is kept in
-`~/.local/share/omarchyform/backups/`, named after the board with its folders
-flattened — out of the boards tree, which is meant to be browsed, hand-edited
-and committed without `.bak` files in the way. The backup completes before replacement, and saves
+`~/.local/share/omarchyform/backups/`, under `v2/`, mirroring the board directory tree — out of the boards tree, which is meant to be browsed, hand-edited
+and committed without `.bak` files in the way. Older flattened backups are
+left untouched; new saves use the mirrored paths to avoid naming collisions. The backup completes before replacement, and saves
 with unchanged contents do not rotate it. Malformed or unsupported board files
 open read-only; no edits or saves are allowed over them. Back it up, sync it,
 edit it by hand, put it in git — it is your file. Older boards are migrated on load: v1 had no ids or
-shapes, v2 stored fixed pastel hexes which are mapped onto theme roles.
+shapes, v2 stored fixed pastel hexes which are mapped onto theme roles. Version 4 adds
+background pinning; older plugin versions open these files read-only instead
+of silently losing that state.
 
 ```json
 {
-  "version": 3,
+  "version": 4,
   "nextId": 3,
   "items": [
     { "id": 1, "kind": "note", "x": 0, "y": 0, "w": 180, "h": 140,
-      "tint": "foreground", "text": "hello" },
+      "tint": "foreground", "text": "hello", "pinned": false },
     { "id": 2, "kind": "ellipse", "x": 300, "y": 0, "w": 160, "h": 110,
-      "tint": "accent", "text": "there" }
+      "tint": "accent", "text": "there", "pinned": false }
   ],
   "links": [ { "from": 1, "to": 2 } ]
 }
@@ -226,6 +248,7 @@ luminance.
 | `BoardStore.js` | Pure logic: parsing, marshalling, geometry. No QML |
 | `BoardSession.qml` | Loading, autosave state, and board-switch coordination |
 | `BoardPersistence.qml` | Serialized backup and atomic write, with completion/failure signals |
+| `BoardFiles.sh` | Confined filesystem operations and exact-path moves |
 
 ## Tests
 
@@ -245,22 +268,8 @@ npm run test:omarchy -- --keep # live desktop smoke test, isolated board data
 checks the suite notices. The command reports its current score and survivors;
 it is a diagnostic, not a CI failure threshold.
 
-The survivors it currently reports are equivalent mutants — each changes a case
-the code's preconditions rule out, so no honest test can tell them apart. They
-are left in the report rather than silenced, so the number stays truthful:
-
-- the id-range guards: values outside the accepted range are reassigned anyway,
-  and a reserved key that no lookup ever asks for changes nothing.
-- `readFile`'s field loop: one step past the end reads an undefined field name,
-  which the loop already skips.
-- `parentOf` and `parseListing`: a boundary at index 0 that gives the same
-  answer either way, since a relative path cannot begin with a separator.
-- the two sort comparators: they differ only when two entries compare equal,
-  and a directory cannot hold two things with the same name.
-- `fuzzyScore`'s loop bound: reading one past the end returns `""`, which
-  matches nothing.
-- `nearest`'s off-axis term: it is only ever called with a unit axis vector, so
-  one of the two products is always zero.
+Review survivors when changing the pure logic; a passing mutation command is
+not a substitute for the runtime and filesystem regression tests.
 
 A contract check reads the names the views and the session reach for on the
 controller and fails if any of them is missing — including from the stub the
@@ -290,7 +299,7 @@ resolve its two ends — so a 3000-item board took about 19ms to load and a
 1000-item one about 3.6ms. Resolving the ends through a single index instead
 makes it linear: roughly 6ms and 2ms.
 
-Saving still forks `sh`, `cp` and `mv` to stage the backup before the board is
+Saving still forks `bash`, `cp` and `mv` to stage the backup before the board is
 replaced, which costs about 9ms per save regardless of board size — far more
 than serialising and writing one. Doing that copy in-process would remove it,
 but the backup is what guarantees the previous version is safely on disk before
@@ -348,7 +357,7 @@ an asynchronous save.
 
 ## Not there yet
 
-Freehand drawing, images, and selecting more than one item at a time.
+Freehand drawing and images are outside the current scope.
 
 ## License
 

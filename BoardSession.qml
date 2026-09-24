@@ -34,6 +34,7 @@ Item {
   }
 
   function openBoard(path, fresh) {
+    if (!Store.safeRelative(path)) return
     if (path === session.ctl.currentBoard && !fresh) return
     session.flushSave()
     if (persistence.busy || session.saveError !== "") {
@@ -47,6 +48,8 @@ Item {
     session.lastSavedCount = -1
     session.ctl.undoStack = []
     session.ctl.redoStack = []
+    session.ctl.markedIds = []
+    session.ctl.showPinned = false
     session.ctl.selectedIndex = -1
     session.ctl.editIndex = -1
     session.ctl.linkingFrom = -1
@@ -65,7 +68,7 @@ Item {
     // Remember what this write contains, so completing it does not have to
     // parse the whole board back again just to count the items.
     session.savingCount = session.ctl.items.count
-    persistence.save(session.ctl.boardPath, text, session.ctl.backupPathFor(session.ctl.currentBoard))
+    persistence.save(session.ctl.boardPath, text, session.ctl.backupPathFor(session.ctl.currentBoard), session.ctl.boardsDir, session.ctl.backupsDir)
   }
 
   function savedBoard(path, text) {
@@ -109,6 +112,8 @@ Item {
       session.ctl.nextId = Store.nextFreeId(session.ctl.items, data.nextId)
       session.ctl.nextColor = session.ctl.items.count
     }
+    session.ctl.markedIds = []
+    session.ctl.showPinned = false
     session.ctl.selectedIndex = -1
     session.ctl.undoStack = []
     session.ctl.redoStack = []
@@ -131,6 +136,7 @@ Item {
     id: persistence
     onCompleted: function(path, text) { session.savedBoard(path, text) }
     onFailed: function(message) { session.failedSave(message) }
+    onDelayed: function(message) { session.saveError = message }
   }
 
   Timer {

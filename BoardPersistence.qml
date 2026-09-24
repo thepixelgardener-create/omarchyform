@@ -8,6 +8,10 @@ Item {
   property bool busy: false
   property string target: ""
   property string contents: ""
+  property string boardRoot: ""
+  property string backupRoot: ""
+  property int timeoutMs: 8000
+  signal delayed(string message)
   signal completed(string path, string text)
   signal failed(string message)
 
@@ -17,8 +21,10 @@ Item {
   // people are invited to hand-edit and commit stays free of .bak files.
   property string backupTarget: ""
 
-  function save(path, text, backupPath) {
+  function save(path, text, backupPath, allowedRoot, allowedBackupRoot) {
     if (busy) return false
+    boardRoot = allowedRoot || ""
+    backupRoot = allowedBackupRoot || ""
     target = path
     contents = text
     backupTarget = backupPath ? backupPath : path + ".bak"
@@ -27,15 +33,13 @@ Item {
     return true
   }
 
-  // A save that never reports back leaves busy stuck, and with it every later
-  // save, board switch and the "saving…" line. Nothing should be able to wedge
-  // the board that way, whatever the cause.
+  // A slow operation still owns its immutable arguments. Report the delay,
+  // but never permit a retry or board switch to reuse an active writer.
   Timer {
-    id: watchdog
-    interval: 8000
+    interval: persistence.timeoutMs
     repeat: false
     running: persistence.busy
-    onTriggered: if (persistence.busy) persistence.fail("Save did not finish")
+    onTriggered: if (persistence.busy) persistence.delayed("Saving is taking longer than expected; waiting for disk")
   }
 
   function fail(message) {
@@ -47,9 +51,8 @@ Item {
     id: backup
     // Arguments are passed separately: filenames never become shell code.
     // Publish the backup atomically; a failed copy leaves the old backup intact.
-    command: ["sh", "-c",
-      'if [ -e "$1" ] || [ -L "$1" ]; then cp -T -- "$1" "$2.tmp" && mv -fT -- "$2.tmp" "$2"; fi',
-      "omarchyform-backup", persistence.target, persistence.backupTarget]
+    command: ["bash", decodeURIComponent(Qt.resolvedUrl("BoardFiles.sh").toString().replace(/^file:\/\//, "")),
+      "backup", persistence.target, persistence.backupTarget, persistence.boardRoot, persistence.backupRoot]
     onExited: function(code) {
       if (code !== 0) { persistence.fail("Backup failed; board was not replaced"); return }
       writer.path = persistence.target

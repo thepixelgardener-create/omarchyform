@@ -13,6 +13,7 @@ TestCase {
     id: ctl
     property alias items: model
     property bool canEdit: true
+    property bool showPinned: false
     property int selectedIndex: -1
     property int editIndex: -1
     property int linkingFrom: -1
@@ -27,11 +28,14 @@ TestCase {
     property int undoCount: 0
     property int saveCount: 0
     property int flushCount: 0
+    function isMarked(id) { return false }
     function sp(n) { return n }
     function tintFill(tint, strong) { return itemFill }
     function tintBorder(tint, strong) { return "#999999" }
     function repaintLinks() {}
-    function selectOnly(index) { selectedIndex = index; editIndex = -1 }
+    function pointerSelect(index, additive) { selectedIndex = index; editIndex = -1 }
+    function moveTargets(dx, dy) { model.setProperty(0, "ix", model.get(0).ix + dx); model.setProperty(0, "iy", model.get(0).iy + dy) }
+    function resizeTargets(dx, dy) { model.setProperty(0, "iw", Math.max(60, model.get(0).iw + dx)); model.setProperty(0, "ih", Math.max(60, model.get(0).ih + dy)) }
     function pushUndo() { undoCount++ }
     function save() { saveCount++ }
     function scheduleSave() { saveCount++ }
@@ -43,11 +47,17 @@ TestCase {
       ListElement { ix: 100; iy: 100; iw: 180; ih: 140; itext: "" }
     }
   }
+  property int backgroundDoubleClicks: 0
+  MouseArea {
+    anchors.fill: parent
+    onDoubleClicked: test.backgroundDoubleClicks++
+  }
   Node {
     id: subject
     ctl: ctl
     index: 0
     iid: 1
+    ipinned: false
     kind: "note"
     ix: model.get(0).ix
     iy: model.get(0).iy
@@ -57,7 +67,10 @@ TestCase {
     itext: model.get(0).itext
   }
   function init() {
+    backgroundDoubleClicks = 0
     subject.kind = "note"
+    subject.ipinned = false
+    ctl.showPinned = false
     ctl.itemFill = "#222222"
     ctl.canEdit = true
     ctl.selectedIndex = -1
@@ -84,6 +97,22 @@ TestCase {
     compare(model.get(0).ih, 160)
     compare(ctl.undoCount, 1)
     compare(ctl.saveCount, 1)
+  }
+  function test_pinnedPointer() {
+    subject.ipinned = true
+    mousePress(test, 140, 140, Qt.LeftButton)
+    mouseMove(test, 200, 160, -1, Qt.LeftButton)
+    mouseRelease(test, 200, 160, Qt.LeftButton)
+    compare(ctl.selectedIndex, -1)
+    mouseDoubleClickSequence(test, 140, 140, Qt.LeftButton)
+    compare(backgroundDoubleClicks, 1)
+    ctl.showPinned = true
+    mouseClick(test, 140, 140, Qt.LeftButton)
+    compare(ctl.selectedIndex, 0)
+    mouseDoubleClickSequence(test, 140, 140, Qt.LeftButton)
+    compare(ctl.editIndex, -1)
+    compare(model.get(0).ix, 100)
+    compare(ctl.undoCount, 0)
   }
   function test_readOnly() {
     ctl.canEdit = false

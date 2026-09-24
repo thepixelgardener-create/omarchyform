@@ -7,6 +7,13 @@ since older boards are migrated on load rather than rejected.
 
 ### Added
 
+- Background pinning: `p` pins items behind the working canvas; `Shift+P`
+  selects backgrounds to unpin. Normal edits and mark-all skip pinned items.
+  Board format v4 preserves pinning; v1–v3 boards still load.
+- Shift-click marking; pointer dragging and resizing respect marked items.
+- Regression coverage for restore collisions, unsafe paths, delayed saves,
+  background pinning and board-local selection.
+
 - **A trash.** Deleting a board or a folder moves it aside and records where it
   came from, so putting it back is exact rather than a guess. `t` in the
   browser shows what is in there, `enter` restores, and only `x` inside the
@@ -38,6 +45,16 @@ since older boards are migrated on load rather than rejected.
   so a hundred steps of three thousand items held twenty-four megabytes.
 
 ### Fixed
+
+- Restore refuses occupied destinations without discarding the trash entry.
+  Filesystem operations reject traversal and symlink components, and browser
+  mutations serialize their pending metadata. Trash index write failures are
+  visible and retryable.
+- Slow saves retain exclusive writer ownership until completion. Marks reset
+  on board switches and history restoration.
+- Backups mirror board paths under `backups/v2/`; older backups are retained.
+- Ellipse and diamond connectors meet their outlines. Undo has a 100-step cap.
+- Qt UI tests now reject runtime TypeErrors and validate the Node test fixture.
 
 - A completion for one board could become the baseline for another. Two empty
   boards serialise the same, so creating a board straight after switching away

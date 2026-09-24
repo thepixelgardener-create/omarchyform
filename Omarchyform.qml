@@ -110,6 +110,7 @@ Item {
   property int editIndex: -1      // -1 means normal mode: every key is a command
   property int linkingFrom: -1    // id of the first end while connecting
   property bool helpVisible: false
+  property bool showPinned: false
 
   // A line that says what just happened and then goes away. Deleting is one
   // keystroke, so it should at least say so, and say how to take it back.
@@ -133,7 +134,7 @@ Item {
   readonly property string saveError: session.saveError
   readonly property bool saving: session.busy
   readonly property var pendingBoard: session.pendingBoard
-  readonly property bool canEdit: session.canEdit
+  readonly property bool canEdit: session.canEdit && !root.browserBusy
   property bool stateReady: false
 
   property var undoStack: []
@@ -157,6 +158,45 @@ Item {
   // The browser shows the trash instead of the boards while this is on.
   property bool browserTrash: false
   property var trashEntries: []
+  property bool trashIndexSaving: false
+  property bool trashIndexLoading: true
+  property bool trashIndexNeedsRead: true
+  property string trashIndexError: ""
+  readonly property bool browserBusy: mkdirProc.running || moveProc.running || trashProc.running
+    || restoreProc.running || purgeProc.running || root.trashIndexSaving || root.trashIndexLoading
+
+  function refreshTrashIndex() {
+    if (root.trashIndexSaving || (root.trashIndexError !== "" && !root.trashIndexNeedsRead)) return
+    root.trashIndexLoading = true
+    root.trashIndexNeedsRead = true
+    trashIndexFile.reload()
+  }
+
+  function acceptTrashIndex(raw) {
+    root.trashIndexLoading = false
+    if (root.trashIndexSaving || (root.trashIndexError !== "" && !root.trashIndexNeedsRead)) return
+    var parsed = null
+    try { parsed = JSON.parse(raw) } catch (e) {}
+    var entries = Store.readTrash(raw)
+    if (!parsed || (parsed.version !== undefined && parsed.version !== 1) || !Array.isArray(parsed.entries) || entries.length !== parsed.entries.length) {
+      root.trashIndexNeedsRead = true
+      root.trashIndexError = "trash index is invalid — repair index.json, then ctrl+s to reload"
+      return
+    }
+    root.trashEntries = entries
+    root.trashIndexNeedsRead = false
+    root.trashIndexError = ""
+  }
+
+  function fileCommand(action, args) {
+    return ["bash", decodeURIComponent(Qt.resolvedUrl("BoardFiles.sh").toString().replace(/^file:\/\//, "")), action].concat(args)
+  }
+
+  function filesystemReady() {
+    if (root.browserBusy) { root.browserMessage = "finishing the previous operation…"; return false }
+    if (root.trashIndexError !== "") { root.browserMessage = root.trashIndexError; return false }
+    return true
+  }
 
   readonly property var browserRows: root.browserTrash
     ? Store.sortedTrash(root.trashEntries)
@@ -177,15 +217,15 @@ Item {
   function targets() {
     var out = []
     if (root.markedIds.length === 0)
-      return root.selectedIndex >= 0 ? [root.selectedIndex] : []
+      return root.selectedIndex >= 0 && !itemModel.get(root.selectedIndex).ipinned ? [root.selectedIndex] : []
     for (var i = itemModel.count - 1; i >= 0; i--)
-      if (root.isMarked(itemModel.get(i).iid)) out.push(i)
+      if (!itemModel.get(i).ipinned && root.isMarked(itemModel.get(i).iid)) out.push(i)
     return out
   }
 
   function toggleMark() {
     var n = root.selected()
-    if (!n) return
+    if (!n || n.ipinned) return
     var m = root.markedIds.slice()
     var at = m.indexOf(n.iid)
     if (at >= 0) m.splice(at, 1)
@@ -197,7 +237,8 @@ Item {
 
   function markAll() {
     var m = []
-    for (var i = 0; i < itemModel.count; i++) m.push(itemModel.get(i).iid)
+    for (var i = 0; i < itemModel.count; i++)
+      if (!itemModel.get(i).ipinned) m.push(itemModel.get(i).iid)
     root.markedIds = m
     root.flash(m.length + " marked")
     root.repaintLinks()
@@ -208,6 +249,34 @@ Item {
     root.markedIds = []
     root.repaintLinks()
     return true
+  }
+
+  function togglePin() {
+    if (!root.canEdit) return
+    var n = root.selected()
+    var unpin = n && n.ipinned
+    var t = unpin ? [root.selectedIndex] : root.targets()
+    if (t.length === 0) return
+    root.pushUndo()
+    for (var i = 0; i < t.length; i++) itemModel.setProperty(t[i], "ipinned", !unpin)
+    root.markedIds = []
+    root.editIndex = -1
+    root.linkingFrom = -1
+    root.showPinned = false
+    if (!unpin) root.selectedIndex = -1
+    root.save()
+    root.flash(unpin ? "unpinned" : "pinned as background · shift+p to select backgrounds")
+    root.focusKeys()
+  }
+
+  function togglePinnedSelection() {
+    root.showPinned = !root.showPinned
+    root.markedIds = []
+    root.selectedIndex = -1
+    root.editIndex = -1
+    root.linkingFrom = -1
+    root.selectNext(1)
+    root.focusKeys()
   }
 
   function selected() { return root.selectedIndex >= 0 ? itemModel.get(root.selectedIndex) : null }
@@ -229,7 +298,7 @@ Item {
     // A snapshot holds the whole board, so depth has to give way as boards
     // grow: a hundred steps of three thousand items is twenty-four megabytes
     // held in the shell. Ten steps of a large board, a hundred of a small one.
-    var maxSteps = Math.max(10, Math.floor(20000 / Math.max(1, itemModel.count)))
+    var maxSteps = Math.min(100, Math.max(10, Math.floor(20000 / Math.max(1, itemModel.count))))
     while (s.length > maxSteps) s.shift()
     root.undoStack = s
     root.redoStack = []   // a new edit drops the redo branch
@@ -237,6 +306,7 @@ Item {
 
   function restore(snap) {
     if (!root.canEdit) return
+    root.markedIds = []
     Store.fillItems(itemModel, snap.items)
     Store.fillLinks(linkModel, itemModel, snap.links)
     root.nextId = snap.nextId
@@ -278,6 +348,8 @@ Item {
   // -------------------------------------------------------------------- items
   function addItem(kind, wx, wy) {
     if (!root.canEdit) return
+    root.showPinned = false
+    root.markedIds = []
     root.pushUndo()
     var w = kind === "note" ? 180 : 160
     var h = kind === "note" ? 140 : 110
@@ -285,7 +357,7 @@ Item {
       iid: root.nextId, kind: kind,
       ix: wx - w / 2, iy: wy - h / 2, iw: w, ih: h,
       itint: Store.TINTS[root.nextColor % Store.TINTS.length],
-      itext: ""
+      itext: "", ipinned: false
     })
     root.nextId += 1
     root.nextColor += 1
@@ -306,7 +378,7 @@ Item {
 
   function removeItem(index) {
     if (!root.canEdit) return
-    if (index < 0 || index >= itemModel.count) return
+    if (index < 0 || index >= itemModel.count || itemModel.get(index).ipinned) return
     root.removeAt([index])
   }
 
@@ -362,6 +434,7 @@ Item {
 
   // ------------------------------------------------------------------ linking
   function toggleLinking() {
+    if (root.selected() && root.selected().ipinned) return
     var n = root.selected()
     if (!n) return
     if (root.linkingFrom < 0) { root.linkingFrom = n.iid; root.repaintLinks(); return }
@@ -399,6 +472,7 @@ Item {
   }
 
   function unlinkSelected() {
+    if (root.selected() && root.selected().ipinned) return
     if (!root.canEdit) return
     var n = root.selected()
     if (!n) return
@@ -414,6 +488,40 @@ Item {
   }
 
   // --------------------------------------------------------------- navigation
+  function pointerSelect(index, additive) {
+    if (additive && !itemModel.get(index).ipinned) {
+      if (root.markedIds.length === 0 && root.selectedIndex >= 0 && root.selectedIndex !== index
+          && !itemModel.get(root.selectedIndex).ipinned) root.markedIds = [itemModel.get(root.selectedIndex).iid]
+      root.selectedIndex = index
+      root.toggleMark()
+    } else if (root.isMarked(itemModel.get(index).iid)) {
+      root.selectedIndex = index
+    } else root.selectOnly(index)
+    root.editIndex = -1
+    root.linkingFrom = -1
+    root.focusKeys()
+  }
+
+  function moveTargets(dx, dy) {
+    if (!root.canEdit) return
+    var t = root.targets()
+    for (var i = 0; i < t.length; i++) {
+      var n = itemModel.get(t[i])
+      itemModel.setProperty(t[i], "ix", n.ix + dx)
+      itemModel.setProperty(t[i], "iy", n.iy + dy)
+    }
+  }
+
+  function resizeTargets(dx, dy) {
+    if (!root.canEdit) return
+    var t = root.targets()
+    for (var i = 0; i < t.length; i++) {
+      var n = itemModel.get(t[i])
+      itemModel.setProperty(t[i], "iw", Math.max(root.minItemSize, n.iw + dx))
+      itemModel.setProperty(t[i], "ih", Math.max(root.minItemSize, n.ih + dy))
+    }
+  }
+
   function selectOnly(index) {
     root.markedIds = []
     root.selectedIndex = index
@@ -425,7 +533,7 @@ Item {
   function move(dx, dy, carry) {
     if (carry) return root.nudgeSelected(dx, dy)
     if (root.selectedIndex < 0) return root.panBy(-dx * 120, -dy * 120)
-    var next = Store.nearest(itemModel, root.selectedIndex, dx, dy)
+    var next = Store.nearest(itemModel, root.selectedIndex, dx, dy, root.showPinned)
     if (next >= 0) root.selectedIndex = next
     root.centerOnSelected()
     root.repaintLinks()
@@ -433,7 +541,14 @@ Item {
 
   function selectNext(stepBy) {
     if (itemModel.count === 0) return
-    root.selectedIndex = ((root.selectedIndex + stepBy) % itemModel.count + itemModel.count) % itemModel.count
+    var start = root.selectedIndex
+    if (start < 0) start = stepBy > 0 ? -1 : 0
+    var found = -1
+    for (var i = 1; i <= itemModel.count; i++) {
+      var at = ((start + stepBy * i) % itemModel.count + itemModel.count) % itemModel.count
+      if ((itemModel.get(at).ipinned === true) === root.showPinned) { found = at; break }
+    }
+    root.selectedIndex = found
     root.centerOnSelected()
     root.repaintLinks()
   }
@@ -537,6 +652,7 @@ Item {
 
   // -------------------------------------------------------------------- modes
   function editSelected() {
+    if (root.selected() && root.selected().ipinned) return
     if (!root.canEdit) return
     if (root.selectedIndex < 0) return
     root.pushUndo()
@@ -557,6 +673,7 @@ Item {
   // Escape unwinds one layer at a time rather than closing outright.
   function back() {
     if (root.helpVisible) root.helpVisible = false
+    else if (root.showPinned) { root.showPinned = false; root.selectedIndex = -1 }
     else if (root.clearMarks()) root.flash("marks cleared")
     else if (root.linkingFrom >= 0) { root.linkingFrom = -1; root.repaintLinks() }
     else root.dismiss()
@@ -575,7 +692,7 @@ Item {
     root.browserDir = Store.parentOf(root.currentBoard)
     root.browserTrash = false
     root.browserVisible = true
-    trashIndexFile.reload()
+    root.refreshTrashIndex()
     root.rescan()
   }
 
@@ -604,6 +721,7 @@ Item {
 
   // Enter descends into a folder or opens a board.
   function browserEnter() {
+    if (!root.filesystemReady()) return
     var e = root.browserCurrent()
     if (!e) return
     if (root.browserTrash) { root.restoreCurrent(); return }
@@ -635,19 +753,20 @@ Item {
   }
 
   function commitPrompt() {
+    if (!root.filesystemReady()) return
     var name = root.browserInput.trim()
     var action = root.browserAction
     root.browserPrompt = ""
     root.browserInput = ""
     root.browserAction = ""
-    if (!Store.nameIsValid(name)) return
+    if (!Store.nameIsValid(name)) { root.browserMessage = "use a name without slashes or control characters"; return }
 
     if (action === "board") {
       var path = Store.uniquePath(root.browserEntries, root.browserDir, name, false)
       root.createBoard(path)
     } else if (action === "folder") {
       var dir = Store.uniquePath(root.browserEntries, root.browserDir, name, true)
-      mkdirProc.command = ["mkdir", "-p", root.boardsDir + "/" + dir]
+      mkdirProc.command = root.fileCommand("mkdir", [root.boardsDir, dir])
       mkdirProc.running = true
     } else if (action === "rename") {
       root.flushSave()
@@ -658,7 +777,7 @@ Item {
       var e = root.browserCurrent()
       if (!e) return
       var target = Store.uniquePath(root.browserEntries, Store.parentOf(e.path), name, e.dir)
-      moveProc.command = ["mv", "-n", root.boardsDir + "/" + e.path, root.boardsDir + "/" + target]
+      moveProc.command = root.fileCommand("move", [root.boardsDir, e.path, root.boardsDir, target])
       moveProc.renamedFrom = e.path
       moveProc.renamedTo = target
       moveProc.running = true
@@ -679,6 +798,7 @@ Item {
   }
 
   function deleteCurrent() {
+    if (!root.filesystemReady()) return
     var e = root.browserCurrent()
     if (!e) return
 
@@ -693,7 +813,7 @@ Item {
       root.pendingDelete = ""
       root.browserMessage = ""
       purgeProc.entryFile = e.file
-      purgeProc.command = ["rm", "-rf", "--", root.trashDir + "/" + e.file]
+      purgeProc.command = root.fileCommand("purge", [root.trashDir, e.file])
       purgeProc.running = true
       return
     }
@@ -715,18 +835,16 @@ Item {
     var stamp = Qt.formatDateTime(new Date(), "yyyyMMdd-hhmmss")
     var file = Store.trashFile(root.trashEntries, e.path, stamp)
     trashProc.pending = { file: file, path: e.path, dir: e.dir, at: stamp }
-    trashProc.command = ["mv", "-n", "--", root.boardsDir + "/" + e.path, root.trashDir + "/" + file]
+    trashProc.command = root.fileCommand("move", [root.boardsDir, e.path, root.trashDir, file])
     trashProc.running = true
   }
 
   function restoreCurrent() {
+    if (!root.filesystemReady()) return
     var e = root.browserCurrent()
     if (!e || !root.browserTrash) return
     restoreProc.entryFile = e.file
-    // mkdir first: the folder it came out of may have gone since.
-    restoreProc.command = ["sh", "-c",
-      'mkdir -p -- "$(dirname -- "$2")" && mv -n -- "$1" "$2"',
-      "omarchyform-restore", root.trashDir + "/" + e.file, root.boardsDir + "/" + e.path]
+    restoreProc.command = root.fileCommand("move", [root.trashDir, e.file, root.boardsDir, e.path])
     restoreProc.running = true
   }
 
@@ -737,15 +855,23 @@ Item {
     root.browserSearching = false
     root.pendingDelete = ""
     root.browserMessage = ""
-    if (root.browserTrash) trashIndexFile.reload()
+    if (root.browserTrash) root.refreshTrashIndex()
   }
 
   function saveTrashIndex(entries) {
     root.trashEntries = entries
+    root.trashIndexSaving = true
+    root.trashIndexNeedsRead = false
+    root.trashIndexError = ""
     trashIndexFile.setText(Store.writeTrash(entries))
   }
 
   function browserKey(event) {
+    if (event.key === Qt.Key_S && (event.modifiers & Qt.ControlModifier)) {
+      root.retryTrashIndex()
+      event.accepted = true
+      return
+    }
     var text = event.text
     var shift = (event.modifiers & Qt.ShiftModifier) !== 0
 
@@ -796,6 +922,7 @@ Item {
       } else root.browserUp()
     }
     else if (text === "/") { root.browserSearching = true; root.browserQuery = ""; root.browserIndex = 0 }
+    else if (root.browserTrash && ["a", "A", "r"].indexOf(text) >= 0) root.browserMessage = "enter: restore this item · t: return to boards"
     else if (text === "a") root.prompt("board", "new board:", "")
     else if (text === "A") root.prompt("folder", "new folder:", "")
     else if (text === "r") {
@@ -814,7 +941,12 @@ Item {
   BoardSession { id: session; ctl: root }
 
   function scheduleSave() { session.scheduleSave() }
-  function flushSave() { session.flushSave() }
+  function retryTrashIndex() {
+    if (root.trashIndexLoading || root.trashIndexSaving || root.trashIndexError === "") return
+    if (root.trashIndexNeedsRead) root.refreshTrashIndex()
+    else root.saveTrashIndex(root.trashEntries)
+  }
+  function flushSave() { root.retryTrashIndex(); session.flushSave() }
   function save(allowEmpty) { session.save(allowEmpty) }
   function openBoard(path, fresh) { session.openBoard(path, fresh) }
 
@@ -836,7 +968,7 @@ Item {
   function applyState(raw) {
     var st = null
     try { st = JSON.parse(raw) } catch (e) { st = null }
-    if (st && st.lastBoard) root.currentBoard = String(st.lastBoard)
+    if (st && Store.safeRelative(st.lastBoard)) root.currentBoard = st.lastBoard
     if (st) {
       root.windowMode = st.windowMode === true
       if (typeof st.autosaveMs === "number") root.autosaveMs = st.autosaveMs
@@ -894,6 +1026,8 @@ Item {
   function close() {
     root.flushSave()
     root.opened = false
+    root.markedIds = []
+    root.showPinned = false
     root.selectedIndex = -1
     root.editIndex = -1
     root.linkingFrom = -1
@@ -932,7 +1066,7 @@ Item {
   readonly property string trashIndexPath: root.trashDir + "/index.json"
 
   function backupPathFor(relative) {
-    return root.backupsDir + "/" + String(relative).replace(/\//g, "__") + ".bak"
+    return root.backupsDir + "/" + "v2/" + relative + ".bak"
   }
   readonly property string legacyPath: root.dataDir + "/board.json"
   readonly property string statePath: root.dataDir + "/state.json"
@@ -980,7 +1114,10 @@ Item {
 
   Process {
     id: mkdirProc
-    onExited: root.rescan()
+    onExited: function(code) {
+      if (code !== 0) root.browserMessage = "could not create that folder"
+      root.rescan()
+    }
   }
 
   Process {
@@ -1000,6 +1137,7 @@ Item {
           root.writeState()
         }
       }
+      if (code !== 0) root.browserMessage = "could not rename that; destination exists or path is unavailable"
       root.rescan()
     }
   }
@@ -1041,6 +1179,7 @@ Item {
     property string entryFile: ""
     onExited: function (code) {
       if (code === 0) root.saveTrashIndex(Store.withoutTrash(root.trashEntries, purgeProc.entryFile))
+      else root.browserMessage = "could not remove that trash entry"
       purgeProc.entryFile = ""
     }
   }
@@ -1051,8 +1190,22 @@ Item {
     watchChanges: false
     atomicWrites: true
     printErrors: false
-    onLoaded: root.trashEntries = Store.readTrash(text())
-    onLoadFailed: root.trashEntries = []
+    onLoaded: root.acceptTrashIndex(text())
+    onLoadFailed: function(error) {
+      root.trashIndexLoading = false
+      if (root.trashIndexSaving || !root.trashIndexNeedsRead) return
+      if (error === FileViewError.FileNotFound) {
+        root.trashEntries = []
+        root.trashIndexNeedsRead = false
+        root.trashIndexError = ""
+      } else root.trashIndexError = "trash index could not be read — ctrl+s to retry"
+    }
+    onSaved: { root.trashIndexSaving = false; root.trashIndexError = "" }
+    onSaveFailed: {
+      root.trashIndexSaving = false
+      root.trashIndexError = "trash index could not be saved — ctrl+s to retry; keep the board open"
+      root.browserMessage = root.trashIndexError
+    }
   }
 
   Process {

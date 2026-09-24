@@ -17,7 +17,7 @@ function loadStore(source) {
     "itemRows", "linkRows", "fillItems", "fillLinks", "indexOfId", "idIndex",
     "nextFreeId", "num", "readFile", "writeFile", "parseThemeMode", "isLightColor",
     "readTrash", "writeTrash", "trashFile", "trashEntry", "withoutTrash", "sortedTrash",
-    "joinPath", "parentOf", "baseName", "displayName", "parseListing",
+    "safeRelative", "joinPath", "parentOf", "baseName", "displayName", "parseListing",
     "childrenOf", "fuzzyScore", "filterEntries", "nameIsValid", "uniquePath", "nearest", "bounds", "edgePoint", "cycle"
   ]
   const factory = new Function(`${body}\nreturn {${exported.join(",")}}`)
@@ -40,7 +40,7 @@ class FakeModel {
 
 function item(over) {
   return Object.assign(
-    { iid: 1, kind: "note", ix: 0, iy: 0, iw: 100, ih: 100, itint: "foreground", itext: "" },
+    { iid: 1, kind: "note", ix: 0, iy: 0, iw: 100, ih: 100, itint: "foreground", itext: "", ipinned: false },
     over)
 }
 

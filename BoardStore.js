@@ -25,6 +25,7 @@ function normalizeTint(value) {
 var KEY_HELP = [
   ["n", "new note beside the selected one"],
   ["r / e", "new box / ellipse"],
+  ["p / shift+p", "pin as background / select backgrounds"],
   ["s", "cycle shape: note, box, ellipse, diamond"],
   ["x", "connect: press on one, then on another; again to turn it round"],
   ["X", "remove every connector on this item"],
@@ -45,7 +46,8 @@ var KEY_HELP = [
   ["0", "reset the view"],
   ["+ / -", "zoom"],
   ["? / F1", "this list"],
-  ["drag", "move an item, or the canvas"],
+  ["shift+click", "mark items together"],
+  ["drag", "move marked items, or pan the canvas"],
   ["wheel", "zoom at the pointer"]
 ]
 
@@ -57,7 +59,7 @@ function itemRows(items) {
   var out = []
   for (var i = 0; i < items.count; i++) {
     var n = items.get(i)
-    out.push({ id: n.iid, kind: n.kind, x: n.ix, y: n.iy, w: n.iw, h: n.ih, tint: n.itint, text: n.itext })
+    out.push({ id: n.iid, kind: n.kind, x: n.ix, y: n.iy, w: n.iw, h: n.ih, tint: n.itint, text: n.itext, pinned: n.ipinned === true })
   }
   return out
 }
@@ -106,7 +108,8 @@ function fillItems(items, rows) {
       iw: Math.max(MIN_SIZE, num(n.w, 180)),
       ih: Math.max(MIN_SIZE, num(n.h, 140)),
       itint: normalizeTint(n.tint || n.color),
-      itext: typeof n.text === "string" ? n.text : ""
+      itext: typeof n.text === "string" ? n.text : "",
+      ipinned: n.pinned === true
     })
   }
 }
@@ -123,7 +126,7 @@ function fillLinks(links, items, rows) {
   for (var i = 0; i < rows.length; i++) {
     var l = rows[i]
     // Both ends must exist, an item cannot be joined to itself, and the same
-    // pair cannot appear twice — a connector is undirected.
+    // pair cannot appear twice; from/to retain its direction.
     if (l.from === l.to) continue
     if (byId[l.from] === undefined || byId[l.to] === undefined) continue
     var key = Math.min(l.from, l.to) + ":" + Math.max(l.from, l.to)
@@ -157,7 +160,7 @@ function readFile(raw) {
   var parsed
   try { parsed = JSON.parse(raw) } catch (e) { return null }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null
-  if (parsed.version !== undefined && [1, 2, 3].indexOf(parsed.version) < 0) return null
+  if (parsed.version !== undefined && [1, 2, 3, 4].indexOf(parsed.version) < 0) return null
   var fields = ["items", "notes", "links"]
   for (var f = 0; f < fields.length; f++) {
     var rows = parsed[fields[f]]
@@ -178,7 +181,7 @@ function readFile(raw) {
 // written before that split still carries the key; it is ignored on the way in.
 function writeFile(items, links, nextId) {
   return JSON.stringify({
-    version: 3,
+    version: 4,
     nextId: nextId,
     items: itemRows(items),
     links: linkRows(links)
@@ -291,7 +294,15 @@ function filterEntries(entries, dir, query) {
 function nameIsValid(name) {
   if (!name) return false
   if (name === "." || name === "..") return false
-  return !/[\/\\\0]/.test(name)
+  return !/[\/\\\x00-\x1f\x7f]/.test(name)
+}
+
+// Relative paths in state/trash may have been edited outside the application.
+function safeRelative(path) {
+  if (typeof path !== "string" || !path) return false
+  var parts = path.split("/")
+  for (var i = 0; i < parts.length; i++) if (!nameIsValid(parts[i])) return false
+  return true
 }
 
 // "notes", "notes-2", "notes-3", ...
@@ -321,8 +332,8 @@ function readTrash(raw) {
   for (var i = 0; i < parsed.entries.length; i++) {
     var e = parsed.entries[i]
     if (!e || typeof e !== "object") continue
-    if (typeof e.file !== "string" || !e.file) continue
-    if (typeof e.path !== "string" || !e.path) continue
+    if (typeof e.file !== "string" || !nameIsValid(e.file)) continue
+    if (!safeRelative(e.path)) continue
     out.push({ file: e.file, path: e.path, dir: e.dir === true, at: typeof e.at === "string" ? e.at : "" })
   }
   return out
@@ -386,7 +397,7 @@ function isLightColor(r, g, b) {
 // (dx, dy) is a unit axis vector: one of (1,0) (-1,0) (0,1) (0,-1). Because one
 // component is always zero, the sign inside the off-axis term is unobservable
 // — mutation testing reports it as an equivalent mutant, which it is.
-function nearest(items, fromIndex, dx, dy) {
+function nearest(items, fromIndex, dx, dy, pinnedMode) {
   if (fromIndex < 0 || fromIndex >= items.count) return -1
   var from = items.get(fromIndex)
   var fx = from.ix + from.iw / 2
@@ -394,7 +405,7 @@ function nearest(items, fromIndex, dx, dy) {
   var best = -1
   var bestScore = Infinity
   for (var i = 0; i < items.count; i++) {
-    if (i === fromIndex) continue
+    if (i === fromIndex || (items.get(i).ipinned === true) !== (pinnedMode === true)) continue
     var n = items.get(i)
     var ax = (n.ix + n.iw / 2) - fx
     var ay = (n.iy + n.ih / 2) - fy
@@ -420,12 +431,17 @@ function bounds(items) {
 }
 
 // Where a connector meets an item: walk from its centre toward the other end
-// until we cross the bounding box.
+// until we cross its outline.
 function edgePoint(it, cx, cy, tx, ty) {
   var dx = tx - cx
   var dy = ty - cy
   if (dx === 0 && dy === 0) return { x: cx, y: cy }
-  var scale = Math.min(
+  var scale
+  if (it.kind === "ellipse") {
+    scale = 1 / Math.sqrt(dx * dx / (it.iw * it.iw / 4) + dy * dy / (it.ih * it.ih / 4))
+  } else if (it.kind === "diamond") {
+    scale = 1 / (Math.abs(dx) / (it.iw / 2) + Math.abs(dy) / (it.ih / 2))
+  } else scale = Math.min(
     dx === 0 ? Infinity : (it.iw / 2) / Math.abs(dx),
     dy === 0 ? Infinity : (it.ih / 2) / Math.abs(dy))
   return { x: cx + dx * scale, y: cy + dy * scale }

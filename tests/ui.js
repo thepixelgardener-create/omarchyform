@@ -3,9 +3,11 @@ const path = require('path')
 const { spawnSync } = require('child_process')
 const runner = process.env.QMLTESTRUNNER || '/usr/lib/qt6/bin/qmltestrunner'
 const result = spawnSync(runner, ['-input', path.join(__dirname, 'qt')], {
-  stdio: 'inherit', timeout: 30000,
+  encoding: 'utf8', timeout: 30000,
   env: {...process.env, QT_QPA_PLATFORM: 'offscreen', QT_QPA_PLATFORMTHEME: '',
     QT_QUICK_CONTROLS_STYLE: 'Basic', QT_QUICK_BACKEND: 'software'}
 })
+const output = (result.stdout || '') + (result.stderr || '')
+process.stdout.write(output)
 if (result.error) console.error(result.error.message)
-process.exit(result.status === 0 && !result.error ? 0 : 1)
+process.exit(result.status === 0 && !result.error && !/TypeError|ReferenceError|Binding loop/.test(output) ? 0 : 1)

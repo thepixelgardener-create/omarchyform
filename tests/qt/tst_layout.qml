@@ -26,6 +26,7 @@ TestCase {
     property string browserQuery: ""
     property string browserPrompt: ""
     property string browserInput: ""
+    property string trashIndexError: ""
     property string browserMessage: ""
     property string browserDir: ""
     property string currentBoard: "board.json"

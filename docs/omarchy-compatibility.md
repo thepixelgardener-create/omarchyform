@@ -51,7 +51,23 @@ targeting only the test process by PID.
 - **Dependency and development guidance:** removed the unused `qs.Ui` import;
   corrected the README's reload and idle-resource descriptions.
 
-## Validation results
+## Follow-up validation: reliability and background pinning
+
+The subsequent working-tree changes pass 79 pure tests plus controller,
+contract and filesystem regressions; 13 Qt results including setup/cleanup;
+and persistence, session and real delayed-backup tests. The extended live
+suite verifies pin/unpin rendering and persistence, mark-all exclusions,
+trash restoration and the existing keyboard/window/monitor workflows.
+Mutation testing reports 174/190 killed, 16 survivors. QML lint still has only
+the metadata warnings described below. The initial follow-up run failed after
+reopen (stage 42); later complete runs passed without a focus-specific fix.
+A browser-readiness guard required the harness to await index loading before
+issuing its next filesystem command.
+
+Current live artifacts: `/tmp/omarchyform-compat-PjcpVJ` (temporary). This still
+is not a registry installation or in-place upgrade test.
+
+## Original validation results
 
 | Check | Result |
 | --- | --- |
