@@ -79,7 +79,8 @@ Item {
 
     Connections {
       target: node
-      function onItintChanged() { shape.requestPaint() }
+      function onFillChanged() { shape.requestPaint() }
+      function onOutlineChanged() { shape.requestPaint() }
       function onKindChanged() { shape.requestPaint() }
       function onSelectedChanged() { shape.requestPaint() }
       function onLinkSourceChanged() { shape.requestPaint() }
@@ -123,6 +124,12 @@ Item {
     }
     onActiveFocusChanged: if (!activeFocus) node.ctl.flushSave()
     Keys.onEscapePressed: node.ctl.stopEditing()
+    Keys.onPressed: function(event) {
+      if (event.key === Qt.Key_S && (event.modifiers & Qt.ControlModifier)) {
+        node.ctl.flushSave()
+        event.accepted = true
+      }
+    }
 
     readonly property bool wantsEdit: node.ctl.editIndex === node.index
     onWantsEditChanged: if (wantsEdit) {

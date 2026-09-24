@@ -34,3 +34,17 @@ jobs:
             }
             console.log("manifest ok:", m.id);
           '
+
+  qt-ui:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Qt Quick test runtime
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qt6-declarative-dev-tools qml6-module-qtqml qml6-module-qtqml-models qml6-module-qtquick qml6-module-qtquick-window qml6-module-qttest qml6-module-qtqml-workerscript
+      - name: Pointer, theme, and small-window tests
+        run: npm run test:ui

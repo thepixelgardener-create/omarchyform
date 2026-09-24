@@ -12,7 +12,7 @@ FocusScope {
   required property var ctl
 
   readonly property var rows: browser.ctl.browserRows
-  readonly property bool searching: browser.ctl.browserQuery !== ""
+  readonly property bool searching: browser.ctl.browserSearching
   readonly property bool prompting: browser.ctl.browserPrompt !== ""
 
   // The path line, in the shape a shell would print it.
@@ -39,9 +39,11 @@ FocusScope {
 
   Rectangle {
     id: panel
-    anchors.centerIn: parent
+    objectName: "browser-panel"
+    anchors.horizontalCenter: parent.horizontalCenter
+    y: Math.max(browser.ctl.sp(16), (parent.height - browserFooter.height - browser.ctl.sp(32) - height) / 2)
     width: Math.min(parent.width - browser.ctl.sp(80), browser.ctl.sp(720))
-    height: Math.min(parent.height - browser.ctl.sp(80), browser.ctl.sp(560))
+    height: Math.max(0, Math.min(parent.height - browserFooter.height - browser.ctl.sp(48), browser.ctl.sp(560)))
     color: browser.ctl.canvasBackground
     border.width: browser.ctl.borderWidth
     border.color: Qt.rgba(browser.ctl.foreground.r, browser.ctl.foreground.g,
@@ -147,7 +149,14 @@ FocusScope {
   }
 
   Text {
-    anchors.horizontalCenter: parent.horizontalCenter
+    id: browserFooter
+    objectName: "browser-footer"
+    anchors.left: parent.left
+    anchors.right: parent.right
+    anchors.leftMargin: browser.ctl.sp(16)
+    anchors.rightMargin: browser.ctl.sp(16)
+    horizontalAlignment: Text.AlignHCenter
+    wrapMode: Text.Wrap
     anchors.bottom: parent.bottom
     anchors.bottomMargin: browser.ctl.sp(16)
     color: browser.ctl.foreground
