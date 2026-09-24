@@ -44,12 +44,12 @@ BarWidget {
     id: button
     anchors.fill: parent
     bar: root.bar
-    // An outline sticky note. It carries the same stroke weight as the stock
-    // bar icons, where the filled version sits heavier than its neighbours; a
-    // grid glyph was the first choice and read as a spreadsheet.
-    text: ""
+    // A filled sticky note at the bar's own icon size. The outline version
+    // read thin and small beside its neighbours; a grid glyph, tried first,
+    // read as a spreadsheet.
+    text: ""
     slotSize: Style.bar.statusSlot
-    fontSize: Style.font.caption
+    fontSize: Style.bar.iconFont
     // Accent rather than the default urgent: an open board is a state, not a
     // problem.
     active: root.boardOpen

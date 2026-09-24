@@ -37,7 +37,7 @@ Put it on the bar, which is the way to reach it without knowing a keybinding:
 omarchy bar put thepixelgardener.omarchyform --section right
 ```
 
-The icon opens and closes the board, and carries the accent colour while it is
+The sticky-note icon opens and closes the board, and carries the accent colour while it is
 open. Its settings — autosave delay, keyboard step, dot grid, and whether the
 board opens windowed — live on the bar entry and are handed to the board when
 it opens, then remembered, so opening from the keyboard uses the same values.
