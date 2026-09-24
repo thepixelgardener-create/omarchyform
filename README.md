@@ -51,6 +51,24 @@ o.bind("SUPER + SHIFT + I", "Omarchyform", "omarchy-shell shell toggle thepixelg
 Check the key is free first with `omarchy menu keybindings --print`, and
 validate afterwards with `hyprctl reload && hyprctl configerrors`.
 
+The plugin also ships `hypr/bindings.lua` with that same binding in it, for
+people who would rather load plugin bindings than write their own. Omarchy
+does not read those files on its own — `hyprland.lua` only loads your
+`hypr/bindings.lua` — so add a loader to it once:
+
+```lua
+-- Load keybindings shipped by installed Omarchy plugins.
+local plugins = os.getenv("HOME") .. "/.config/omarchy/plugins"
+local found = io.popen("find " .. plugins .. " -maxdepth 3 -name bindings.lua 2>/dev/null")
+if found then
+  for file in found:lines() do dofile(file) end
+  found:close()
+end
+```
+
+Use the loader or your own `o.bind`, not both: the same key declared twice is
+declared twice.
+
 ## Keys
 
 Press `?` or `F1` on the board for this list.
@@ -125,11 +143,16 @@ Which board you had open is remembered in `state.json` and reopened next time.
 │   ├── board.json
 │   └── work/
 │       └── project-a.json
+├── backups/
+│   ├── board.json.bak
+│   └── work__project-a.json.bak
 └── state.json
 ```
 
-Each board is plain JSON, written atomically, with one generation kept beside
-it as `<board>.json.bak`. The backup completes before replacement, and saves
+Each board is plain JSON, written atomically. One generation back is kept in
+`~/.local/share/omarchyform/backups/`, named after the board with its folders
+flattened — out of the boards tree, which is meant to be browsed, hand-edited
+and committed without `.bak` files in the way. The backup completes before replacement, and saves
 with unchanged contents do not rotate it. Malformed or unsupported board files
 open read-only; no edits or saves are allowed over them. Back it up, sync it,
 edit it by hand, put it in git — it is your file. Older boards are migrated on load: v1 had no ids or

@@ -11,10 +11,17 @@ Item {
   signal completed(string path, string text)
   signal failed(string message)
 
-  function save(path, text) {
+  // backupPath is optional: without one the previous version is kept beside
+  // the board, which is what a caller testing this component in isolation
+  // expects. The app passes a path outside the boards tree, so a directory
+  // people are invited to hand-edit and commit stays free of .bak files.
+  property string backupTarget: ""
+
+  function save(path, text, backupPath) {
     if (busy) return false
     target = path
     contents = text
+    backupTarget = backupPath ? backupPath : path + ".bak"
     busy = true
     backup.running = true
     return true
@@ -30,8 +37,8 @@ Item {
     // Arguments are passed separately: filenames never become shell code.
     // Publish the backup atomically; a failed copy leaves the old backup intact.
     command: ["sh", "-c",
-      'if [ -e "$1" ] || [ -L "$1" ]; then cp -T -- "$1" "$1.bak.tmp" && mv -fT -- "$1.bak.tmp" "$1.bak"; fi',
-      "omarchyform-backup", persistence.target]
+      'if [ -e "$1" ] || [ -L "$1" ]; then cp -T -- "$1" "$2.tmp" && mv -fT -- "$2.tmp" "$2"; fi',
+      "omarchyform-backup", persistence.target, persistence.backupTarget]
     onExited: function(code) {
       if (code !== 0) { persistence.fail("Backup failed; board was not replaced"); return }
       writer.path = persistence.target

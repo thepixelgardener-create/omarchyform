@@ -27,21 +27,24 @@ function tests(S) {
 
   test("readFile passes a v2 board through", () => {
     const d = S.readFile(JSON.stringify({
-      version: 2, nextId: 9, windowMode: true,
+      version: 2, nextId: 9,
       items: [{ id: 3, kind: "ellipse", x: 1, y: 2, w: 60, h: 60, tint: "accent", text: "" }],
       links: [{ from: 3, to: 3 }]
     }))
     eq(d.nextId, 9, "nextId")
-    eq(d.windowMode, true, "windowMode")
     eq(d.items[0].kind, "ellipse", "kind")
     eq(d.links.length, 1, "links")
   })
 
-  test("windowMode is only true for a real true", () => {
-    eq(S.readFile('{"windowMode":true}').windowMode, true, "true")
-    eq(S.readFile('{"windowMode":false}').windowMode, false, "false")
-    eq(S.readFile('{"windowMode":"yes"}').windowMode, false, "truthy string is not true")
-    eq(S.readFile("{}").windowMode, false, "absent")
+  test("a board carries no window preference", () => {
+    // Which surface the board opens on belongs to the machine, not the board,
+    // so it must not travel in a file people sync between machines.
+    const raw = S.writeFile(new FakeModel(), new FakeModel(), 1)
+    ok(!("windowMode" in JSON.parse(raw)), "not written")
+    // A board written before the split still has the key; it is simply ignored.
+    const back = S.readFile('{"version":3,"windowMode":true,"items":[]}')
+    ok(back !== null, "an older board still loads")
+    ok(back.windowMode === undefined, "and the key is not carried forward")
   })
 
   test("readFile rejects invalid structures and unsupported versions", () => {
@@ -241,7 +244,7 @@ function tests(S) {
     ])
     const links = new FakeModel([{ lfrom: 1, lto: 2 }])
 
-    const raw = S.writeFile(items, links, 3, true)
+    const raw = S.writeFile(items, links, 3)
     const back = S.readFile(raw)
 
     const items2 = new FakeModel()
@@ -252,11 +255,10 @@ function tests(S) {
     eq(items2.rows, items.rows, "items survive the round trip")
     eq(links2.rows, links.rows, "links survive the round trip")
     eq(back.nextId, 3, "nextId")
-    eq(back.windowMode, true, "windowMode")
   })
 
   test("writeFile emits the current version and a trailing newline", () => {
-    const raw = S.writeFile(new FakeModel(), new FakeModel(), 1, false)
+    const raw = S.writeFile(new FakeModel(), new FakeModel(), 1)
     eq(JSON.parse(raw).version, 3, "version")
     ok(raw.endsWith("\n"), "trailing newline")
   })
@@ -656,7 +658,7 @@ function tests(S) {
       for (let i = 0; i < n - 1; i++)
         if (rnd() < 0.5) links.append({ lfrom: i + 1, lto: i + 2 })
 
-      const back = S.readFile(S.writeFile(items, links, n + 1, false))
+      const back = S.readFile(S.writeFile(items, links, n + 1))
       const items2 = new FakeModel()
       const links2 = new FakeModel()
       S.fillItems(items2, back.items)

@@ -764,6 +764,15 @@ Item {
 
   readonly property string dataDir: Quickshell.env("HOME") + "/.local/share/omarchyform"
   readonly property string boardsDir: root.dataDir + "/boards"
+  // Backups sit outside the boards tree: that tree is meant to be browsed,
+  // hand-edited and committed, and .bak files beside every board are noise in
+  // all three. The relative path is flattened so one directory holds them all
+  // without needing a folder created for every board folder.
+  readonly property string backupsDir: root.dataDir + "/backups"
+
+  function backupPathFor(relative) {
+    return root.backupsDir + "/" + String(relative).replace(/\//g, "__") + ".bak"
+  }
   readonly property string legacyPath: root.dataDir + "/board.json"
   readonly property string statePath: root.dataDir + "/state.json"
 
@@ -779,7 +788,7 @@ Item {
   Process {
     id: initProc
     running: true
-    command: ["mkdir", "-p", root.boardsDir]
+    command: ["mkdir", "-p", root.boardsDir, root.backupsDir]
     onExited: migrateProc.running = true
   }
 
