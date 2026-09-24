@@ -71,6 +71,22 @@ end
 Use the loader or your own `o.bind`, not both: the same key declared twice is
 declared twice.
 
+## Removing it
+
+```bash
+omarchy bar remove thepixelgardener.omarchyform
+omarchy plugin remove thepixelgardener.omarchyform
+```
+
+Then delete the binding from `~/.config/hypr/bindings.lua` if you added one,
+and `~/.local/share/applications/omarchyform.desktop` if you installed the
+desktop entry.
+
+Your boards are left alone. They live in
+`~/.local/share/omarchyform/`, and removing the plugin does not touch them, so
+reinstalling picks up exactly where you left off. Delete that directory
+yourself if you want them gone.
+
 ## Keys
 
 Press `?` or `F1` on the board for this list.
