@@ -30,6 +30,10 @@ ShellRoot {
     function backupPathFor(relative) { return test.dir + "/bak__" + String(relative).replace(/\//g, "__") + ".bak" }
     property var undoStack: []
     property var redoStack: []
+    property var markedIds: []
+    property bool showPinned: false
+    readonly property string boardsDir: test.dir
+    readonly property string backupsDir: test.dir
     property int selectedIndex: -1
     property int editIndex: -1
     property int linkingFrom: -1

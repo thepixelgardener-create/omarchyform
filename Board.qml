@@ -73,6 +73,46 @@ FocusScope {
     onHeightChanged: requestPaint()
   }
 
+  // Background: drag to pan, wheel to zoom, double-click for a note.
+  MouseArea {
+    anchors.fill: parent
+    acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+    property real lastX: 0
+    property real lastY: 0
+    property bool panning: false
+
+    onPressed: function (mouse) {
+      lastX = mouse.x
+      lastY = mouse.y
+      panning = true
+      board.ctl.selectOnly(-1)
+      board.focusKeys()
+    }
+    onReleased: panning = false
+    onPositionChanged: function (mouse) {
+      if (!panning) return
+      board.ctl.panBy(mouse.x - lastX, mouse.y - lastY)
+      lastX = mouse.x
+      lastY = mouse.y
+    }
+    onDoubleClicked: function (mouse) {
+      board.ctl.addItem("note", board.ctl.toWorldX(mouse.x), board.ctl.toWorldY(mouse.y))
+    }
+    onWheel: function (wheel) {
+      board.ctl.zoomAt(wheel.x, wheel.y, wheel.angleDelta.y > 0 ? 1.12 : 1 / 1.12)
+    }
+  }
+
+  Item {
+    id: backgroundWorld
+    objectName: "background-world"
+    anchors.fill: parent
+    transform: [
+      Scale { xScale: board.ctl.zoom; yScale: board.ctl.zoom },
+      Translate { x: board.ctl.camX; y: board.ctl.camY }
+    ]
+  }
+
   Canvas {
     id: linkCanvas
     anchors.fill: parent
@@ -126,38 +166,10 @@ FocusScope {
     onHeightChanged: requestPaint()
   }
 
-  // Background: drag to pan, wheel to zoom, double-click for a note.
-  MouseArea {
-    anchors.fill: parent
-    acceptedButtons: Qt.LeftButton | Qt.MiddleButton
-    property real lastX: 0
-    property real lastY: 0
-    property bool panning: false
-
-    onPressed: function (mouse) {
-      lastX = mouse.x
-      lastY = mouse.y
-      panning = true
-      board.ctl.selectOnly(-1)
-      board.focusKeys()
-    }
-    onReleased: panning = false
-    onPositionChanged: function (mouse) {
-      if (!panning) return
-      board.ctl.panBy(mouse.x - lastX, mouse.y - lastY)
-      lastX = mouse.x
-      lastY = mouse.y
-    }
-    onDoubleClicked: function (mouse) {
-      board.ctl.addItem("note", board.ctl.toWorldX(mouse.x), board.ctl.toWorldY(mouse.y))
-    }
-    onWheel: function (wheel) {
-      board.ctl.zoomAt(wheel.x, wheel.y, wheel.angleDelta.y > 0 ? 1.12 : 1 / 1.12)
-    }
-  }
-
-  // The world. Everything inside is positioned in canvas coordinates.
+  // Foreground items are above backgrounds and connectors.
   Item {
+    id: foregroundWorld
+    objectName: "foreground-world"
     anchors.fill: parent
     transform: [
       Scale { xScale: board.ctl.zoom; yScale: board.ctl.zoom },
@@ -166,7 +178,10 @@ FocusScope {
 
     Repeater {
       model: board.ctl.items
-      delegate: Node { ctl: board.ctl }
+      delegate: Node {
+        ctl: board.ctl
+        parent: ipinned ? backgroundWorld : foregroundWorld
+      }
     }
   }
 
@@ -185,6 +200,8 @@ FocusScope {
       "n": function () { board.ctl.addRelative("note") },
       "r": function () { board.ctl.addRelative("rect") },
       "e": function () { board.ctl.addRelative("ellipse") },
+      "p": function () { board.ctl.togglePin() },
+      "P": function () { board.ctl.togglePinnedSelection() },
       "s": function () { board.ctl.cycleKind() },
       "c": function () { board.ctl.recolorItem() },
       "d": function () { board.ctl.removeTargets() },
@@ -235,7 +252,7 @@ FocusScope {
         if (rd) board.ctl.resizeSelected(rd[0], rd[1])
         else if (event.key === Qt.Key_R) board.ctl.redo()
         else if (event.key === Qt.Key_Z) shift ? board.ctl.redo() : board.ctl.undo()
-        else if (event.key === Qt.Key_S) board.ctl.save()
+        else if (event.key === Qt.Key_S) board.ctl.flushSave()
         else return
         event.accepted = true
         return
@@ -299,6 +316,8 @@ FocusScope {
     font.pixelSize: board.ctl.fontBody
     visible: !board.ctl.helpVisible && !board.ctl.browserVisible
     text: board.ctl.saveError !== "" ? board.ctl.saveError
+      : board.ctl.trashIndexError !== "" ? board.ctl.trashIndexError
+      : board.ctl.showPinned ? "backgrounds · tab/hjkl or click: select · p: unpin · esc: done"
       : board.ctl.statusText !== "" ? board.ctl.statusText
       : board.ctl.pendingBoard !== null ? "saving before switching boards…"
       : board.ctl.saving ? "saving…"

@@ -66,7 +66,8 @@ FocusScope {
         color: browser.ctl.foreground
         font.family: browser.ctl.fontFamily
         font.pixelSize: browser.ctl.fontSubtitle
-        text: browser.ctl.browserMessage !== ""
+        text: browser.ctl.trashIndexError !== "" ? browser.ctl.trashIndexError
+          : browser.ctl.browserMessage !== ""
           ? browser.ctl.browserMessage
           : browser.prompting
             ? browser.ctl.browserPrompt + " " + browser.ctl.browserInput + "▏"

@@ -13,9 +13,6 @@ Item {
   property string saveError: ""
   property string lastSavedText: ""
   property int savingCount: 0
-  // A save asked for while the writer was busy. Dropping it loses the only
-  // record that the board on screen differs from the one on disk.
-  property bool saveWanted: false
   property int lastSavedCount: -1
   property var pendingBoard: null
   property bool createWhenLoaded: false
@@ -34,6 +31,7 @@ Item {
   }
 
   function openBoard(path, fresh) {
+    if (!Store.safeRelative(path)) return
     if (path === session.ctl.currentBoard && !fresh) return
     session.flushSave()
     if (persistence.busy || session.saveError !== "") {
@@ -47,6 +45,8 @@ Item {
     session.lastSavedCount = -1
     session.ctl.undoStack = []
     session.ctl.redoStack = []
+    session.ctl.markedIds = []
+    session.ctl.showPinned = false
     session.ctl.selectedIndex = -1
     session.ctl.editIndex = -1
     session.ctl.linkingFrom = -1
@@ -58,14 +58,14 @@ Item {
   function save(allowEmpty) {
     if (!session.boardLoaded) return
     if (session.ctl.items.count === 0 && session.lastSavedCount > 0 && allowEmpty !== true) return
-    if (persistence.busy) { session.saveWanted = true; return }
+    if (persistence.busy) return // Completion serializes the latest model again.
     var text = Store.writeFile(session.ctl.items, session.ctl.links, session.ctl.nextId)
     session.saveError = ""
     if (text === session.lastSavedText) return
     // Remember what this write contains, so completing it does not have to
     // parse the whole board back again just to count the items.
     session.savingCount = session.ctl.items.count
-    persistence.save(session.ctl.boardPath, text, session.ctl.backupPathFor(session.ctl.currentBoard))
+    persistence.save(session.ctl.boardPath, text, session.ctl.backupPathFor(session.ctl.currentBoard), session.ctl.boardsDir, session.ctl.backupsDir)
   }
 
   function savedBoard(path, text) {
@@ -77,9 +77,8 @@ Item {
       session.lastSavedText = text
       session.lastSavedCount = session.savingCount
     }
-    // Edits made during the write, and any save the writer was too busy to
-    // take, are coalesced into this one.
-    session.saveWanted = false
+    // Always compare the latest model after completion: edits made while the
+    // writer was busy are coalesced here without a separate pending flag.
     session.save(true)
     if (!persistence.busy && session.pendingBoard !== null) {
       var next = session.pendingBoard
@@ -109,6 +108,8 @@ Item {
       session.ctl.nextId = Store.nextFreeId(session.ctl.items, data.nextId)
       session.ctl.nextColor = session.ctl.items.count
     }
+    session.ctl.markedIds = []
+    session.ctl.showPinned = false
     session.ctl.selectedIndex = -1
     session.ctl.undoStack = []
     session.ctl.redoStack = []
@@ -131,6 +132,7 @@ Item {
     id: persistence
     onCompleted: function(path, text) { session.savedBoard(path, text) }
     onFailed: function(message) { session.failedSave(message) }
+    onDelayed: function(message) { session.saveError = message }
   }
 
   Timer {

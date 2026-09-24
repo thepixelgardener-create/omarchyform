@@ -7,6 +7,39 @@ function tests(S) {
   const t = []
   const test = (name, fn) => t.push({ name, fn })
 
+  test("state and trash paths stay relative and readable", () => {
+    for (const bad of [null, 2, "", "../boards", "/outside", "a/../b", "a//b", "a/", "a\nb", "a\tb"])
+      eq(S.safeRelative(bad), false, String(bad))
+    eq(S.safeRelative("work/hello world.json"), true)
+    eq(S.nameIsValid("a\nb"), false)
+    const raw = {entries:[null, {file:"../boards",path:"ok.json"}, {file:"safe",path:"../outside"},
+      {file:"valid",path:"work/a.json"}]}
+    eq(S.readTrash(JSON.stringify(raw)), [{file:"valid",path:"work/a.json",dir:false,at:""}])
+  })
+
+  test("pin state survives serialization and old items default to unpinned", () => {
+    const items = new FakeModel([item({ipinned:true})])
+    const loaded = S.readFile(S.writeFile(items,new FakeModel(),2))
+    const restored = new FakeModel()
+    S.fillItems(restored,loaded.items)
+    eq(restored.get(0).ipinned,true)
+    S.fillItems(restored,[{id:1}])
+    eq(restored.get(0).ipinned,false)
+  })
+
+  test("directional navigation separates backgrounds from working items", () => {
+    const items = new FakeModel([item({iid:1}),item({iid:2,ix:100,ipinned:true}),item({iid:3,ix:200})])
+    eq(S.nearest(items,0,1,0),2)
+    eq(S.nearest(items,0,1,0,true),1)
+  })
+
+  test("diagonal connectors meet ellipse and diamond outlines", () => {
+    eq(S.edgePoint({kind:"diamond",iw:100,ih:100},0,0,100,100),{x:25,y:25})
+    near(S.edgePoint({kind:"ellipse",iw:100,ih:100},0,0,100,100).x,Math.sqrt(1250))
+    const edge = S.edgePoint({kind:"ellipse",iw:200,ih:100},10,20,110,120)
+    near((edge.x-10)**2/10000 + (edge.y-20)**2/2500,1)
+  })
+
   // ------------------------------------------------------------------ reading
   test("readFile rejects malformed json", () => {
     eq(S.readFile("{ not json"), null, "malformed")
@@ -259,7 +292,7 @@ function tests(S) {
 
   test("writeFile emits the current version and a trailing newline", () => {
     const raw = S.writeFile(new FakeModel(), new FakeModel(), 1)
-    eq(JSON.parse(raw).version, 3, "version")
+    eq(JSON.parse(raw).version, 4, "version")
     ok(raw.endsWith("\n"), "trailing newline")
   })
 

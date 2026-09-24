@@ -8,7 +8,8 @@ function controller() {
   const items = new FakeModel(), links = new FakeModel()
   const root = { currentBoard: 'a.json', items, links, nextId: 1, nextColor: 0, windowMode: false,
     undoStack: [], redoStack: [], selectedIndex: -1, editIndex: -1,
-    camX: 0, camY: 0, zoom: 1, activeBoard: null }
+    camX: 0, camY: 0, zoom: 1, activeBoard: null, markedIds: [], showPinned: false,
+    boardsDir: '/boards', backupsDir: '/backups', worldStep: 40, minItemSize: 60, viewW: 1000, viewH: 700 }
   const session = { ctl: root, boardLoaded: true, damaged: false, pendingBoard: null,
     lastSavedCount: 0, lastSavedText: '', saveError: '' }
   Object.defineProperty(session, 'canEdit', {
@@ -20,7 +21,7 @@ function controller() {
   const writes = []
   const persistence = { busy: false, save(path, text) { this.busy = true; writes.push({path,text}) } }
   const context = vm.createContext({ root, session, Store: loadStore(), itemModel: items, linkModel: links,
-    persistence, saveTimer: { running: false, stop() {}, restart() {} }, stateFile: {setText() {}} })
+    persistence, statusTimer: {restart() {}}, saveTimer: { running: false, stop() {}, restart() {} }, stateFile: {setText() {}} })
   function loadFunctions(target, qml) {
     for (const match of qml.matchAll(/^  function (\w+)\((.*?)\) \{\n([\s\S]*?)^  }/gm))
       target[match[1]] = vm.runInContext(`(function(${match[2]}) {${match[3]}})`, context)
@@ -189,3 +190,82 @@ function controller() {
   console.log('   stress: ' + totalWrites + ' writes, ' + totalSwitches + ' board switches across 200 runs')
 }
 console.log('ok — controller: damaged boards, delayed saves, switching, failure and retry')
+
+{
+  const c = controller()
+  c.root.markedIds = [1]
+  c.root.showPinned = true
+  c.session.loadBoard('{"version":3,"items":[{"id":1,"text":"other board"}]}', false)
+  assert.deepEqual(Array.from(c.root.markedIds), [])
+  assert.equal(c.root.showPinned, false)
+  assert.deepEqual(Array.from(c.root.targets()), [])
+  assert.notEqual(c.root.backupPathFor('work/a.json'), c.root.backupPathFor('work__a.json'))
+  c.root.applyState('{"lastBoard":"../outside.json"}')
+  assert.equal(c.root.currentBoard, 'a.json')
+}
+{
+  const c = controller()
+  c.session.loadBoard('{"version":3,"items":[{"id":1},{"id":2}]}', false)
+  c.root.selectedIndex = 0
+  c.root.togglePin()
+  assert.equal(c.items.get(0).ipinned, true)
+  assert.equal(c.root.selectedIndex, -1)
+  c.root.markAll()
+  assert.deepEqual(Array.from(c.root.markedIds), [2])
+  c.root.selectedIndex = 0
+  c.root.markedIds = []
+  c.root.nudgeSelected(1,0)
+  c.root.resizeSelected(1,0)
+  c.root.removeItem(0)
+  c.root.editSelected()
+  assert.equal(c.items.count, 2)
+  assert.equal(c.items.get(0).ix, 0)
+  assert.equal(c.items.get(0).iw, 180)
+  assert.equal(c.root.editIndex, -1)
+  c.root.selectNext(1)
+  assert.equal(c.root.selectedIndex, 1)
+  c.root.togglePinnedSelection()
+  assert.equal(c.root.selectedIndex, 0)
+  c.root.togglePin()
+  assert.equal(c.items.get(0).ipinned, false)
+  c.root.undo()
+  assert.equal(c.items.get(0).ipinned, true)
+  c.root.redo()
+  assert.equal(c.items.get(0).ipinned, false)
+  for (let i=0;i<130;i++) c.root.pushUndo()
+  assert.equal(c.root.undoStack.length, 100)
+}
+console.log('ok — controller: board-local marks, pinning, backup names and history cap')
+
+{
+  const c = controller()
+  c.session.loadBoard('{"items":[{"id":1},{"id":2},{"id":3,"pinned":true}]}', false)
+  c.root.pointerSelect(0, false)
+  c.root.pointerSelect(1, true)
+  assert.deepEqual(Array.from(c.root.markedIds), [1,2])
+  c.root.pointerSelect(0, false)
+  c.root.moveTargets(20,30)
+  c.root.resizeTargets(10,20)
+  assert.equal(c.items.get(0).ix,20)
+  assert.equal(c.items.get(1).ix,20)
+  assert.equal(c.items.get(2).ix,0)
+  assert.equal(c.items.get(0).iw,190)
+  assert.equal(c.items.get(1).iw,190)
+  assert.equal(c.items.get(2).iw,180)
+}
+
+{
+  const c = controller()
+  c.root.trashIndexSaving = false
+  c.root.trashIndexError = ''
+  c.root.trashIndexNeedsRead = true
+  c.root.acceptTrashIndex('{"version":1,"entries":[{"file":"saved","path":"work/a.json"}]}')
+  assert.equal(c.root.trashEntries.length,1)
+  c.root.acceptTrashIndex('{broken')
+  assert.equal(c.root.trashEntries.length,1,'invalid metadata must not replace remembered entries')
+  assert.match(c.root.trashIndexError,/invalid/)
+  c.root.acceptTrashIndex('{"entries":[{"file":"../boards","path":"a.json"}]}')
+  assert.match(c.root.trashIndexError,/invalid/)
+  c.root.acceptTrashIndex('{"version":1,"entries":[]}')
+  assert.equal(c.root.trashIndexError,'')
+}

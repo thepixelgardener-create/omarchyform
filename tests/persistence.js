@@ -3,13 +3,17 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const { spawnSync } = require('child_process')
-for (const scenario of ['persistence', 'session']) {
+for (const scenario of ['persistence', 'session', 'timeout']) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'omarchyform-persistence-'))
   try {
     fs.writeFileSync(path.join(dir, 'blocked.json'), 'original')
     fs.mkdirSync(path.join(dir, 'blocked.json.bak.tmp'))
     fs.writeFileSync(path.join(dir, 'damaged.json'), '{broken')
-    for (const file of ['BoardPersistence.qml', 'BoardSession.qml', 'BoardStore.js'])
+    if (scenario === 'timeout') {
+      const fifo = spawnSync('mkfifo', [path.join(dir, 'slow.json')])
+      if (fifo.status !== 0) throw new Error('could not create delayed-backup fixture')
+    }
+    for (const file of ['BoardPersistence.qml', 'BoardSession.qml', 'BoardStore.js', 'BoardFiles.sh'])
       fs.copyFileSync(path.join(__dirname, '..', file), path.join(dir, file))
     fs.writeFileSync(path.join(dir, 'shell.qml'), fs.readFileSync(path.join(__dirname, `qml/tst_${scenario}.qml`), 'utf8').replace('import "../.."', ''))
     const result = spawnSync('qs', ['--no-color', '-p', path.join(dir, 'shell.qml')], {
