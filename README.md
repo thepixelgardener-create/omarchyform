@@ -8,6 +8,8 @@ zoom, driven from the keyboard, stored as a plain JSON file on your own disk.
 Think Apple Freeform, except it is keyboard-first, it matches your Omarchy
 theme, and nothing leaves the machine.
 
+![Omarchyform](preview.gif)
+
 ## What it is
 
 A native Quickshell plugin. It runs inside the long-running `omarchy-shell`
