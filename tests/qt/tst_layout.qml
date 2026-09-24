@@ -29,6 +29,20 @@ TestCase {
     property string trashIndexError: ""
     property string browserMessage: ""
     property string browserDir: ""
+    property string boardTitle: "A long board name that should truncate gracefully"
+    property string boardState: "Saved locally"
+    property string saveError: ""
+    property color urgent: "red"
+    property color muted: "gray"
+    property real zoom: 1
+    function renameBoard() {}
+    function resetView() {}
+    function fitToItems() {}
+    function newBoard() {}
+    function openBrowser() {}
+    function importBoard() {}
+    function exportBoard() {}
+    function choosePng() {}
     property string currentBoard: "board.json"
     property var browserRows: []
     property int browserIndex: 0
@@ -38,6 +52,11 @@ TestCase {
   }
   Help { id: help; ctl: ctl; anchors.centerIn: parent }
   Browser { id: browser; ctl: ctl; anchors.fill: parent }
+  BoardToolbar { id: toolbar; ctl: ctl; width: test.width - 32; height: implicitHeight; visible: false }
+  function test_toolbarFitsLargeFonts() {
+    verify(toolbar.implicitHeight < test.height - 64)
+    verify(toolbar.children[1].width <= toolbar.width)
+  }
   function test_helpFitsAndScrolls() {
     verify(help.width <= test.width - 32)
     verify(help.height <= test.height - 32)

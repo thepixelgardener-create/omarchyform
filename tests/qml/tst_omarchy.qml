@@ -11,6 +11,10 @@ ShellRoot {
   property int ticks: 0
   property int hides: 0
   property int switchedAt: 0
+  property string newPath: ""
+  property var exchangeApi: null
+  property var closedWindow: null
+  property double newStarted: 0
   function findItem(parent, name) {
     if (parent.objectName === name) return parent
     for (var i = 0; i < parent.children.length; i++) {
@@ -272,10 +276,43 @@ ShellRoot {
         test.switchedAt = test.ticks
         test.stage = 20
       } else if (test.stage === 20 && plugin.activeBoard && plugin.windowMode && test.ticks > test.switchedAt + 5) {
-        plugin.activeBoard.QsWindow.window.visible = false
+        test.closedWindow = plugin.activeBoard.QsWindow.window
+        test.closedWindow.visible = false
         test.stage = 21
       } else if (test.stage === 21 && !plugin.opened) {
         test.check(test.hides === 1, "window close notifies scoped facade")
+        // The explicit assignment above simulates closing but removes the
+        // visibility binding; restore it before testing a subsequent reopen.
+        test.closedWindow.visible = Qt.binding(function() { return plugin.opened && plugin.windowMode })
+        plugin.open("{}")
+        test.stage = 22
+      } else if (test.stage === 22 && plugin.activeBoard) {
+        test.newStarted = Date.now()
+        plugin.newBoard()
+        test.stage = 23
+      } else if (test.stage === 23 && plugin.currentBoard.indexOf("untitled") === 0 && plugin.boardLoaded && plugin.editIndex === 0) {
+        console.log("NEW_BOARD_READY_MS: " + (Date.now()-test.newStarted) + " (50ms polling)")
+        test.newPath = plugin.currentBoard
+        test.check(plugin.items.count === 1, "new board starts with one focused note")
+        test.key("a")
+        test.stage = 24
+      } else if (test.stage === 24 && plugin.items.get(0).itext === "a") {
+        plugin.stopEditing()
+        plugin.pasteText("Pasted thought\nSecond line")
+        test.check(plugin.items.count === 2 && plugin.items.get(1).itext === "Pasted thought\nSecond line", "multiline paste creates one note")
+        test.exchangeApi = test.findItem(plugin, "board-exchange")
+        test.exchangeApi.exportJson(Quickshell.env("OMARCHYFORM_TEST_DIR") + "/editable.json")
+        test.stage = 25
+      } else if (test.stage === 25 && !test.exchangeApi.busy) {
+        test.check(test.exchangeApi.error === "", "editable export completes")
+        test.exchangeApi.importPath(Quickshell.env("OMARCHYFORM_TEST_DIR") + "/editable.json")
+        test.stage = 26
+      } else if (test.stage === 26 && plugin.currentBoard === "editable.json" && plugin.boardLoaded) {
+        test.check(plugin.items.count === 2 && plugin.items.get(1).itext === "Pasted thought\nSecond line", "native import preserves contents")
+        plugin.exportPng(Quickshell.env("OMARCHYFORM_TEST_DIR") + "/export.png")
+        test.stage = 27
+      } else if (test.stage === 27 && !plugin.imageBusy) {
+        test.check(plugin.statusText.indexOf("PNG saved") === 0, "PNG export succeeds")
         console.log("OMARCHY_TESTS_PASSED")
         Qt.quit()
       }

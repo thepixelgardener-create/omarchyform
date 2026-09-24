@@ -23,6 +23,34 @@ confined() {
 operation=$1
 shift
 case "$operation" in
+  export)
+    staged=$1 destination=$2 private_root=$3
+    [[ -f $staged && ! -L $destination ]]
+    resolved=$(realpath -m -- "$destination")
+    private_root=$(realpath -m -- "$private_root")
+    [[ $resolved != "$private_root" && $resolved != "$private_root/"* ]]
+    temporary=$(mktemp -- "$(dirname -- "$destination")/.omarchyform-export-XXXXXX")
+    trap 'rm -f -- "$temporary"' EXIT
+    cp -T -- "$staged" "$temporary"
+    mv -fT -- "$temporary" "$destination"
+    rm -- "$staged"
+    ;;
+  publish)
+    # Publish a complete staged board to a unique name without overwriting.
+    board_root=$1 base_name=$2 staged=$3
+    [[ $base_name != */* ]]
+    confined "$board_root" "$base_name.json"
+    [[ -f $staged && ! -L $staged ]]
+    number=1
+    candidate=$base_name.json
+    while ! ln -T -- "$staged" "$board_root/$candidate" 2>/dev/null; do
+      [[ -e $board_root/$candidate || -L $board_root/$candidate ]] || exit 1
+      number=$((number + 1))
+      candidate=$base_name-$number.json
+    done
+    rm -- "$staged"
+    printf '%s' "$candidate"
+    ;;
   move)
     source_root=$1 source_name=$2 target_root=$3 target_name=$4
     confined "$source_root" "$source_name"

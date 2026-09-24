@@ -84,6 +84,12 @@ Press `?` or `F1` on the board for this list.
 | `x` | Connect: press on one, then on another; again to turn it round |
 | `X` | Remove every connector on this item |
 | `u` / `ctrl+r` | Undo / redo |
+| `ctrl+n` | New board, already waiting for the first note |
+| `F2` | Rename the board you are on |
+| `ctrl+v` | Paste the clipboard as a note |
+| `ctrl+o` | Open a board file from anywhere |
+| `ctrl+shift+s` | Save a copy of this board somewhere else |
+| `ctrl+e` | Export the board as a PNG |
 | `enter` / `i` | Type in the selected note |
 | `esc` | Stop typing, drop the marks, then close the board |
 | `h` `j` `k` `l` | Move the selection to the nearest note that way |
@@ -157,6 +163,24 @@ inside the boards, backups and trash folders; those folders themselves may be
 symlinks. If the trash index cannot be saved, the browser keeps its pending state
 and shows `ctrl+s` to retry; keep the application running until that succeeds. Only `x` inside the trash actually destroys
 something, and it asks twice.
+
+## Getting things in and out
+
+A board is a file, so it can leave and come back. `ctrl+shift+s` writes a copy
+wherever you choose; `ctrl+o` reads one back in as a new board rather than
+overwriting the one you are on. `ctrl+e` renders the board to a PNG for
+sharing. `ctrl+v` turns whatever is on the clipboard into a note, however many
+lines it is.
+
+`ctrl+n` makes a board and puts you straight into its first note, so a thought
+can be captured before it is named; `F2` names it afterwards.
+
+The plugin also ships a desktop entry, so the board can be opened from a
+launcher, with a *New board* action for the same instant capture:
+
+```bash
+./desktop/install.sh
+```
 
 ## Saving
 

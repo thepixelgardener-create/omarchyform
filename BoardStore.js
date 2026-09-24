@@ -23,6 +23,10 @@ function normalizeTint(value) {
 }
 
 var KEY_HELP = [
+  ["ctrl+n / F2", "new board / name the current board"],
+  ["ctrl+v", "paste clipboard text as a note"],
+  ["ctrl+o", "import a native board"],
+  ["ctrl+shift+s / ctrl+e", "export editable copy / PNG"],
   ["n", "new note beside the selected one"],
   ["r / e", "new box / ellipse"],
   ["p / shift+p", "pin as background / select backgrounds"],

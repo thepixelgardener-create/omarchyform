@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=Omarchyform
+Comment=Capture a thought, arrange it spatially, get back to work
+Exec=omarchy-shell shell summon thepixelgardener.omarchyform {}
+Icon=accessories-text-editor
+Terminal=false
+Categories=Utility;
+Keywords=board;notes;ideas;canvas;
+Actions=NewBoard;
+
+[Desktop Action NewBoard]
+Name=New board
+Exec=omarchy-shell shell summon thepixelgardener.omarchyform "{\"action\":\"new\"}"
