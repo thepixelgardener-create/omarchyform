@@ -40,6 +40,7 @@ FocusScope {
   Canvas {
     id: grid
     anchors.fill: parent
+    visible: board.ctl.showGrid
     onPaint: {
       var ctx = getContext("2d")
       ctx.reset()
