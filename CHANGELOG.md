@@ -7,9 +7,25 @@ since older boards are migrated on load rather than rejected.
 
 ### Added
 
+- A line under the board says what a destructive key just did, and that `u`
+  takes it back.
 - Connectors point somewhere. An arrowhead is drawn at the target end, and
   drawing the same pair again turns the connector round; drawing it a third
   time, in the direction it already runs, removes it.
+
+### Changed
+
+- Keyboard moves and resizes are the same distance on screen whatever the
+  zoom. A step was measured in the canvas, so one press moved an eighth as far
+  zoomed out and four times as far zoomed in.
+- Undo depth follows the size of the board. A snapshot holds the whole board,
+  so a hundred steps of three thousand items held twenty-four megabytes.
+
+### Fixed
+
+- A save that never reports back no longer wedges the board. If `state.json`
+  named a board file that had been deleted, every later save, board switch and
+  the status line stuck at "saving…" with no way out.
 
 ## 0.2.0
 

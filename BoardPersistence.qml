@@ -27,6 +27,17 @@ Item {
     return true
   }
 
+  // A save that never reports back leaves busy stuck, and with it every later
+  // save, board switch and the "saving…" line. Nothing should be able to wedge
+  // the board that way, whatever the cause.
+  Timer {
+    id: watchdog
+    interval: 8000
+    repeat: false
+    running: persistence.busy
+    onTriggered: if (persistence.busy) persistence.fail("Save did not finish")
+  }
+
   function fail(message) {
     busy = false
     failed(message)
