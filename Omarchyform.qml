@@ -104,6 +104,9 @@ Item {
   property int nextId: 1
   property int nextColor: 0
   property int selectedIndex: -1
+  // Ids of the items marked alongside the cursor. Ids rather than indices,
+  // because a delete renumbers indices and a mark must survive that.
+  property var markedIds: []
   property int editIndex: -1      // -1 means normal mode: every key is a command
   property int linkingFrom: -1    // id of the first end while connecting
   property bool helpVisible: false
@@ -162,6 +165,46 @@ Item {
   function repaintGrid() { if (root.activeBoard) root.activeBoard.repaintGrid() }
   function repaintLinks() { if (root.activeBoard) root.activeBoard.repaintLinks() }
   function focusKeys() { if (root.activeBoard) root.activeBoard.focusKeys() }
+  function isMarked(id) { return root.markedIds.indexOf(id) >= 0 }
+
+  // What an operation applies to: everything marked, or the cursor alone.
+  // Descending, so removing by index cannot shift the ones still to come.
+  function targets() {
+    var out = []
+    if (root.markedIds.length === 0)
+      return root.selectedIndex >= 0 ? [root.selectedIndex] : []
+    for (var i = itemModel.count - 1; i >= 0; i--)
+      if (root.isMarked(itemModel.get(i).iid)) out.push(i)
+    return out
+  }
+
+  function toggleMark() {
+    var n = root.selected()
+    if (!n) return
+    var m = root.markedIds.slice()
+    var at = m.indexOf(n.iid)
+    if (at >= 0) m.splice(at, 1)
+    else m.push(n.iid)
+    root.markedIds = m
+    root.flash(m.length === 0 ? "nothing marked" : m.length + " marked")
+    root.repaintLinks()
+  }
+
+  function markAll() {
+    var m = []
+    for (var i = 0; i < itemModel.count; i++) m.push(itemModel.get(i).iid)
+    root.markedIds = m
+    root.flash(m.length + " marked")
+    root.repaintLinks()
+  }
+
+  function clearMarks() {
+    if (root.markedIds.length === 0) return false
+    root.markedIds = []
+    root.repaintLinks()
+    return true
+  }
+
   function selected() { return root.selectedIndex >= 0 ? itemModel.get(root.selectedIndex) : null }
 
   function toWorldX(sx) { return (sx - root.camX) / root.zoom }
@@ -259,36 +302,56 @@ Item {
   function removeItem(index) {
     if (!root.canEdit) return
     if (index < 0 || index >= itemModel.count) return
+    root.removeAt([index])
+  }
+
+  function removeTargets() {
+    if (!root.canEdit) return
+    root.removeAt(root.targets())
+  }
+
+  // Indices must arrive descending: removing one shifts every index after it.
+  function removeAt(indices) {
+    if (indices.length === 0) return
     root.pushUndo()
-    var id = itemModel.get(index).iid
-    itemModel.remove(index)
-    // Connectors cannot outlive either end.
-    for (var j = linkModel.count - 1; j >= 0; j--) {
-      var l = linkModel.get(j)
-      if (l.lfrom === id || l.lto === id) linkModel.remove(j)
+    for (var k = 0; k < indices.length; k++) {
+      var id = itemModel.get(indices[k]).iid
+      itemModel.remove(indices[k])
+      // Connectors cannot outlive either end.
+      for (var j = linkModel.count - 1; j >= 0; j--) {
+        var l = linkModel.get(j)
+        if (l.lfrom === id || l.lto === id) linkModel.remove(j)
+      }
     }
+    root.markedIds = []
     if (root.selectedIndex >= itemModel.count) root.selectedIndex = itemModel.count - 1
     root.save(true)
     root.repaintLinks()
-    root.flash("deleted · u to undo")
+    root.flash((indices.length === 1 ? "deleted" : indices.length + " deleted") + " · u to undo")
     if (!root.browserVisible) root.focusKeys()
   }
 
+  // The cursor item decides the next value and the rest follow it, so a mixed
+  // selection lands on one colour rather than each cycling from its own.
   function recolorItem() {
     if (!root.canEdit) return
     var n = root.selected()
-    if (!n) return
+    var t = root.targets()
+    if (!n || t.length === 0) return
     root.pushUndo()
-    itemModel.setProperty(root.selectedIndex, "itint", Store.cycle(Store.TINTS, n.itint))
+    var next = Store.cycle(Store.TINTS, n.itint)
+    for (var i = 0; i < t.length; i++) itemModel.setProperty(t[i], "itint", next)
     root.save()
   }
 
   function cycleKind() {
     if (!root.canEdit) return
     var n = root.selected()
-    if (!n) return
+    var t = root.targets()
+    if (!n || t.length === 0) return
     root.pushUndo()
-    itemModel.setProperty(root.selectedIndex, "kind", Store.cycle(Store.KINDS, n.kind))
+    var next = Store.cycle(Store.KINDS, n.kind)
+    for (var i = 0; i < t.length; i++) itemModel.setProperty(t[i], "kind", next)
     root.save()
   }
 
@@ -347,6 +410,7 @@ Item {
 
   // --------------------------------------------------------------- navigation
   function selectOnly(index) {
+    root.markedIds = []
     root.selectedIndex = index
     root.editIndex = -1
     root.linkingFrom = -1
@@ -371,11 +435,14 @@ Item {
 
   function nudgeSelected(dx, dy) {
     if (!root.canEdit) return
-    var n = root.selected()
-    if (!n) return
+    var t = root.targets()
+    if (t.length === 0) return
     root.pushUndo()
-    itemModel.setProperty(root.selectedIndex, "ix", n.ix + dx * root.worldStep)
-    itemModel.setProperty(root.selectedIndex, "iy", n.iy + dy * root.worldStep)
+    for (var i = 0; i < t.length; i++) {
+      var n = itemModel.get(t[i])
+      itemModel.setProperty(t[i], "ix", n.ix + dx * root.worldStep)
+      itemModel.setProperty(t[i], "iy", n.iy + dy * root.worldStep)
+    }
     root.centerOnSelected()
     root.save()
   }
@@ -386,15 +453,22 @@ Item {
   // item's top-left stays where you put it.
   function resizeSelected(dx, dy) {
     if (!root.canEdit) return
-    var n = root.selected()
-    if (!n) return
-    var w = Math.max(root.minItemSize, n.iw + dx * root.worldStep)
-    var h = Math.max(root.minItemSize, n.ih + dy * root.worldStep)
-    // Already at the minimum: nothing to record, and no undo step to spend.
-    if (w === n.iw && h === n.ih) return
+    var t = root.targets()
+    if (t.length === 0) return
+    // Nothing to record when every one of them is already at the minimum.
+    var moved = false
+    for (var i = 0; i < t.length; i++) {
+      var n = itemModel.get(t[i])
+      if (Math.max(root.minItemSize, n.iw + dx * root.worldStep) !== n.iw) { moved = true; break }
+      if (Math.max(root.minItemSize, n.ih + dy * root.worldStep) !== n.ih) { moved = true; break }
+    }
+    if (!moved) return
     root.pushUndo()
-    itemModel.setProperty(root.selectedIndex, "iw", w)
-    itemModel.setProperty(root.selectedIndex, "ih", h)
+    for (var j = 0; j < t.length; j++) {
+      var m = itemModel.get(t[j])
+      itemModel.setProperty(t[j], "iw", Math.max(root.minItemSize, m.iw + dx * root.worldStep))
+      itemModel.setProperty(t[j], "ih", Math.max(root.minItemSize, m.ih + dy * root.worldStep))
+    }
     root.centerOnSelected()
     root.save()
   }
@@ -478,6 +552,7 @@ Item {
   // Escape unwinds one layer at a time rather than closing outright.
   function back() {
     if (root.helpVisible) root.helpVisible = false
+    else if (root.clearMarks()) root.flash("marks cleared")
     else if (root.linkingFrom >= 0) { root.linkingFrom = -1; root.repaintLinks() }
     else root.dismiss()
   }

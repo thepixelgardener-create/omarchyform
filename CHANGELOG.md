@@ -7,6 +7,11 @@ since older boards are migrated on load rather than rejected.
 
 ### Added
 
+- **More than one item at a time.** `space` marks the item under the cursor and
+  `a` marks everything; moving, resizing, recolouring, changing shape and
+  deleting then apply to the whole set. Marks are held as ids, so a delete
+  cannot renumber them, and `esc` drops them. With nothing marked every command
+  applies to the cursor alone, so the keys are unchanged until you ask for more.
 - A line under the board says what a destructive key just did, and that `u`
   takes it back.
 - Connectors point somewhere. An arrowhead is drawn at the target end, and
