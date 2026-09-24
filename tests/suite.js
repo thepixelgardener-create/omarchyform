@@ -127,6 +127,15 @@ function tests(S) {
     for (const id of ids) ok(id > 0 && Math.floor(id) === id, `${id} is a positive whole number`)
   })
 
+  test("fillItems rejects an id at the top of the range", () => {
+    // 2147483647 is the exclusive ceiling: keeping it would leave no room to
+    // count past it when the next item needs an id.
+    const m = new FakeModel()
+    S.fillItems(m, [{ id: 2147483647 }, { id: 2147483646 }])
+    eq(m.get(0).iid, 1, "the ceiling itself is replaced")
+    eq(m.get(1).iid, 2147483646, "one below it is still fine")
+  })
+
   test("fillItems refuses a shape it cannot draw", () => {
     const m = new FakeModel()
     S.fillItems(m, [{ kind: "hexagon" }, { kind: "ellipse" }])

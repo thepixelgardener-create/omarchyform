@@ -189,6 +189,23 @@ npm run test:omarchy -- --keep # live desktop smoke test, isolated board data
 checks the suite notices. The command reports its current score and survivors;
 it is a diagnostic, not a CI failure threshold.
 
+The survivors it currently reports are equivalent mutants — each changes a case
+the code's preconditions rule out, so no honest test can tell them apart. They
+are left in the report rather than silenced, so the number stays truthful:
+
+- the id-range guards: values outside the accepted range are reassigned anyway,
+  and a reserved key that no lookup ever asks for changes nothing.
+- `readFile`'s field loop: one step past the end reads an undefined field name,
+  which the loop already skips.
+- `parentOf` and `parseListing`: a boundary at index 0 that gives the same
+  answer either way, since a relative path cannot begin with a separator.
+- the two sort comparators: they differ only when two entries compare equal,
+  and a directory cannot hold two things with the same name.
+- `fuzzyScore`'s loop bound: reading one past the end returns `""`, which
+  matches nothing.
+- `nearest`'s off-axis term: it is only ever called with a unit axis vector, so
+  one of the two products is always zero.
+
 Controller tests evaluate the actual QML JavaScript functions with delayed I/O
 completion to cover damaged files, queued edits, board switching, and retry.
 The separate `test:qml` suite runs the real persistence and session components
