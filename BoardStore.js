@@ -34,6 +34,7 @@ var KEY_HELP = [
   ["esc", "back out, then close the board"],
   ["h j k l", "move the selection around"],
   ["H J K L", "push the selected item"],
+  ["ctrl+hjkl", "resize it, from the bottom-right"],
   ["tab", "cycle through everything"],
   ["d", "delete the selected item"],
   ["c", "change its colour"],
