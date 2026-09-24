@@ -186,11 +186,13 @@ FocusScope {
 
     readonly property var arrows: ({})
 
+    // Matched on key codes as well as text: holding Ctrl turns the letter in
+    // event.text into a control character, so text alone would miss.
     function direction(key, text) {
-      if (key === Qt.Key_Left || text === "h" || text === "H") return [-1, 0]
-      if (key === Qt.Key_Right || text === "l" || text === "L") return [1, 0]
-      if (key === Qt.Key_Up || text === "k" || text === "K") return [0, -1]
-      if (key === Qt.Key_Down || text === "j" || text === "J") return [0, 1]
+      if (key === Qt.Key_Left || key === Qt.Key_H || text === "h" || text === "H") return [-1, 0]
+      if (key === Qt.Key_Right || key === Qt.Key_L || text === "l" || text === "L") return [1, 0]
+      if (key === Qt.Key_Up || key === Qt.Key_K || text === "k" || text === "K") return [0, -1]
+      if (key === Qt.Key_Down || key === Qt.Key_J || text === "j" || text === "J") return [0, 1]
       return null
     }
 
@@ -208,7 +210,10 @@ FocusScope {
       var shift = (event.modifiers & Qt.ShiftModifier) !== 0
 
       if (ctrl) {
-        if (event.key === Qt.Key_R) board.ctl.redo()
+        // Ctrl plus a movement key resizes, the same way Shift plus one moves.
+        var rd = keys.direction(event.key, "")
+        if (rd) board.ctl.resizeSelected(rd[0], rd[1])
+        else if (event.key === Qt.Key_R) board.ctl.redo()
         else if (event.key === Qt.Key_Z) shift ? board.ctl.redo() : board.ctl.undo()
         else if (event.key === Qt.Key_S) board.ctl.save()
         else return

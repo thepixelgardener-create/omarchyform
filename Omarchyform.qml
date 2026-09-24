@@ -347,6 +347,23 @@ Item {
 
   // Keep the selected item on screen without yanking the view around when it
   // is already comfortably visible.
+  // Resize from the bottom-right, the same corner the mouse grip pulls, so the
+  // item's top-left stays where you put it.
+  function resizeSelected(dx, dy) {
+    if (!root.canEdit) return
+    var n = root.selected()
+    if (!n) return
+    var w = Math.max(root.minItemSize, n.iw + dx * 40)
+    var h = Math.max(root.minItemSize, n.ih + dy * 40)
+    // Already at the minimum: nothing to record, and no undo step to spend.
+    if (w === n.iw && h === n.ih) return
+    root.pushUndo()
+    itemModel.setProperty(root.selectedIndex, "iw", w)
+    itemModel.setProperty(root.selectedIndex, "ih", h)
+    root.centerOnSelected()
+    root.save()
+  }
+
   function centerOnSelected() {
     var n = root.selected()
     if (!n) return
