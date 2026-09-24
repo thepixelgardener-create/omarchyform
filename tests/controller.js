@@ -86,4 +86,32 @@ function controller() {
   assert.equal(c.root.canEdit, true)
   assert.equal(c.root.nextId, 1)
 }
+
+{
+  // A completion carries the board it belongs to. Adopting it as the baseline
+  // for a different board suppresses that board's first write whenever the two
+  // serialise the same — and two empty boards always do.
+  const c = controller()
+  c.session.loadBoard('{"version":3,"items":[],"links":[]}', false)
+  c.root.addItem('note', 0, 0)
+  assert.equal(c.writes.length, 1, 'the first board is written')
+  const stale = c.writes[c.writes.length - 1]
+
+  // Switch away before that write reports back, the way openBoard does.
+  c.session.boardLoaded = false
+  c.root.currentBoard = 'b.json'
+  c.session.loadBoard('', true)          // a board that does not exist yet
+  const beforeBaseline = c.session.lastSavedText
+
+  // The late completion names the board it was for, not the one now open.
+  c.persistence.busy = false
+  c.session.savedBoard(stale.path, stale.text)
+  assert.equal(c.session.lastSavedText, beforeBaseline,
+    'a completion for another board must not become this board\'s baseline')
+
+  // With the baseline intact, the new board can still write itself.
+  c.root.addItem('note', 0, 0)
+  const last = c.writes[c.writes.length - 1]
+  assert.equal(last.path, '/boards/b.json', 'the new board is written')
+}
 console.log('ok — controller: damaged boards, delayed saves, switching, failure and retry')

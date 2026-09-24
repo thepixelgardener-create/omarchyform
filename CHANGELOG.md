@@ -23,6 +23,10 @@ since older boards are migrated on load rather than rejected.
 
 ### Fixed
 
+- A completion for one board could become the baseline for another. Two empty
+  boards serialise the same, so creating a board straight after switching away
+  from an empty one could skip writing it.
+- A save asked for while the writer was busy was dropped rather than queued.
 - A save that never reports back no longer wedges the board. If `state.json`
   named a board file that had been deleted, every later save, board switch and
   the status line stuck at "saving…" with no way out.

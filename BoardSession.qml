@@ -13,6 +13,9 @@ Item {
   property string saveError: ""
   property string lastSavedText: ""
   property int savingCount: 0
+  // A save asked for while the writer was busy. Dropping it loses the only
+  // record that the board on screen differs from the one on disk.
+  property bool saveWanted: false
   property int lastSavedCount: -1
   property var pendingBoard: null
   property bool createWhenLoaded: false
@@ -55,7 +58,7 @@ Item {
   function save(allowEmpty) {
     if (!session.boardLoaded) return
     if (session.ctl.items.count === 0 && session.lastSavedCount > 0 && allowEmpty !== true) return
-    if (persistence.busy) return
+    if (persistence.busy) { session.saveWanted = true; return }
     var text = Store.writeFile(session.ctl.items, session.ctl.links, session.ctl.nextId)
     session.saveError = ""
     if (text === session.lastSavedText) return
@@ -66,9 +69,17 @@ Item {
   }
 
   function savedBoard(path, text) {
-    session.lastSavedText = text
-    session.lastSavedCount = session.savingCount
-    // Edits made during the write are coalesced into the next save.
+    // A completion belongs to the board it names. Adopting it as the baseline
+    // for a different board suppresses that board's first write whenever the
+    // two serialise the same — which two empty boards always do, so creating a
+    // board straight after switching away from an empty one wrote nothing.
+    if (path === session.ctl.boardPath) {
+      session.lastSavedText = text
+      session.lastSavedCount = session.savingCount
+    }
+    // Edits made during the write, and any save the writer was too busy to
+    // take, are coalesced into this one.
+    session.saveWanted = false
     session.save(true)
     if (!persistence.busy && session.pendingBoard !== null) {
       var next = session.pendingBoard
