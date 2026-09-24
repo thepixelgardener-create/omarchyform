@@ -6,12 +6,61 @@
   "author": "frueh",
   "description": "An infinite canvas for Omarchy: pan, zoom, and sticky notes you can drag anywhere.",
   "kinds": [
-    "overlay"
+    "overlay",
+    "bar-widget"
   ],
   "keepLoaded": true,
   "entryPoints": {
-    "overlay": "Omarchyform.qml"
+    "overlay": "Omarchyform.qml",
+    "barWidget": "BoardBar.qml"
   },
   "license": "MIT",
-  "homepage": "https://github.com/thepixelgardener-create/omarchyform"
+  "homepage": "https://github.com/thepixelgardener-create/omarchyform",
+  "barWidget": {
+    "displayName": "Omarchyform",
+    "description": "Open the board: an infinite canvas for notes, shapes and connectors.",
+    "category": "Productivity",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "autosaveMs": 700,
+      "step": 40,
+      "showGrid": true,
+      "startWindowed": false
+    },
+    "schema": [
+      {
+        "key": "autosaveMs",
+        "type": "integer",
+        "label": "Autosave delay (ms)",
+        "description": "How long typing settles before the board is written.",
+        "min": 100,
+        "max": 5000,
+        "step": 50,
+        "defaultValue": 700
+      },
+      {
+        "key": "step",
+        "type": "integer",
+        "label": "Keyboard step (px)",
+        "description": "How far HJKL pushes an item, and ctrl+HJKL resizes it.",
+        "min": 5,
+        "max": 200,
+        "step": 5,
+        "defaultValue": 40
+      },
+      {
+        "key": "showGrid",
+        "type": "boolean",
+        "label": "Show the dot grid",
+        "defaultValue": true
+      },
+      {
+        "key": "startWindowed",
+        "type": "boolean",
+        "label": "Open in a window rather than fullscreen",
+        "defaultValue": false
+      }
+    ]
+  }
 }

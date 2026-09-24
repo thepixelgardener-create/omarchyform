@@ -124,7 +124,7 @@ Item {
 
   Timer {
     id: saveTimer
-    interval: 700
+    interval: session.ctl.autosaveMs
     repeat: false
     onTriggered: session.save()
   }

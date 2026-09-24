@@ -31,7 +31,18 @@ your place. The mode is remembered between sessions.
 omarchy plugin add https://github.com/thepixelgardener-create/omarchyform.git --enable
 ```
 
-Then bind a key in `~/.config/hypr/bindings.lua`:
+Put it on the bar, which is the way to reach it without knowing a keybinding:
+
+```bash
+omarchy bar put thepixelgardener.omarchyform --section right
+```
+
+The icon opens and closes the board, and carries the accent colour while it is
+open. Its settings — autosave delay, keyboard step, dot grid, and whether the
+board opens windowed — live on the bar entry and are handed to the board when
+it opens, then remembered, so opening from the keyboard uses the same values.
+
+For the keyboard route, bind a key in `~/.config/hypr/bindings.lua`:
 
 ```lua
 o.bind("SUPER + SHIFT + I", "Omarchyform", "omarchy-shell shell toggle thepixelgardener.omarchyform")
@@ -167,6 +178,7 @@ luminance.
 | `Board.qml` | The canvas surface — grid, connectors, keys, cheat sheet |
 | `Node.qml` | One item: note, box, ellipse or diamond |
 | `Browser.qml` | The board browser |
+| `BoardBar.qml` | The bar widget: the board's presence in the shell |
 | `Help.qml` | Scrollable keyboard help |
 | `BoardStore.js` | Pure logic: parsing, marshalling, geometry. No QML |
 | `BoardSession.qml` | Loading, autosave state, and board-switch coordination |

@@ -102,6 +102,13 @@ Item {
   property int editIndex: -1      // -1 means normal mode: every key is a command
   property int linkingFrom: -1    // id of the first end while connecting
   property bool helpVisible: false
+
+  // Configurable from the bar widget's settings, and remembered in state.json
+  // so opening from the keyboard uses the same values.
+  property int autosaveMs: 700
+  property int step: 40
+  property bool showGrid: true
+  property bool startWindowed: false
   property bool windowMode: false
 
   // Views consume session state; loading and save coordination live together.
@@ -339,8 +346,8 @@ Item {
     var n = root.selected()
     if (!n) return
     root.pushUndo()
-    itemModel.setProperty(root.selectedIndex, "ix", n.ix + dx * 40)
-    itemModel.setProperty(root.selectedIndex, "iy", n.iy + dy * 40)
+    itemModel.setProperty(root.selectedIndex, "ix", n.ix + dx * root.step)
+    itemModel.setProperty(root.selectedIndex, "iy", n.iy + dy * root.step)
     root.centerOnSelected()
     root.save()
   }
@@ -353,8 +360,8 @@ Item {
     if (!root.canEdit) return
     var n = root.selected()
     if (!n) return
-    var w = Math.max(root.minItemSize, n.iw + dx * 40)
-    var h = Math.max(root.minItemSize, n.ih + dy * 40)
+    var w = Math.max(root.minItemSize, n.iw + dx * root.step)
+    var h = Math.max(root.minItemSize, n.ih + dy * root.step)
     // Already at the minimum: nothing to record, and no undo step to spend.
     if (w === n.iw && h === n.ih) return
     root.pushUndo()
@@ -658,7 +665,11 @@ Item {
     stateFile.setText(JSON.stringify({
       version: 1,
       lastBoard: root.currentBoard,
-      windowMode: root.windowMode
+      windowMode: root.windowMode,
+      autosaveMs: root.autosaveMs,
+      step: root.step,
+      showGrid: root.showGrid,
+      startWindowed: root.startWindowed
     }, null, 2) + "\n")
   }
 
@@ -669,7 +680,15 @@ Item {
     var st = null
     try { st = JSON.parse(raw) } catch (e) { st = null }
     if (st && st.lastBoard) root.currentBoard = String(st.lastBoard)
-    if (st) root.windowMode = st.windowMode === true
+    if (st) {
+      root.windowMode = st.windowMode === true
+      if (typeof st.autosaveMs === "number") root.autosaveMs = st.autosaveMs
+      if (typeof st.step === "number") root.step = st.step
+      if (typeof st.showGrid === "boolean") root.showGrid = st.showGrid
+      if (typeof st.startWindowed === "boolean") root.startWindowed = st.startWindowed
+      // With no board open yet, the bar's preference decides the surface.
+      if (st.windowMode === undefined) root.windowMode = root.startWindowed
+    }
     root.stateReady = true
   }
 
@@ -687,7 +706,23 @@ Item {
     return screens[0]
   }
 
+  // A summon from the bar carries that widget's settings. Applying them here
+  // and writing them to state keeps the two entry points in step: configure on
+  // the bar, and the keybinding opens the same board the same way.
+  function applyPayload(payloadJson) {
+    var p = null
+    try { p = JSON.parse(payloadJson || "{}") } catch (e) { return false }
+    if (!p || !p.settings) return false
+    var st = p.settings
+    if (typeof st.autosaveMs === "number") root.autosaveMs = Math.max(100, Math.min(5000, st.autosaveMs))
+    if (typeof st.step === "number") root.step = Math.max(5, Math.min(200, st.step))
+    if (typeof st.showGrid === "boolean") root.showGrid = st.showGrid
+    if (typeof st.startWindowed === "boolean") root.startWindowed = st.startWindowed
+    return true
+  }
+
   function open(payloadJson) {
+    if (root.applyPayload(payloadJson)) root.writeState()
     root.boardScreen = root.focusedScreen()
     root.opened = true
     Qt.callLater(function () {
