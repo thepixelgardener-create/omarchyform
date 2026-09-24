@@ -115,12 +115,15 @@ function fillLinks(links, items, rows) {
   links.clear()
   if (!rows) return
   var seen = {}
+  // One index of the items, rather than a scan of them per endpoint: loading a
+  // board was costing time proportional to items times connectors.
+  var byId = idIndex(items)
   for (var i = 0; i < rows.length; i++) {
     var l = rows[i]
     // Both ends must exist, an item cannot be joined to itself, and the same
     // pair cannot appear twice — a connector is undirected.
     if (l.from === l.to) continue
-    if (indexOfId(items, l.from) < 0 || indexOfId(items, l.to) < 0) continue
+    if (byId[l.from] === undefined || byId[l.to] === undefined) continue
     var key = Math.min(l.from, l.to) + ":" + Math.max(l.from, l.to)
     if (seen[key]) continue
     seen[key] = true

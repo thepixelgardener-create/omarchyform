@@ -180,6 +180,7 @@ the suite loads the very file the plugin loads — there is no copy to drift.
 ```bash
 npm test        # pure logic and controller regression tests, no dependencies
 npm run mutate  # mutation testing
+npm run bench   # board marshalling cost at size
 npm run test:qml # headless persistence tests; requires installed Quickshell
 npm run test:ui  # Qt Quick pointer, theme, and layout tests
 npm run test:omarchy -- --keep # live desktop smoke test, isolated board data
@@ -219,6 +220,22 @@ installed plugin, boards, and theme.
 
 See [the compatibility review](docs/omarchy-compatibility.md) for the tested
 versions, first-party references, results, and remaining limits.
+
+## Speed
+
+`npm run bench` prints what a board costs to serialise and to load, at size.
+Loading used to be superlinear — every connector scanned the whole item list to
+resolve its two ends — so a 3000-item board took about 19ms to load and a
+1000-item one about 3.6ms. Resolving the ends through a single index instead
+makes it linear: roughly 6ms and 2ms.
+
+Saving still forks `sh`, `cp` and `mv` to stage the backup before the board is
+replaced, which costs about 9ms per save regardless of board size — far more
+than serialising and writing one. Doing that copy in-process would remove it,
+but the backup is what guarantees the previous version is safely on disk before
+the board is overwritten, and the obvious rewrites broke that guarantee. It is
+left alone deliberately, behind the autosave delay, rather than traded for
+speed.
 
 ## Notes on the platform
 

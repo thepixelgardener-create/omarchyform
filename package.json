@@ -8,6 +8,7 @@
     "mutate": "node tests/mutate.js",
     "test:qml": "node tests/persistence.js",
     "test:ui": "node tests/ui.js",
-    "test:omarchy": "node tests/omarchy.js --live"
+    "test:omarchy": "node tests/omarchy.js --live",
+    "bench": "node tests/bench.js"
   }
 }
