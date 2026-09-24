@@ -92,29 +92,57 @@ FocusScope {
     onHeightChanged: requestPaint()
   }
 
-  // Background: drag to pan, wheel to zoom, double-click for a note.
+  // Background: left drag draws a marquee, middle or right drag pans, wheel
+  // zooms, double-click leaves a note.
   MouseArea {
     anchors.fill: parent
-    acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+    acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
     property real lastX: 0
     property real lastY: 0
     property bool panning: false
+    property bool additive: false
 
     onPressed: function (mouse) {
       lastX = mouse.x
       lastY = mouse.y
-      panning = true
-      board.ctl.selectOnly(-1)
+      additive = (mouse.modifiers & Qt.ShiftModifier) !== 0
+      // Backgrounds answer to the camera rather than the marquee: marks never
+      // reach them, so a rectangle there would cost the pan and buy nothing.
+      panning = mouse.button !== Qt.LeftButton || board.ctl.showPinned
+      if (!panning) {
+        marquee.fromX = board.ctl.toWorldX(mouse.x)
+        marquee.fromY = board.ctl.toWorldY(mouse.y)
+        marquee.toX = marquee.fromX
+        marquee.toY = marquee.fromY
+        marquee.dragging = true
+        if (!additive) board.ctl.selectOnly(-1)
+      }
       board.focusKeys()
     }
-    onReleased: panning = false
+    onReleased: {
+      panning = false
+      if (!marquee.dragging) return
+      var caught = marquee.wide
+      marquee.dragging = false
+      if (caught) board.ctl.markInRect(marquee.fromX, marquee.fromY, marquee.toX, marquee.toY, additive)
+    }
+    onCanceled: {
+      panning = false
+      marquee.dragging = false
+    }
     onPositionChanged: function (mouse) {
+      if (marquee.dragging) {
+        marquee.toX = board.ctl.toWorldX(mouse.x)
+        marquee.toY = board.ctl.toWorldY(mouse.y)
+        return
+      }
       if (!panning) return
       board.ctl.panBy(mouse.x - lastX, mouse.y - lastY)
       lastX = mouse.x
       lastY = mouse.y
     }
     onDoubleClicked: function (mouse) {
+      if (mouse.button !== Qt.LeftButton) return
       board.ctl.addItem("note", board.ctl.toWorldX(mouse.x), board.ctl.toWorldY(mouse.y))
     }
     onWheel: function (wheel) {
@@ -202,6 +230,32 @@ FocusScope {
         parent: ipinned ? backgroundWorld : foregroundWorld
       }
     }
+  }
+
+  // Held in world coordinates, so a zoom part-way through a drag keeps the
+  // rectangle over the items it started on; only the drawing comes back to
+  // the screen. Below the keyboard owner, above everything it selects.
+  Rectangle {
+    id: marquee
+    property bool dragging: false
+    property real fromX: 0
+    property real fromY: 0
+    property real toX: 0
+    property real toY: 0
+    readonly property real left: Math.min(board.ctl.toScreenX(fromX), board.ctl.toScreenX(toX))
+    readonly property real top: Math.min(board.ctl.toScreenY(fromY), board.ctl.toScreenY(toY))
+    // A few pixels of slack, so a plain click on the canvas stays a click.
+    readonly property bool wide: Math.abs(board.ctl.toScreenX(toX) - board.ctl.toScreenX(fromX)) > 4
+                                 || Math.abs(board.ctl.toScreenY(toY) - board.ctl.toScreenY(fromY)) > 4
+    visible: dragging && wide
+    x: left
+    y: top
+    width: Math.abs(board.ctl.toScreenX(toX) - board.ctl.toScreenX(fromX))
+    height: Math.abs(board.ctl.toScreenY(toY) - board.ctl.toScreenY(fromY))
+    color: Qt.rgba(board.ctl.accent.r, board.ctl.accent.g, board.ctl.accent.b, 0.12)
+    border.width: board.ctl.borderWidth
+    border.color: board.ctl.accent
+    radius: board.ctl.cornerRadius
   }
 
   // Keyboard owner. Lives above the canvas so Escape always lands here.

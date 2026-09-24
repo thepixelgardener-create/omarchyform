@@ -543,6 +543,31 @@ function tests(S) {
   })
 
   // ----------------------------------------------------------------- geometry
+  test("the marquee catches what it touches, not only what it swallows", () => {
+    const m = new FakeModel([
+      item({ iid: 1, ix: 0, iy: 0, iw: 100, ih: 100 }),
+      item({ iid: 2, ix: 500, iy: 500, iw: 100, ih: 100 })
+    ])
+    eq(S.idsInRect(m, -10, -10, 10, 10), [1], "a corner is enough")
+    eq(S.idsInRect(m, 20, 20, 40, 40), [1], "a rectangle inside the item counts")
+    eq(S.idsInRect(m, -50, -50, 700, 700), [1, 2], "both, in model order")
+    eq(S.idsInRect(m, 200, 200, 300, 300), [], "the gap between them catches nothing")
+  })
+
+  test("the marquee leaves backgrounds alone", () => {
+    const m = new FakeModel([
+      item({ iid: 1, ix: 0, iy: 0, ipinned: true }),
+      item({ iid: 2, ix: 0, iy: 0 })
+    ])
+    eq(S.idsInRect(m, -500, -500, 500, 500), [2], "the pinned one is not marked")
+  })
+
+  test("the marquee counts an edge that only grazes an item", () => {
+    const m = new FakeModel([item({ iid: 1, ix: 0, iy: 0, iw: 100, ih: 100 })])
+    eq(S.idsInRect(m, 100, 100, 200, 200), [1], "touching the far corner counts")
+    eq(S.idsInRect(m, 101, 101, 200, 200), [], "a pixel past it does not")
+  })
+
   test("nearest picks the item in the direction asked for", () => {
     // left(0) at x=0, right(1) at x=200, above(2) at y=-200
     const m = new FakeModel([

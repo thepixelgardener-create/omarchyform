@@ -321,6 +321,28 @@ Item {
     root.repaintLinks()
   }
 
+  // The marquee hands back world coordinates, so a mark survives a pan or a
+  // zoom that happens mid-drag. Additive keeps what was already marked.
+  function markInRect(x0, y0, x1, y1, additive) {
+    var ids = Store.idsInRect(itemModel,
+                              Math.min(x0, x1), Math.min(y0, y1),
+                              Math.max(x0, x1), Math.max(y0, y1))
+    var m = additive ? root.markedIds.slice() : []
+    for (var i = 0; i < ids.length; i++)
+      if (m.indexOf(ids[i]) < 0) m.push(ids[i])
+    root.markedIds = m
+    // Leave a cursor inside the marked set so the keyboard carries on from
+    // where the rectangle finished rather than from wherever it last was.
+    if (m.length === 0) root.selectedIndex = -1
+    else if (root.selectedIndex < 0 || !root.isMarked(itemModel.get(root.selectedIndex).iid))
+      root.selectedIndex = Store.indexOfId(itemModel, m[m.length - 1])
+    root.editIndex = -1
+    root.linkingFrom = -1
+    root.repaintLinks()
+    root.flash(m.length === 0 ? "nothing marked" : m.length + " marked")
+    root.focusKeys()
+  }
+
   function clearMarks() {
     if (root.markedIds.length === 0) return false
     root.markedIds = []

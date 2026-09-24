@@ -12,14 +12,13 @@ const STORE_PATH = path.join(__dirname, "..", "BoardStore.js")
 function loadStore(source) {
   const src = source !== undefined ? source : fs.readFileSync(STORE_PATH, "utf8")
   const body = src.replace(/^\s*\.pragma\s+library\s*$/m, "")
+  // Read off the source rather than listed by hand: a hand-written list means
+  // a new Store function is quietly missing from every test until someone
+  // remembers this file, which is how idsInRect first arrived unreachable.
   const exported = [
-    "MIN_SIZE", "TINTS", "LEGACY_SWATCHES", "KINDS", "KEY_HELP", "normalizeTint",
-    "itemRows", "linkRows", "fillItems", "fillLinks", "indexOfId", "idIndex",
-    "nextFreeId", "num", "readFile", "writeFile", "parseThemeMode", "isLightColor",
-    "readTrash", "writeTrash", "trashFile", "trashEntry", "withoutTrash", "sortedTrash",
-    "safeRelative", "joinPath", "parentOf", "baseName", "displayName", "parseListing",
-    "childrenOf", "fuzzyScore", "filterEntries", "nameIsValid", "uniquePath", "nearest", "bounds", "edgePoint", "cycle"
-  ]
+    ...body.matchAll(/^function\s+(\w+)\s*\(/gm),
+    ...body.matchAll(/^var\s+(\w+)\s*=/gm)
+  ].map(m => m[1])
   const factory = new Function(`${body}\nreturn {${exported.join(",")}}`)
   return factory()
 }

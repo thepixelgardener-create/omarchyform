@@ -133,11 +133,12 @@ rather than each cycling from its own. With nothing marked, every command
 applies to the cursor alone, so the keys behave exactly as before until you
 ask for more.
 
-Mouse works too: Shift-click to mark items together, drag a marked item to move
-the set, drag the canvas to pan, wheel to
-zoom, double-click empty canvas for a new note, double-click a note to type in
-it, drag the bottom-right corner to resize marked items, middle-click to delete
-the clicked item.
+Mouse works too. Drag across empty canvas to sweep a rectangle: everything it
+touches gets marked, and holding Shift keeps whatever was marked already.
+Shift-click marks items one at a time, dragging a marked item moves the whole
+set, and the bottom-right corner resizes them. Middle-drag or right-drag pans,
+the wheel zooms at the pointer, double-clicking empty canvas leaves a new note,
+double-clicking a note types in it, and middle-clicking an item deletes it.
 
 ## Backgrounds
 

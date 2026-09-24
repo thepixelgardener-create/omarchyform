@@ -295,3 +295,25 @@ console.log('ok — controller: board-local marks, pinning, backup names and his
   c.root.acceptTrashIndex('{"version":1,"entries":[]}')
   assert.equal(c.root.trashIndexError,'')
 }
+{
+  // The marquee: what it catches, what it leaves, and the cursor it hands to
+  // the keyboard afterwards.
+  const c = controller()
+  c.session.loadBoard('{"items":[{"id":1,"x":0,"y":0},{"id":2,"x":400,"y":0},{"id":3,"x":0,"y":400,"pinned":true}]}', false)
+  c.root.markInRect(-10, -10, 10, 10, false)
+  assert.deepEqual(Array.from(c.root.markedIds), [1])
+  assert.equal(c.root.selectedIndex, 0, 'a sweep leaves a cursor inside what it marked')
+  c.root.markInRect(410, 10, 390, -10, true)
+  assert.deepEqual(Array.from(c.root.markedIds), [1, 2], 'dragging up and left marks the same items')
+  assert.equal(c.root.selectedIndex, 0, 'an additive sweep keeps a cursor that is still marked')
+  c.root.markInRect(390, -10, 410, 10, false)
+  assert.deepEqual(Array.from(c.root.markedIds), [2], 'without shift the previous marks go')
+  assert.equal(c.root.selectedIndex, 1, 'the cursor follows into the new set')
+  c.root.markInRect(2000, 2000, 2100, 2100, false)
+  assert.deepEqual(Array.from(c.root.markedIds), [])
+  assert.equal(c.root.selectedIndex, -1, 'an empty sweep is a deselect')
+  c.root.markInRect(-2000, -2000, 2000, 2000, false)
+  assert.deepEqual(Array.from(c.root.markedIds), [1, 2], 'the background is never swept up')
+  assert.deepEqual(Array.from(c.root.targets()), [1, 0], 'and the marks drive the next operation')
+}
+console.log('ok — controller: marquee selection, order and cursor handover')

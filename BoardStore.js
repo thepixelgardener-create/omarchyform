@@ -51,7 +51,10 @@ var KEY_HELP = [
   ["+ / -", "zoom"],
   ["? / F1", "this list"],
   ["shift+click", "mark items together"],
-  ["drag", "move marked items, or pan the canvas"],
+  ["drag on canvas", "sweep a rectangle to mark everything it touches"],
+  ["shift+drag", "sweep, keeping what was already marked"],
+  ["drag an item", "move it, and everything marked with it"],
+  ["middle/right drag", "pan the canvas"],
   ["wheel", "zoom at the pointer"]
 ]
 
@@ -432,6 +435,22 @@ function bounds(items) {
     b.maxY = Math.max(b.maxY, n.iy + n.ih)
   }
   return b
+}
+
+// Items a marquee touches, in model order. Touching rather than enclosing: at
+// low zoom a rectangle that has to swallow an item whole is fiddly, and every
+// canvas worth copying picks touching. Backgrounds are skipped, the way every
+// other bulk operation skips them.
+function idsInRect(items, minX, minY, maxX, maxY) {
+  var out = []
+  for (var i = 0; i < items.count; i++) {
+    var n = items.get(i)
+    if (n.ipinned === true) continue
+    if (n.ix > maxX || n.ix + n.iw < minX) continue
+    if (n.iy > maxY || n.iy + n.ih < minY) continue
+    out.push(n.iid)
+  }
+  return out
 }
 
 // Where a connector meets an item: walk from its centre toward the other end
