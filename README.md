@@ -5,8 +5,8 @@ A local, keyboard-first board for arranging thoughts on Omarchy.
 An infinite canvas. Notes, shapes and connectors on a board you can pan and
 zoom, driven from the keyboard, stored as a plain JSON file on your own disk.
 
-Think Apple Freeform, except it is keyboard-first, it matches your Omarchy
-theme, and nothing leaves the machine.
+Capture a thought, arrange it spatially, get back to work. It follows your
+Omarchy theme and keeps your boards on your own machine.
 
 ![Omarchyform](preview.gif)
 

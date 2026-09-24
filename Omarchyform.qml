@@ -558,17 +558,11 @@ Item {
     var t = root.targets()
     if (t.length === 0) return
     root.pushUndo()
-    for (var i = 0; i < t.length; i++) {
-      var n = itemModel.get(t[i])
-      itemModel.setProperty(t[i], "ix", n.ix + dx * root.worldStep)
-      itemModel.setProperty(t[i], "iy", n.iy + dy * root.worldStep)
-    }
+    root.moveTargets(dx * root.worldStep, dy * root.worldStep)
     root.centerOnSelected()
     root.save()
   }
 
-  // Keep the selected item on screen without yanking the view around when it
-  // is already comfortably visible.
   // Resize from the bottom-right, the same corner the mouse grip pulls, so the
   // item's top-left stays where you put it.
   function resizeSelected(dx, dy) {
@@ -584,15 +578,12 @@ Item {
     }
     if (!moved) return
     root.pushUndo()
-    for (var j = 0; j < t.length; j++) {
-      var m = itemModel.get(t[j])
-      itemModel.setProperty(t[j], "iw", Math.max(root.minItemSize, m.iw + dx * root.worldStep))
-      itemModel.setProperty(t[j], "ih", Math.max(root.minItemSize, m.ih + dy * root.worldStep))
-    }
+    root.resizeTargets(dx * root.worldStep, dy * root.worldStep)
     root.centerOnSelected()
     root.save()
   }
 
+  // Keep the selection visible without moving a comfortably framed view.
   function centerOnSelected() {
     var n = root.selected()
     if (!n) return
@@ -873,7 +864,6 @@ Item {
       return
     }
     var text = event.text
-    var shift = (event.modifiers & Qt.ShiftModifier) !== 0
 
     // Arming a delete lasts exactly until the next keystroke.
     if (text !== "x") {
@@ -1206,11 +1196,6 @@ Item {
       root.trashIndexError = "trash index could not be saved — ctrl+s to retry; keep the board open"
       root.browserMessage = root.trashIndexError
     }
-  }
-
-  Process {
-    id: removeProc
-    onExited: root.rescan()
   }
 
   FileView {

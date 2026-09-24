@@ -13,9 +13,6 @@ Item {
   property string saveError: ""
   property string lastSavedText: ""
   property int savingCount: 0
-  // A save asked for while the writer was busy. Dropping it loses the only
-  // record that the board on screen differs from the one on disk.
-  property bool saveWanted: false
   property int lastSavedCount: -1
   property var pendingBoard: null
   property bool createWhenLoaded: false
@@ -61,7 +58,7 @@ Item {
   function save(allowEmpty) {
     if (!session.boardLoaded) return
     if (session.ctl.items.count === 0 && session.lastSavedCount > 0 && allowEmpty !== true) return
-    if (persistence.busy) { session.saveWanted = true; return }
+    if (persistence.busy) return // Completion serializes the latest model again.
     var text = Store.writeFile(session.ctl.items, session.ctl.links, session.ctl.nextId)
     session.saveError = ""
     if (text === session.lastSavedText) return
@@ -80,9 +77,8 @@ Item {
       session.lastSavedText = text
       session.lastSavedCount = session.savingCount
     }
-    // Edits made during the write, and any save the writer was too busy to
-    // take, are coalesced into this one.
-    session.saveWanted = false
+    // Always compare the latest model after completion: edits made while the
+    // writer was busy are coalesced here without a separate pending flag.
     session.save(true)
     if (!persistence.busy && session.pendingBoard !== null) {
       var next = session.pendingBoard
