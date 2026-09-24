@@ -254,6 +254,12 @@ are left in the report rather than silenced, so the number stays truthful:
 - `nearest`'s off-axis term: it is only ever called with a unit axis vector, so
   one of the two products is always zero.
 
+A contract check reads the names the views and the session reach for on the
+controller and fails if any of them is missing — including from the stub the
+QML session test uses in the controller's place. QML resolves those names at
+runtime, so a missing one is a TypeError in a suite CI cannot run, which is
+how two of them reached `main` behind green checks.
+
 Controller tests evaluate the actual QML JavaScript functions with delayed I/O
 completion to cover damaged files, queued edits, board switching, and retry.
 The separate `test:qml` suite runs the real persistence and session components

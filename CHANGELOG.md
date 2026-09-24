@@ -7,6 +7,13 @@ since older boards are migrated on load rather than rejected.
 
 ### Added
 
+- A contract check, run in CI, that reads the names the views and the session
+  reach for on the controller and fails if one is missing — including from the
+  stub the QML session test puts in the controller's place. QML resolves those
+  names at runtime, so a missing one is a TypeError in a suite CI cannot run.
+- A randomised ordering test for saves, board switches and completions, which
+  asserts that a write lands on the board it was serialised for and that the
+  writer never stays busy.
 - **More than one item at a time.** `space` marks the item under the cursor and
   `a` marks everything; moving, resizing, recolouring, changing shape and
   deleting then apply to the whole set. Marks are held as ids, so a delete
