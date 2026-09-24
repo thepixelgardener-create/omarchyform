@@ -29,6 +29,7 @@ TestCase {
     property int saveCount: 0
     property int flushCount: 0
     function isMarked(id) { return false }
+    function newBoard() {}
     function sp(n) { return n }
     function tintFill(tint, strong) { return itemFill }
     function tintBorder(tint, strong) { return "#999999" }

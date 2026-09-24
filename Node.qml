@@ -34,6 +34,10 @@ Item {
     ? node.ctl.accent
     : node.ctl.tintBorder(node.itint, node.selected)
 
+  opacity: node.ctl.showPinned && !node.ipinned ? 0.35 : 1
+
+  HoverHandler { id: hover }
+
   x: node.ix
   y: node.iy
   width: node.iw
@@ -107,16 +111,27 @@ Item {
     color: node.outline
   }
 
+  Flickable {
+    id: textViewport
+    anchors.fill: parent
+    anchors.margins: node.ctl.sp(14)
+    anchors.topMargin: node.isNote ? header.height + node.ctl.sp(14) : node.ctl.sp(14)
+    contentWidth: width
+    contentHeight: body.height
+    clip: true
+    interactive: node.ctl.editIndex === node.index
+    boundsBehavior: Flickable.StopAtBounds
+
   TextEdit {
     id: body
-    anchors.fill: parent
-    anchors.margins: node.ctl.sp(10)
-    anchors.topMargin: node.isNote ? header.height + node.ctl.sp(10) : node.ctl.sp(10)
+    width: textViewport.width
+    height: Math.max(textViewport.height, contentHeight)
     text: node.itext
     color: node.ctl.foreground
     font.family: node.ctl.fontFamily
     font.pixelSize: node.ctl.fontSubtitle
     wrapMode: TextEdit.Wrap
+    clip: true
     // Pinned: board files are shareable, and RichText here would let someone
     // else's board inject markup into yours.
     textFormat: TextEdit.PlainText
@@ -134,7 +149,10 @@ Item {
     onActiveFocusChanged: if (!activeFocus) node.ctl.flushSave()
     Keys.onEscapePressed: node.ctl.stopEditing()
     Keys.onPressed: function(event) {
-      if (event.key === Qt.Key_S && (event.modifiers & Qt.ControlModifier)) {
+      if (event.key === Qt.Key_N && (event.modifiers & Qt.ControlModifier)) {
+        node.ctl.newBoard()
+        event.accepted = true
+      } else if (event.key === Qt.Key_S && (event.modifiers & Qt.ControlModifier)) {
         node.ctl.flushSave()
         event.accepted = true
       }
@@ -144,7 +162,24 @@ Item {
     onWantsEditChanged: if (wantsEdit) {
       forceActiveFocus()
       cursorPosition = length
+    } else textViewport.contentY = 0
+    onCursorRectangleChanged: if (wantsEdit) {
+      if (cursorRectangle.y < textViewport.contentY) textViewport.contentY = cursorRectangle.y
+      else if (cursorRectangle.y + cursorRectangle.height > textViewport.contentY + textViewport.height)
+        textViewport.contentY = cursorRectangle.y + cursorRectangle.height - textViewport.height
     }
+  }
+
+  }
+
+  Text {
+    anchors.right: parent.right
+    anchors.bottom: parent.bottom
+    anchors.margins: node.ctl.sp(5)
+    text: "…"
+    color: node.ctl.foreground
+    font.family: node.ctl.fontFamily
+    visible: body.contentHeight > textViewport.height && node.ctl.editIndex !== node.index
   }
 
   // Drag anywhere. Steps aside the moment this item is being edited, so the
@@ -217,7 +252,7 @@ Item {
       sizing = false
     }
 
-    visible: !node.ipinned
+    visible: !node.ipinned && (node.selected || hover.hovered)
     Rectangle {
       anchors.centerIn: parent
       width: 8

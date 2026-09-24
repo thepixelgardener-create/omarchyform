@@ -7,6 +7,15 @@ since older boards are migrated on load rather than rejected.
 
 ### Added
 
+- **Getting things in and out.** `ctrl+shift+s` saves a copy of the board
+  anywhere, `ctrl+o` reads one back as a new board, `ctrl+e` renders it to a
+  PNG, and `ctrl+v` turns the clipboard into a note. Imports never overwrite
+  the board you are on.
+- **Capture before naming.** `ctrl+n` opens a new board already waiting for its
+  first note, and `F2` names it once the thought is down. A desktop entry with
+  a *New board* action does the same from a launcher.
+- A header showing which board is open and whether it is saved.
+
 - Background pinning: `p` pins items behind the working canvas; `Shift+P`
   selects backgrounds to unpin. Normal edits and mark-all skip pinned items.
   Board format v4 preserves pinning; v1–v3 boards still load.

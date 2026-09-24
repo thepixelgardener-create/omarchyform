@@ -63,7 +63,7 @@ Item {
 
   // A wash reads differently on paper than on ink, so the weights differ.
   readonly property color dotColor: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b,
-                                            root.isLight ? 0.28 : 0.18)
+                                            root.isLight ? 0.13 : 0.08)
   readonly property int minItemSize: Store.MIN_SIZE
 
   // The step is what the eye sees, so it is divided by the zoom: otherwise one
@@ -82,7 +82,7 @@ Item {
   function tintFill(tint, strong) {
     var c = root.tintColor(tint)
     var a = root.isLight ? (strong ? 0.20 : 0.10) : (strong ? 0.22 : 0.12)
-    return Qt.rgba(c.r, c.g, c.b, a)
+    return Qt.rgba(c.r * a + root.canvasBackground.r * (1-a), c.g * a + root.canvasBackground.g * (1-a), c.b * a + root.canvasBackground.b * (1-a), 1)
   }
   function tintBorder(tint, strong) {
     var c = root.tintColor(tint)
@@ -111,6 +111,82 @@ Item {
   property int linkingFrom: -1    // id of the first end while connecting
   property bool helpVisible: false
   property bool showPinned: false
+  property string pendingFirstNote: ""
+  property bool launchNewBoard: false
+  property bool imageBusy: false
+  readonly property bool exchangeBusy: exchange.busy
+  readonly property bool dialogOpen: exchange.dialogOpen
+  readonly property string boardState: root.damaged ? "Read only" : root.saveError !== "" ? "Save failed" : root.saving ? "Saving…" : "Saved locally"
+  onBoardLoadedChanged: if (root.boardLoaded && root.pendingFirstNote === root.currentBoard) {
+    root.pendingFirstNote = ""
+    Qt.callLater(function() {
+      root.selectedIndex = 0
+      root.editIndex = 0
+      root.centerOnSelected()
+    })
+  }
+
+  function newBoard() {
+    if (!root.stateReady || root.exchangeBusy || !root.filesystemReady()) return
+    root.stopEditing()
+    exchange.newBoard()
+  }
+
+  function pasteText(text) {
+    if (!root.canEdit || !text) return
+    root.addItem("note", root.toWorldX(root.viewW / 2), root.toWorldY(root.viewH / 2))
+    itemModel.setProperty(root.selectedIndex, "itext", text)
+    itemModel.setProperty(root.selectedIndex, "iw", 300)
+    itemModel.setProperty(root.selectedIndex, "ih", 200)
+    root.save()
+    root.flash("Text pasted · enter to edit")
+    root.focusKeys()
+  }
+
+  function pasteClipboard() { exchange.paste() }
+  function importBoard() { exchange.choose("import") }
+  function exportBoard() { exchange.choose("json") }
+  function choosePng() { exchange.choose("png") }
+  function exportPng(path) { if (root.activeBoard) root.activeBoard.exportPng(path) }
+
+  function finishPng(path) {
+    imagePublish.command = root.fileCommand("export", [root.dataDir + "/.image-export.png", path, root.dataDir])
+    imagePublish.running = true
+  }
+  Process {
+    id: imagePublish
+    onExited: function(code) {
+      root.imageBusy = false
+      root.flash(code === 0 ? "PNG saved · full board, without controls" : "Could not save PNG; choose a location outside the app data folder")
+    }
+  }
+
+  function renameBoard() {
+    root.openBrowser()
+    root.prompt("rename-current", "board name:", root.boardTitle)
+  }
+
+  Timer {
+    interval: 20
+    repeat: true
+    running: root.launchNewBoard
+    onTriggered: if (root.stateReady && !root.browserBusy && !root.exchangeBusy) {
+      root.launchNewBoard = false
+      root.newBoard()
+    }
+  }
+
+  BoardExchange {
+    id: exchange
+    ctl: root
+    onCreated: function(path, editFirst) {
+      if (editFirst) root.pendingFirstNote = path
+      root.openBoard(path, false)
+      root.rescan()
+      root.flash(editFirst ? "New board · F2 to name it" : "Board imported")
+    }
+    onFinished: function(message) { root.flash(message) }
+  }
 
   // A line that says what just happened and then goes away. Deleting is one
   // keystroke, so it should at least say so, and say how to take it back.
@@ -135,7 +211,7 @@ Item {
   readonly property string saveError: session.saveError
   readonly property bool saving: session.busy
   readonly property var pendingBoard: session.pendingBoard
-  readonly property bool canEdit: session.canEdit && !root.browserBusy
+  readonly property bool canEdit: session.canEdit && !root.browserBusy && !root.imageBusy
   property bool stateReady: false
 
   property var undoStack: []
@@ -589,11 +665,12 @@ Item {
     var n = root.selected()
     if (!n) return
     var m = 60
+    var topInset = root.activeBoard ? root.activeBoard.headerHeight + 24 : m
     var sx = root.toScreenX(n.ix), sy = root.toScreenY(n.iy)
     var sw = n.iw * root.zoom, sh = n.ih * root.zoom
     if (sx < m) root.camX += m - sx
     else if (sx + sw > root.viewW - m) root.camX -= (sx + sw) - (root.viewW - m)
-    if (sy < m) root.camY += m - sy
+    if (sy < topInset) root.camY += topInset - sy
     else if (sy + sh > root.viewH - m) root.camY -= (sy + sh) - (root.viewH - m)
     root.repaintGrid()
     root.repaintLinks()
@@ -635,9 +712,9 @@ Item {
     var pad = 80
     var w = (b.maxX - b.minX) + pad * 2
     var h = (b.maxY - b.minY) + pad * 2
-    root.zoom = Math.max(0.2, Math.min(1, Math.min(root.viewW / w, root.viewH / h)))
+    root.zoom = Math.max(0.2, Math.min(1, Math.min(root.viewW / w, Math.max(100, root.viewH - (root.activeBoard ? root.activeBoard.headerHeight : 0)) / h)))
     root.camX = root.viewW / 2 - ((b.minX + b.maxX) / 2) * root.zoom
-    root.camY = root.viewH / 2 - ((b.minY + b.maxY) / 2) * root.zoom
+    root.camY = ((root.activeBoard ? root.activeBoard.headerHeight : 0) + root.viewH) / 2 - ((b.minY + b.maxY) / 2) * root.zoom
     root.repaintGrid()
     root.repaintLinks()
   }
@@ -762,14 +839,15 @@ Item {
       var dir = Store.uniquePath(root.browserEntries, root.browserDir, name, true)
       mkdirProc.command = root.fileCommand("mkdir", [root.boardsDir, dir])
       mkdirProc.running = true
-    } else if (action === "rename") {
+    } else if (action === "rename" || action === "rename-current") {
       root.flushSave()
       if (session.busy || root.saveError !== "") {
         root.browserMessage = "finish saving before renaming; try again"
         return
       }
-      var e = root.browserCurrent()
+      var e = action === "rename-current" ? {path: root.currentBoard, dir: false} : root.browserCurrent()
       if (!e) return
+      if (name === Store.displayName(e)) { root.closeBrowser(); return }
       var target = Store.uniquePath(root.browserEntries, Store.parentOf(e.path), name, e.dir)
       moveProc.command = root.fileCommand("move", [root.boardsDir, e.path, root.boardsDir, target])
       moveProc.renamedFrom = e.path
@@ -1004,6 +1082,9 @@ Item {
   }
 
   function open(payloadJson) {
+    var request = null
+    try { request = JSON.parse(payloadJson || "{}") } catch (e) {}
+    if (request && request.action === "new") root.launchNewBoard = true
     if (root.applyPayload(payloadJson)) root.writeState()
     root.boardScreen = root.focusedScreen()
     root.opened = true
@@ -1017,6 +1098,7 @@ Item {
   // The host calls close() for IPC hide/toggle; Escape and window close use
   // the same cleanup before notifying the scoped shell facade.
   function close() {
+    if (root.imageBusy) { root.flash("Finishing image export…"); return }
     root.flushSave()
     root.opened = false
     root.markedIds = []
@@ -1242,7 +1324,7 @@ Item {
         color: "transparent"
         WlrLayershell.namespace: "omarchyform"
         WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
+        WlrLayershell.keyboardFocus: root.dialogOpen ? WlrKeyboardFocus.None : WlrKeyboardFocus.Exclusive
         exclusionMode: ExclusionMode.Ignore
         anchors { top: true; bottom: true; left: true; right: true }
 

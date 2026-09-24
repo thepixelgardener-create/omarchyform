@@ -11,6 +11,25 @@ FocusScope {
   required property var ctl
 
   focus: true
+  readonly property real headerHeight: toolbar.y + toolbar.height
+
+  property string exportDestination: ""
+
+  function exportPng(path) {
+    if (board.ctl.imageBusy) return
+    if (board.ctl.items.count === 0) { board.ctl.flash("Add a note before exporting an image"); return }
+    board.ctl.imageBusy = true
+    exportDestination = path
+    picture.save(board.ctl.dataDir + "/.image-export.png")
+  }
+  BoardImage {
+    id: picture
+    ctl: board.ctl
+    onFinished: function(success) {
+      if (success) board.ctl.finishPng(board.exportDestination)
+      else { board.ctl.imageBusy = false; board.ctl.flash("Could not render PNG") }
+    }
+  }
 
   // A filled head at the target end, pointing the way the connector runs.
   function arrowHead(ctx, fromX, fromY, toX, toY) {
@@ -221,8 +240,6 @@ FocusScope {
       "?": function () { board.ctl.helpVisible = !board.ctl.helpVisible }
     })
 
-    readonly property var arrows: ({})
-
     // Matched on key codes as well as text: holding Ctrl turns the letter in
     // event.text into a control character, so text alone would miss.
     function direction(key, text) {
@@ -252,7 +269,12 @@ FocusScope {
         if (rd) board.ctl.resizeSelected(rd[0], rd[1])
         else if (event.key === Qt.Key_R) board.ctl.redo()
         else if (event.key === Qt.Key_Z) shift ? board.ctl.redo() : board.ctl.undo()
+        else if (event.key === Qt.Key_S && shift) board.ctl.exportBoard()
         else if (event.key === Qt.Key_S) board.ctl.flushSave()
+        else if (event.key === Qt.Key_N) board.ctl.newBoard()
+        else if (event.key === Qt.Key_V) board.ctl.pasteClipboard()
+        else if (event.key === Qt.Key_O) board.ctl.importBoard()
+        else if (event.key === Qt.Key_E) board.ctl.choosePng()
         else return
         event.accepted = true
         return
@@ -268,6 +290,7 @@ FocusScope {
       }
 
       if (event.key === Qt.Key_Escape) board.ctl.back()
+      else if (event.key === Qt.Key_F2) board.ctl.renameBoard()
       else if (event.key === Qt.Key_F1) board.ctl.helpVisible = !board.ctl.helpVisible
       else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) board.ctl.editSelected()
       else if (event.key === Qt.Key_Tab) board.ctl.selectNext(1)
@@ -280,6 +303,54 @@ FocusScope {
         run()
       }
       event.accepted = true
+    }
+  }
+
+  BoardToolbar {
+    id: toolbar
+    objectName: "board-toolbar"
+    ctl: board.ctl
+    anchors { top: parent.top; left: parent.left; right: parent.right; margins: board.ctl.sp(16) }
+    height: implicitHeight
+    visible: !board.ctl.browserVisible && !board.ctl.helpVisible
+  }
+
+  Column {
+    width: parent.width - board.ctl.sp(64)
+    anchors.horizontalCenter: parent.horizontalCenter
+    y: toolbar.y + toolbar.height + Math.max(24, (board.height-toolbar.height-height)/2 - 32)
+    spacing: board.ctl.sp(12)
+    visible: board.ctl.boardLoaded && board.ctl.items.count === 0 && !board.ctl.browserVisible && !board.ctl.helpVisible
+    Text {
+      anchors.horizontalCenter: parent.horizontalCenter
+      text: "Start with a thought."
+      color: board.ctl.foreground
+      font.family: board.ctl.fontFamily
+      font.pixelSize: board.ctl.fontHeading
+    }
+    Text {
+      anchors.horizontalCenter: parent.horizontalCenter
+      text: "n  Write a note    Ctrl+V  Paste text"
+      width: parent.width
+      wrapMode: Text.Wrap
+      horizontalAlignment: Text.AlignHCenter
+      color: board.ctl.foreground
+      font.family: board.ctl.fontFamily
+      font.pixelSize: board.ctl.fontBody
+    }
+  }
+
+  Rectangle {
+    anchors { left: parent.left; right: parent.right; top: toolbar.bottom; topMargin: board.ctl.sp(8); margins: board.ctl.sp(16) }
+    height: board.ctl.sp(36)
+    visible: board.ctl.showPinned
+    color: board.ctl.accent
+    Text {
+      anchors.centerIn: parent
+      text: "BACKGROUNDS  ·  Tab to select  ·  p to unpin  ·  Esc to return"
+      color: board.ctl.canvasBackground
+      font.family: board.ctl.fontFamily
+      font.pixelSize: board.ctl.fontBody
     }
   }
 
@@ -311,7 +382,7 @@ FocusScope {
     anchors.bottom: parent.bottom
     anchors.bottomMargin: board.ctl.sp(16)
     color: board.ctl.foreground
-    opacity: 0.55
+    opacity: 0.85
     font.family: board.ctl.fontFamily
     font.pixelSize: board.ctl.fontBody
     visible: !board.ctl.helpVisible && !board.ctl.browserVisible
@@ -329,6 +400,6 @@ FocusScope {
       ? "esc: done typing"
       : board.ctl.linkingFrom >= 0
         ? "pick the other end, then x to connect  ·  esc: cancel"
-        : board.ctl.boardTitle + "  ·  n: note  ·  r/e: shapes  ·  x: connect  ·  u: undo  ·  b: boards  ·  ?: all keys  ·  esc: close"
+        : "n: note  ·  r/e: shapes  ·  x: connect  ·  ?: keys  ·  esc: close"
   }
 }
