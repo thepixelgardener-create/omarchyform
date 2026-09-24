@@ -6,7 +6,6 @@ import Quickshell.Hyprland
 import Quickshell.Wayland
 import QtQuick
 import qs.Commons
-import qs.Ui
 import "BoardStore.js" as Store
 
 // Controller and plugin entry point. Owns the state, the file, and the two
@@ -109,6 +108,7 @@ Item {
   readonly property bool boardLoaded: session.boardLoaded
   readonly property bool damaged: session.damaged
   readonly property string saveError: session.saveError
+  readonly property bool saving: session.busy
   readonly property var pendingBoard: session.pendingBoard
   readonly property bool canEdit: session.canEdit
   property bool stateReady: false
@@ -246,6 +246,7 @@ Item {
     if (root.selectedIndex >= itemModel.count) root.selectedIndex = itemModel.count - 1
     root.save(true)
     root.repaintLinks()
+    if (!root.browserVisible) root.focusKeys()
   }
 
   function recolorItem() {
@@ -679,15 +680,27 @@ Item {
     })
   }
 
-  function close() { root.opened = false }
-
-  function dismiss() {
-    root.save()
+  // The host calls close() for IPC hide/toggle; Escape and window close use
+  // the same cleanup before notifying the scoped shell facade.
+  function close() {
+    root.flushSave()
     root.opened = false
     root.selectedIndex = -1
     root.editIndex = -1
     root.linkingFrom = -1
     root.helpVisible = false
+    root.browserVisible = false
+    root.browserPrompt = ""
+    root.browserInput = ""
+    root.browserAction = ""
+    root.browserQuery = ""
+    root.browserSearching = false
+    root.browserMessage = ""
+    root.pendingDelete = ""
+  }
+
+  function dismiss() {
+    root.close()
     if (root.shell && typeof root.shell.hide === "function")
       root.shell.hide((root.manifest && root.manifest.id) || "thepixelgardener.omarchyform")
   }

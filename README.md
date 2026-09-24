@@ -11,8 +11,9 @@ theme, and nothing leaves the machine.
 ## What it is
 
 A native Quickshell plugin. It runs inside the long-running `omarchy-shell`
-process — no webview, no Electron, no second Quickshell instance, nothing
-running when the board is closed.
+process — no webview, no Electron, and no separate application service.
+The controller stays loaded between opens; canvas surfaces exist only while
+open, and pending saves can finish after closing.
 
 It has two surfaces, and `w` switches between them:
 
@@ -166,6 +167,7 @@ luminance.
 | `Board.qml` | The canvas surface — grid, connectors, keys, cheat sheet |
 | `Node.qml` | One item: note, box, ellipse or diamond |
 | `Browser.qml` | The board browser |
+| `Help.qml` | Scrollable keyboard help |
 | `BoardStore.js` | Pure logic: parsing, marshalling, geometry. No QML |
 | `BoardSession.qml` | Loading, autosave state, and board-switch coordination |
 | `BoardPersistence.qml` | Serialized backup and atomic write, with completion/failure signals |
@@ -179,6 +181,8 @@ the suite loads the very file the plugin loads — there is no copy to drift.
 npm test        # pure logic and controller regression tests, no dependencies
 npm run mutate  # mutation testing
 npm run test:qml # headless persistence tests; requires installed Quickshell
+npm run test:ui  # Qt Quick pointer, theme, and layout tests
+npm run test:omarchy -- --keep # live desktop smoke test, isolated board data
 ```
 
 `npm run mutate` breaks `BoardStore.js` on purpose, one edit at a time, and
@@ -191,12 +195,17 @@ The separate `test:qml` suite runs the real persistence and session components
 in isolated headless Quickshell instances with temporary files. It checks backup
 contents, write ordering, failure handling, retry, queued edits, and switching
 between fresh, saved, and damaged boards. It does not interact with the running
-desktop shell. CI runs the Node tests; run `test:qml` on a machine with
-Quickshell before release.
+desktop shell. CI runs the Node and Qt Quick tests. Run `test:qml` and
+`test:omarchy` on an Omarchy machine before release. The live test opens test
+surfaces and targets keyboard events at its own process; it preserves your
+installed plugin, boards, and theme.
+
+See [the compatibility review](docs/omarchy-compatibility.md) for the tested
+versions, first-party references, results, and remaining limits.
 
 ## Notes on the platform
 
-Omarchy is pre-release and the shell's `qs.Commons` / `qs.Ui` singletons are
+Omarchy is pre-release and the shell's `qs.Commons` singletons are
 internals, not a versioned API. Every read of them here goes through a guard
 with a hardcoded fallback, so a rename upstream costs a wrong colour rather
 than a board that will not open. An import disappearing entirely is still
@@ -208,8 +217,8 @@ Assigning `screen` to a window that already exists leaves it unmapped.
 
 ## Dependencies
 
-None beyond Omarchy itself. No network access, no external services, no
-elevated privileges, no background process.
+None beyond Omarchy itself. No network access, no external services, and no
+elevated privileges. Saving uses short-lived local filesystem commands.
 
 ## Development
 
@@ -224,15 +233,23 @@ Validate before publishing:
 
 ```bash
 omarchy plugin validate .
-/usr/lib/qt6/bin/qmllint -I "$OMARCHY_PATH/shell" Omarchyform.qml
+qml_imports=$(mktemp -d)
+ln -s "$OMARCHY_PATH/shell" "$qml_imports/qs"
+/usr/lib/qt6/bin/qmllint -I "$qml_imports" Omarchyform.qml Board.qml Browser.qml Node.qml Help.qml BoardSession.qml BoardPersistence.qml
+rm -rf "$qml_imports"
 ```
 
-`qmllint` reports `qs.Commons` / `qs.Ui` import failures and
-`PanelWindow is not creatable` — both are expected, since it cannot resolve
-the shell's own modules outside the running shell.
+The temporary import tree resolves Omarchy's `qs.Commons` namespace. The
+installed QML metadata still produces warnings about `PanelWindow`,
+`QProcess::ExitStatus`, and the dynamic Style font object. The live test checks
+that those types and properties work in the actual runtime.
 
-Note that `keepLoaded: true` means a saved edit does not replace an overlay
-that is already loaded. Use `omarchy restart shell` to pick up changes.
+`keepLoaded: true` keeps this overlay mounted between summons. On the tested
+Omarchy version, `omarchy-shell shell rescanPlugins` unloads and recreates
+panels and overlays, including kept overlays. The special reload retention for
+kept services does not apply here. Save with `ctrl+s` and wait for the saving
+indicator to clear before rescan or shell restart; forced unload can interrupt
+an asynchronous save.
 
 ## Not there yet
 

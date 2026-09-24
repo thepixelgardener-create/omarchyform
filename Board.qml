@@ -16,6 +16,12 @@ FocusScope {
   function repaintLinks() { linkCanvas.requestPaint() }
   function focusKeys() { keys.forceActiveFocus() }
 
+  Connections {
+    target: board.ctl
+    function onDotColorChanged() { board.repaintGrid() }
+    function onForegroundChanged() { board.repaintLinks() }
+  }
+
   // A real window hands focus to its content item, not to whatever is nested
   // inside it, so claim it explicitly on both surfaces.
   Component.onCompleted: {
@@ -189,6 +195,15 @@ FocusScope {
     }
 
     Keys.onPressed: function (event) {
+      if (board.ctl.helpVisible) {
+        if (event.key === Qt.Key_Escape || event.key === Qt.Key_F1 || event.text === "?") board.ctl.helpVisible = false
+        else if (event.key === Qt.Key_Down || event.text === "j") help.scroll(board.ctl.fontBody * 2)
+        else if (event.key === Qt.Key_Up || event.text === "k") help.scroll(-board.ctl.fontBody * 2)
+        else if (event.key === Qt.Key_PageDown) help.scroll(help.height * 0.8)
+        else if (event.key === Qt.Key_PageUp) help.scroll(-help.height * 0.8)
+        event.accepted = true
+        return
+      }
       var ctrl = (event.modifiers & Qt.ControlModifier) !== 0
       var shift = (event.modifiers & Qt.ShiftModifier) !== 0
 
@@ -231,58 +246,25 @@ FocusScope {
     ctl: board.ctl
   }
 
-  // Keybinding cheat sheet, on ? or F1.
-  Rectangle {
-    anchors.centerIn: parent
+  // Help consumes input so browsing shortcuts cannot edit the board behind it.
+  MouseArea {
+    anchors.fill: parent
     visible: board.ctl.helpVisible
-    width: helpColumn.width + board.ctl.sp(56)
-    height: helpColumn.height + board.ctl.sp(48)
-    color: board.ctl.canvasBackground
-    border.width: board.ctl.borderWidth
-    border.color: Qt.rgba(board.ctl.foreground.r, board.ctl.foreground.g, board.ctl.foreground.b, 0.35)
-    radius: board.ctl.cornerRadius
-
-    Column {
-      id: helpColumn
-      anchors.centerIn: parent
-      spacing: board.ctl.sp(6)
-
-      Text {
-        text: "Omarchyform"
-        color: board.ctl.foreground
-        font.family: board.ctl.fontFamily
-        font.pixelSize: board.ctl.fontHeading
-        bottomPadding: board.ctl.sp(8)
-      }
-
-      Repeater {
-        model: Store.KEY_HELP
-
-        Row {
-          required property var modelData
-          spacing: board.ctl.sp(16)
-
-          Text {
-            width: board.ctl.sp(96)
-            text: parent.modelData[0]
-            color: board.ctl.foreground
-            font.family: board.ctl.fontFamily
-            font.pixelSize: board.ctl.fontBody
-          }
-          Text {
-            text: parent.modelData[1]
-            color: board.ctl.foreground
-            opacity: 0.7
-            font.family: board.ctl.fontFamily
-            font.pixelSize: board.ctl.fontBody
-          }
-        }
-      }
-    }
+    onClicked: board.ctl.helpVisible = false
+  }
+  Help {
+    id: help
+    anchors.centerIn: parent
+    ctl: board.ctl
   }
 
   Text {
-    anchors.horizontalCenter: parent.horizontalCenter
+    anchors.left: parent.left
+    anchors.right: parent.right
+    anchors.leftMargin: board.ctl.sp(16)
+    anchors.rightMargin: board.ctl.sp(16)
+    horizontalAlignment: Text.AlignHCenter
+    wrapMode: Text.Wrap
     anchors.bottom: parent.bottom
     anchors.bottomMargin: board.ctl.sp(16)
     color: board.ctl.foreground
@@ -292,6 +274,7 @@ FocusScope {
     visible: !board.ctl.helpVisible && !board.ctl.browserVisible
     text: board.ctl.saveError !== "" ? board.ctl.saveError
       : board.ctl.pendingBoard !== null ? "saving before switching boards…"
+      : board.ctl.saving ? "saving…"
       : board.ctl.damaged
       ? board.ctl.boardTitle + " could not be read — not saving over it"
       : board.ctl.editIndex >= 0
