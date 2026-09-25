@@ -8,6 +8,10 @@ Terminal=false
 Categories=Utility;
 Keywords=board;notes;ideas;canvas;
 Actions=NewBoard;
+# This installer only ever replaces or removes an entry carrying these two
+# keys, so a file someone else put at this path is left alone.
+X-Omarchyform-Managed=true
+X-Omarchyform-Entry-Version=1
 
 [Desktop Action NewBoard]
 Name=New board
