@@ -313,6 +313,7 @@ The pure logic lives in plain JavaScript so it can be tested without Qt, and
 the suite loads the very file the plugin loads — there is no copy to drift.
 
 ```bash
+./tests/run     # everything available on this machine, skipping what is not installed
 npm test        # pure logic and controller regression tests, no dependencies
 npm run mutate  # mutation testing
 npm run bench   # board marshalling cost at size

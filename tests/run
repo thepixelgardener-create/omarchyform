@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# One command for a reviewer who does not know this stack: everything that can
+# run anywhere, then the desktop suites when their runners are installed.
+set -euo pipefail
+root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+cd -- "$root"
+
+# Node only: no dependencies, no compositor, no Qt.
+npm test
+
+# The scripts are run by the plugin, so a syntax error in one is a defect the
+# JavaScript suites cannot see.
+bash -n BoardFiles.sh desktop/install.sh tests/run
+
+# Qt and Quickshell are present on an Omarchy machine and absent in a plain
+# container. Say which was skipped rather than passing quietly.
+runner=${QMLTESTRUNNER:-/usr/lib/qt6/bin/qmltestrunner}
+if [[ -x $runner ]]; then npm run test:ui
+else printf 'skipped: pointer and theme tests need %s\n' "$runner"
+fi
+
+if command -v qs >/dev/null 2>&1; then npm run test:qml
+else printf 'skipped: persistence tests need quickshell (qs)\n'
+fi
+
+printf 'All available checks passed.\n'
