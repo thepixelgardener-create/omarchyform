@@ -590,6 +590,91 @@ function tests(S) {
     eq(S.readFile(JSON.stringify({ version: 6, items: [] })), null, "and one from the future does not")
   })
 
+  test("aligning puts every marked item on the same edge", () => {
+    // A spans 0..100 across and 0..50 down; B spans 40..80 and 200..280.
+    const m = new FakeModel([
+      item({ iid: 1, ix: 0, iy: 0, iw: 100, ih: 50 }),
+      item({ iid: 2, ix: 40, iy: 200, iw: 40, ih: 80 })
+    ])
+    const after = (edge, axis) => {
+      const moves = S.alignMoves(m, [0, 1], edge)
+      return [0, 1].map(i => {
+        const move = moves.find(mv => mv.index === i)
+        return move ? move[axis] : m.get(i)[axis === "x" ? "ix" : "iy"]
+      })
+    }
+    eq(S.alignMoves(m, [0, 1], "left").length, 1, "only what moves comes back")
+    eq(after("left", "x")[1], 0, "the leftmost edge is the one they meet on")
+    eq(after("right", "x")[1], 60, "and the rightmost for the other side")
+    eq(after("right", "x")[0], 0, "which leaves the widest one alone")
+    // Centres, not edges: a narrow item beside a wide one lands on its middle.
+    const centres = after("centreX", "x")
+    eq(centres[0] + 100 / 2, centres[1] + 40 / 2, "both centres on one line")
+    eq(after("top", "y")[1], 0, "top leaves the topmost alone")
+    eq(after("bottom", "y")[0], 280 - 50, "bottom brings the shallow one down")
+    eq(S.alignMoves(m, [0], "left").length, 0, "one item is already aligned with itself")
+    eq(S.alignMoves(m, [0, 1], "sideways").length, 0, "an edge that does not exist does nothing")
+  })
+
+  test("aligning reports nothing to do when there is nothing to do", () => {
+    const m = new FakeModel([
+      item({ iid: 1, ix: 10, iy: 0, iw: 100, ih: 50 }),
+      item({ iid: 2, ix: 10, iy: 90, iw: 100, ih: 50 })
+    ])
+    eq(S.alignMoves(m, [0, 1], "left").length, 0)
+    eq(S.alignMoves(m, [0, 1], "right").length, 0, "same width, same left: same right")
+  })
+
+  test("spreading leaves the outermost two where they are", () => {
+    const m = new FakeModel([
+      item({ iid: 1, ix: 0, iy: 0, iw: 100, ih: 10 }),
+      item({ iid: 2, ix: 110, iy: 0, iw: 100, ih: 10 }),
+      item({ iid: 3, ix: 500, iy: 0, iw: 100, ih: 10 })
+    ])
+    const moves = S.spreadMoves(m, [0, 1, 2], "x")
+    // Span 0..600, 300 of it taken by items, so 300 across two gaps.
+    eq(moves.length, 1, "only the middle one needed moving")
+    eq(moves[0].index, 1)
+    eq(moves[0].x, 250, "equal gaps, not equal centres")
+    eq(moves[0].y, 0, "the other axis is left alone")
+  })
+
+  test("spreading is even with mixed sizes", () => {
+    const m = new FakeModel([
+      item({ iid: 1, ix: 0, iy: 0, iw: 50, ih: 10 }),
+      item({ iid: 2, ix: 60, iy: 0, iw: 200, ih: 10 }),
+      item({ iid: 3, ix: 70, iy: 0, iw: 50, ih: 10 }),
+      item({ iid: 4, ix: 400, iy: 0, iw: 50, ih: 10 })
+    ])
+    const moves = S.spreadMoves(m, [0, 1, 2, 3], "x")
+    const at = i => (moves.find(mv => mv.index === i) || { x: m.get(i).ix }).x
+    // Sorted by position, the gaps between consecutive items must match.
+    const gaps = [at(1) - (at(0) + 50), at(2) - (at(1) + 200), at(3) - (at(2) + 50)]
+    ok(Math.abs(gaps[0] - gaps[1]) < 1e-9 && Math.abs(gaps[1] - gaps[2]) < 1e-9, "gaps " + gaps)
+  })
+
+  test("spreading refuses what it cannot spread", () => {
+    const m = new FakeModel([
+      item({ iid: 1, ix: 0, iy: 0, iw: 100, ih: 10 }),
+      item({ iid: 2, ix: 200, iy: 0, iw: 100, ih: 10 })
+    ])
+    eq(S.spreadMoves(m, [0, 1], "x").length, 0, "two items have no middle to move")
+    eq(S.spreadMoves(m, [0, 1], "sideways").length, 0, "and no third axis either")
+  })
+
+  test("items wider than their span are butted together rather than pulled in", () => {
+    const m = new FakeModel([
+      item({ iid: 1, ix: 0, iy: 0, iw: 100, ih: 10 }),
+      item({ iid: 2, ix: 10, iy: 0, iw: 100, ih: 10 }),
+      item({ iid: 3, ix: 20, iy: 0, iw: 100, ih: 10 })
+    ])
+    const moves = S.spreadMoves(m, [0, 1, 2], "x")
+    const at = i => (moves.find(mv => mv.index === i) || { x: m.get(i).ix }).x
+    eq(at(0), 0, "the first one does not move")
+    eq(at(1), 100, "the rest sit edge to edge")
+    eq(at(2), 200)
+  })
+
   test("the marquee catches what it touches, not only what it swallows", () => {
     const m = new FakeModel([
       item({ iid: 1, ix: 0, iy: 0, iw: 100, ih: 100 }),

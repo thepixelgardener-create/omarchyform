@@ -59,6 +59,9 @@ var KEY_HELP = [
   ["a", "mark everything"],
   ["d", "delete what is marked, or the one under the cursor"],
   ["ctrl+d", "duplicate it, connectors between the copies included"],
+  ["g then h j k l", "align the marked items on that edge"],
+  ["g then c / m", "align their centres on one line"],
+  ["g then H J K L", "spread them evenly, outermost two staying put"],
   ["c", "change its colour"],
   ["w", "fullscreen or windowed"],
   ["f", "fit the whole board on screen"],
@@ -453,6 +456,78 @@ function bounds(items) {
     b.maxY = Math.max(b.maxY, n.iy + n.ih)
   }
   return b
+}
+
+// ------------------------------------------------------------------ arranging
+// Edges a selection can be aligned on. centreX puts every centre on one
+// vertical line, centreY on one horizontal line.
+var ALIGN_EDGES = ["left", "right", "top", "bottom", "centreX", "centreY"]
+
+function boundsOf(items, indices) {
+  if (!indices || indices.length === 0) return null
+  var b = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity }
+  for (var i = 0; i < indices.length; i++) {
+    var n = items.get(indices[i])
+    b.minX = Math.min(b.minX, n.ix)
+    b.minY = Math.min(b.minY, n.iy)
+    b.maxX = Math.max(b.maxX, n.ix + n.iw)
+    b.maxY = Math.max(b.maxY, n.iy + n.ih)
+  }
+  return b
+}
+
+// Both of these return only the items that actually move, so the caller can
+// tell "already arranged" from "nothing to arrange" and does not write a
+// property to the value it already holds.
+function alignMoves(items, indices, edge) {
+  if (!indices || indices.length < 2 || ALIGN_EDGES.indexOf(edge) < 0) return []
+  var b = boundsOf(items, indices)
+  var moves = []
+  for (var i = 0; i < indices.length; i++) {
+    var n = items.get(indices[i])
+    var x = n.ix, y = n.iy
+    if (edge === "left") x = b.minX
+    else if (edge === "right") x = b.maxX - n.iw
+    else if (edge === "centreX") x = (b.minX + b.maxX) / 2 - n.iw / 2
+    else if (edge === "top") y = b.minY
+    else if (edge === "bottom") y = b.maxY - n.ih
+    else y = (b.minY + b.maxY) / 2 - n.ih / 2
+    if (x !== n.ix || y !== n.iy) moves.push({ index: indices[i], x: x, y: y })
+  }
+  return moves
+}
+
+// Equal gaps rather than equal centre spacing: a wide note beside two narrow
+// ones looks evenly placed only when the space between them is what is even.
+// The outermost two keep their positions, so the selection does not drift.
+function spreadMoves(items, indices, axis) {
+  if (!indices || indices.length < 3 || (axis !== "x" && axis !== "y")) return []
+  var start = axis === "x" ? "ix" : "iy"
+  var size = axis === "x" ? "iw" : "ih"
+  var order = indices.slice().sort(function (a, b) {
+    return items.get(a)[start] - items.get(b)[start]
+  })
+  var first = items.get(order[0])
+  var last = items.get(order[order.length - 1])
+  var span = (last[start] + last[size]) - first[start]
+  var total = 0
+  for (var i = 0; i < order.length; i++) total += items.get(order[i])[size]
+  // Items that together take more room than they sit in cannot have gaps; butt
+  // them up rather than dragging the outer two inwards.
+  var gap = Math.max(0, (span - total) / (order.length - 1))
+  var moves = []
+  var at = first[start]
+  for (var j = 0; j < order.length; j++) {
+    var n = items.get(order[j])
+    if (at !== n[start])
+      moves.push({
+        index: order[j],
+        x: axis === "x" ? at : n.ix,
+        y: axis === "y" ? at : n.iy
+      })
+    at = at + n[size] + gap
+  }
+  return moves
 }
 
 // Items a marquee touches, in model order. Touching rather than enclosing: at
