@@ -19,6 +19,10 @@ const run = (...args) => spawnSync('bash', [script, ...args],
   { encoding: 'utf8', env: { ...process.env, XDG_DATA_HOME: dir } })
 
 try {
+  // The README tells people to run `./desktop/install.sh`, which only works if
+  // the bit survives a clone. It did not, and every user hit permission denied.
+  assert.ok(fs.statSync(script).mode & 0o111, 'the installer ships executable')
+
   // Fresh install.
   assert.equal(run().status, 0)
   assert.equal(fs.readFileSync(target, 'utf8'), shipped, 'the shipped entry lands verbatim')

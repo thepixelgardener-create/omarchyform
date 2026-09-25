@@ -11,6 +11,12 @@ since older boards are migrated on load rather than rejected.
   `~/.cache/omarchyform/shots/`. It asserts nothing and is not part of
   `tests/run`; it is for the questions only eyes answer.
 
+### Fixed
+
+- `desktop/install.sh` was committed without its executable bit, so the
+  `./desktop/install.sh` the README gives you failed with permission denied on
+  every clone. The bit is committed now, and a test asserts it survives.
+
 ### Changed
 
 - **The header is one line.** The board's name and save state sit on the left,
