@@ -71,6 +71,26 @@ end
 Use the loader or your own `o.bind`, not both: the same key declared twice is
 declared twice.
 
+## Updating it
+
+```bash
+omarchy plugin update thepixelgardener.omarchyform
+```
+
+That reloads the plugin itself, so there is no rescan to run afterwards. Close
+the board first, or save with `ctrl+s` and wait for the saving indicator to
+clear: a reload unloads the overlay, and a forced unload can interrupt a save
+that is still in flight.
+
+Your boards, backups, trash and pasted pictures are untouched by an update:
+they live outside the plugin directory, in `~/.local/share/omarchyform/`. A
+board written by a newer version than the one you are running opens read-only
+rather than losing what it does not understand, so downgrading is safe too.
+
+If you installed the desktop entry, re-run `./desktop/install.sh` after an
+update to pick up any change to it. It replaces only an entry it installed
+itself and leaves your edits alone; see below.
+
 ## Removing it
 
 ```bash
@@ -82,8 +102,15 @@ That takes the bar icon with it. To put it away without uninstalling, use
 restores the icon where it was.
 
 Then delete the binding from `~/.config/hypr/bindings.lua` if you added one,
-and `~/.local/share/applications/omarchyform.desktop` if you installed the
-desktop entry.
+and remove the desktop entry if you installed it:
+
+```bash
+./desktop/install.sh --uninstall
+```
+
+That removes the launcher entry only if this installer is the thing that wrote
+it and you have not edited it since; otherwise it says what it found and leaves
+the file alone.
 
 Your boards are left alone. They live in
 `~/.local/share/omarchyform/`, and removing the plugin does not touch them, so
@@ -202,6 +229,13 @@ launcher, with a *New board* action for the same instant capture:
 ```bash
 ./desktop/install.sh
 ```
+
+It writes one file, `~/.local/share/applications/omarchyform.desktop`, and
+refuses rather than overwriting anything it did not put there: a launcher entry
+someone else owns at that path, or its own entry that you have since edited.
+Both cases print what was found and exit non-zero; `--force` replaces the file
+once you have decided that is what you want. `--uninstall` removes it under the
+same rule. Nothing else on your system is touched, and it never needs `sudo`.
 
 ## Saving
 
@@ -379,8 +413,18 @@ Assigning `screen` to a window that already exists leaves it unmapped.
 
 ## Dependencies
 
-None beyond Omarchy itself. No network access, no external services, and no
-elevated privileges. Saving uses short-lived local filesystem commands.
+One external program: **wl-clipboard**, for `wl-paste`. `ctrl+v` needs it and
+says so if it is missing; nothing else does, so a board without it still opens,
+edits, saves, imports, exports and renders a PNG. Omarchy ships it, so on a
+stock install there is nothing to do.
+
+Everything else is already in the shell: Qt 6 Quick, and the Quickshell process
+and file primitives. No network access, no external services, and no elevated
+privileges — saving uses short-lived local filesystem commands, and the plugin
+never calls `sudo`, `pkexec`, or a package manager.
+
+Licences: this plugin is MIT (see `LICENSE`). `wl-clipboard` is GPL-2.0-or-later
+and is invoked as a separate process, not linked or redistributed here.
 
 ## Development
 
@@ -418,6 +462,33 @@ an asynchronous save.
 Freehand drawing is outside the current scope. Pictures arrive by paste;
 there is no drag-and-drop from a file manager yet.
 
+## Tested against
+
+| | |
+|---|---|
+| Omarchy | `4.0.0.r2158.gd174d4a-1`, Quattro shell |
+| Qt | 6.11.2 |
+| Display | single 1x monitor, Wayland under Hyprland |
+| Clipboard | `wl-clipboard` 1:2.3.0 |
+
+That is the one configuration the automated and live checks have actually run
+on. Omarchy 4's plugin contract is still moving, so this claims nothing about
+other versions in either direction — it may well work on yours, but nobody has
+checked.
+
+Not tested: multiple monitors, fractional or mixed scaling, and any compositor
+other than Hyprland. Portrait and small-window layout is covered by the Qt
+layout suite rather than by hand on hardware. If you run one of those, the thing
+most likely to be wrong is where the overlay places itself.
+
+## Support
+
+Bugs and questions belong in
+[GitHub issues](https://github.com/thepixelgardener-create/omarchyform/issues).
+Security reports go through the private route in [SECURITY.md](SECURITY.md)
+instead.
+
 ## License
 
-MIT
+MIT. `wl-clipboard`, the one external program this calls, is
+GPL-2.0-or-later and is not redistributed here.

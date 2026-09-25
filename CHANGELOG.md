@@ -5,6 +5,23 @@ since older boards are migrated on load rather than rejected.
 
 ## 0.3.0
 
+### Fixed
+
+- **The board opens again.** The marquee rectangle declared `left` and `top`,
+  which are final on `Item`, so the shell refused `Board.qml` outright and the
+  board did not open on a real desktop. `tests/run` and CI now fail on any
+  member that shadows a final one.
+
+### Changed
+
+- **The desktop entry installer owns only what it wrote.** It refuses to replace
+  a launcher entry someone else put at that path, or its own entry that you have
+  edited since, and says what it found; `--force` replaces it once you have
+  decided. `--uninstall` removes it under the same rule. Previously it
+  overwrote whatever was there and left the file behind on removal.
+- The README documents the one external dependency, `wl-clipboard`, which
+  `ctrl+v` has always needed. It previously claimed none.
+
 ### Added
 
 - **Pictures on the board.** `ctrl+v` now asks the clipboard for an image
