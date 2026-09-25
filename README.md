@@ -82,6 +82,10 @@ the board first, or save with `ctrl+s` and wait for the saving indicator to
 clear: a reload unloads the overlay, and a forced unload can interrupt a save
 that is still in flight.
 
+If the board will not open after an update — the bar icon clicks and nothing
+appears — run `omarchy restart shell`. A reload cannot replace a version the
+shell previously failed to compile; see [Development](#development).
+
 Your boards, backups, trash and pasted pictures are untouched by an update:
 they live outside the plugin directory, in `~/.local/share/omarchyform/`. A
 board written by a newer version than the one you are running opens read-only
@@ -491,6 +495,32 @@ panels and overlays, including kept overlays. The special reload retention for
 kept services does not apply here. Save with `ctrl+s` and wait for the saving
 indicator to clear before rescan or shell restart; forced unload can interrupt
 an asynchronous save.
+
+**A rescan does not recover a plugin whose QML failed to compile.** Once the
+shell has failed to build a type, that failure outlives `rescanPlugins`:
+reinstalling the plugin and rescanning twice leaves the overlay uncreated, and
+the bar icon does nothing when clicked because there is nothing to toggle. Only
+a full restart clears it:
+
+```bash
+omarchy restart shell
+```
+
+Observed on Omarchy `4.0.0.r2158.gd174d4a-1` after a `Cannot override FINAL
+property` error, which made `Board.qml` — and so the whole overlay —
+unavailable. Two symptoms tell this apart from a plugin that is merely closed:
+`omarchy plugin list` reports it `enabled` while the shell never instantiates
+it, and `~/.local/share/omarchyform/images/` is missing, because the directories
+are created the moment the plugin's root loads. The error itself is in the
+shell's log, under `/run/user/$UID/quickshell/by-id/*/log.qslog`.
+
+So: after changing QML, watch that log rather than trusting a silent rescan.
+Two checks catch this class of error before the shell ever sees it —
+`./tests/run` fails on any member that shadows a final one, and
+`npm run test:omarchy -- --live` loads the whole plugin the way the shell does.
+The unit suites do not: `npm run test:ui` mounts `Node.qml` rather than the
+surfaces, and the JavaScript suites never load QML at all, which is exactly why
+this reached a desktop in the first place.
 
 ## Not there yet
 

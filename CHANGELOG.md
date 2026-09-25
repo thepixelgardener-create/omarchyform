@@ -13,6 +13,11 @@ since older boards are migrated on load rather than rejected.
 
 ### Changed
 
+- The README said a rescan recreates overlays, which holds for a working plugin
+  but not for one the shell has already failed to compile: that failure outlives
+  `rescanPlugins` and a reinstall, and only `omarchy restart shell` clears it.
+  Documented with the two symptoms that identify it and where the shell logs the
+  original error.
 - **Selection no longer borrows the item's colour.** A tinted item sitting idle
   could look more selected than the cursor did, because selection worked by
   brightening and thickening the item's own border — which an accent tint
