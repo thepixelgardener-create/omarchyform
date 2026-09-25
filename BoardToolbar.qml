@@ -49,10 +49,15 @@ Rectangle {
         font.pixelSize: toolbar.ctl.fontSubtitle
         MouseArea { anchors.fill: parent; onClicked: toolbar.ctl.renameBoard() }
       }
+      // Secondary text is the foreground held back, not the theme's muted token.
+      // A theme is free to set muted almost to its own background — azure-glow
+      // does, at 1.28:1 — and then a plugin using it for text writes in
+      // invisible ink. Held back like this it is 4.9:1 at worst.
       Text {
         id: separator
         text: "·"
-        color: toolbar.ctl.muted
+        opacity: 0.85
+        color: toolbar.ctl.foreground
         font.family: toolbar.ctl.fontFamily
         font.pixelSize: toolbar.ctl.fontBody
         anchors.verticalCenter: title.verticalCenter
@@ -60,7 +65,8 @@ Rectangle {
       Text {
         id: state
         text: toolbar.ctl.boardState
-        color: toolbar.ctl.saveError !== "" ? toolbar.ctl.urgent : toolbar.ctl.muted
+        opacity: toolbar.ctl.saveError !== "" ? 1 : 0.85
+        color: toolbar.ctl.saveError !== "" ? toolbar.ctl.urgent : toolbar.ctl.foreground
         font.family: toolbar.ctl.fontFamily
         font.pixelSize: toolbar.ctl.fontBody
         anchors.verticalCenter: title.verticalCenter
@@ -77,7 +83,8 @@ Rectangle {
       anchors.leftMargin: content.gap
       anchors.verticalCenter: parent.verticalCenter
       text: "menu · m"
-      color: toolbar.ctl.muted
+      opacity: 0.85
+      color: toolbar.ctl.foreground
       font.family: toolbar.ctl.fontFamily
       font.pixelSize: toolbar.ctl.fontBody
       MouseArea { anchors.fill: parent; onClicked: toolbar.ctl.toggleMenu() }

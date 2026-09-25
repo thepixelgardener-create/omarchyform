@@ -117,7 +117,10 @@ Item {
     wrapMode: Text.Wrap
     elide: Text.ElideMiddle
     maximumLineCount: 3
-    color: node.ctl.muted
+    // Same reason as the header: a theme's muted can sit on top of its own
+    // background, and "missing image" is the one line that has to be readable.
+    opacity: 0.85
+    color: node.ctl.foreground
     font.family: node.ctl.fontFamily
     font.pixelSize: node.ctl.fontBody
   }

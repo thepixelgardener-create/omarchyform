@@ -24,6 +24,12 @@ since older boards are migrated on load rather than rejected.
   pointer's hover does, so both read the same. The dispatch moved to the
   controller, so a click and an `enter` cannot diverge, and the command list is
   one definition shared with the header.
+- **Secondary text is readable whatever the theme.** The save state, the
+  separators, the `menu · m` label and a missing image's name used the theme's
+  `muted` token, which a theme is free to set almost to its own background —
+  azure-glow does, giving 1.28:1, near enough invisible. They are the foreground
+  held back to 0.85 now: 9.9:1 on that theme and 4.9:1 on the lightest one
+  tested, both past the 4.5:1 the guidelines ask for body text.
 - **All the chrome is at the top.** The status and hint line moved from the
   bottom edge to directly under the header, so the board's name, its commands
   and whatever it is telling you are one block to look at, and the bottom of the
