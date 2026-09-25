@@ -345,3 +345,64 @@ console.log('ok — controller: marquee selection, order and cursor handover')
   assert.equal(c.items.get(0).kind, 'image', 'and the image is left out of it')
 }
 console.log('ok — controller: pasted images, sizing and the shape cycle')
+{
+  // Duplicating: what comes along, what does not, and what is selected after.
+  const c = controller()
+  c.session.loadBoard('{"version":5,"items":[]}', false)
+  c.root.addItem('note', 0, 0)
+  c.root.addItem('rect', 300, 0)
+  c.root.addItem('note', 600, 0)
+  const [a, b, outside] = [c.items.get(0).iid, c.items.get(1).iid, c.items.get(2).iid]
+  c.root.addLink(a, b)
+  c.root.addLink(b, outside)
+
+  c.root.selectedIndex = 0
+  c.root.markedIds = [a, b]
+  c.root.duplicateTargets()
+  assert.equal(c.items.count, 5, 'two copies landed')
+  const copies = [c.items.get(3), c.items.get(4)]
+  assert.deepEqual(copies.map(n => n.kind), ['note', 'rect'], 'copied in board order, not mark order')
+  assert.equal(copies[0].ix, c.items.get(0).ix + 24, 'offset from the original rather than on top of it')
+  assert.equal(copies[0].iy, c.items.get(0).iy + 24)
+  assert.equal(copies[1].iw, c.items.get(1).iw, 'size comes along')
+  assert.equal(copies[1].itint, c.items.get(1).itint, 'so does the colour')
+  assert.equal(new Set([a, b, outside, ...copies.map(n => n.iid)]).size, 5, 'every id is distinct')
+
+  assert.equal(c.links.count, 3, 'the connector between the two copies came along')
+  const added = c.links.get(2)
+  assert.deepEqual([added.lfrom, added.lto], copies.map(n => n.iid),
+    'and it joins the copies, not the originals')
+
+  assert.deepEqual(Array.from(c.root.markedIds), copies.map(n => n.iid),
+    'the copies are what the next command acts on')
+  assert.equal(c.root.selectedIndex, 4, 'with the cursor on the last of them')
+
+  // One item: no marks to inherit, just the cursor on the copy.
+  c.root.markedIds = []
+  c.root.selectedIndex = 0
+  c.root.duplicateTargets()
+  assert.equal(c.items.count, 6)
+  assert.deepEqual(Array.from(c.root.markedIds), [], 'a single copy does not leave a mark behind')
+  assert.equal(c.root.selectedIndex, 5)
+
+  // An image copy shares the file rather than duplicating it.
+  c.root.pasteImage('paste-1.png', 100, 100)
+  c.root.markedIds = []
+  c.root.duplicateTargets()
+  assert.equal(c.items.get(c.items.count - 1).isrc, 'paste-1.png')
+
+  // Undo puts the board back, including the connector.
+  const before = c.items.count
+  c.root.undo()
+  assert.equal(c.items.count, before - 1)
+
+  // A pinned item is not a target, so it is not duplicated.
+  c.root.selectedIndex = 0
+  c.root.markedIds = []
+  c.root.togglePin()
+  const pinnedCount = c.items.count
+  c.root.selectedIndex = 0
+  c.root.duplicateTargets()
+  assert.equal(c.items.count, pinnedCount, 'a background is left out of it')
+}
+console.log('ok — controller: duplicating items, their connectors and their pictures')

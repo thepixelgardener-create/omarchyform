@@ -509,6 +509,46 @@ Item {
     root.removeAt(root.targets())
   }
 
+  // A copy lands offset from its original rather than on top of it, and becomes
+  // the selection, so duplicating then pushing it somewhere is two commands
+  // instead of four.
+  function duplicateTargets() {
+    if (!root.canEdit) return
+    var t = root.targets()
+    if (t.length === 0) return
+    // targets() comes back descending; copying in board order keeps the copies
+    // stacked the way the originals were.
+    var ordered = t.slice().sort(function (a, b) { return a - b })
+    root.pushUndo()
+    var fresh = []
+    var byOriginal = ({})
+    for (var i = 0; i < ordered.length; i++) {
+      var n = itemModel.get(ordered[i])
+      var id = root.nextId
+      root.nextId += 1
+      byOriginal[n.iid] = id
+      // An image copy points at the same file: the picture is shared by every
+      // board already, and duplicating one should not duplicate megabytes.
+      itemModel.append({
+        iid: id, kind: n.kind,
+        ix: n.ix + Store.DUPLICATE_OFFSET, iy: n.iy + Store.DUPLICATE_OFFSET,
+        iw: n.iw, ih: n.ih, itint: n.itint, itext: n.itext, ipinned: false, isrc: n.isrc
+      })
+      fresh.push(id)
+    }
+    // A connector is copied only when both of its ends were: half of one would
+    // have to guess which original it still joins.
+    var rows = Store.linkRows(linkModel)
+    for (var j = 0; j < rows.length; j++)
+      if (byOriginal[rows[j].from] !== undefined && byOriginal[rows[j].to] !== undefined)
+        linkModel.append({ lfrom: byOriginal[rows[j].from], lto: byOriginal[rows[j].to] })
+    root.markedIds = fresh.length > 1 ? fresh : []
+    root.selectedIndex = itemModel.count - 1
+    root.save()
+    root.repaintLinks()
+    root.flash(fresh.length === 1 ? "Duplicated" : "Duplicated " + fresh.length + " items")
+  }
+
   // Indices must arrive descending: removing one shifts every index after it.
   function removeAt(indices) {
     if (indices.length === 0) return
