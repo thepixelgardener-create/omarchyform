@@ -8,7 +8,7 @@ zoom, driven from the keyboard, stored as a plain JSON file on your own disk.
 Capture a thought, arrange it spatially, get back to work. It follows your
 Omarchy theme and keeps your boards on your own machine.
 
-![Omarchyform](preview.gif)
+![Omarchyform](preview.png)
 
 ## What it is
 
