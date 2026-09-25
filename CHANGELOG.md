@@ -19,6 +19,13 @@ since older boards are migrated on load rather than rejected.
 
 ### Changed
 
+- **The menu can be walked from the keyboard.** `h` `l` or `tab` move along it,
+  `enter` picks, `esc` closes; the item the keyboard is on takes the accent the
+  pointer's hover does, so both read the same. The dispatch moved to the
+  controller, so a click and an `enter` cannot diverge, and the command list is
+  one definition shared with the header.
+- **The header is transparent.** The canvas runs under it; only the hairline
+  edge remains.
 - **The header is one line.** The board's name and save state sit on the left,
   the menu after them, the zoom on the right — where the name, the state and a
   row of six buttons used to take three stacked rows and most of the bar's

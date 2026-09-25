@@ -568,10 +568,32 @@ Item {
   // The commands in the menu all have keys of their own, so the menu is a
   // reminder rather than the way in, and it costs no height until asked for.
   property bool menuVisible: false
+  // Which item the keyboard is on. Opening starts at the first, so the menu can
+  // be walked without reaching for the mouse.
+  property int menuIndex: 0
 
   function toggleMenu() {
     root.menuVisible = !root.menuVisible
+    root.menuIndex = 0
     root.focusKeys()
+  }
+
+  function moveMenu(step) {
+    var n = Store.MENU_COMMANDS.length
+    root.menuIndex = ((root.menuIndex + step) % n + n) % n
+  }
+
+  // The dispatch lives here rather than in the toolbar, so a click and a
+  // keystroke take the same path and the list can be tested without a scene.
+  function runMenu(index) {
+    root.menuVisible = false
+    root.menuIndex = 0
+    if (index === 0) root.newBoard()
+    else if (index === 1) root.openBrowser()
+    else if (index === 2) root.importBoard()
+    else if (index === 3) root.exportBoard()
+    else if (index === 4) root.choosePng()
+    else if (index === 5) root.helpVisible = true
   }
 
   // Finding is navigation, not editing, so it works on a board that cannot be

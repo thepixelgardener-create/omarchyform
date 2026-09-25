@@ -151,6 +151,7 @@ Press `?` or `F1` on the board for this list.
 | `d` / `del` | Delete what is marked, or the one under the cursor |
 | `ctrl+d` | Duplicate it, and the connectors between the copies |
 | `m` | Show or hide the menu in the header |
+| `m` then `h` `l` / `tab` | Walk the menu; `enter` picks, `esc` closes |
 | `ctrl+c` | Copy it out: a picture as a picture, anything else as its text |
 | `/` | Find: type to search the notes, `enter` steps through the matches |
 | `g` then `h` `j` `k` `l` | Align the marked items on that edge |

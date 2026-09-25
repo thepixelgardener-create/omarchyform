@@ -36,6 +36,10 @@ function normalizeTint(value) {
   return TINTS[0]
 }
 
+// The header menu. One list, so the view draws what the controller dispatches
+// and a keyboard walk cannot drift out of step with what is on screen.
+var MENU_COMMANDS = ["New", "Boards", "Import", "Save copy", "Export PNG", "Help"]
+
 var KEY_HELP = [
   ["ctrl+n / F2", "new board / name the current board"],
   ["ctrl+v", "paste a picture, or clipboard text as a note"],
@@ -60,6 +64,7 @@ var KEY_HELP = [
   ["d", "delete what is marked, or the one under the cursor"],
   ["ctrl+d", "duplicate it, connectors between the copies included"],
   ["m", "show or hide the menu in the header"],
+  ["m then h l / tab", "walk the menu; enter picks, esc closes"],
   ["ctrl+c", "copy it out: a picture as a picture, anything else as its text"],
   ["/", "find: type to search the notes, enter steps through matches"],
   ["g then h j k l", "align the marked items on that edge"],

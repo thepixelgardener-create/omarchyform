@@ -51,7 +51,8 @@ ShellRoot {
     {
       // The header is one line until the menu is asked for.
       name: "02b-menu-open",
-      setup: function () { plugin.toggleMenu() }
+      // Walked two along, so the keyboard's place in it is visible.
+      setup: function () { plugin.toggleMenu(); plugin.moveMenu(2) }
     },
     {
       // The overflow marker and the resize grip both want a corner.

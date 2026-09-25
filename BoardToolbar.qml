@@ -1,4 +1,5 @@
 import QtQuick
+import "BoardStore.js" as Store
 
 // One line: the board's name, then the menu, then the zoom. Two rows of chrome
 // for one board was most of this bar's height, and the commands in the menu all
@@ -6,7 +7,9 @@ import QtQuick
 Rectangle {
   id: toolbar
   required property var ctl
-  color: ctl.canvasBackground
+  // Transparent: the canvas runs under it, and the board is the thing worth
+  // looking at. The hairline stays, so the chrome still has an edge to it.
+  color: "transparent"
   border.width: ctl.borderWidth
   border.color: Qt.rgba(ctl.foreground.r, ctl.foreground.g, ctl.foreground.b, 0.18)
   radius: ctl.cornerRadius
@@ -90,16 +93,19 @@ Rectangle {
       anchors.verticalCenter: parent.verticalCenter
       spacing: toolbar.ctl.sp(6)
       Repeater {
-        model: ["New", "Boards", "Import", "Save copy", "Export PNG", "Help"]
+        model: Store.MENU_COMMANDS
         delegate: Rectangle {
           required property string modelData
           required property int index
           width: label.implicitWidth + toolbar.ctl.sp(14)
           height: label.implicitHeight + toolbar.ctl.sp(8)
-          color: mouse.containsMouse ? Qt.rgba(toolbar.ctl.accent.r, toolbar.ctl.accent.g, toolbar.ctl.accent.b, 0.15) : "transparent"
+          // Where the keyboard is, and where the pointer is, read the same.
+          readonly property bool onIt: toolbar.ctl.menuIndex === index || mouse.containsMouse
+          color: onIt ? Qt.rgba(toolbar.ctl.accent.r, toolbar.ctl.accent.g, toolbar.ctl.accent.b, 0.15) : "transparent"
           radius: toolbar.ctl.cornerRadius
-          border.width: 1
-          border.color: Qt.rgba(toolbar.ctl.foreground.r, toolbar.ctl.foreground.g, toolbar.ctl.foreground.b, 0.20)
+          border.width: onIt ? toolbar.ctl.borderWidth * 2 : 1
+          border.color: onIt ? toolbar.ctl.accent
+            : Qt.rgba(toolbar.ctl.foreground.r, toolbar.ctl.foreground.g, toolbar.ctl.foreground.b, 0.20)
           Text {
             id: label
             anchors.centerIn: parent
@@ -112,17 +118,9 @@ Rectangle {
             id: mouse
             anchors.fill: parent
             hoverEnabled: true
-            onClicked: {
-              // Picking a command closes the menu: it was asked for to reach
-              // this, and leaving it open would cost the height again.
-              toolbar.ctl.menuVisible = false
-              if (index === 0) toolbar.ctl.newBoard()
-              else if (index === 1) toolbar.ctl.openBrowser()
-              else if (index === 2) toolbar.ctl.importBoard()
-              else if (index === 3) toolbar.ctl.exportBoard()
-              else if (index === 4) toolbar.ctl.choosePng()
-              else toolbar.ctl.helpVisible = true
-            }
+            // Picking a command closes the menu, whichever way it was picked:
+            // the controller owns both, so a click and an enter cannot diverge.
+            onClicked: toolbar.ctl.runMenu(index)
           }
         }
       }

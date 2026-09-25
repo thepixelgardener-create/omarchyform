@@ -376,6 +376,21 @@ FocusScope {
       var ctrl = (event.modifiers & Qt.ControlModifier) !== 0
       var shift = (event.modifiers & Qt.ShiftModifier) !== 0
 
+      // The menu is open: the keyboard walks it. Anything that is not one of
+      // these closes it without running its usual command, the same rule the
+      // arrange mode follows.
+      if (board.ctl.menuVisible) {
+        var md = keys.direction(event.key, event.text)
+        if (event.key === Qt.Key_Escape || event.text === "m") board.ctl.toggleMenu()
+        else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) board.ctl.runMenu(board.ctl.menuIndex)
+        else if (event.key === Qt.Key_Tab) board.ctl.moveMenu(shift ? -1 : 1)
+        else if (event.key === Qt.Key_Backtab) board.ctl.moveMenu(-1)
+        else if (md) board.ctl.moveMenu(md[0] !== 0 ? md[0] : md[1])
+        else board.ctl.menuVisible = false
+        event.accepted = true
+        return
+      }
+
       // While finding, every printable key is the query. Enter steps to the
       // next match rather than ending, because stepping is the common case.
       if (board.ctl.finding) {

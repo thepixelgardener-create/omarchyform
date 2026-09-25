@@ -10,6 +10,7 @@ function controller() {
     undoStack: [], redoStack: [], selectedIndex: -1, editIndex: -1,
     camX: 0, camY: 0, zoom: 1, activeBoard: null, markedIds: [], showPinned: false, arranging: false,
     finding: false, findQuery: '', findCount: 0, imageQueue: [],
+    menuVisible: false, menuIndex: 0, helpVisible: false,
     boardsDir: '/boards', backupsDir: '/backups', worldStep: 40, minItemSize: 60, viewW: 1000, viewH: 700 }
   const session = { ctl: root, boardLoaded: true, damaged: false, pendingBoard: null,
     lastSavedCount: 0, lastSavedText: '', saveError: '' }
@@ -29,8 +30,13 @@ function controller() {
   const exchange = { imported: [], copied: [],
     importDropped(entries) { exchange.imported.push(...entries) },
     copyItems(indices) { exchange.copied.push(Array.from(indices)) } }
+  // The browser reaches for the trash index and a directory listing; neither is
+  // the subject of these tests, so both are present and inert.
+  const trashIndexFile = { reload() {}, setText() {} }
+  const scanProc = { running: false }
   const context = vm.createContext({ root, session, Store: loadStore(), itemModel: items, linkModel: links,
-    persistence, exchange, statusTimer: {restart() {}}, saveTimer: { running: false, stop() {}, restart() {} }, stateFile: {setText() {}} })
+    persistence, exchange, trashIndexFile, scanProc,
+    statusTimer: {restart() {}}, saveTimer: { running: false, stop() {}, restart() {} }, stateFile: {setText() {}} })
   function loadFunctions(target, qml) {
     for (const match of qml.matchAll(/^  function (\w+)\((.*?)\) \{\n([\s\S]*?)^  }/gm))
       target[match[1]] = vm.runInContext(`(function(${match[2]}) {${match[3]}})`, context)
@@ -625,3 +631,47 @@ console.log('ok — controller: dropped files, their paths and where they land')
   assert.equal(pinned.exchange.copied.length, 0)
 }
 console.log('ok — controller: copying the selection out')
+{
+  // Walking the menu, and one dispatch for both the keyboard and the pointer.
+  const c = controller()
+  c.session.loadBoard('{"version":5,"items":[]}', false)
+  const menu = require('./harness').loadStore().MENU_COMMANDS
+  assert.equal(menu.length, 6, 'six commands, as the header draws')
+
+  c.root.toggleMenu()
+  assert.equal(c.root.menuVisible, true)
+  assert.equal(c.root.menuIndex, 0, 'opens on the first item, ready to walk')
+
+  c.root.moveMenu(1)
+  assert.equal(c.root.menuIndex, 1)
+  c.root.moveMenu(-1)
+  assert.equal(c.root.menuIndex, 0)
+  // Wrapping both ways, so neither end is a dead stop.
+  c.root.moveMenu(-1)
+  assert.equal(c.root.menuIndex, menu.length - 1, 'back from the first is the last')
+  c.root.moveMenu(1)
+  assert.equal(c.root.menuIndex, 0, 'and on from the last is the first')
+
+  // Running the highlighted item closes the menu and resets the walk.
+  c.root.menuIndex = 5
+  c.root.runMenu(c.root.menuIndex)
+  assert.equal(c.root.helpVisible, true, 'the last item is Help')
+  assert.equal(c.root.menuVisible, false)
+  assert.equal(c.root.menuIndex, 0)
+
+  // Boards is the browser, and it is the same call a click makes.
+  c.root.helpVisible = false
+  c.root.toggleMenu()
+  c.root.runMenu(1)
+  assert.equal(c.root.browserVisible, true)
+  assert.equal(c.root.menuVisible, false, 'picking always closes it')
+
+  // Toggling shut resets the highlight rather than leaving it where it was.
+  c.root.closeBrowser()
+  c.root.toggleMenu()
+  c.root.moveMenu(3)
+  c.root.toggleMenu()
+  assert.equal(c.root.menuVisible, false)
+  assert.equal(c.root.menuIndex, 0)
+}
+console.log('ok — controller: walking the header menu and running its commands')
