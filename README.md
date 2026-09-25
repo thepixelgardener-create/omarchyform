@@ -145,6 +145,7 @@ Press `?` or `F1` on the board for this list.
 | `space` | Mark this item as well, so the next command takes both |
 | `a` | Mark everything |
 | `d` / `del` | Delete what is marked, or the one under the cursor |
+| `ctrl+d` | Duplicate it, and the connectors between the copies |
 | `c` | Cycle its theme role: foreground, accent, urgent, muted |
 | `b` | Boards: browse, open, create |
 | `w` | Switch between fullscreen and windowed |

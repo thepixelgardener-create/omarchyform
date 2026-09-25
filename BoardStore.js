@@ -20,6 +20,10 @@ function imageIsValid(name) {
     && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name) && name.indexOf("..") < 0
 }
 
+// Far enough that the copy is visibly its own item, near enough that it is
+// obviously related to the one it came from.
+var DUPLICATE_OFFSET = 24
+
 // v2 boards stored fixed pastels. Map them onto tints by position so an old
 // board keeps its variety instead of going flat.
 var LEGACY_SWATCHES = ["#F7D794", "#F3A0A0", "#A8D8B9", "#A3C4E8", "#D4B5E8", "#F0C9A0"]
@@ -54,6 +58,7 @@ var KEY_HELP = [
   ["space", "mark this one as well"],
   ["a", "mark everything"],
   ["d", "delete what is marked, or the one under the cursor"],
+  ["ctrl+d", "duplicate it, connectors between the copies included"],
   ["c", "change its colour"],
   ["w", "fullscreen or windowed"],
   ["f", "fit the whole board on screen"],

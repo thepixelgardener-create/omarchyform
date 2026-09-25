@@ -3,6 +3,15 @@
 Notable changes, newest first. Board file versions are noted where they moved,
 since older boards are migrated on load rather than rejected.
 
+## Unreleased
+
+### Added
+
+- **`ctrl+d` duplicates.** The copies land offset from their originals and
+  become the selection, so duplicating and then pushing the copy somewhere is
+  two commands. A connector is copied when both of its ends were; an image copy
+  points at the same file rather than duplicating it.
+
 ## 0.3.0
 
 ### Fixed
