@@ -1,2 +1,5 @@
 *.bak
 *.swp
+
+# Agent skills installed for development; never part of the distributed plugin.
+.claude/
