@@ -5,6 +5,12 @@ since older boards are migrated on load rather than rejected.
 
 ## Unreleased
 
+### Added
+
+- `npm run shots` photographs the plugin in twelve states, in any theme, into
+  `~/.cache/omarchyform/shots/`. It asserts nothing and is not part of
+  `tests/run`; it is for the questions only eyes answer.
+
 ### Changed
 
 - **Selection no longer borrows the item's colour.** A tinted item sitting idle

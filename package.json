@@ -9,6 +9,7 @@
     "test:qml": "node tests/persistence.js",
     "test:ui": "node tests/ui.js",
     "test:omarchy": "node tests/omarchy.js --live",
-    "bench": "node tests/bench.js"
+    "bench": "node tests/bench.js",
+    "shots": "node tests/shots.js"
   }
 }

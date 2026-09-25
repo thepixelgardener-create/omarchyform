@@ -372,7 +372,24 @@ npm run bench   # board marshalling cost at size
 npm run test:qml # headless persistence tests; requires installed Quickshell
 npm run test:ui  # Qt Quick pointer, theme, and layout tests
 npm run test:omarchy -- --keep # live desktop smoke test, isolated board data
+npm run shots   # photograph every state, for judging by eye
 ```
+
+`npm run shots` puts the real plugin through twelve states — empty, a cursor
+beside a mark, typing, backgrounds, finding, arranging, help, the browser, a
+failed save, and a close-up at working zoom — and saves a picture of each into
+`~/.cache/omarchyform/shots/`. It asserts nothing: it exists because whether a
+tinted item reads as selected, or a hint still fits on one line, is not
+something a test can answer, and reading the source instead has been wrong
+before. Add a theme name to see another theme, or `--light --dark` for one of
+each:
+
+```bash
+npm run shots -- --light --dark
+```
+
+It runs against the live compositor in an isolated `HOME`, so the installed
+copy of the plugin and the running shell are both left alone.
 
 `npm run mutate` breaks `BoardStore.js` on purpose, one edit at a time, and
 checks the suite notices. The command reports its current score and survivors;
