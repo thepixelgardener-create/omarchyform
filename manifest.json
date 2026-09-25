@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "thepixelgardener.omarchyform",
   "name": "Omarchyform",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": "frueh",
   "description": "An infinite canvas for Omarchy: pan, zoom, and sticky notes you can drag anywhere.",
   "kinds": [
