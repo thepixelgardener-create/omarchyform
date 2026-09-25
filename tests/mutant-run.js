@@ -8,7 +8,10 @@
 
 const fs = require("fs")
 const { loadStore } = require("./harness")
-const { runSuite } = require("./run")
+// ./run.js, spelled out: `require("./run")` finds the extensionless bash
+// script beside it first, and blows up here, above the catch — which
+// counted every mutant as killed and made the score a constant 100%.
+const { runSuite } = require("./run.js")
 
 try {
   const source = fs.readFileSync(process.argv[2], "utf8")

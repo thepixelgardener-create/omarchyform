@@ -19,6 +19,13 @@ since older boards are migrated on load rather than rejected.
   help. It holds on to its own clicks now, from underneath the scroller, where
   it costs neither the wheel nor the drag.
 
+- `npm run mutate` reported 100% no matter what. `tests/mutant-run.js` reached
+  for `require("./run")` and found the extensionless `tests/run` shell script
+  beside it rather than `run.js`, which threw above the `catch` that reads an
+  exit code as a killed mutant — so every mutant "died" on the same syntax
+  error and none of them ran. It names `run.js` now; the true score is 87.5%,
+  and the survivors it had been hiding are printed.
+
 - `desktop/install.sh` was committed without its executable bit, so the
   `./desktop/install.sh` the README gives you failed with permission denied on
   every clone. The bit is committed now, and a test asserts it survives.
