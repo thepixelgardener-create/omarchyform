@@ -73,6 +73,10 @@ try {
 
   assert.equal(paste('image/jpeg','JPGBYTES',images,'paste-2').stdout,'paste-2.jpg','the format picks the extension')
 
+  // The same rule for a paste: a name already on disk is not written over.
+  assert.equal(paste('image/png','OTHERBYTES',images,'paste-1').status,6)
+  assert.equal(fs.readFileSync(path.join(images,'paste-1.png'),'utf8'),'PNGBYTES','the first one still stands')
+
   // An empty clipboard read must not leave a zero-byte image on the board.
   assert.equal(paste('image/png','',images,'paste-3').status,4)
   assert.equal(fs.existsSync(path.join(images,'paste-3.png')),false)
@@ -116,14 +120,15 @@ try {
   fs.writeFileSync(path.join(source,'lying.png'),'still not a picture')
   const drop=(name,file)=>run('importimage',images,name,path.join(source,file))
 
-  assert.equal(drop('drop-1','shot.png').status,0)
-  assert.equal(drop('drop-1','shot.png').stdout,'drop-1.png','the caller is told the name it got')
+  const firstDrop=drop('drop-1','shot.png')
+  assert.equal(firstDrop.status,0)
+  assert.equal(firstDrop.stdout,'drop-1.png','the caller is told the name it got')
   assert.deepEqual(fs.readFileSync(path.join(images,'drop-1.png')),pngBytes,'the bytes arrive unchanged')
 
-  // A name already taken is never written over: callers generate unique names,
-  // and silently replacing one board's picture from another would be worse.
+  // A name already taken is never written over, and says so with a code of its
+  // own rather than depending on how this coreutils version reports it.
   fs.writeFileSync(path.join(source,'other.png'),Buffer.concat([pngBytes,Buffer.from([0])]))
-  drop('drop-1','other.png')
+  assert.equal(drop('drop-1','other.png').status,6,'the name is taken')
   assert.deepEqual(fs.readFileSync(path.join(images,'drop-1.png')),pngBytes,'the first one still stands')
 
   assert.equal(drop('drop-2','notes.txt').status,4,'a text file is not an image')

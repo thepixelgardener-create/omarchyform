@@ -5,6 +5,16 @@ set -euo pipefail
 # Refuse traversal and symlink components below base, including dangling
 # symlinks. Base itself may be a symlink (e.g. a boards folder kept in a
 # dotfiles repo): it is where the user chose to keep their data.
+# Put a finished temporary file at its final name, and never over a name that
+# is already taken: callers generate unique ones, so a collision is worth
+# reporting. The check is explicit because mv -n's exit status for an existing
+# destination differs between coreutils versions. Exit 6 says the name was taken.
+place_new() {
+  local temporary=$1 destination=$2
+  [[ ! -e $destination && ! -L $destination ]] || exit 6
+  mv -T -- "$temporary" "$destination"
+}
+
 confined() {
   local base=$1 relative=$2 component current
   local -a components
@@ -82,7 +92,7 @@ case "$operation" in
     trap 'rm -f -- "$temporary"' EXIT
     timeout 10 wl-paste --no-newline --type "$mime" > "$temporary" || exit 4
     [[ -s $temporary ]] || exit 4
-    mv -nT -- "$temporary" "$images_root/$base_name.$extension"
+    place_new "$temporary" "$images_root/$base_name.$extension"
     printf '%s' "$base_name.$extension"
     ;;
   clipcopy)
@@ -125,7 +135,7 @@ case "$operation" in
     temporary=$(mktemp -- "$images_root/.omarchyform-drop-XXXXXX")
     trap 'rm -f -- "$temporary"' EXIT
     cp -- "$source_path" "$temporary"
-    mv -nT -- "$temporary" "$images_root/$base_name.$extension"
+    place_new "$temporary" "$images_root/$base_name.$extension"
     printf '%s' "$base_name.$extension"
     ;;
   check)
