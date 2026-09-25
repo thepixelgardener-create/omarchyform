@@ -487,7 +487,10 @@ FocusScope {
     color: board.ctl.accent
     Text {
       anchors.centerIn: parent
-      text: "BACKGROUNDS  ·  Tab to select  ·  p to unpin  ·  Esc to return"
+      // Names the mode only: the keys live in the footer, which is where they
+      // live for every other mode. Saying them twice, differently, was worse
+      // than saying them once.
+      text: "BACKGROUNDS"
       color: board.ctl.canvasBackground
       font.family: board.ctl.fontFamily
       font.pixelSize: board.ctl.fontBody
@@ -531,9 +534,9 @@ FocusScope {
       : board.ctl.finding
       ? "find: " + board.ctl.findQuery + "▏"
         + (board.ctl.findQuery === "" ? ""
-           : "  ·  " + (board.ctl.findCount === 0 ? "no match"
+           : " · " + (board.ctl.findCount === 0 ? "no match"
                         : board.ctl.findCount === 1 ? "1 match" : board.ctl.findCount + " matches"))
-        + "  ·  enter: next  ·  esc: done"
+        + " · enter: next · esc: done"
       : board.ctl.arranging ? "arrange · hjkl: edges · c/m: centres · HJKL: spread evenly · esc: cancel"
       : board.ctl.showPinned ? "backgrounds · tab/hjkl or click: select · p: unpin · esc: done"
       : board.ctl.statusText !== "" ? board.ctl.statusText
@@ -546,7 +549,7 @@ FocusScope {
       : board.ctl.editIndex >= 0
       ? "esc: done typing"
       : board.ctl.linkingFrom >= 0
-        ? "pick the other end, then x to connect  ·  esc: cancel"
-        : "n: note  ·  r/e: shapes  ·  x: connect  ·  ?: keys  ·  esc: close"
+        ? "pick the other end, then x to connect · esc: cancel"
+        : "n: note · r/e: shapes · x: connect · /: find · ?: keys · esc: close"
   }
 }

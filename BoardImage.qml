@@ -36,6 +36,7 @@ Item {
     property color foreground: picture.ctl.foreground
     property color accent: picture.ctl.accent
     property color muted: picture.ctl.muted
+    property color canvasBackground: picture.ctl.canvasBackground
     property string fontFamily: picture.ctl.fontFamily
     property int fontSubtitle: picture.ctl.fontSubtitle
     property int fontBody: picture.ctl.fontBody

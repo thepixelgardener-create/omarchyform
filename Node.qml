@@ -33,15 +33,36 @@ Item {
   readonly property bool foundMatch: node.ctl.matchesFind(node.itext)
   readonly property bool emphasised: node.selected || node.linkSource
   readonly property color fill: node.ctl.tintFill(node.itint, node.emphasised)
+  // The item's own border says what tint it carries and nothing else. Selection
+  // used to thicken and brighten this border, which meant an accent-tinted item
+  // sitting idle looked more selected than the cursor did on a muted one. The
+  // ring below carries selection instead, in one colour at one width, whatever
+  // the item is tinted.
   readonly property color outline: node.linkSource || node.foundMatch
     ? node.ctl.accent
-    : node.ctl.tintBorder(node.itint, node.selected)
+    : node.ctl.tintBorder(node.itint, false)
 
   // Both modes narrow the board the same way: what you are not working on
   // recedes rather than disappearing, so the shape of the board is still there.
   opacity: node.ctl.showPinned && !node.ipinned ? 0.35
     : node.ctl.findDimming && !node.foundMatch ? 0.3
     : 1
+
+  // Outside the item's own edge, so it cannot be mistaken for the item's
+  // border: the cursor is a solid ring, a secondary mark a lighter one. Drawn
+  // for painted shapes too, where an outline on the shape itself is hard to
+  // follow around a diamond.
+  Rectangle {
+    anchors.fill: parent
+    anchors.margins: -node.ctl.sp(4)
+    visible: node.selected && !node.ctl.showPinned
+    color: "transparent"
+    radius: node.ctl.cornerRadius > 0 ? node.ctl.cornerRadius + node.ctl.sp(4) : 0
+    border.width: node.cursor ? node.ctl.borderWidth * 2 : node.ctl.borderWidth
+    border.color: node.ctl.accent
+    opacity: node.cursor ? 1 : 0.55
+    antialiasing: true
+  }
 
   HoverHandler { id: hover }
 
@@ -64,7 +85,7 @@ Item {
     color: node.fill
     radius: node.ctl.cornerRadius
     antialiasing: true
-    border.width: node.cursor || node.linkSource || node.foundMatch ? node.ctl.borderWidth * 2 : node.ctl.borderWidth
+    border.width: node.linkSource || node.foundMatch ? node.ctl.borderWidth * 2 : node.ctl.borderWidth
     border.color: node.outline
   }
 
@@ -213,14 +234,26 @@ Item {
 
   }
 
-  Text {
-    anchors.right: parent.right
+  // More text than fits. A tinted tab in the corner rather than an ellipsis in
+  // the text colour, which read as punctuation belonging to the note.
+  Rectangle {
+    // Bottom left: the resize grip owns the other corner, and two marks in one
+    // corner read as one confusing thing.
+    anchors.left: parent.left
     anchors.bottom: parent.bottom
-    anchors.margins: node.ctl.sp(5)
-    text: "…"
-    color: node.ctl.foreground
-    font.family: node.ctl.fontFamily
+    anchors.margins: node.ctl.borderWidth
+    width: node.ctl.sp(22)
+    height: node.ctl.sp(14)
     visible: body.contentHeight > textViewport.height && node.ctl.editIndex !== node.index
+    color: node.ctl.tintBorder(node.itint, true)
+    radius: node.ctl.cornerRadius > 0 ? node.ctl.sp(3) : 0
+    Text {
+      anchors.centerIn: parent
+      text: "…"
+      color: node.ctl.canvasBackground
+      font.family: node.ctl.fontFamily
+      font.pixelSize: node.ctl.fontBody
+    }
   }
 
   // Drag anywhere. Steps aside the moment this item is being edited, so the
