@@ -384,7 +384,7 @@ npm run test:omarchy -- --keep # live desktop smoke test, isolated board data
 npm run shots   # photograph every state, for judging by eye
 ```
 
-`npm run shots` puts the real plugin through twelve states — empty, a cursor
+`npm run shots` puts the real plugin through thirteen states — empty, a cursor
 beside a mark, typing, backgrounds, finding, arranging, help, the browser, a
 failed save, and a close-up at working zoom — and saves a picture of each into
 `~/.cache/omarchyform/shots/`. It asserts nothing: it exists because whether a

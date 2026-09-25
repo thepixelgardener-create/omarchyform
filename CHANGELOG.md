@@ -13,6 +13,12 @@ since older boards are migrated on load rather than rejected.
 
 ### Fixed
 
+- Clicking near the edge of the shortcut panel closed it. The panel is a plain
+  rectangle, which lets a click through, and its scroller stops short of the
+  border — so the ring between the two reached the layer that dismisses the
+  help. It holds on to its own clicks now, from underneath the scroller, where
+  it costs neither the wheel nor the drag.
+
 - `desktop/install.sh` was committed without its executable bit, so the
   `./desktop/install.sh` the README gives you failed with permission denied on
   every clone. The bit is committed now, and a test asserts it survives.

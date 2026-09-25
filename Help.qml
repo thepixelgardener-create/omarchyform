@@ -19,6 +19,12 @@ Rectangle {
     content.contentY = Math.max(0, Math.min(content.contentHeight - content.height, content.contentY + delta))
   }
 
+  // Swallow clicks so they do not reach the dismiss layer behind. Beneath the
+  // Flickable rather than over it, so the panel keeps its drag to scroll and
+  // this catches only the margin ring, where a click used to fall through the
+  // panel and close it.
+  MouseArea { anchors.fill: parent }
+
   Flickable {
     id: content
     anchors.fill: parent
@@ -31,11 +37,27 @@ Rectangle {
     // The key column is measured, not guessed: the widest label decides it, and
     // the rest right-align against the descriptions so the two columns meet in
     // the middle and the eye can run down either one.
-    TextMetrics {
-      id: widest
-      font.family: help.ctl.fontFamily
-      font.pixelSize: help.ctl.fontBody
-      text: Store.longestKeyLabel()
+    //
+    // It is measured by the same Text that draws a row, and every label is
+    // measured rather than the longest string being picked out. Font metrics
+    // alone come out a pixel or two under what a Text of the same string needs,
+    // by a margin that grows with the size, so the label the column was sized
+    // from was the one that wrapped once the theme's text got large; and the
+    // theme chooses the font, which need not be monospace, so the longest
+    // string is not reliably the widest. An invisible Column is as wide as its
+    // widest child, which is the number wanted.
+    Column {
+      id: keyRuler
+      visible: false
+      Repeater {
+        model: Store.KEY_HELP
+        Text {
+          required property var modelData
+          text: modelData[0]
+          font.family: help.ctl.fontFamily
+          font.pixelSize: help.ctl.fontBody
+        }
+      }
     }
 
     Column {
@@ -56,11 +78,11 @@ Rectangle {
           required property var modelData
           width: helpColumn.width
           height: Math.max(shortcut.implicitHeight, description.implicitHeight)
-          // Never wider than half the panel, so a long label cannot squeeze the
-          // descriptions into a ribbon on a small window.
-          // Two pixels of slack: measured exactly, the widest label rounds to a
-          // pixel short of its own column and wraps.
-          readonly property real keyColumn: Math.min(Math.ceil(widest.width) + 2, helpColumn.width * 0.5)
+          // Never more than half the room, the gap between the columns counted
+          // against the keys, so a long label cannot squeeze the descriptions
+          // into something narrower than itself on a small window.
+          readonly property real keyColumn: Math.min(Math.ceil(keyRuler.implicitWidth),
+                                                     (helpColumn.width - help.ctl.sp(18)) * 0.5)
           Text {
             id: shortcut
             width: row.keyColumn
