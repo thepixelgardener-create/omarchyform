@@ -124,6 +124,43 @@ Item {
       else exchange.finished("Editable copy saved")
     }
   }
+  // Copying out. One picture on its own goes as the picture, so it can be
+  // pasted into anything that takes an image; anything else goes as text,
+  // because that is what the rest of an item is.
+  function copyItems(indices) {
+    if (copyProc.running || copyImageProc.running) return
+    if (indices.length === 1) {
+      var only = exchange.ctl.items.get(indices[0])
+      if (only.kind === "image" && only.isrc !== "") {
+        copyImageProc.command = exchange.ctl.fileCommand("clipcopyimage",
+          [exchange.ctl.imagesDir, only.isrc])
+        copyImageProc.running = true
+        return
+      }
+    }
+    var text = Store.copyText(exchange.ctl.items, indices)
+    if (text === "") { exchange.finished("nothing written on it to copy"); return }
+    copyProc.command = exchange.ctl.fileCommand("clipcopy", [text])
+    copyProc.copied = indices.length
+    copyProc.running = true
+  }
+
+  Process {
+    id: copyProc
+    property int copied: 0
+    onExited: function (code) {
+      if (code !== 0) exchange.finished("Could not reach the clipboard")
+      else exchange.finished(copyProc.copied === 1 ? "Copied" : "Copied " + copyProc.copied + " items")
+    }
+  }
+
+  Process {
+    id: copyImageProc
+    onExited: function (code) {
+      exchange.finished(code === 0 ? "Picture copied" : "Could not copy that picture")
+    }
+  }
+
   // Dropped files are copied one at a time: a Process is a single slot, and a
   // drop of five screenshots should not race itself. Each entry remembers the
   // board it was meant for, so a switch part-way through does not scatter

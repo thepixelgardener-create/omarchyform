@@ -85,6 +85,23 @@ case "$operation" in
     mv -nT -- "$temporary" "$images_root/$base_name.$extension"
     printf '%s' "$base_name.$extension"
     ;;
+  clipcopy)
+    # wl-copy forks and keeps serving the clipboard for as long as it owns it,
+    # so this is deliberately not wrapped in a timeout: killing it would take
+    # the clipboard contents with it.
+    wl-copy -- "$1"
+    ;;
+  clipcopyimage)
+    # The name comes out of a board file, so it is validated the same way
+    # loading one is, and the type is read from the bytes rather than the name.
+    images_root=$1 picture=$2
+    confined "$images_root" "$picture"
+    case "$(file -bL --mime-type -- "$images_root/$picture")" in
+      image/*) ;;
+      *) exit 4 ;;
+    esac
+    wl-copy --type "$(file -bL --mime-type -- "$images_root/$picture")" < "$images_root/$picture"
+    ;;
   importimage)
     # A dropped path is untrusted: it names a file to read, never where bytes
     # land or what they are called. The type comes from the content rather than

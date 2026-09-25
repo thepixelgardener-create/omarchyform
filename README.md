@@ -146,6 +146,7 @@ Press `?` or `F1` on the board for this list.
 | `a` | Mark everything |
 | `d` / `del` | Delete what is marked, or the one under the cursor |
 | `ctrl+d` | Duplicate it, and the connectors between the copies |
+| `ctrl+c` | Copy it out: a picture as a picture, anything else as its text |
 | `/` | Find: type to search the notes, `enter` steps through the matches |
 | `g` then `h` `j` `k` `l` | Align the marked items on that edge |
 | `g` then `c` / `m` | Align their centres on one vertical / horizontal line |
@@ -224,6 +225,11 @@ overwriting the one you are on. `ctrl+e` renders the board to a PNG for
 sharing. `ctrl+v` asks the clipboard for a picture first and drops it on the board at its
 own proportions; failing that, it turns the text into a note, however many lines
 it is.
+
+`ctrl+c` goes the other way. A picture on its own lands on the clipboard as a
+picture, ready to paste into a chat or an editor; anything else goes as its text,
+and several items arrive as paragraphs in board order. Backgrounds are left out,
+the way they are left out of every other bulk command.
 
 Pictures can also be dragged in from a file manager or a browser's downloads and
 land where you let go of them. Several at once arrive staggered rather than in

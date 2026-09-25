@@ -216,6 +216,12 @@ Item {
     root.pumpImages()
   }
 
+  function copySelection() {
+    var t = root.targets()
+    if (t.length === 0) { root.flash("nothing selected to copy"); return }
+    exchange.copyItems(t)
+  }
+
   function pasteClipboard() { exchange.paste() }
   function importBoard() { exchange.choose("import") }
   function exportBoard() { exchange.choose("json") }

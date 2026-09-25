@@ -26,7 +26,9 @@ function controller() {
   const persistence = { busy: false, save(path, text) { this.busy = true; writes.push({path,text}) } }
   // Stands in for BoardExchange: the controller hands it filtered paths and
   // never learns what happens to them.
-  const exchange = { imported: [], importDropped(entries) { exchange.imported.push(...entries) } }
+  const exchange = { imported: [], copied: [],
+    importDropped(entries) { exchange.imported.push(...entries) },
+    copyItems(indices) { exchange.copied.push(Array.from(indices)) } }
   const context = vm.createContext({ root, session, Store: loadStore(), itemModel: items, linkModel: links,
     persistence, exchange, statusTimer: {restart() {}}, saveTimer: { running: false, stop() {}, restart() {} }, stateFile: {setText() {}} })
   function loadFunctions(target, qml) {
@@ -591,3 +593,35 @@ console.log('ok — controller: finding, stepping through matches and dimming th
   assert.equal(probes[probes.length - 1], 'after.png', 'which is now the one being measured')
 }
 console.log('ok — controller: dropped files, their paths and where they land')
+{
+  // Copying out: what the controller decides to hand over.
+  const c = controller()
+  c.session.loadBoard('{"version":5,"items":[]}', false)
+
+  c.root.selectedIndex = -1
+  c.root.copySelection()
+  assert.equal(c.exchange.copied.length, 0, 'nothing selected is nothing to copy')
+
+  c.root.addItem('note', 0, 0)
+  c.root.addItem('note', 200, 0)
+  c.root.selectedIndex = 0
+  c.root.markedIds = []
+  c.root.copySelection()
+  assert.deepEqual(c.exchange.copied[0], [0], 'the item under the cursor')
+
+  c.root.markedIds = [c.items.get(0).iid, c.items.get(1).iid]
+  c.root.copySelection()
+  assert.deepEqual(c.exchange.copied[1].slice().sort(), [0, 1], 'or everything marked')
+
+  // A background is not a target, so it is not copied either.
+  const pinned = controller()
+  pinned.session.loadBoard('{"version":5,"items":[]}', false)
+  pinned.root.addItem('note', 0, 0)
+  pinned.root.selectedIndex = 0
+  pinned.root.togglePin()
+  pinned.root.selectedIndex = 0
+  pinned.root.markedIds = []
+  pinned.root.copySelection()
+  assert.equal(pinned.exchange.copied.length, 0)
+}
+console.log('ok — controller: copying the selection out')
