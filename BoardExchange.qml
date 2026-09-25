@@ -201,6 +201,9 @@ Item {
       // 5 is the helper's way of saying the file is too big to put on a board,
       // which is worth saying differently from "that is not a picture".
       else if (code === 5) exchange.finished("That file is too large to put on a board")
+      // 6 needs two pictures to arrive in the same millisecond, but saying the
+      // wrong thing about it would be worse than the line it costs.
+      else if (code === 6) exchange.finished("A picture of that name is already there")
       else exchange.finished("That is not an image this can read")
       exchange.nextDrop()
     }
@@ -214,6 +217,7 @@ Item {
       // 4 is the script's way of saying the clipboard holds no picture, which
       // is not a failure: text is the other thing it could be holding.
       if (code === 4) { clipboard.running = true; return }
+      if (code === 6) { exchange.finished("A picture of that name is already there"); return }
       if (code !== 0 || !grabbed.text) { exchange.finished("Could not read the clipboard image"); return }
       exchange.ctl.imagePasted(grabbed.text)
     }
