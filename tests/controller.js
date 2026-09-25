@@ -9,6 +9,7 @@ function controller() {
   const root = { currentBoard: 'a.json', items, links, nextId: 1, nextColor: 0, windowMode: false,
     undoStack: [], redoStack: [], selectedIndex: -1, editIndex: -1,
     camX: 0, camY: 0, zoom: 1, activeBoard: null, markedIds: [], showPinned: false, arranging: false,
+    finding: false, findQuery: '', findCount: 0,
     boardsDir: '/boards', backupsDir: '/backups', worldStep: 40, minItemSize: 60, viewW: 1000, viewH: 700 }
   const session = { ctl: root, boardLoaded: true, damaged: false, pendingBoard: null,
     lastSavedCount: 0, lastSavedText: '', saveError: '' }
@@ -18,6 +19,9 @@ function controller() {
   for (const key of ['boardLoaded', 'damaged', 'pendingBoard', 'saveError', 'canEdit'])
     Object.defineProperty(root, key, { get: () => session[key] })
   Object.defineProperty(root, 'boardPath', { get: () => '/boards/' + root.currentBoard })
+  // Mirrors the QML binding of the same name: the harness loads functions, not
+  // bindings, so a derived property has to be declared here.
+  Object.defineProperty(root, 'findDimming', { get: () => root.finding && root.findQuery !== '' })
   const writes = []
   const persistence = { busy: false, save(path, text) { this.busy = true; writes.push({path,text}) } }
   const context = vm.createContext({ root, session, Store: loadStore(), itemModel: items, linkModel: links,
@@ -460,3 +464,65 @@ console.log('ok — controller: duplicating items, their connectors and their pi
   assert.equal(ro.root.arranging, false, 'a board that cannot be edited cannot be arranged')
 }
 console.log('ok — controller: the arrange mode, aligning and spreading')
+{
+  // Finding: navigation that works on a board you cannot write to.
+  const c = controller()
+  c.session.loadBoard(JSON.stringify({ version: 5, items: [
+    { id: 1, kind: 'note', x: 0, y: 0, w: 100, h: 100, text: 'ship the notes' },
+    { id: 2, kind: 'note', x: 900, y: 0, w: 100, h: 100, text: 'unrelated' },
+    { id: 3, kind: 'note', x: 0, y: 900, w: 100, h: 100, text: 'shipping' }
+  ] }), false)
+
+  c.root.beginFind()
+  assert.equal(c.root.finding, true)
+  assert.equal(c.root.findDimming, false, 'an empty query dims nothing')
+
+  c.root.extendFind('s')
+  c.root.extendFind('h')
+  assert.equal(c.root.findQuery, 'sh')
+  assert.equal(c.root.findCount, 2)
+  assert.equal(c.root.selectedIndex, 0, 'the board follows the typing to the first match')
+  assert.equal(c.root.findDimming, true)
+  assert.equal(c.root.matchesFind('SHIPPED'), true, 'case is not part of the question')
+  assert.equal(c.root.matchesFind('unrelated'), false)
+
+  // Enter steps through matches and wraps.
+  c.root.nextMatch()
+  assert.equal(c.root.selectedIndex, 2)
+  c.root.nextMatch()
+  assert.equal(c.root.selectedIndex, 0, 'and comes back round')
+
+  // Backspace widens the query again.
+  c.root.trimFind()
+  assert.equal(c.root.findQuery, 's')
+  assert.equal(c.root.findCount, 2)
+
+  // A query that matches nothing leaves the selection where it was.
+  c.root.extendFind('zz')
+  assert.equal(c.root.findCount, 0)
+  assert.equal(c.root.selectedIndex, 0, 'no match does not throw the cursor away')
+
+  c.root.endFind()
+  assert.equal(c.root.finding, false)
+  assert.equal(c.root.findQuery, '')
+  assert.equal(c.root.findDimming, false)
+
+  // Nothing to search is said rather than entering a mode with no exit sign.
+  const empty = controller()
+  empty.session.loadBoard('{"version":5,"items":[]}', false)
+  empty.root.beginFind()
+  assert.equal(empty.root.finding, false)
+
+  // A damaged board is read-only, but finding is not a write.
+  const ro = controller()
+  ro.session.loadBoard('{broken', false)
+  assert.equal(ro.root.canEdit, false)
+  ro.items.append({ iid: 1, kind: 'note', ix: 0, iy: 0, iw: 100, ih: 100,
+    itint: 'foreground', itext: 'still findable', ipinned: false, isrc: '' })
+  ro.root.beginFind()
+  ro.root.extendFind('find')
+  assert.equal(ro.root.finding, true, 'a board that cannot be edited can still be searched')
+  assert.equal(ro.root.findCount, 1)
+  assert.equal(ro.writes.length, 0, 'and searching never writes')
+}
+console.log('ok — controller: finding, stepping through matches and dimming the rest')

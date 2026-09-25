@@ -47,6 +47,9 @@ Item {
     function tintFill(tint, strong) { return picture.ctl.tintFill(tint, false) }
     function tintBorder(tint, strong) { return picture.ctl.tintBorder(tint, false) }
     function isMarked(id) { return false }
+    // An export is not a search result: every item is drawn at full strength.
+    readonly property bool findDimming: false
+    function matchesFind(text) { return false }
     function repaintLinks() { connectors.requestPaint() }
     // Everything a Node can reach, present and doing nothing. The delegates
     // here are disabled so none of it is ever called, but a member missing

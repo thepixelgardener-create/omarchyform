@@ -509,6 +509,67 @@ Item {
     root.removeAt(root.targets())
   }
 
+  // Finding is navigation, not editing, so it works on a board that cannot be
+  // written to as well as one that can.
+  property bool finding: false
+  property string findQuery: ""
+  property int findCount: 0
+  // One read for the whole board rather than a query test per item: while this
+  // is true, anything that does not match recedes.
+  readonly property bool findDimming: root.finding && root.findQuery !== ""
+
+  function beginFind() {
+    if (itemModel.count === 0) { root.flash("nothing on this board to find yet"); return }
+    root.showPinned = false
+    root.stopEditing()
+    root.finding = true
+    root.findQuery = ""
+    root.findCount = 0
+  }
+
+  function endFind() {
+    root.finding = false
+    root.findQuery = ""
+    root.findCount = 0
+  }
+
+  function extendFind(text) {
+    root.findQuery += text
+    root.refreshFind()
+  }
+
+  function trimFind() {
+    root.findQuery = root.findQuery.slice(0, -1)
+    root.refreshFind()
+  }
+
+  // The board follows the typing: the first match is selected and centred as
+  // the query narrows, so you see where you are going before pressing Enter.
+  function refreshFind() {
+    var m = Store.findMatches(itemModel, root.findQuery)
+    root.findCount = m.length
+    if (m.length === 0) return
+    root.selectedIndex = m[0]
+    root.centerOnSelected()
+  }
+
+  function nextMatch() {
+    var m = Store.findMatches(itemModel, root.findQuery)
+    root.findCount = m.length
+    if (m.length === 0) { root.flash(root.findQuery === "" ? "type something to find" : "no match"); return }
+    var at = -1
+    for (var i = 0; i < m.length; i++) if (m[i] === root.selectedIndex) { at = i; break }
+    root.selectedIndex = m[(at + 1) % m.length]
+    root.centerOnSelected()
+  }
+
+  // Asked per item, so it takes the text it already has rather than scanning
+  // the model once for every note on the board.
+  function matchesFind(text) {
+    if (!root.findDimming || typeof text !== "string") return false
+    return text.toLowerCase().indexOf(root.findQuery.toLowerCase()) >= 0
+  }
+
   // Arranging is a two-key command: g, then which edge. A mode rather than six
   // more bindings, because the second key is a direction the hands already know
   // and the footer can say what the choices are while it waits.
@@ -874,6 +935,7 @@ Item {
   // Escape unwinds one layer at a time rather than closing outright.
   function back() {
     if (root.helpVisible) root.helpVisible = false
+    else if (root.finding) root.endFind()
     else if (root.arranging) root.arranging = false
     else if (root.showPinned) { root.showPinned = false; root.selectedIndex = -1 }
     else if (root.clearMarks()) root.flash("marks cleared")
