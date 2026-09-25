@@ -565,6 +565,15 @@ Item {
     root.removeAt(root.targets())
   }
 
+  // The commands in the menu all have keys of their own, so the menu is a
+  // reminder rather than the way in, and it costs no height until asked for.
+  property bool menuVisible: false
+
+  function toggleMenu() {
+    root.menuVisible = !root.menuVisible
+    root.focusKeys()
+  }
+
   // Finding is navigation, not editing, so it works on a board that cannot be
   // written to as well as one that can.
   property bool finding: false
@@ -991,6 +1000,7 @@ Item {
   // Escape unwinds one layer at a time rather than closing outright.
   function back() {
     if (root.helpVisible) root.helpVisible = false
+    else if (root.menuVisible) root.menuVisible = false
     else if (root.finding) root.endFind()
     else if (root.arranging) root.arranging = false
     else if (root.showPinned) { root.showPinned = false; root.selectedIndex = -1 }

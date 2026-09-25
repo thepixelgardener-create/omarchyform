@@ -343,6 +343,7 @@ FocusScope {
       "w": function () { board.ctl.toggleWindowMode() },
       "g": function () { board.ctl.beginArrange() },
       "/": function () { board.ctl.beginFind() },
+      "m": function () { board.ctl.toggleMenu() },
       "f": function () { board.ctl.fitToItems() },
       "b": function () { board.ctl.openBrowser() },
       "0": function () { board.ctl.resetView() },

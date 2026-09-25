@@ -13,6 +13,12 @@ since older boards are migrated on load rather than rejected.
 
 ### Changed
 
+- **The header is one line.** The board's name and save state sit on the left,
+  the menu after them, the zoom on the right — where the name, the state and a
+  row of six buttons used to take three stacked rows and most of the bar's
+  height. The menu is hidden until `m` shows it, and closes again when a command
+  is picked or `esc` is pressed. Closed, it leaves a clickable `menu · m` behind,
+  so the commands are still reachable without knowing the key.
 - The README said a rescan recreates overlays, which holds for a working plugin
   but not for one the shell has already failed to compile: that failure outlives
   `rescanPlugins` and a reinstall, and only `omarchy restart shell` clears it.

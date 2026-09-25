@@ -59,6 +59,7 @@ var KEY_HELP = [
   ["a", "mark everything"],
   ["d", "delete what is marked, or the one under the cursor"],
   ["ctrl+d", "duplicate it, connectors between the copies included"],
+  ["m", "show or hide the menu in the header"],
   ["ctrl+c", "copy it out: a picture as a picture, anything else as its text"],
   ["/", "find: type to search the notes, enter steps through matches"],
   ["g then h j k l", "align the marked items on that edge"],

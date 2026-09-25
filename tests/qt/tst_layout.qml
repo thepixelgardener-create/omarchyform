@@ -22,6 +22,8 @@ TestCase {
     property int borderWidth: 1
     property int cornerRadius: 0
     property bool browserVisible: false
+    property bool menuVisible: false
+    function toggleMenu() { menuVisible = !menuVisible }
     property bool browserSearching: false
     property string browserQuery: ""
     property string browserPrompt: ""
@@ -56,6 +58,26 @@ TestCase {
   function test_toolbarFitsLargeFonts() {
     verify(toolbar.implicitHeight < test.height - 64)
     verify(toolbar.children[1].width <= toolbar.width)
+  }
+
+  function test_toolbarIsSlimUntilTheMenuIsAskedFor() {
+    ctl.menuVisible = false
+    toolbar.visible = true
+    verify(waitForRendering(toolbar))
+    const closed = toolbar.implicitHeight
+    // One line of chrome at a body font this large, long board name and all.
+    verify(closed < ctl.fontSubtitle * 3)
+
+    ctl.menuVisible = true
+    verify(waitForRendering(toolbar))
+    verify(toolbar.implicitHeight >= closed, "the menu takes room when it is open")
+    verify(toolbar.children[1].width <= toolbar.width, "and still fits across")
+
+    // Closing gives the height back rather than leaving a gap behind.
+    ctl.menuVisible = false
+    verify(waitForRendering(toolbar))
+    compare(toolbar.implicitHeight, closed)
+    toolbar.visible = false
   }
   function test_helpFitsAndScrolls() {
     verify(help.width <= test.width - 32)

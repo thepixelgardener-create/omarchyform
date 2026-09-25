@@ -49,10 +49,17 @@ ShellRoot {
       }
     },
     {
+      // The header is one line until the menu is asked for.
+      name: "02b-menu-open",
+      setup: function () { plugin.toggleMenu() }
+    },
+    {
       // The overflow marker and the resize grip both want a corner.
       name: "03-overflowing-and-selected",
-      setup: function () { plugin.selectOnly(4) }
+      // The menu closes again first: every later scene wants the slim header.
+      setup: function () { plugin.menuVisible = false; plugin.selectOnly(4) }
     },
+
     {
       // The question the review asked: is the cursor told apart from a mark,
       // whatever the two of them are tinted?
