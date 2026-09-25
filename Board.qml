@@ -317,6 +317,7 @@ FocusScope {
       "X": function () { board.ctl.unlinkSelected() },
       "w": function () { board.ctl.toggleWindowMode() },
       "g": function () { board.ctl.beginArrange() },
+      "/": function () { board.ctl.beginFind() },
       "f": function () { board.ctl.fitToItems() },
       "b": function () { board.ctl.openBrowser() },
       "0": function () { board.ctl.resetView() },
@@ -348,6 +349,17 @@ FocusScope {
       }
       var ctrl = (event.modifiers & Qt.ControlModifier) !== 0
       var shift = (event.modifiers & Qt.ShiftModifier) !== 0
+
+      // While finding, every printable key is the query. Enter steps to the
+      // next match rather than ending, because stepping is the common case.
+      if (board.ctl.finding) {
+        if (event.key === Qt.Key_Escape) board.ctl.endFind()
+        else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) board.ctl.nextMatch()
+        else if (event.key === Qt.Key_Backspace) board.ctl.trimFind()
+        else if (event.text && event.text >= " " && !ctrl) board.ctl.extendFind(event.text)
+        event.accepted = true
+        return
+      }
 
       // Waiting for the second key of g. Anything that is not one of the
       // choices cancels, rather than being taken as the command it usually is:
@@ -490,6 +502,12 @@ FocusScope {
     visible: !board.ctl.helpVisible && !board.ctl.browserVisible
     text: board.ctl.saveError !== "" ? board.ctl.saveError
       : board.ctl.trashIndexError !== "" ? board.ctl.trashIndexError
+      : board.ctl.finding
+      ? "find: " + board.ctl.findQuery + "▏"
+        + (board.ctl.findQuery === "" ? ""
+           : "  ·  " + (board.ctl.findCount === 0 ? "no match"
+                        : board.ctl.findCount === 1 ? "1 match" : board.ctl.findCount + " matches"))
+        + "  ·  enter: next  ·  esc: done"
       : board.ctl.arranging ? "arrange · hjkl: edges · c/m: centres · HJKL: spread evenly · esc: cancel"
       : board.ctl.showPinned ? "backgrounds · tab/hjkl or click: select · p: unpin · esc: done"
       : board.ctl.statusText !== "" ? board.ctl.statusText

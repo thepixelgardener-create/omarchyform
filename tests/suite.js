@@ -590,6 +590,20 @@ function tests(S) {
     eq(S.readFile(JSON.stringify({ version: 6, items: [] })), null, "and one from the future does not")
   })
 
+  test("finding matches text, ignores case, and skips backgrounds", () => {
+    const m = new FakeModel([
+      item({ iid: 1, itext: "Ship the release notes" }),
+      item({ iid: 2, itext: "ship it" }),
+      item({ iid: 3, itext: "unrelated" }),
+      item({ iid: 4, itext: "shipping", ipinned: true })
+    ])
+    eq(S.findMatches(m, "ship").join(","), "0,1", "in board order, backgrounds left out")
+    eq(S.findMatches(m, "SHIP").join(","), "0,1", "case is not part of the question")
+    eq(S.findMatches(m, "notes").join(","), "0", "matches anywhere in the text")
+    eq(S.findMatches(m, "").length, 0, "an empty query matches nothing, not everything")
+    eq(S.findMatches(m, "nowhere").length, 0)
+  })
+
   test("aligning puts every marked item on the same edge", () => {
     // A spans 0..100 across and 0..50 down; B spans 40..80 and 200..280.
     const m = new FakeModel([

@@ -59,6 +59,7 @@ var KEY_HELP = [
   ["a", "mark everything"],
   ["d", "delete what is marked, or the one under the cursor"],
   ["ctrl+d", "duplicate it, connectors between the copies included"],
+  ["/", "find: type to search the notes, enter steps through matches"],
   ["g then h j k l", "align the marked items on that edge"],
   ["g then c / m", "align their centres on one line"],
   ["g then H J K L", "spread them evenly, outermost two staying put"],
@@ -528,6 +529,20 @@ function spreadMoves(items, indices, axis) {
     at = at + n[size] + gap
   }
   return moves
+}
+
+// Items whose text contains the query, in board order. Case-insensitive, and
+// backgrounds are skipped the way every other bulk operation skips them.
+function findMatches(items, query) {
+  var out = []
+  if (!query) return out
+  var needle = query.toLowerCase()
+  for (var i = 0; i < items.count; i++) {
+    var n = items.get(i)
+    if (n.ipinned === true) continue
+    if (typeof n.itext === "string" && n.itext.toLowerCase().indexOf(needle) >= 0) out.push(i)
+  }
+  return out
 }
 
 // Items a marquee touches, in model order. Touching rather than enclosing: at

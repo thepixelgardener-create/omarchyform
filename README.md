@@ -146,6 +146,7 @@ Press `?` or `F1` on the board for this list.
 | `a` | Mark everything |
 | `d` / `del` | Delete what is marked, or the one under the cursor |
 | `ctrl+d` | Duplicate it, and the connectors between the copies |
+| `/` | Find: type to search the notes, `enter` steps through the matches |
 | `g` then `h` `j` `k` `l` | Align the marked items on that edge |
 | `g` then `c` / `m` | Align their centres on one vertical / horizontal line |
 | `g` then `H` `J` `K` `L` | Spread them evenly; the outermost two stay put |

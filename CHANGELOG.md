@@ -7,6 +7,11 @@ since older boards are migrated on load rather than rejected.
 
 ### Added
 
+- **`/` finds a note by its text.** Typing narrows as you go: the first match is
+  selected and centred, matches take the accent outline, and everything else
+  recedes the way it does in background mode. `enter` steps through the matches
+  and wraps; `esc` puts the board back. It is navigation rather than editing, so
+  it works on a board that opened read-only.
 - **`g` arranges what is marked.** Then `h` `j` `k` `l` for an edge, `c` or `m`
   for centres on one line, or `H` `J` `K` `L` to spread them evenly with the
   outermost two staying put. The footer says what the second key can be while it

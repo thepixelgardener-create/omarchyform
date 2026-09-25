@@ -30,13 +30,18 @@ Item {
   readonly property bool isNote: node.kind === "note"
   readonly property bool isImage: node.kind === "image"
   readonly property bool painted: node.kind === "ellipse" || node.kind === "diamond"
+  readonly property bool foundMatch: node.ctl.matchesFind(node.itext)
   readonly property bool emphasised: node.selected || node.linkSource
   readonly property color fill: node.ctl.tintFill(node.itint, node.emphasised)
-  readonly property color outline: node.linkSource
+  readonly property color outline: node.linkSource || node.foundMatch
     ? node.ctl.accent
     : node.ctl.tintBorder(node.itint, node.selected)
 
-  opacity: node.ctl.showPinned && !node.ipinned ? 0.35 : 1
+  // Both modes narrow the board the same way: what you are not working on
+  // recedes rather than disappearing, so the shape of the board is still there.
+  opacity: node.ctl.showPinned && !node.ipinned ? 0.35
+    : node.ctl.findDimming && !node.foundMatch ? 0.3
+    : 1
 
   HoverHandler { id: hover }
 
@@ -59,7 +64,7 @@ Item {
     color: node.fill
     radius: node.ctl.cornerRadius
     antialiasing: true
-    border.width: node.cursor || node.linkSource ? node.ctl.borderWidth * 2 : node.ctl.borderWidth
+    border.width: node.cursor || node.linkSource || node.foundMatch ? node.ctl.borderWidth * 2 : node.ctl.borderWidth
     border.color: node.outline
   }
 

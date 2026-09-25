@@ -31,6 +31,11 @@ TestCase {
     property int saveCount: 0
     property int flushCount: 0
     function isMarked(id) { return false }
+    property bool findDimming: false
+    property string findNeedle: ""
+    function matchesFind(text) {
+      return findDimming && findNeedle !== "" && text.toLowerCase().indexOf(findNeedle) >= 0
+    }
     // A two-pixel red PNG, inline: a real decode with no file to create, clean
     // up, or have the runner refuse to read.
     readonly property string redPixels: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP4z8AARAwQCgAf7gP9i18U1AAAAABJRU5ErkJggg=="
@@ -83,6 +88,8 @@ TestCase {
     subject.isrc = ""
     subject.ipinned = false
     ctl.showPinned = false
+    ctl.findDimming = false
+    ctl.findNeedle = ""
     ctl.itemFill = "#222222"
     ctl.canEdit = true
     ctl.selectedIndex = -1
@@ -152,6 +159,26 @@ TestCase {
     // The frame stays, so a board that lost its pictures still reads as a
     // board rather than as a hole.
     tryVerify(function () { return grabImage(subject).pixel(90, 70) === Qt.rgba(34/255, 34/255, 34/255, 1) })
+  }
+
+  function test_findMatchStandsOut() {
+    ctl.findDimming = true
+    ctl.findNeedle = "keep"
+    model.set(0, {ix:100, iy:100, iw:180, ih:140, itext:"keep this one"})
+    verify(waitForRendering(subject))
+    compare(subject.opacity, 1, "a match stays at full strength")
+    verify(subject.foundMatch)
+
+    // What does not match recedes rather than disappearing, so the shape of
+    // the board is still readable while searching.
+    model.set(0, {ix:100, iy:100, iw:180, ih:140, itext:"something else"})
+    verify(waitForRendering(subject))
+    verify(!subject.foundMatch)
+    verify(subject.opacity < 0.5 && subject.opacity > 0)
+
+    ctl.findDimming = false
+    verify(waitForRendering(subject))
+    compare(subject.opacity, 1, "and everything comes back when the search ends")
   }
 
   function test_paintedShapeFollowsTheme() {
