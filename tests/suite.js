@@ -590,6 +590,18 @@ function tests(S) {
     eq(S.readFile(JSON.stringify({ version: 6, items: [] })), null, "and one from the future does not")
   })
 
+  test("only a plain local file path survives a drop", () => {
+    eq(S.localPath("file:///home/me/a shot.png"), "/home/me/a shot.png", "escapes are decoded")
+    eq(S.localPath("file:///home/me/%C3%A5.png"), "/home/me/\u00e5.png", "including non-ascii ones")
+    eq(S.localPath("https://example.com/a.png"), "", "a download is not a local file")
+    eq(S.localPath("file://elsewhere/a.png"), "", "and neither is another host's")
+    eq(S.localPath("data:image/png;base64,AAAA"), "", "nor a data url")
+    eq(S.localPath("file:///a%00b.png"), "", "a control character is not a path")
+    eq(S.localPath("file:///a%0ab.png"), "", "including a newline")
+    eq(S.localPath("file:///a%ZZ.png"), "", "an escape that does not decode is refused outright")
+    eq(S.localPath(42), "", "and so is something that is not text")
+  })
+
   test("finding matches text, ignores case, and skips backgrounds", () => {
     const m = new FakeModel([
       item({ iid: 1, itext: "Ship the release notes" }),

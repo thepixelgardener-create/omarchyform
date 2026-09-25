@@ -145,25 +145,75 @@ Item {
 
   // Sizing needs the picture loaded, and only an open board has a scene that
   // will load one, so the board measures it and calls back.
-  function imagePasted(name) {
-    if (root.activeBoard) root.activeBoard.probeImage(name)
-    else root.pasteImage(name, 0, 0)
+  // Measuring is asynchronous and a scene has one probe, so pictures wait their
+  // turn rather than overwriting each other's pending name. Each carries where
+  // it should land: a paste goes to the middle of the view, a drop to the point
+  // it was let go of.
+  property var imageQueue: []
+
+  function imagePasted(name) { root.enqueueImage(name, 0, 0, false) }
+  function imageDropped(name, wx, wy) { root.enqueueImage(name, wx, wy, true) }
+
+  function enqueueImage(name, wx, wy, atPoint) {
+    var q = root.imageQueue.slice()
+    q.push({ name: name, x: wx, y: wy, atPoint: atPoint })
+    root.imageQueue = q
+    if (q.length === 1) root.pumpImages()
+  }
+
+  function pumpImages() {
+    if (root.imageQueue.length === 0) return
+    if (root.activeBoard) root.activeBoard.probeImage(root.imageQueue[0].name)
+    else root.pasteImage(root.imageQueue[0].name, 0, 0)
+  }
+
+  // Files arrive from another application, so nothing here trusts them: the
+  // paths are filtered to plain local ones, and the helper decides whether each
+  // is really a picture and what it is called once it is ours.
+  function dropFiles(urls, wx, wy) {
+    if (!root.canEdit) { root.flash("this board is read-only"); return }
+    var entries = []
+    for (var i = 0; i < urls.length; i++) {
+      var dropped = Store.localPath(String(urls[i]))
+      if (dropped === "") continue
+      // Staggered, so a handful let go together do not land in one stack.
+      entries.push({ path: dropped,
+                     x: wx + entries.length * Store.DUPLICATE_OFFSET,
+                     y: wy + entries.length * Store.DUPLICATE_OFFSET })
+    }
+    if (entries.length === 0) { root.flash("drop an image file from your files"); return }
+    exchange.importDropped(entries)
   }
 
   function pasteImage(name, naturalWidth, naturalHeight) {
-    if (!root.canEdit || !Store.imageIsValid(name)) return
+    // The head of the queue says where this one goes. Called without one — a
+    // board that never opened a scene — it lands in the middle of the view.
+    var placing = root.imageQueue.length > 0 && root.imageQueue[0].name === name
+      ? root.imageQueue[0] : null
+    if (placing) root.imageQueue = root.imageQueue.slice(1)
+    if (!root.canEdit || !Store.imageIsValid(name)) { root.pumpImages(); return }
     var w = naturalWidth > 0 ? naturalWidth : 320
     var h = naturalHeight > 0 ? naturalHeight : 240
     // Big enough to see, small enough that a phone screenshot does not arrive
     // taller than the board. Aspect is kept, so nothing is squashed.
     var fit = Math.min(1, 360 / Math.max(w, h))
-    root.addItem("image", root.toWorldX(root.viewW / 2), root.toWorldY(root.viewH / 2))
+    var fitW = Math.max(root.minItemSize, Math.round(w * fit))
+    var fitH = Math.max(root.minItemSize, Math.round(h * fit))
+    var atX = placing && placing.atPoint ? placing.x : root.toWorldX(root.viewW / 2)
+    var atY = placing && placing.atPoint ? placing.y : root.toWorldY(root.viewH / 2)
+    root.addItem("image", atX, atY)
     itemModel.setProperty(root.selectedIndex, "isrc", name)
-    itemModel.setProperty(root.selectedIndex, "iw", Math.max(root.minItemSize, Math.round(w * fit)))
-    itemModel.setProperty(root.selectedIndex, "ih", Math.max(root.minItemSize, Math.round(h * fit)))
+    itemModel.setProperty(root.selectedIndex, "iw", fitW)
+    itemModel.setProperty(root.selectedIndex, "ih", fitH)
+    // addItem centres an item of its default size; the picture's own size is
+    // only known now, so it is re-centred on the point it was actually meant
+    // for rather than sitting half a picture away from it.
+    itemModel.setProperty(root.selectedIndex, "ix", atX - fitW / 2)
+    itemModel.setProperty(root.selectedIndex, "iy", atY - fitH / 2)
     root.save()
-    root.flash(naturalWidth > 0 ? "Image pasted" : "Image pasted · it could not be read, so the size is a guess")
+    root.flash(naturalWidth > 0 ? "Image added" : "Image added · it could not be read, so the size is a guess")
     root.focusKeys()
+    root.pumpImages()
   }
 
   function pasteClipboard() { exchange.paste() }

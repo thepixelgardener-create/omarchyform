@@ -531,6 +531,18 @@ function spreadMoves(items, indices, axis) {
   return moves
 }
 
+// A dropped URL is untrusted text from another application. Only a plain local
+// path comes back; anything with a scheme of its own, a host, or a control
+// character in it is not something to go reading off disk.
+function localPath(url) {
+  if (typeof url !== "string" || url.indexOf("file:///") !== 0) return ""
+  var path
+  try { path = decodeURIComponent(url.slice(7)) } catch (e) { return "" }
+  if (path.charAt(0) !== "/") return ""
+  if (/[\x00-\x1f]/.test(path)) return ""
+  return path
+}
+
 // Items whose text contains the query, in board order. Case-insensitive, and
 // backgrounds are skipped the way every other bulk operation skips them.
 function findMatches(items, query) {

@@ -124,6 +124,51 @@ Item {
       else exchange.finished("Editable copy saved")
     }
   }
+  // Dropped files are copied one at a time: a Process is a single slot, and a
+  // drop of five screenshots should not race itself. Each entry remembers the
+  // board it was meant for, so a switch part-way through does not scatter
+  // pictures onto the wrong one.
+  property var dropQueue: []
+  property int dropSeq: 0
+
+  function importDropped(entries) {
+    var queued = exchange.dropQueue.slice()
+    for (var i = 0; i < entries.length; i++)
+      queued.push({ path: entries[i].path, x: entries[i].x, y: entries[i].y,
+                    board: exchange.ctl.currentBoard })
+    exchange.dropQueue = queued
+    if (!imageImport.running) exchange.nextDrop()
+  }
+
+  function nextDrop() {
+    if (exchange.dropQueue.length === 0) return
+    var next = exchange.dropQueue[0]
+    if (next.board !== exchange.ctl.currentBoard) {
+      exchange.dropQueue = exchange.dropQueue.slice(1)
+      exchange.nextDrop()
+      return
+    }
+    exchange.dropSeq += 1
+    imageImport.command = exchange.ctl.fileCommand("importimage",
+      [exchange.ctl.imagesDir, "drop-" + Date.now() + "-" + exchange.dropSeq, next.path])
+    imageImport.running = true
+  }
+
+  Process {
+    id: imageImport
+    stdout: StdioCollector { id: importedName; waitForEnd: true }
+    onExited: function (code) {
+      var done = exchange.dropQueue[0]
+      exchange.dropQueue = exchange.dropQueue.slice(1)
+      if (code === 0 && importedName.text) exchange.ctl.imageDropped(importedName.text, done.x, done.y)
+      // 5 is the helper's way of saying the file is too big to put on a board,
+      // which is worth saying differently from "that is not a picture".
+      else if (code === 5) exchange.finished("That file is too large to put on a board")
+      else exchange.finished("That is not an image this can read")
+      exchange.nextDrop()
+    }
+  }
+
   Process {
     id: imageGrab
     stdout: StdioCollector { id: grabbed; waitForEnd: true }

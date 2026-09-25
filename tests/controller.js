@@ -9,7 +9,7 @@ function controller() {
   const root = { currentBoard: 'a.json', items, links, nextId: 1, nextColor: 0, windowMode: false,
     undoStack: [], redoStack: [], selectedIndex: -1, editIndex: -1,
     camX: 0, camY: 0, zoom: 1, activeBoard: null, markedIds: [], showPinned: false, arranging: false,
-    finding: false, findQuery: '', findCount: 0,
+    finding: false, findQuery: '', findCount: 0, imageQueue: [],
     boardsDir: '/boards', backupsDir: '/backups', worldStep: 40, minItemSize: 60, viewW: 1000, viewH: 700 }
   const session = { ctl: root, boardLoaded: true, damaged: false, pendingBoard: null,
     lastSavedCount: 0, lastSavedText: '', saveError: '' }
@@ -24,8 +24,11 @@ function controller() {
   Object.defineProperty(root, 'findDimming', { get: () => root.finding && root.findQuery !== '' })
   const writes = []
   const persistence = { busy: false, save(path, text) { this.busy = true; writes.push({path,text}) } }
+  // Stands in for BoardExchange: the controller hands it filtered paths and
+  // never learns what happens to them.
+  const exchange = { imported: [], importDropped(entries) { exchange.imported.push(...entries) } }
   const context = vm.createContext({ root, session, Store: loadStore(), itemModel: items, linkModel: links,
-    persistence, statusTimer: {restart() {}}, saveTimer: { running: false, stop() {}, restart() {} }, stateFile: {setText() {}} })
+    persistence, exchange, statusTimer: {restart() {}}, saveTimer: { running: false, stop() {}, restart() {} }, stateFile: {setText() {}} })
   function loadFunctions(target, qml) {
     for (const match of qml.matchAll(/^  function (\w+)\((.*?)\) \{\n([\s\S]*?)^  }/gm))
       target[match[1]] = vm.runInContext(`(function(${match[2]}) {${match[3]}})`, context)
@@ -34,7 +37,7 @@ function controller() {
   }
   loadFunctions(root, source)
   loadFunctions(session, fs.readFileSync(require('path').join(__dirname, '../BoardSession.qml'), 'utf8'))
-  return { root, session, items, links, writes, persistence, complete() {
+  return { root, session, items, links, writes, persistence, exchange, complete() {
     const write = writes[writes.length - 1]
     persistence.busy = false
     session.savedBoard(write.path, write.text)
@@ -526,3 +529,65 @@ console.log('ok — controller: the arrange mode, aligning and spreading')
   assert.equal(ro.writes.length, 0, 'and searching never writes')
 }
 console.log('ok — controller: finding, stepping through matches and dimming the rest')
+{
+  // Dropping files in: which paths get through, where they land, and what
+  // happens when several arrive at once.
+  const c = controller()
+  c.session.loadBoard('{"version":5,"items":[]}', false)
+
+  // Only local files are passed on, and a drop of nothing usable says so.
+  c.root.dropFiles(['https://example.com/a.png', 'data:image/png;base64,AA'], 100, 200)
+  assert.equal(c.exchange.imported.length, 0, 'a download is not a file to copy')
+
+  c.root.dropFiles(['file:///shots/a.png', 'https://example.com/b.png', 'file:///shots/b.png'], 100, 200)
+  assert.deepEqual(c.exchange.imported.map(e => e.path), ['/shots/a.png', '/shots/b.png'],
+    'the usable ones go through in order')
+  assert.deepEqual(c.exchange.imported.map(e => [e.x, e.y]), [[100, 200], [124, 224]],
+    'staggered, so two dropped together do not land in one stack')
+
+  // A read-only board takes nothing.
+  const ro = controller()
+  ro.session.loadBoard('{broken', false)
+  ro.root.dropFiles(['file:///shots/a.png'], 0, 0)
+  assert.equal(ro.exchange.imported.length, 0)
+
+  // With a scene, measuring is asynchronous: one probe runs and the rest wait.
+  // The stub stands in for an open board, recording what it was asked to measure.
+  const probes = []
+  c.root.activeBoard = { probeImage(name) { probes.push(name) }, repaintLinks() {}, focusKeys() {} }
+  c.root.imageDropped('drop-1.png', 500, 600)
+  c.root.imagePasted('paste-1.png')
+  assert.equal(c.root.imageQueue.length, 2, 'both wait their turn')
+  assert.deepEqual(probes, ['drop-1.png'], 'and only the first is being measured')
+
+  c.root.pasteImage('drop-1.png', 200, 100)
+  assert.deepEqual(probes, ['drop-1.png', 'paste-1.png'], 'finishing one starts the next')
+  assert.equal(c.items.count, 1)
+  assert.equal(c.items.get(0).isrc, 'drop-1.png')
+  assert.equal(c.items.get(0).ix, 500 - c.items.get(0).iw / 2, 'centred on the point it was dropped')
+  assert.equal(c.items.get(0).iy, 600 - c.items.get(0).ih / 2)
+
+  c.root.pasteImage('paste-1.png', 200, 100)
+  assert.equal(c.items.count, 2)
+  assert.equal(c.root.imageQueue.length, 0, 'and the queue drains')
+  // viewW/viewH are 1000x700 in this harness, so the middle is 500,350.
+  assert.equal(c.items.get(1).iy, 350 - c.items.get(1).ih / 2, 'a paste goes to the middle of the view')
+
+  // A name that never entered the queue still places, in the middle. This is
+  // the no-scene path, so nothing is waiting behind it.
+  c.root.activeBoard = null
+  c.root.pasteImage('stray.png', 100, 100)
+  assert.equal(c.items.count, 3)
+  assert.equal(c.root.imageQueue.length, 0)
+
+  // A name the queue rejects does not strand the ones behind it.
+  c.root.activeBoard = { probeImage(name) { probes.push(name) }, repaintLinks() {}, focusKeys() {} }
+  c.root.imageDropped('../escape.png', 0, 0)
+  c.root.imageDropped('after.png', 10, 20)
+  const before = c.items.count
+  c.root.pasteImage('../escape.png', 10, 10)
+  assert.equal(c.items.count, before, 'the bad name is refused')
+  assert.equal(c.root.imageQueue.length, 1, 'and the one behind it is still waiting')
+  assert.equal(probes[probes.length - 1], 'after.png', 'which is now the one being measured')
+}
+console.log('ok — controller: dropped files, their paths and where they land')

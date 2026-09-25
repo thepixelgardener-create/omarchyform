@@ -289,6 +289,31 @@ FocusScope {
     }
   }
 
+  // Pictures dragged in from a file manager. Above the canvas so the whole
+  // board is a target, below the keyboard owner so nothing about typing
+  // changes. The world point is worked out here, while the drop still knows
+  // where it happened.
+  DropArea {
+    id: dropTarget
+    anchors.fill: parent
+    keys: ["text/uri-list"]
+    onDropped: function (drop) {
+      if (!drop.hasUrls) { drop.accepted = false; return }
+      board.ctl.dropFiles(drop.urls, board.ctl.toWorldX(drop.x), board.ctl.toWorldY(drop.y))
+      drop.acceptProposedAction()
+    }
+  }
+
+  // Says the board will take it, before it is let go of.
+  Rectangle {
+    anchors.fill: parent
+    visible: dropTarget.containsDrag
+    color: "transparent"
+    border.width: board.ctl.borderWidth * 2
+    border.color: board.ctl.accent
+    radius: board.ctl.cornerRadius
+  }
+
   // Keyboard owner. Lives above the canvas so Escape always lands here.
   Item {
     id: keys

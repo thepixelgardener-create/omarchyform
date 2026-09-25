@@ -225,6 +225,13 @@ sharing. `ctrl+v` asks the clipboard for a picture first and drops it on the boa
 own proportions; failing that, it turns the text into a note, however many lines
 it is.
 
+Pictures can also be dragged in from a file manager or a browser's downloads and
+land where you let go of them. Several at once arrive staggered rather than in
+one stack. What a file claims to be is ignored: the type is read from the
+content, the name and the folder are chosen here, and anything that is not a
+picture — or is larger than 32 MB — is refused with a reason rather than left on
+the board as a broken frame.
+
 `ctrl+n` makes a board and puts you straight into its first note, so a thought
 can be captured before it is named; `F2` names it afterwards.
 
@@ -464,8 +471,7 @@ an asynchronous save.
 
 ## Not there yet
 
-Freehand drawing is outside the current scope. Pictures arrive by paste;
-there is no drag-and-drop from a file manager yet.
+Freehand drawing is outside the current scope.
 
 ## Tested against
 

@@ -81,5 +81,46 @@ try {
     assert.notEqual(paste('image/png','X',images,bad).status,0,bad)
   assert.deepEqual(fs.readdirSync(images).sort(),['paste-1.png','paste-2.jpg'],'no strays, no temporaries')
 
+  // Dropping a file in: the path is untrusted, the type comes from the content,
+  // and the destination name is ours.
+  const source=path.join(dir,'source')
+  fs.mkdirSync(source)
+  // A real two-pixel PNG, so `file` recognises it the way it will in earnest.
+  const pngBytes=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP4z8AARAwQCgAf7gP9i18U1AAAAABJRU5ErkJggg==','base64')
+  fs.writeFileSync(path.join(source,'shot.png'),pngBytes)
+  fs.writeFileSync(path.join(source,'notes.txt'),'this is not a picture')
+  fs.writeFileSync(path.join(source,'lying.png'),'still not a picture')
+  const drop=(name,file)=>run('importimage',images,name,path.join(source,file))
+
+  assert.equal(drop('drop-1','shot.png').status,0)
+  assert.equal(drop('drop-1','shot.png').stdout,'drop-1.png','the caller is told the name it got')
+  assert.deepEqual(fs.readFileSync(path.join(images,'drop-1.png')),pngBytes,'the bytes arrive unchanged')
+
+  // A name already taken is never written over: callers generate unique names,
+  // and silently replacing one board's picture from another would be worse.
+  fs.writeFileSync(path.join(source,'other.png'),Buffer.concat([pngBytes,Buffer.from([0])]))
+  drop('drop-1','other.png')
+  assert.deepEqual(fs.readFileSync(path.join(images,'drop-1.png')),pngBytes,'the first one still stands')
+
+  assert.equal(drop('drop-2','notes.txt').status,4,'a text file is not an image')
+  assert.equal(drop('drop-3','lying.png').status,4,'and neither is one that says it is')
+  assert.equal(fs.existsSync(path.join(images,'drop-3.png')),false)
+
+  // The extension follows the content, not the name it arrived under.
+  fs.copyFileSync(path.join(source,'shot.png'),path.join(source,'mislabelled.jpg'))
+  assert.equal(drop('drop-4','mislabelled.jpg').stdout,'drop-4.png','content decides the extension')
+
+  // Too large to sit on a board is refused before anything is copied.
+  fs.writeFileSync(path.join(source,'huge.png'),Buffer.concat([pngBytes,Buffer.alloc(33554433-pngBytes.length)]))
+  assert.equal(drop('drop-5','huge.png').status,5,'a distinct code, so the message can differ')
+  assert.equal(fs.existsSync(path.join(images,'drop-5.png')),false)
+
+  assert.equal(run('importimage',images,'drop-6',path.join(source,'absent.png')).status,4,'a path that is not there')
+  assert.equal(run('importimage',images,'drop-7',source).status,4,'a directory is not a file')
+  for (const bad of ['../escape','a/b','.hidden','-dash'])
+    assert.notEqual(drop(bad,'shot.png').status,0,bad)
+
+  assert.deepEqual(fs.readdirSync(images).filter(f=>f.startsWith('.')),[],'no temporaries left behind')
+
 } finally {fs.rmSync(dir,{recursive:true,force:true})}
 console.log('ok — filesystem confinement and restore collisions')

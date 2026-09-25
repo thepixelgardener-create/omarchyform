@@ -85,6 +85,32 @@ case "$operation" in
     mv -nT -- "$temporary" "$images_root/$base_name.$extension"
     printf '%s' "$base_name.$extension"
     ;;
+  importimage)
+    # A dropped path is untrusted: it names a file to read, never where bytes
+    # land or what they are called. The type comes from the content rather than
+    # the name, and a file too big to sit on a board is refused before it is
+    # copied. Exit 4 means "not an image this can take", 5 means "too large".
+    images_root=$1 base_name=$2 source_path=$3
+    [[ $base_name != */* && $base_name =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]
+    [[ -f $source_path ]] || exit 4
+    size=$(stat -Lc %s -- "$source_path") || exit 4
+    (( size > 0 )) || exit 4
+    (( size <= 33554432 )) || exit 5
+    case "$(file -bL --mime-type -- "$source_path")" in
+      image/png) extension=png ;;
+      image/jpeg) extension=jpg ;;
+      image/webp) extension=webp ;;
+      image/gif) extension=gif ;;
+      image/bmp) extension=bmp ;;
+      *) exit 4 ;;
+    esac
+    confined "$images_root" "$base_name.$extension"
+    temporary=$(mktemp -- "$images_root/.omarchyform-drop-XXXXXX")
+    trap 'rm -f -- "$temporary"' EXIT
+    cp -- "$source_path" "$temporary"
+    mv -nT -- "$temporary" "$images_root/$base_name.$extension"
+    printf '%s' "$base_name.$extension"
+    ;;
   check)
     # Loading asks first, so a board that could never be saved is not opened.
     confined "$1" "$2" || exit 3
