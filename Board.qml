@@ -497,15 +497,16 @@ FocusScope {
   }
 
   Rectangle {
+    id: banner
     anchors { left: parent.left; right: parent.right; top: toolbar.bottom; topMargin: board.ctl.sp(8); margins: board.ctl.sp(16) }
     height: board.ctl.sp(36)
     visible: board.ctl.showPinned
     color: board.ctl.accent
     Text {
       anchors.centerIn: parent
-      // Names the mode only: the keys live in the footer, which is where they
-      // live for every other mode. Saying them twice, differently, was worse
-      // than saying them once.
+      // Names the mode only: the keys live on the line below, where they live
+      // for every other mode. Saying them twice, differently, was worse than
+      // saying them once.
       text: "BACKGROUNDS"
       color: board.ctl.canvasBackground
       font.family: board.ctl.fontFamily
@@ -531,15 +532,19 @@ FocusScope {
     ctl: board.ctl
   }
 
+  // Under the header rather than at the far edge: the name, the commands and
+  // whatever the board is saying are one block to look at, and the bottom of
+  // the canvas is left to the board.
   Text {
+    id: status
     anchors.left: parent.left
     anchors.right: parent.right
     anchors.leftMargin: board.ctl.sp(16)
     anchors.rightMargin: board.ctl.sp(16)
     horizontalAlignment: Text.AlignHCenter
     wrapMode: Text.Wrap
-    anchors.bottom: parent.bottom
-    anchors.bottomMargin: board.ctl.sp(16)
+    anchors.top: banner.visible ? banner.bottom : toolbar.bottom
+    anchors.topMargin: board.ctl.sp(8)
     color: board.ctl.foreground
     opacity: 0.85
     font.family: board.ctl.fontFamily

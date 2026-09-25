@@ -24,6 +24,11 @@ since older boards are migrated on load rather than rejected.
   pointer's hover does, so both read the same. The dispatch moved to the
   controller, so a click and an `enter` cannot diverge, and the command list is
   one definition shared with the header.
+- **All the chrome is at the top.** The status and hint line moved from the
+  bottom edge to directly under the header, so the board's name, its commands
+  and whatever it is telling you are one block to look at, and the bottom of the
+  canvas belongs to the board. In background mode it sits under the mode banner
+  rather than behind it.
 - **The header is transparent.** The canvas runs under it; only the hairline
   edge remains.
 - **The header is one line.** The board's name and save state sit on the left,

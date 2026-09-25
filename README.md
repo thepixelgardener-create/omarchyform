@@ -123,7 +123,9 @@ yourself if you want them gone.
 
 ## Keys
 
-Press `?` or `F1` on the board for this list.
+Press `?` or `F1` on the board for this list. The board's name, the menu and
+whatever it is currently telling you all sit together at the top; the rest of
+the canvas is yours.
 
 | Key | Does |
 |-----|------|
