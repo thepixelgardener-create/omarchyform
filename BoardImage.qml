@@ -35,17 +35,34 @@ Item {
     property bool showPinned: false
     property color foreground: picture.ctl.foreground
     property color accent: picture.ctl.accent
+    property color muted: picture.ctl.muted
     property string fontFamily: picture.ctl.fontFamily
     property int fontSubtitle: picture.ctl.fontSubtitle
+    property int fontBody: picture.ctl.fontBody
     property int borderWidth: picture.ctl.borderWidth
     property int cornerRadius: picture.ctl.cornerRadius
     property int minItemSize: picture.ctl.minItemSize
     function sp(n) { return picture.ctl.sp(n) }
+    function imagePath(name) { return picture.ctl.imagePath(name) }
     function tintFill(tint, strong) { return picture.ctl.tintFill(tint, false) }
     function tintBorder(tint, strong) { return picture.ctl.tintBorder(tint, false) }
     function isMarked(id) { return false }
     function repaintLinks() { connectors.requestPaint() }
+    // Everything a Node can reach, present and doing nothing. The delegates
+    // here are disabled so none of it is ever called, but a member missing
+    // from this list is a member that breaks an exported image the first time
+    // a binding does reach for it, which is why the contract check counts
+    // them rather than trusting that they stay unreachable.
     function flushSave() {}
+    function save() {}
+    function scheduleSave() {}
+    function pushUndo() {}
+    function stopEditing() {}
+    function newBoard() {}
+    function removeItem(index) {}
+    function pointerSelect(index, additive) {}
+    function moveTargets(dx, dy) {}
+    function resizeTargets(dx, dy) {}
   }
   Rectangle { anchors.fill: parent; color: picture.ctl.canvasBackground }
   Item {

@@ -39,7 +39,7 @@ class FakeModel {
 
 function item(over) {
   return Object.assign(
-    { iid: 1, kind: "note", ix: 0, iy: 0, iw: 100, ih: 100, itint: "foreground", itext: "", ipinned: false },
+    { iid: 1, kind: "note", ix: 0, iy: 0, iw: 100, ih: 100, itint: "foreground", itext: "", ipinned: false, isrc: "" },
     over)
 }
 

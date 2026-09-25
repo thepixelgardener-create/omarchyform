@@ -10,6 +10,16 @@ var KINDS = ["note", "rect", "ellipse", "diamond"]
 // theme instead of fighting it. The shell exposes these four.
 var TINTS = ["foreground", "accent", "urgent", "muted"]
 
+// An image lives beside the board rather than inside it: a screenshot in
+// base64 would be megabytes rewritten on every autosave. The item keeps only
+// the file name, and a name out of a board file is never trusted — boards are
+// hand-editable and shareable, so only a plain name in the images folder is
+// ever loaded.
+function imageIsValid(name) {
+  return typeof name === "string" && name.length > 0 && name.length <= 128
+    && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name) && name.indexOf("..") < 0
+}
+
 // v2 boards stored fixed pastels. Map them onto tints by position so an old
 // board keeps its variety instead of going flat.
 var LEGACY_SWATCHES = ["#F7D794", "#F3A0A0", "#A8D8B9", "#A3C4E8", "#D4B5E8", "#F0C9A0"]
@@ -24,7 +34,7 @@ function normalizeTint(value) {
 
 var KEY_HELP = [
   ["ctrl+n / F2", "new board / name the current board"],
-  ["ctrl+v", "paste clipboard text as a note"],
+  ["ctrl+v", "paste a picture, or clipboard text as a note"],
   ["ctrl+o", "import a native board"],
   ["ctrl+shift+s / ctrl+e", "export editable copy / PNG"],
   ["n", "new note beside the selected one"],
@@ -66,7 +76,7 @@ function itemRows(items) {
   var out = []
   for (var i = 0; i < items.count; i++) {
     var n = items.get(i)
-    out.push({ id: n.iid, kind: n.kind, x: n.ix, y: n.iy, w: n.iw, h: n.ih, tint: n.itint, text: n.itext, pinned: n.ipinned === true })
+    out.push({ id: n.iid, kind: n.kind, x: n.ix, y: n.iy, w: n.iw, h: n.ih, tint: n.itint, text: n.itext, pinned: n.ipinned === true, src: n.isrc })
   }
   return out
 }
@@ -107,16 +117,19 @@ function fillItems(items, rows) {
       nextId++
     }
     used[id] = true
+    var kind = KINDS.indexOf(n.kind) >= 0 ? n.kind
+      : (n.kind === "image" && imageIsValid(n.src) ? "image" : "note")
     items.append({
       iid: id,
-      kind: KINDS.indexOf(n.kind) >= 0 ? n.kind : "note",
+      kind: kind,
       ix: num(n.x, 0),
       iy: num(n.y, 0),
       iw: Math.max(MIN_SIZE, num(n.w, 180)),
       ih: Math.max(MIN_SIZE, num(n.h, 140)),
       itint: normalizeTint(n.tint || n.color),
       itext: typeof n.text === "string" ? n.text : "",
-      ipinned: n.pinned === true
+      ipinned: n.pinned === true,
+      isrc: kind === "image" ? n.src : ""
     })
   }
 }
@@ -167,7 +180,7 @@ function readFile(raw) {
   var parsed
   try { parsed = JSON.parse(raw) } catch (e) { return null }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null
-  if (parsed.version !== undefined && [1, 2, 3, 4].indexOf(parsed.version) < 0) return null
+  if (parsed.version !== undefined && [1, 2, 3, 4, 5].indexOf(parsed.version) < 0) return null
   var fields = ["items", "notes", "links"]
   for (var f = 0; f < fields.length; f++) {
     var rows = parsed[fields[f]]
@@ -188,7 +201,7 @@ function readFile(raw) {
 // written before that split still carries the key; it is ignored on the way in.
 function writeFile(items, links, nextId) {
   return JSON.stringify({
-    version: 4,
+    version: 5,
     nextId: nextId,
     items: itemRows(items),
     links: linkRows(links)

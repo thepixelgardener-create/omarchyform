@@ -7,6 +7,12 @@ since older boards are migrated on load rather than rejected.
 
 ### Added
 
+- **Pictures on the board.** `ctrl+v` now asks the clipboard for an image
+  before it asks for text, and drops it at its own proportions. The file is
+  written beside the boards in `images/` and the item keeps only its name, so a
+  screenshot is not re-encoded into every autosave; a board whose picture has
+  gone says so instead of drawing an empty frame. Board format v5 carries
+  `src`; v1–v4 boards still load.
 - **Getting things in and out.** `ctrl+shift+s` saves a copy of the board
   anywhere, `ctrl+o` reads one back as a new board, `ctrl+e` renders it to a
   PNG, and `ctrl+v` turns the clipboard into a note. Imports never overwrite

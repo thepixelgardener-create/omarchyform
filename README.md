@@ -105,7 +105,7 @@ Press `?` or `F1` on the board for this list.
 | `u` / `ctrl+r` | Undo / redo |
 | `ctrl+n` | New board, already waiting for the first note |
 | `F2` | Rename the board you are on |
-| `ctrl+v` | Paste the clipboard as a note |
+| `ctrl+v` | Paste a picture from the clipboard, or text as a note |
 | `ctrl+o` | Open a board file from anywhere |
 | `ctrl+shift+s` | Save a copy of this board somewhere else |
 | `ctrl+e` | Export the board as a PNG |
@@ -189,8 +189,9 @@ something, and it asks twice.
 A board is a file, so it can leave and come back. `ctrl+shift+s` writes a copy
 wherever you choose; `ctrl+o` reads one back in as a new board rather than
 overwriting the one you are on. `ctrl+e` renders the board to a PNG for
-sharing. `ctrl+v` turns whatever is on the clipboard into a note, however many
-lines it is.
+sharing. `ctrl+v` asks the clipboard for a picture first and drops it on the board at its
+own proportions; failing that, it turns the text into a note, however many lines
+it is.
 
 `ctrl+n` makes a board and puts you straight into its first note, so a thought
 can be captured before it is named; `F2` names it afterwards.
@@ -226,6 +227,8 @@ Which board you had open is remembered in `state.json` and reopened next time.
 ├── trash/
 │   ├── index.json
 │   └── 20260924-133036-work__sprint.json
+├── images/
+│   └── paste-1758801036123.png
 ├── backups/
 │   └── v2/
 │       ├── board.json.bak
@@ -241,18 +244,27 @@ with unchanged contents do not rotate it. Malformed or unsupported board files
 open read-only; no edits or saves are allowed over them. Back it up, sync it,
 edit it by hand, put it in git — it is your file. Older boards are migrated on load: v1 had no ids or
 shapes, v2 stored fixed pastel hexes which are mapped onto theme roles. Version 4 adds
-background pinning; older plugin versions open these files read-only instead
-of silently losing that state.
+background pinning, version 5 pasted pictures; older plugin versions open these
+files read-only instead of silently losing that state.
+
+A pasted picture is written to `images/` and the item keeps only its file name,
+so a screenshot is not re-encoded into every autosave. Nothing deletes those
+files: a board in the trash still points at its pictures, and so does a copy
+exported last month. An item whose picture has gone says so on the board rather
+than drawing an empty frame.
 
 ```json
 {
-  "version": 4,
-  "nextId": 3,
+  "version": 5,
+  "nextId": 4,
   "items": [
     { "id": 1, "kind": "note", "x": 0, "y": 0, "w": 180, "h": 140,
       "tint": "foreground", "text": "hello", "pinned": false },
     { "id": 2, "kind": "ellipse", "x": 300, "y": 0, "w": 160, "h": 110,
-      "tint": "accent", "text": "there", "pinned": false }
+      "tint": "accent", "text": "there", "pinned": false },
+    { "id": 3, "kind": "image", "x": 0, "y": 200, "w": 360, "h": 203,
+      "tint": "foreground", "text": "", "pinned": false,
+      "src": "paste-1758801036123.png" }
   ],
   "links": [ { "from": 1, "to": 2 } ]
 }
@@ -286,7 +298,7 @@ luminance.
 |------|-------|
 | `Omarchyform.qml` | Controller: editing, navigation, and the two surfaces |
 | `Board.qml` | The canvas surface — grid, connectors, keys, cheat sheet |
-| `Node.qml` | One item: note, box, ellipse or diamond |
+| `Node.qml` | One item: note, box, ellipse, diamond or picture |
 | `Browser.qml` | The board browser |
 | `BoardBar.qml` | The bar widget: the board's presence in the shell |
 | `Help.qml` | Scrollable keyboard help |
@@ -402,7 +414,8 @@ an asynchronous save.
 
 ## Not there yet
 
-Freehand drawing and images are outside the current scope.
+Freehand drawing is outside the current scope. Pictures arrive by paste;
+there is no drag-and-drop from a file manager yet.
 
 ## License
 

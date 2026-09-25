@@ -47,6 +47,12 @@ FocusScope {
 
   function repaintGrid() { grid.requestPaint() }
   function repaintLinks() { linkCanvas.requestPaint() }
+  function probeImage(name) {
+    sizeProbe.pending = name
+    sizeProbe.source = ""
+    sizeProbe.source = board.ctl.imagePath(name)
+  }
+
   function focusKeys() { keys.forceActiveFocus() }
 
   Connections {
@@ -256,6 +262,29 @@ FocusScope {
     border.width: board.ctl.borderWidth
     border.color: board.ctl.accent
     radius: board.ctl.cornerRadius
+  }
+
+  // A pasted picture is measured before it is placed, so it lands at its own
+  // proportions rather than in a box that squashes it. Never shown: only an
+  // open board has a scene that will load an image at all, which is why this
+  // lives here rather than on the controller.
+  Image {
+    id: sizeProbe
+    visible: false
+    cache: false
+    asynchronous: true
+    property string pending: ""
+    onStatusChanged: {
+      if (pending === "" || (status !== Image.Ready && status !== Image.Error)) return
+      var name = pending
+      // Read off before the source is cleared: clearing it takes the natural
+      // size with it.
+      var w = status === Image.Ready ? implicitWidth : 0
+      var h = status === Image.Ready ? implicitHeight : 0
+      pending = ""
+      source = ""
+      board.ctl.pasteImage(name, w, h)
+    }
   }
 
   // Keyboard owner. Lives above the canvas so Escape always lands here.

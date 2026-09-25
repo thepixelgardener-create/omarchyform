@@ -19,6 +19,7 @@ Item {
   required property string itint
   required property string itext
   required property bool ipinned
+  required property string isrc
 
   readonly property bool cursor: node.ctl.selectedIndex === node.index
   readonly property bool marked: node.ctl.isMarked(node.iid)
@@ -27,6 +28,7 @@ Item {
   readonly property bool selected: node.cursor || node.marked
   readonly property bool linkSource: node.ctl.linkingFrom === node.iid
   readonly property bool isNote: node.kind === "note"
+  readonly property bool isImage: node.kind === "image"
   readonly property bool painted: node.kind === "ellipse" || node.kind === "diamond"
   readonly property bool emphasised: node.selected || node.linkSource
   readonly property color fill: node.ctl.tintFill(node.itint, node.emphasised)
@@ -59,6 +61,39 @@ Item {
     antialiasing: true
     border.width: node.cursor || node.linkSource ? node.ctl.borderWidth * 2 : node.ctl.borderWidth
     border.color: node.outline
+  }
+
+  // Inside the frame, so the tint still reads as a border and a selection
+  // still shows. Aspect is preserved: a resize letterboxes rather than
+  // stretches, which is what a picture on a board should do.
+  Image {
+    id: picture
+    anchors.fill: parent
+    anchors.margins: node.ctl.borderWidth
+    visible: node.isImage
+    source: node.isImage ? node.ctl.imagePath(node.isrc) : ""
+    fillMode: Image.PreserveAspectFit
+    asynchronous: true
+    cache: false
+    mipmap: true
+    smooth: true
+  }
+
+  // A board can outlive the picture it points at: an image folder cleared by
+  // hand, or a board copied to another machine without it. Say so rather than
+  // leaving an empty box that looks like a bug.
+  Text {
+    anchors.centerIn: parent
+    width: parent.width - node.ctl.sp(16)
+    visible: node.isImage && picture.status === Image.Error
+    text: "missing image\n" + node.isrc
+    horizontalAlignment: Text.AlignHCenter
+    wrapMode: Text.Wrap
+    elide: Text.ElideMiddle
+    maximumLineCount: 3
+    color: node.ctl.muted
+    font.family: node.ctl.fontFamily
+    font.pixelSize: node.ctl.fontBody
   }
 
   Canvas {
@@ -113,6 +148,7 @@ Item {
 
   Flickable {
     id: textViewport
+    visible: !node.isImage
     anchors.fill: parent
     anchors.margins: node.ctl.sp(14)
     anchors.topMargin: node.isNote ? header.height + node.ctl.sp(14) : node.ctl.sp(14)

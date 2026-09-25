@@ -67,8 +67,15 @@ expect(sessionReads, controller, "the controller", "BoardSession.qml")
 const stub = nestedMembers(read("tests/qml/tst_session.qml"), "ctl")
 expect(sessionReads, stub, "the tst_session stub", "tests/qml/tst_session.qml")
 
-expect(referenced(read("Node.qml"), "ctl."), nestedMembers(read("tests/qt/tst_node.qml"), "ctl"),
+const nodeReads = referenced(read("Node.qml"), "ctl.")
+expect(nodeReads, nestedMembers(read("tests/qt/tst_node.qml"), "ctl"),
   "the tst_node stub", "tests/qt/tst_node.qml")
+
+// PNG export draws the same Node against a stand-in controller of its own. It
+// is not the real one, so the checks above never touched it, and a member
+// added to Node would have gone missing from every exported image in silence.
+expect(nodeReads, nestedMembers(read("BoardImage.qml"), "renderCtl"),
+  "the PNG export's renderCtl", "BoardImage.qml")
 
 if (failures.length) {
   for (const line of failures) console.error("  " + line)

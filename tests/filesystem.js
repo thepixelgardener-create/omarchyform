@@ -51,5 +51,35 @@ try {
   assert.equal(fs.readFileSync(path.join(boards,'a.json'),'utf8'),'new')
   assert.equal(run('export',staged,path.join(outside,'copy.json'),boards).status,0)
   assert.equal(fs.readFileSync(path.join(outside,'copy.json'),'utf8'),'export')
+
+  // Pasting an image: the clipboard chooses the format, the script chooses the
+  // name and the folder. A stub wl-paste stands in for the compositor.
+  const images=path.join(dir,'images'),stubs=path.join(dir,'stubs')
+  for (const d of [images,stubs]) fs.mkdirSync(d)
+  fs.writeFileSync(path.join(stubs,'wl-paste'),
+    '#!/usr/bin/env bash\nfor a in "$@"; do [[ $a == --list-types ]] && { printf \'%s\\n\' "$FAKE_TYPES"; exit 0; }; done\nprintf \'%s\' "$FAKE_BYTES"\n')
+  fs.chmodSync(path.join(stubs,'wl-paste'),0o755)
+  const paste=(types,bytes,root,name)=>spawnSync('bash',
+    [path.join(__dirname,'../BoardFiles.sh'),'clipimage',root,name],
+    {encoding:'utf8',env:{...process.env,PATH:stubs+':'+process.env.PATH,FAKE_TYPES:types,FAKE_BYTES:bytes}})
+
+  assert.equal(paste('text/plain','hello',images,'paste-1').status,4,'no picture on the clipboard is not a failure')
+  assert.deepEqual(fs.readdirSync(images),[],'and nothing is left behind')
+
+  const png=paste('text/plain\nimage/png','PNGBYTES',images,'paste-1')
+  assert.equal(png.status,0)
+  assert.equal(png.stdout,'paste-1.png','the caller is told the name it got')
+  assert.equal(fs.readFileSync(path.join(images,'paste-1.png'),'utf8'),'PNGBYTES')
+
+  assert.equal(paste('image/jpeg','JPGBYTES',images,'paste-2').stdout,'paste-2.jpg','the format picks the extension')
+
+  // An empty clipboard read must not leave a zero-byte image on the board.
+  assert.equal(paste('image/png','',images,'paste-3').status,4)
+  assert.equal(fs.existsSync(path.join(images,'paste-3.png')),false)
+
+  for (const bad of ['../escape','a/b','.hidden','-dash'])
+    assert.notEqual(paste('image/png','X',images,bad).status,0,bad)
+  assert.deepEqual(fs.readdirSync(images).sort(),['paste-1.png','paste-2.jpg'],'no strays, no temporaries')
+
 } finally {fs.rmSync(dir,{recursive:true,force:true})}
 console.log('ok — filesystem confinement and restore collisions')

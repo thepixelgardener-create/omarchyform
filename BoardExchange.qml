@@ -82,10 +82,14 @@ Item {
     picker.open()
   }
 
+  // One paste, two possible clipboards. The picture is asked for first: if a
+  // copy carries both an image and its text fallback, the image is the thing
+  // that was copied.
   function paste() {
-    if (clipboard.running || !exchange.ctl.canEdit) return
+    if (clipboard.running || imageGrab.running || !exchange.ctl.canEdit) return
     pasteBoard = exchange.ctl.currentBoard
-    clipboard.running = true
+    imageGrab.command = exchange.ctl.fileCommand("clipimage", [exchange.ctl.imagesDir, "paste-" + Date.now()])
+    imageGrab.running = true
   }
 
   FileView {
@@ -118,6 +122,18 @@ Item {
       if (code !== 0) { exchange.fail("Could not save there; choose a location outside the app data folder"); return }
       if (exchange.operation === "publish") exchange.created(published.text, exchange.firstNote)
       else exchange.finished("Editable copy saved")
+    }
+  }
+  Process {
+    id: imageGrab
+    stdout: StdioCollector { id: grabbed; waitForEnd: true }
+    onExited: function (code) {
+      if (exchange.pasteBoard !== exchange.ctl.currentBoard) { exchange.finished("Board changed; paste again"); return }
+      // 4 is the script's way of saying the clipboard holds no picture, which
+      // is not a failure: text is the other thing it could be holding.
+      if (code === 4) { clipboard.running = true; return }
+      if (code !== 0 || !grabbed.text) { exchange.finished("Could not read the clipboard image"); return }
+      exchange.ctl.imagePasted(grabbed.text)
     }
   }
   Process {

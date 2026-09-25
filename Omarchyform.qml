@@ -143,6 +143,29 @@ Item {
     root.focusKeys()
   }
 
+  // Sizing needs the picture loaded, and only an open board has a scene that
+  // will load one, so the board measures it and calls back.
+  function imagePasted(name) {
+    if (root.activeBoard) root.activeBoard.probeImage(name)
+    else root.pasteImage(name, 0, 0)
+  }
+
+  function pasteImage(name, naturalWidth, naturalHeight) {
+    if (!root.canEdit || !Store.imageIsValid(name)) return
+    var w = naturalWidth > 0 ? naturalWidth : 320
+    var h = naturalHeight > 0 ? naturalHeight : 240
+    // Big enough to see, small enough that a phone screenshot does not arrive
+    // taller than the board. Aspect is kept, so nothing is squashed.
+    var fit = Math.min(1, 360 / Math.max(w, h))
+    root.addItem("image", root.toWorldX(root.viewW / 2), root.toWorldY(root.viewH / 2))
+    itemModel.setProperty(root.selectedIndex, "isrc", name)
+    itemModel.setProperty(root.selectedIndex, "iw", Math.max(root.minItemSize, Math.round(w * fit)))
+    itemModel.setProperty(root.selectedIndex, "ih", Math.max(root.minItemSize, Math.round(h * fit)))
+    root.save()
+    root.flash(naturalWidth > 0 ? "Image pasted" : "Image pasted · it could not be read, so the size is a guess")
+    root.focusKeys()
+  }
+
   function pasteClipboard() { exchange.paste() }
   function importBoard() { exchange.choose("import") }
   function exportBoard() { exchange.choose("json") }
@@ -456,7 +479,7 @@ Item {
       iid: root.nextId, kind: kind,
       ix: wx - w / 2, iy: wy - h / 2, iw: w, ih: h,
       itint: Store.TINTS[root.nextColor % Store.TINTS.length],
-      itext: "", ipinned: false
+      itext: "", ipinned: false, isrc: ""
     })
     root.nextId += 1
     root.nextColor += 1
@@ -525,9 +548,13 @@ Item {
     var n = root.selected()
     var t = root.targets()
     if (!n || t.length === 0) return
+    // Turning an image into a box would drop the picture with no way back, so
+    // it keeps its shape and takes the rest of the selection with it.
+    if (n.kind === "image") { root.flash("an image keeps its shape"); return }
     root.pushUndo()
     var next = Store.cycle(Store.KINDS, n.kind)
-    for (var i = 0; i < t.length; i++) itemModel.setProperty(t[i], "kind", next)
+    for (var i = 0; i < t.length; i++)
+      if (itemModel.get(t[i]).kind !== "image") itemModel.setProperty(t[i], "kind", next)
     root.save()
   }
 
@@ -1161,6 +1188,15 @@ Item {
   // where each one came from, so putting it back is exact.
   readonly property string trashDir: root.dataDir + "/trash"
   readonly property string trashIndexPath: root.trashDir + "/index.json"
+  // Pasted pictures are shared by every board, and nothing deletes them: a
+  // board in the trash still points at its images, and so does a copy someone
+  // exported last month. An orphan costs disk; a missing one costs the board.
+  readonly property string imagesDir: root.dataDir + "/images"
+
+  // The only way a file name out of a board file becomes a URL to load.
+  function imagePath(name) {
+    return Store.imageIsValid(name) ? "file://" + root.imagesDir + "/" + name : ""
+  }
 
   function backupPathFor(relative) {
     return root.backupsDir + "/" + "v2/" + relative + ".bak"
@@ -1187,7 +1223,7 @@ Item {
   Process {
     id: initProc
     running: true
-    command: ["mkdir", "-p", root.boardsDir, root.backupsDir, root.trashDir]
+    command: ["mkdir", "-p", root.boardsDir, root.backupsDir, root.trashDir, root.imagesDir]
     onExited: migrateProc.running = true
   }
 

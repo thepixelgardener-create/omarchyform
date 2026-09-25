@@ -62,6 +62,29 @@ case "$operation" in
     mv -nT -- "$source_path" "$target_path"
     [[ ! -e $source_path && ! -L $source_path ]]
     ;;
+  clipimage)
+    # The clipboard picks the format; this picks the name and the folder, so
+    # nothing the clipboard says can steer where the bytes land. Exit 4 means
+    # there is no image on it, which is the caller's cue to try text instead.
+    images_root=$1 base_name=$2
+    [[ $base_name != */* && $base_name =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]
+    mime=$(timeout 5 wl-paste --list-types 2>/dev/null | grep -m1 -E '^image/(png|jpeg|webp|gif|bmp)$' || true)
+    [[ -n $mime ]] || exit 4
+    case "$mime" in
+      image/png) extension=png ;;
+      image/jpeg) extension=jpg ;;
+      image/webp) extension=webp ;;
+      image/gif) extension=gif ;;
+      *) extension=bmp ;;
+    esac
+    confined "$images_root" "$base_name.$extension"
+    temporary=$(mktemp -- "$images_root/.omarchyform-paste-XXXXXX")
+    trap 'rm -f -- "$temporary"' EXIT
+    timeout 10 wl-paste --no-newline --type "$mime" > "$temporary" || exit 4
+    [[ -s $temporary ]] || exit 4
+    mv -nT -- "$temporary" "$images_root/$base_name.$extension"
+    printf '%s' "$base_name.$extension"
+    ;;
   check)
     # Loading asks first, so a board that could never be saved is not opened.
     confined "$1" "$2" || exit 3

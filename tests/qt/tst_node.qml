@@ -25,10 +25,19 @@ TestCase {
     property color itemFill: "#222222"
     property string fontFamily: "monospace"
     property int fontSubtitle: 13
+    property int fontBody: 11
+    property color muted: "#999999"
     property int undoCount: 0
     property int saveCount: 0
     property int flushCount: 0
     function isMarked(id) { return false }
+    // A two-pixel red PNG, inline: a real decode with no file to create, clean
+    // up, or have the runner refuse to read.
+    readonly property string redPixels: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP4z8AARAwQCgAf7gP9i18U1AAAAABJRU5ErkJggg=="
+    function imagePath(name) {
+      if (name === "") return ""
+      return name === "gone.png" ? "file:///nonexistent/gone.png" : redPixels
+    }
     function newBoard() {}
     function sp(n) { return n }
     function tintFill(tint, strong) { return itemFill }
@@ -66,10 +75,12 @@ TestCase {
     ih: model.get(0).ih
     itint: "foreground"
     itext: model.get(0).itext
+    isrc: ""
   }
   function init() {
     backgroundDoubleClicks = 0
     subject.kind = "note"
+    subject.isrc = ""
     subject.ipinned = false
     ctl.showPinned = false
     ctl.itemFill = "#222222"
@@ -126,6 +137,23 @@ TestCase {
     compare(ctl.editIndex, -1)
     compare(ctl.undoCount, 0)
   }
+  function test_image() {
+    subject.kind = "image"
+    subject.isrc = "ok.png"
+    verify(waitForRendering(subject))
+    // Inside the frame, and actually decoded rather than left as a tinted box.
+    tryVerify(function () { return grabImage(subject).pixel(90, 70) === Qt.rgba(1, 0, 0, 1) })
+  }
+
+  function test_missingImage() {
+    subject.kind = "image"
+    subject.isrc = "gone.png"
+    verify(waitForRendering(subject))
+    // The frame stays, so a board that lost its pictures still reads as a
+    // board rather than as a hole.
+    tryVerify(function () { return grabImage(subject).pixel(90, 70) === Qt.rgba(34/255, 34/255, 34/255, 1) })
+  }
+
   function test_paintedShapeFollowsTheme() {
     subject.kind = "ellipse"
     verify(waitForRendering(subject))

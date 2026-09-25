@@ -317,3 +317,31 @@ console.log('ok — controller: board-local marks, pinning, backup names and his
   assert.deepEqual(Array.from(c.root.targets()), [1, 0], 'and the marks drive the next operation')
 }
 console.log('ok — controller: marquee selection, order and cursor handover')
+{
+  // Pasted pictures: what lands, how big, and what the shape cycle does to it.
+  const c = controller()
+  c.session.loadBoard('{"version":5,"items":[]}', false)
+  c.root.pasteImage('../escape.png', 100, 100)
+  assert.equal(c.items.count, 0, 'a name that is not a plain file name never becomes an item')
+  c.root.pasteImage('paste-1.png', 1600, 900)
+  assert.equal(c.items.count, 1)
+  assert.equal(c.items.get(0).kind, 'image')
+  assert.equal(c.items.get(0).isrc, 'paste-1.png')
+  assert.equal(c.items.get(0).iw, 360, 'the long side sets the size')
+  assert.equal(c.items.get(0).ih, 203, 'and the short side keeps the proportions')
+  c.root.pasteImage('paste-2.png', 0, 0)
+  assert.equal(c.items.get(1).iw, 320, 'an image that could not be measured still lands')
+  assert.equal(c.items.get(1).ih, 240)
+  c.root.selectedIndex = 0
+  c.root.markedIds = []
+  c.root.cycleKind()
+  assert.equal(c.items.get(0).kind, 'image', 'there is nowhere for an image to cycle to')
+  c.root.addItem('note', 0, 0)
+  const note = c.items.count - 1
+  c.root.selectedIndex = note
+  c.root.markedIds = [c.items.get(0).iid, c.items.get(note).iid]
+  c.root.cycleKind()
+  assert.equal(c.items.get(note).kind, 'rect', 'a shape marked beside an image still cycles')
+  assert.equal(c.items.get(0).kind, 'image', 'and the image is left out of it')
+}
+console.log('ok — controller: pasted images, sizing and the shape cycle')

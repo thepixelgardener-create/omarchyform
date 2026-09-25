@@ -292,7 +292,7 @@ function tests(S) {
 
   test("writeFile emits the current version and a trailing newline", () => {
     const raw = S.writeFile(new FakeModel(), new FakeModel(), 1)
-    eq(JSON.parse(raw).version, 4, "version")
+    eq(JSON.parse(raw).version, 5, "version")
     ok(raw.endsWith("\n"), "trailing newline")
   })
 
@@ -543,6 +543,53 @@ function tests(S) {
   })
 
   // ----------------------------------------------------------------- geometry
+  test("an image name out of a board file is only ever a plain file name", () => {
+    for (const bad of [null, 42, "", "../secret.png", "a/b.png", "/etc/passwd", ".hidden.png",
+                       "-dash.png", "a\nb.png", "a..b.png", "x".repeat(129) + ".png"])
+      eq(S.imageIsValid(bad), false, String(bad))
+    for (const good of ["paste-1727205123456.png", "a.jpg", "A_1-2.webp"])
+      eq(S.imageIsValid(good), true, good)
+  })
+
+  test("an image keeps its file name and nothing else does", () => {
+    const items = new FakeModel()
+    S.fillItems(items, [
+      { id: 1, kind: "image", src: "paste-1.png" },
+      { id: 2, kind: "note", src: "paste-2.png" }
+    ])
+    eq(items.get(0).kind, "image")
+    eq(items.get(0).isrc, "paste-1.png")
+    eq(items.get(1).kind, "note")
+    eq(items.get(1).isrc, "", "a note has no picture to point at")
+  })
+
+  test("an image with an unusable name falls back to a note", () => {
+    const items = new FakeModel()
+    S.fillItems(items, [
+      { id: 1, kind: "image" },
+      { id: 2, kind: "image", src: "../../escape.png" }
+    ])
+    // Left as an image it would be an item that can never draw itself, and
+    // the second one would be a board file choosing which file to open.
+    eq(items.get(0).kind, "note")
+    eq(items.get(1).kind, "note")
+    eq(items.get(1).isrc, "")
+  })
+
+  test("an image survives the round trip", () => {
+    const items = new FakeModel([item({ iid: 1, kind: "image", isrc: "paste-1.png" })])
+    const back = new FakeModel()
+    S.fillItems(back, S.readFile(S.writeFile(items, new FakeModel(), 2)).items)
+    eq(back.get(0).kind, "image")
+    eq(back.get(0).isrc, "paste-1.png")
+  })
+
+  test("boards from every version this has ever written still load", () => {
+    for (const v of [1, 2, 3, 4, 5])
+      ok(S.readFile(JSON.stringify({ version: v, items: [] })) !== null, "version " + v)
+    eq(S.readFile(JSON.stringify({ version: 6, items: [] })), null, "and one from the future does not")
+  })
+
   test("the marquee catches what it touches, not only what it swallows", () => {
     const m = new FakeModel([
       item({ iid: 1, ix: 0, iy: 0, iw: 100, ih: 100 }),
