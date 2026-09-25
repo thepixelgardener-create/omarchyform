@@ -84,6 +84,16 @@ var KEY_HELP = [
   ["wheel", "zoom at the pointer"]
 ]
 
+// The widest key label. The help panel measures its key column from this rather
+// than guessing a width: the font is monospace, so the longest string is the
+// widest one.
+function longestKeyLabel() {
+  var longest = ""
+  for (var i = 0; i < KEY_HELP.length; i++)
+    if (KEY_HELP[i][0].length > longest.length) longest = KEY_HELP[i][0]
+  return longest
+}
+
 // ---------------------------------------------------------------- marshalling
 // One shape in, one shape out. The file, the undo stack and the models all
 // speak this, so there is a single definition of what an item is.

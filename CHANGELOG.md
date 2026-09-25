@@ -7,7 +7,7 @@ since older boards are migrated on load rather than rejected.
 
 ### Added
 
-- `npm run shots` photographs the plugin in twelve states, in any theme, into
+- `npm run shots` photographs the plugin in thirteen states, in any theme, into
   `~/.cache/omarchyform/shots/`. It asserts nothing and is not part of
   `tests/run`; it is for the questions only eyes answer.
 
@@ -18,6 +18,13 @@ since older boards are migrated on load rather than rejected.
   every clone. The bit is committed now, and a test asserts it survives.
 
 ### Changed
+
+- **The shortcut list reads as two columns.** Titled "Keyboard shortcuts", with
+  the keys right-aligned in the theme's accent and the descriptions left-aligned
+  beside them, so the eye can run down either column. The key column is measured
+  from the widest label rather than guessed at, and never takes more than half
+  the panel. The panel itself is opaque now — the canvas under it can be
+  translucent, and a shortcut list read through a wallpaper is not one.
 
 - **The menu can be walked from the keyboard.** `h` `l` or `tab` move along it,
   `enter` picks, `esc` closes; the item the keyboard is on takes the accent the
