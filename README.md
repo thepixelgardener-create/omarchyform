@@ -82,9 +82,10 @@ the board first, or save with `ctrl+s` and wait for the saving indicator to
 clear: a reload unloads the overlay, and a forced unload can interrupt a save
 that is still in flight.
 
-If the board will not open after an update — the bar icon clicks and nothing
-appears — run `omarchy restart shell`. A reload cannot replace a version the
-shell previously failed to compile; see [Development](#development).
+If the board does not open after an update, or opens looking like the version
+you just replaced, run `omarchy restart shell`. A reload does not reliably
+replace a plugin's loaded QML on the version tested; see
+[Development](#development).
 
 Your boards, backups, trash and pasted pictures are untouched by an update:
 they live outside the plugin directory, in `~/.local/share/omarchyform/`. A
@@ -493,33 +494,43 @@ installed QML metadata still produces warnings about `PanelWindow`,
 `QProcess::ExitStatus`, and the dynamic Style font object. The live test checks
 that those types and properties work in the actual runtime.
 
-`keepLoaded: true` keeps this overlay mounted between summons. On the tested
-Omarchy version, `omarchy-shell shell rescanPlugins` unloads and recreates
-panels and overlays, including kept overlays. The special reload retention for
-kept services does not apply here. Save with `ctrl+s` and wait for the saving
-indicator to clear before rescan or shell restart; forced unload can interrupt
-an asynchronous save.
+`keepLoaded: true` keeps this overlay mounted between summons. Save with
+`ctrl+s` and wait for the saving indicator to clear before a rescan or a shell
+restart; a forced unload can interrupt an asynchronous save.
 
-**A rescan does not recover a plugin whose QML failed to compile.** Once the
-shell has failed to build a type, that failure outlives `rescanPlugins`:
-reinstalling the plugin and rescanning twice leaves the overlay uncreated, and
-the bar icon does nothing when clicked because there is nothing to toggle. Only
-a full restart clears it:
+**After changing QML, restart the shell. Do not trust a rescan to replace it.**
 
 ```bash
 omarchy restart shell
 ```
 
-Observed on Omarchy `4.0.0.r2158.gd174d4a-1` after a `Cannot override FINAL
-property` error, which made `Board.qml` — and so the whole overlay —
-unavailable. Two symptoms tell this apart from a plugin that is merely closed:
-`omarchy plugin list` reports it `enabled` while the shell never instantiates
-it, and `~/.local/share/omarchyform/images/` is missing, because the directories
-are created the moment the plugin's root loads. The error itself is in the
-shell's log, under `/run/user/$UID/quickshell/by-id/*/log.qslog`.
+`omarchy-shell shell rescanPlugins` is documented as unloading and recreating
+panels and overlays, including kept ones. On Omarchy `4.0.0.r2158.gd174d4a-1`
+that did not hold for this plugin, twice, in two different ways:
 
-So: after changing QML, watch that log rather than trusting a silent rescan.
-Two checks catch this class of error before the shell ever sees it —
+- **A version that would not compile stayed broken.** After a
+  `Cannot override FINAL property` error made `Board.qml` — and so the whole
+  overlay — unavailable, the fix on disk was ignored through a reinstall and two
+  rescans. The bar icon clicked and did nothing, because there was nothing to
+  toggle. Only a restart cleared it.
+- **A version that compiled fine was not replaced.** `omarchy plugin update`
+  reported success and the new files were on disk, but the running board still
+  drew the previous layout until the shell was restarted.
+
+`keepLoaded: true` is the likely reason the second case happens — a kept overlay
+that is never unloaded cannot pick up new source — but that is a suspicion from
+two observations, not something verified against the shell's own code. Either
+way, the safe habit is a restart.
+
+Three symptoms say the shell is not running what is on disk: the board renders a
+layout you have already changed; `omarchy plugin list` reports the plugin
+`enabled` while the shell never instantiates it; and
+`~/.local/share/omarchyform/images/` is missing, because the data directories
+are created the moment the plugin's root loads. Compile errors themselves are in
+the shell's log, under `/run/user/$UID/quickshell/by-id/*/log.qslog`.
+
+Watch that log rather than trusting a silent rescan. Two checks catch this class
+of error before the shell ever sees it —
 `./tests/run` fails on any member that shadows a final one, and
 `npm run test:omarchy -- --live` loads the whole plugin the way the shell does.
 The unit suites do not: `npm run test:ui` mounts `Node.qml` rather than the

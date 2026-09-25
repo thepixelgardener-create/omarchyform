@@ -43,11 +43,12 @@ since older boards are migrated on load rather than rejected.
   height. The menu is hidden until `m` shows it, and closes again when a command
   is picked or `esc` is pressed. Closed, it leaves a clickable `menu · m` behind,
   so the commands are still reachable without knowing the key.
-- The README said a rescan recreates overlays, which holds for a working plugin
-  but not for one the shell has already failed to compile: that failure outlives
-  `rescanPlugins` and a reinstall, and only `omarchy restart shell` clears it.
-  Documented with the two symptoms that identify it and where the shell logs the
-  original error.
+- The README now says plainly that a rescan cannot be trusted to replace a
+  plugin's loaded QML, and to restart the shell after changing it. The first
+  version of this note blamed compile failures; a second case then showed a
+  version that compiled fine also going unreplaced by `omarchy plugin update`,
+  so the advice is no longer conditional. Lists the three symptoms of a shell
+  running something other than what is on disk.
 - **Selection no longer borrows the item's colour.** A tinted item sitting idle
   could look more selected than the cursor did, because selection worked by
   brightening and thickening the item's own border — which an accent tint
