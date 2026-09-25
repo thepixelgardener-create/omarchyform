@@ -248,14 +248,16 @@ FocusScope {
     property real fromY: 0
     property real toX: 0
     property real toY: 0
-    readonly property real left: Math.min(board.ctl.toScreenX(fromX), board.ctl.toScreenX(toX))
-    readonly property real top: Math.min(board.ctl.toScreenY(fromY), board.ctl.toScreenY(toY))
+    // Not "left" and "top": those are final on Item, and shadowing them stops
+    // Board.qml loading at all under the shell's Qt.
+    readonly property real screenLeft: Math.min(board.ctl.toScreenX(fromX), board.ctl.toScreenX(toX))
+    readonly property real screenTop: Math.min(board.ctl.toScreenY(fromY), board.ctl.toScreenY(toY))
     // A few pixels of slack, so a plain click on the canvas stays a click.
     readonly property bool wide: Math.abs(board.ctl.toScreenX(toX) - board.ctl.toScreenX(fromX)) > 4
                                  || Math.abs(board.ctl.toScreenY(toY) - board.ctl.toScreenY(fromY)) > 4
     visible: dragging && wide
-    x: left
-    y: top
+    x: screenLeft
+    y: screenTop
     width: Math.abs(board.ctl.toScreenX(toX) - board.ctl.toScreenX(fromX))
     height: Math.abs(board.ctl.toScreenY(toY) - board.ctl.toScreenY(fromY))
     color: Qt.rgba(board.ctl.accent.r, board.ctl.accent.g, board.ctl.accent.b, 0.12)

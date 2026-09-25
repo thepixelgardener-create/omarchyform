@@ -12,6 +12,21 @@ npm test
 # JavaScript suites cannot see.
 bash -n BoardFiles.sh desktop/install.sh tests/run
 
+# Shadowing a final property of Item stops a whole file loading under the
+# shell's Qt, and no unit test sees it: the JavaScript suites never load QML,
+# and the Qt suite loads Node.qml rather than the surfaces. qmllint does see it,
+# without needing the shell's own modules to resolve.
+if [[ -x /usr/lib/qt6/bin/qmllint ]]; then
+  overrides=$(/usr/lib/qt6/bin/qmllint ./*.qml 2>&1 | grep -F 'property-override' || true)
+  if [[ -n $overrides ]]; then
+    printf '%s\n' "$overrides" >&2
+    printf 'A member here shadows a final one; the shell will refuse the file.\n' >&2
+    exit 1
+  fi
+else
+  printf 'skipped: final-property check needs qmllint\n'
+fi
+
 # Qt and Quickshell are present on an Omarchy machine and absent in a plain
 # container. Say which was skipped rather than passing quietly.
 runner=${QMLTESTRUNNER:-/usr/lib/qt6/bin/qmltestrunner}

@@ -49,5 +49,12 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y qt6-declarative-dev-tools qml6-module-qtqml qml6-module-qtqml-models qml6-module-qtquick qml6-module-qtquick-window qml6-module-qttest qml6-module-qtqml-workerscript
+      # A member shadowing a final one stops the shell loading the whole file,
+      # and only this check sees it before a live desktop does.
+      - name: Final-property check
+        run: |
+          overrides=$(/usr/lib/qt6/bin/qmllint ./*.qml 2>&1 | grep -F 'property-override' || true)
+          if [ -n "$overrides" ]; then echo "$overrides"; exit 1; fi
+
       - name: Pointer, theme, and small-window tests
         run: npm run test:ui
