@@ -7,6 +7,11 @@ since older boards are migrated on load rather than rejected.
 
 ### Added
 
+- **Pictures can be dragged onto the board** from a file manager or a browser,
+  landing where they are let go of. Several at once are copied one at a time and
+  staggered rather than stacked. The type is read from the file's content rather
+  than its name, the destination name and folder are chosen here, and a file that
+  is not a picture or is over 32 MB is refused with a reason.
 - **`/` finds a note by its text.** Typing narrows as you go: the first match is
   selected and centred, matches take the accent outline, and everything else
   recedes the way it does in background mode. `enter` steps through the matches
@@ -25,6 +30,8 @@ since older boards are migrated on load rather than rejected.
 
 ### Fixed
 
+- A pasted picture was placed half its own width away from where it was meant to
+  go: the item was centred at its default size before its real size was known.
 - **The board opens again.** The marquee rectangle declared `left` and `top`,
   which are final on `Item`, so the shell refused `Board.qml` outright and the
   board did not open on a real desktop. `tests/run` and CI now fail on any
