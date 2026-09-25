@@ -410,6 +410,7 @@ FocusScope {
         else if (event.key === Qt.Key_S && shift) board.ctl.exportBoard()
         else if (event.key === Qt.Key_S) board.ctl.flushSave()
         else if (event.key === Qt.Key_N) board.ctl.newBoard()
+        else if (event.key === Qt.Key_C) board.ctl.copySelection()
         else if (event.key === Qt.Key_D) board.ctl.duplicateTargets()
         else if (event.key === Qt.Key_V) board.ctl.pasteClipboard()
         else if (event.key === Qt.Key_O) board.ctl.importBoard()

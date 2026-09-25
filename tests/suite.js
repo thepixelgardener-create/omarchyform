@@ -590,6 +590,19 @@ function tests(S) {
     eq(S.readFile(JSON.stringify({ version: 6, items: [] })), null, "and one from the future does not")
   })
 
+  test("copying out takes the text in board order, blanks left out", () => {
+    const m = new FakeModel([
+      item({ iid: 1, itext: "first" }),
+      item({ iid: 2, itext: "" }),
+      item({ iid: 3, itext: "third\nwith two lines" })
+    ])
+    // Marks arrive descending; the clipboard should read top to bottom.
+    eq(S.copyText(m, [2, 0]), "first\n\nthird\nwith two lines", "board order, a blank line between")
+    eq(S.copyText(m, [1]), "", "an empty note has nothing to give")
+    eq(S.copyText(m, [0, 1]), "first", "and is skipped rather than leaving a gap")
+    eq(S.copyText(m, []), "")
+  })
+
   test("only a plain local file path survives a drop", () => {
     eq(S.localPath("file:///home/me/a shot.png"), "/home/me/a shot.png", "escapes are decoded")
     eq(S.localPath("file:///home/me/%C3%A5.png"), "/home/me/\u00e5.png", "including non-ascii ones")

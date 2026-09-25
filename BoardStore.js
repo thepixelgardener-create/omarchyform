@@ -59,6 +59,7 @@ var KEY_HELP = [
   ["a", "mark everything"],
   ["d", "delete what is marked, or the one under the cursor"],
   ["ctrl+d", "duplicate it, connectors between the copies included"],
+  ["ctrl+c", "copy it out: a picture as a picture, anything else as its text"],
   ["/", "find: type to search the notes, enter steps through matches"],
   ["g then h j k l", "align the marked items on that edge"],
   ["g then c / m", "align their centres on one line"],
@@ -529,6 +530,19 @@ function spreadMoves(items, indices, axis) {
     at = at + n[size] + gap
   }
   return moves
+}
+
+// What lands on the clipboard when items are copied out: their text in board
+// order, blank ones left out, separated by a blank line so several notes arrive
+// as paragraphs rather than one run-on.
+function copyText(items, indices) {
+  var ordered = indices.slice().sort(function (a, b) { return a - b })
+  var parts = []
+  for (var i = 0; i < ordered.length; i++) {
+    var n = items.get(ordered[i])
+    if (typeof n.itext === "string" && n.itext !== "") parts.push(n.itext)
+  }
+  return parts.join("\n\n")
 }
 
 // A dropped URL is untrusted text from another application. Only a plain local

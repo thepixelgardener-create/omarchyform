@@ -81,6 +81,30 @@ try {
     assert.notEqual(paste('image/png','X',images,bad).status,0,bad)
   assert.deepEqual(fs.readdirSync(images).sort(),['paste-1.png','paste-2.jpg'],'no strays, no temporaries')
 
+  // Copying out: a stub wl-copy records what it was handed, so the real
+  // clipboard is never touched by a test run.
+  fs.writeFileSync(path.join(stubs,'wl-copy'),
+    '#!/usr/bin/env bash\nprintf \'%s\\n\' "$*" > "$COPY_LOG"\ncat >> "$COPY_LOG"\n')
+  fs.chmodSync(path.join(stubs,'wl-copy'),0o755)
+  const copyLog=path.join(dir,'copied.txt')
+  const copy=(...args)=>spawnSync('bash',[path.join(__dirname,'../BoardFiles.sh'),...args],
+    {encoding:'utf8',env:{...process.env,PATH:stubs+':'+process.env.PATH,COPY_LOG:copyLog}})
+
+  assert.equal(copy('clipcopy','two\nlines').status,0)
+  assert.match(fs.readFileSync(copyLog,'utf8'),/two\nlines/,'the text reaches the clipboard intact')
+  // A note beginning with a dash is text, not an option.
+  assert.equal(copy('clipcopy','--help').status,0)
+  assert.match(fs.readFileSync(copyLog,'utf8'),/--help/)
+
+  const pixels=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP4z8AARAwQCgAf7gP9i18U1AAAAABJRU5ErkJggg==','base64')
+  fs.writeFileSync(path.join(images,'copy-me.png'),pixels)
+  fs.writeFileSync(path.join(images,'not-a-picture.png'),'plain text')
+  assert.equal(copy('clipcopyimage',images,'copy-me.png').status,0)
+  assert.match(fs.readFileSync(copyLog,'utf8'),/--type image\/png/,'the type is read from the bytes')
+  assert.equal(copy('clipcopyimage',images,'not-a-picture.png').status,4,'a file that is not a picture is refused')
+  for (const bad of ['../escape.png','sub/dir.png'])
+    assert.notEqual(copy('clipcopyimage',images,bad).status,0,bad)
+
   // Dropping a file in: the path is untrusted, the type comes from the content,
   // and the destination name is ours.
   const source=path.join(dir,'source')

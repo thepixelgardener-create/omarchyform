@@ -7,6 +7,10 @@ since older boards are migrated on load rather than rejected.
 
 ### Added
 
+- **`ctrl+c` copies out.** A picture on its own goes to the clipboard as a
+  picture, so it can be pasted into anything that takes an image; anything else
+  goes as its text, several items arriving as paragraphs in board order. The
+  round trip with `ctrl+v` is closed in both directions.
 - **Pictures can be dragged onto the board** from a file manager or a browser,
   landing where they are let go of. Several at once are copied one at a time and
   staggered rather than stacked. The type is read from the file's content rather
