@@ -5,6 +5,23 @@ since older boards are migrated on load rather than rejected.
 
 ## Unreleased
 
+### Changed
+
+- **Selection no longer borrows the item's colour.** A tinted item sitting idle
+  could look more selected than the cursor did, because selection worked by
+  brightening and thickening the item's own border — which an accent tint
+  already does. The cursor is now a solid ring outside the item and a secondary
+  mark a lighter one, in one colour at one width whatever the item is tinted.
+  Drawn for ellipses and diamonds too, where an outline on the shape itself is
+  hard to follow.
+- Background mode said the same thing twice, in two different wordings: the
+  banner now names the mode and the footer carries the keys, as it does for
+  every other mode.
+- The "more text than fits" marker was an ellipsis in the text colour, which
+  read as punctuation belonging to the note. It is a small tinted tab now, in
+  the opposite corner from the resize grip.
+- The footer mentions `/`, and every footer line uses one separator style.
+
 ### Added
 
 - **`ctrl+c` copies out.** A picture on its own goes to the clipboard as a

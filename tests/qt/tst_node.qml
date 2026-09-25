@@ -27,6 +27,7 @@ TestCase {
     property int fontSubtitle: 13
     property int fontBody: 11
     property color muted: "#999999"
+    property color canvasBackground: "#111111"
     property int undoCount: 0
     property int saveCount: 0
     property int flushCount: 0
