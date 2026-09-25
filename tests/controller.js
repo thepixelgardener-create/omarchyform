@@ -8,7 +8,7 @@ function controller() {
   const items = new FakeModel(), links = new FakeModel()
   const root = { currentBoard: 'a.json', items, links, nextId: 1, nextColor: 0, windowMode: false,
     undoStack: [], redoStack: [], selectedIndex: -1, editIndex: -1,
-    camX: 0, camY: 0, zoom: 1, activeBoard: null, markedIds: [], showPinned: false,
+    camX: 0, camY: 0, zoom: 1, activeBoard: null, markedIds: [], showPinned: false, arranging: false,
     boardsDir: '/boards', backupsDir: '/backups', worldStep: 40, minItemSize: 60, viewW: 1000, viewH: 700 }
   const session = { ctl: root, boardLoaded: true, damaged: false, pendingBoard: null,
     lastSavedCount: 0, lastSavedText: '', saveError: '' }
@@ -406,3 +406,57 @@ console.log('ok — controller: pasted images, sizing and the shape cycle')
   assert.equal(c.items.count, pinnedCount, 'a background is left out of it')
 }
 console.log('ok — controller: duplicating items, their connectors and their pictures')
+{
+  // The arrange mode: what it refuses, what it does, and what it says.
+  const c = controller()
+  c.session.loadBoard('{"version":5,"items":[]}', false)
+  // Staggered, so there is something to line up and something to even out.
+  c.root.addItem('note', 0, 0)
+  c.root.addItem('note', 300, 120)
+  c.root.addItem('note', 700, 260)
+  const ids = [0, 1, 2].map(i => c.items.get(i).iid)
+
+  // One item is not an arrangement.
+  c.root.markedIds = []
+  c.root.selectedIndex = 0
+  c.root.beginArrange()
+  assert.equal(c.root.arranging, false, 'one item has nothing to line up with')
+
+  c.root.markedIds = ids.slice(0, 2)
+  c.root.beginArrange()
+  assert.equal(c.root.arranging, true)
+
+  // Aligning leaves the mode, moves only what needs moving, and is undoable.
+  const before = [0, 1].map(i => c.items.get(i).iy)
+  c.root.alignTargets('top')
+  assert.equal(c.root.arranging, false, 'the mode ends with the command')
+  assert.equal(c.items.get(0).iy, c.items.get(1).iy, 'the two share a top edge')
+  c.root.undo()
+  assert.deepEqual([0, 1].map(i => c.items.get(i).iy), before, 'and undo puts them back')
+
+  // Aligning twice: the second time there is nothing to do and no undo entry.
+  c.root.markedIds = ids.slice(0, 2)
+  c.root.alignTargets('top')
+  const depth = c.root.undoStack.length
+  c.root.alignTargets('top')
+  assert.equal(c.root.undoStack.length, depth, 'an alignment that changes nothing is not history')
+
+  // Spreading needs three.
+  c.root.markedIds = ids.slice(0, 2)
+  c.root.spreadTargets('x')
+  assert.equal(c.root.arranging, false)
+  c.root.markedIds = ids
+  c.root.spreadTargets('x')
+  const gaps = [
+    c.items.get(1).ix - (c.items.get(0).ix + c.items.get(0).iw),
+    c.items.get(2).ix - (c.items.get(1).ix + c.items.get(1).iw)
+  ]
+  assert.ok(Math.abs(gaps[0] - gaps[1]) < 1e-9, 'evenly spaced: ' + gaps)
+
+  // A read-only board arranges nothing.
+  const ro = controller()
+  ro.session.loadBoard('{broken', false)
+  ro.root.beginArrange()
+  assert.equal(ro.root.arranging, false, 'a board that cannot be edited cannot be arranged')
+}
+console.log('ok — controller: the arrange mode, aligning and spreading')

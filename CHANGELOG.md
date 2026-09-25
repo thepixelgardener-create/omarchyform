@@ -7,6 +7,10 @@ since older boards are migrated on load rather than rejected.
 
 ### Added
 
+- **`g` arranges what is marked.** Then `h` `j` `k` `l` for an edge, `c` or `m`
+  for centres on one line, or `H` `J` `K` `L` to spread them evenly with the
+  outermost two staying put. The footer says what the second key can be while it
+  waits, and anything else cancels rather than running its usual command.
 - **`ctrl+d` duplicates.** The copies land offset from their originals and
   become the selection, so duplicating and then pushing the copy somewhere is
   two commands. A connector is copied when both of its ends were; an image copy

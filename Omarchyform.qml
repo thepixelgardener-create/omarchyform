@@ -509,6 +509,49 @@ Item {
     root.removeAt(root.targets())
   }
 
+  // Arranging is a two-key command: g, then which edge. A mode rather than six
+  // more bindings, because the second key is a direction the hands already know
+  // and the footer can say what the choices are while it waits.
+  property bool arranging: false
+
+  function beginArrange() {
+    if (!root.canEdit) return
+    if (root.targets().length < 2) { root.flash("mark two or more items to arrange them"); return }
+    root.arranging = true
+  }
+
+  function cancelArrange() { root.arranging = false }
+
+  function alignTargets(edge) {
+    root.arranging = false
+    if (!root.canEdit) return
+    var moves = Store.alignMoves(itemModel, root.targets(), edge)
+    if (moves.length === 0) { root.flash("already aligned"); return }
+    root.applyMoves(moves)
+    root.flash("aligned " + moves.length + (moves.length === 1 ? " item" : " items"))
+  }
+
+  function spreadTargets(axis) {
+    root.arranging = false
+    if (!root.canEdit) return
+    var t = root.targets()
+    if (t.length < 3) { root.flash("mark three or more items to spread them"); return }
+    var moves = Store.spreadMoves(itemModel, t, axis)
+    if (moves.length === 0) { root.flash("already evenly spaced"); return }
+    root.applyMoves(moves)
+    root.flash("spread " + moves.length + (moves.length === 1 ? " item" : " items"))
+  }
+
+  function applyMoves(moves) {
+    root.pushUndo()
+    for (var i = 0; i < moves.length; i++) {
+      itemModel.setProperty(moves[i].index, "ix", moves[i].x)
+      itemModel.setProperty(moves[i].index, "iy", moves[i].y)
+    }
+    root.save()
+    root.repaintLinks()
+  }
+
   // A copy lands offset from its original rather than on top of it, and becomes
   // the selection, so duplicating then pushing it somewhere is two commands
   // instead of four.
@@ -831,6 +874,7 @@ Item {
   // Escape unwinds one layer at a time rather than closing outright.
   function back() {
     if (root.helpVisible) root.helpVisible = false
+    else if (root.arranging) root.arranging = false
     else if (root.showPinned) { root.showPinned = false; root.selectedIndex = -1 }
     else if (root.clearMarks()) root.flash("marks cleared")
     else if (root.linkingFrom >= 0) { root.linkingFrom = -1; root.repaintLinks() }

@@ -316,6 +316,7 @@ FocusScope {
       "x": function () { board.ctl.toggleLinking() },
       "X": function () { board.ctl.unlinkSelected() },
       "w": function () { board.ctl.toggleWindowMode() },
+      "g": function () { board.ctl.beginArrange() },
       "f": function () { board.ctl.fitToItems() },
       "b": function () { board.ctl.openBrowser() },
       "0": function () { board.ctl.resetView() },
@@ -347,6 +348,21 @@ FocusScope {
       }
       var ctrl = (event.modifiers & Qt.ControlModifier) !== 0
       var shift = (event.modifiers & Qt.ShiftModifier) !== 0
+
+      // Waiting for the second key of g. Anything that is not one of the
+      // choices cancels, rather than being taken as the command it usually is:
+      // a mistyped arrange should do nothing, not delete something.
+      if (board.ctl.arranging) {
+        var ad = keys.direction(event.key, event.text)
+        if (ad && shift) board.ctl.spreadTargets(ad[0] !== 0 ? "x" : "y")
+        else if (ad) board.ctl.alignTargets(ad[0] < 0 ? "left" : ad[0] > 0 ? "right"
+                                           : ad[1] < 0 ? "top" : "bottom")
+        else if (event.text === "c") board.ctl.alignTargets("centreX")
+        else if (event.text === "m") board.ctl.alignTargets("centreY")
+        else board.ctl.cancelArrange()
+        event.accepted = true
+        return
+      }
 
       if (ctrl) {
         // Ctrl plus a movement key resizes, the same way Shift plus one moves.
@@ -474,6 +490,7 @@ FocusScope {
     visible: !board.ctl.helpVisible && !board.ctl.browserVisible
     text: board.ctl.saveError !== "" ? board.ctl.saveError
       : board.ctl.trashIndexError !== "" ? board.ctl.trashIndexError
+      : board.ctl.arranging ? "arrange · hjkl: edges · c/m: centres · HJKL: spread evenly · esc: cancel"
       : board.ctl.showPinned ? "backgrounds · tab/hjkl or click: select · p: unpin · esc: done"
       : board.ctl.statusText !== "" ? board.ctl.statusText
       : board.ctl.pendingBoard !== null ? "saving before switching boards…"
