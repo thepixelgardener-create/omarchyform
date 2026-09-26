@@ -7,7 +7,16 @@ since older boards are migrated on load rather than rejected.
 
 ### Added
 
-- `npm run shots` photographs the plugin in thirteen states, in any theme, into
+- **A scroll mark on the panels that scroll.** The shortcut list and the board
+  browser both run past their panel, and neither said so: the list ended
+  mid-row, and a directory of thirty boards looked like a directory of twenty.
+  A slim rule down the inside edge now says how much there is and how far down
+  it you are, and appears only when something is out of sight. It is a mark,
+  not a scrollbar — these panels are driven from the keyboard, and a thumb that
+  invites a grab it does not answer is worse than no thumb at all. The wheel
+  and a drag still work as they did.
+
+- `npm run shots` photographs the plugin in fourteen states, in any theme, into
   `~/.cache/omarchyform/shots/`. It asserts nothing and is not part of
   `tests/run`; it is for the questions only eyes answer.
 

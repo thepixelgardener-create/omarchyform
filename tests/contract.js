@@ -53,7 +53,7 @@ function expect(names, available, what, where) {
 }
 
 // The views address the controller as ctl.
-for (const file of ["Board.qml", "Node.qml", "Browser.qml", "Help.qml", "BoardToolbar.qml", "BoardExchange.qml", "BoardImage.qml"]) {
+for (const file of ["Board.qml", "Node.qml", "Browser.qml", "Help.qml", "BoardToolbar.qml", "BoardExchange.qml", "BoardImage.qml", "ScrollHint.qml"]) {
   const source = read(file)
   expect(referenced(source, "ctl."), controller, "the controller", file)
 }
