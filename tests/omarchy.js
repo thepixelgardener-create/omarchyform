@@ -4,6 +4,7 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const { spawnSync } = require('child_process')
+const { coverage } = require('./png')
 if (!process.argv.includes('--live')) {
   console.error('This test requires a running Omarchy/Hyprland desktop; pass --live to open isolated test surfaces.')
   process.exit(2)
@@ -37,7 +38,21 @@ try {
   if (result.error || result.status !== 0 || !output.includes('OMARCHY_TESTS_PASSED') || /FAIL:|TypeError|ReferenceError|Binding loop|WARN scene|ERROR/.test(output)) {
     console.error(output, result.error || '')
     process.exitCode = 1
-  } else console.log('ok — full Omarchy plugin smoke test (live Wayland)')
+  } else {
+    // The status line said the export succeeded; this says the board is in it.
+    // An item culled by mistake draws nothing and still exports at the right
+    // size, so neither the file existing nor its dimensions would notice.
+    //
+    // The two notes this test exports cover 28% of the frame. With the items
+    // culled out of it, only the connector between them is left and coverage
+    // falls to 11%, so the two cases are not close; a fifth is between them
+    // with room on both sides.
+    const inked = coverage(path.join(dir, 'export.png'))
+    if (inked < 0.2) {
+      console.error(`exported PNG is ${(inked * 100).toFixed(1)}% inked: the board did not render into it`)
+      process.exitCode = 1
+    } else console.log('ok — full Omarchy plugin smoke test (live Wayland)')
+  }
 } finally {
   if (keep) console.log(`Test artifacts: ${dir}`)
   else fs.rmSync(dir, {recursive:true, force:true})

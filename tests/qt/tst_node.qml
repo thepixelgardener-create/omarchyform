@@ -32,6 +32,16 @@ TestCase {
     property int saveCount: 0
     property int flushCount: 0
     function isMarked(id) { return false }
+    // The camera a node culls itself against. Off by default: these tests are
+    // about what one node draws, and a node outside the viewport draws itself
+    // plain on purpose, which would make every appearance check here pass for
+    // the wrong reason. The culling itself is checked in its own test below.
+    property bool culling: false
+    property real zoom: 1
+    property real camX: 0
+    property real camY: 0
+    property real viewW: 800
+    property real viewH: 600
     property bool findDimming: false
     property string findNeedle: ""
     function matchesFind(text) {
@@ -91,6 +101,10 @@ TestCase {
     ctl.showPinned = false
     ctl.findDimming = false
     ctl.findNeedle = ""
+    ctl.culling = false
+    ctl.camX = 0
+    ctl.camY = 0
+    ctl.zoom = 1
     ctl.itemFill = "#222222"
     ctl.canEdit = true
     ctl.selectedIndex = -1
@@ -180,6 +194,66 @@ TestCase {
     ctl.findDimming = false
     verify(waitForRendering(subject))
     compare(subject.opacity, 1, "and everything comes back when the search ends")
+  }
+
+  // An item off the edge of the screen draws itself plain, whatever the board
+  // says about it: it is not there to be looked at, and asking every item on a
+  // large board to restyle itself for a mark nobody can see was most of what
+  // marking one cost. What it must not do is lie once it comes back into view.
+  function test_offScreenItemsStayPlain() {
+    ctl.culling = true
+    ctl.findDimming = true
+    ctl.findNeedle = "keep"
+    model.set(0, {ix: 40, iy: 40, iw: 180, ih: 140, itext: "keep this one"})
+    verify(waitForRendering(subject))
+    verify(subject.onScreen, "an item inside the viewport is live")
+    verify(subject.foundMatch, "and answers the search")
+
+    // Well past the right-hand edge of an 800-wide viewport.
+    model.set(0, {ix: 4000, iy: 40, iw: 180, ih: 140, itext: "keep this one"})
+    verify(!subject.onScreen, "an item beyond the viewport is not live")
+    verify(!subject.foundMatch, "and does not restyle itself for a search")
+    compare(subject.opacity, 1, "nor dim itself where nobody can see it")
+
+    // The camera catches up with it, and it tells the truth again.
+    ctl.camX = -3900
+    verify(waitForRendering(subject))
+    verify(subject.onScreen, "panning to it brings it back")
+    verify(subject.foundMatch, "and the match reads as a match again")
+
+    ctl.camX = 0
+    ctl.findDimming = false
+    ctl.culling = false
+    model.set(0, {ix: 100, iy: 100, iw: 180, ih: 140, itext: ""})
+    verify(waitForRendering(subject))
+  }
+
+  // The edges of the rule, where an off-by-one would show as an item going
+  // plain while half of it is still on the screen.
+  //
+  // Asserted on the property rather than after waitForRendering: culling an
+  // item that was already drawing plain changes nothing on screen, so there is
+  // no frame to wait for and waiting for one fails.
+  function test_cullingEdges() {
+    ctl.culling = true
+
+    // Hanging off the right edge by all but a sliver: still live.
+    model.set(0, {ix: ctl.viewW - 4, iy: 40, iw: 180, ih: 140, itext: ""})
+    verify(subject.onScreen, "an item overlapping the right edge is live")
+
+    // Its trailing edge exactly on the left edge: past it, and out.
+    model.set(0, {ix: -180, iy: 40, iw: 180, ih: 140, itext: ""})
+    verify(!subject.onScreen, "an item flush against the left edge is out")
+
+    // Zoom counts: the same world position is off screen zoomed in.
+    model.set(0, {ix: 700, iy: 40, iw: 180, ih: 140, itext: ""})
+    verify(subject.onScreen, "on screen at 1:1")
+    ctl.zoom = 4
+    verify(!subject.onScreen, "and off it once zoomed in")
+
+    // As does the camera, which is what a pan moves.
+    ctl.camX = -2500
+    verify(subject.onScreen, "panning to it brings it back")
   }
 
   function test_paintedShapeFollowsTheme() {
