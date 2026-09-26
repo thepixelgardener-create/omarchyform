@@ -369,6 +369,7 @@ luminance.
 | `Browser.qml` | The board browser |
 | `BoardBar.qml` | The bar widget: the board's presence in the shell |
 | `Help.qml` | Scrollable keyboard help |
+| `ScrollHint.qml` | The mark that says a panel has more below |
 | `BoardStore.js` | Pure logic: parsing, marshalling, geometry. No QML |
 | `BoardSession.qml` | Loading, autosave state, and board-switch coordination |
 | `BoardPersistence.qml` | Serialized backup and atomic write, with completion/failure signals |
@@ -384,15 +385,33 @@ the suite loads the very file the plugin loads — there is no copy to drift.
 npm test        # pure logic and controller regression tests, no dependencies
 npm run mutate  # mutation testing
 npm run bench   # board marshalling cost at size
+npm run bench:scene # what a board costs to draw, at size; needs a compositor
 npm run test:qml # headless persistence tests; requires installed Quickshell
 npm run test:ui  # Qt Quick pointer, theme, and layout tests
 npm run test:omarchy -- --keep # live desktop smoke test, isolated board data
 npm run shots   # photograph every state, for judging by eye
 ```
 
-`npm run shots` puts the real plugin through thirteen states — empty, a cursor
+`npm run bench:scene` measures the other half of what a board costs. `npm run
+bench` times marshalling, which is arithmetic over an array and has never been
+the problem; this drives the real scene — delegates, bindings and both canvases
+— through panning, zooming, dragging, marking and finding, and reports
+milliseconds per frame at each board size. A phase at the refresh interval is
+vsync-bound and has room to spare; above it, the board drops frames while you
+use it. Like `shots` it asserts nothing and is not in `tests/run`: it needs a
+compositor, and frame times on a busy desktop are noisy enough that a single
+run can be misleading. Run it before and after a change and compare the
+columns.
+
+```bash
+npm run bench:scene            # 100, 500, 1000 and 3000 items
+npm run bench:scene -- 3000    # one size
+```
+
+`npm run shots` puts the real plugin through fourteen states — empty, a cursor
 beside a mark, typing, backgrounds, finding, arranging, help, the browser, a
-failed save, and a close-up at working zoom — and saves a picture of each into
+browser with more boards than fit, a failed save, and a close-up at working
+zoom — and saves a picture of each into
 `~/.cache/omarchyform/shots/`. It asserts nothing: it exists because whether a
 tinted item reads as selected, or a hint still fits on one line, is not
 something a test can answer, and reading the source instead has been wrong

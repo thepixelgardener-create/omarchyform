@@ -16,6 +16,19 @@ since older boards are migrated on load rather than rejected.
   invites a grab it does not answer is worse than no thumb at all. The wheel
   and a drag still work as they did.
 
+- `npm run bench:scene` measures what a board costs to *draw*, at size:
+  delegates, bindings and both canvases, driven through panning, zooming,
+  dragging, marking and finding, reported as milliseconds per frame. `npm run
+  bench` only ever measured marshalling, which is arithmetic over an array and
+  was never the problem — which is why the thing that was went unnoticed. Like
+  `shots`, it asserts nothing and is not part of `tests/run`.
+
+- The live smoke test checks the exported PNG has the board in it rather than
+  only that the export reported success. An item that draws itself as nothing
+  still exports at the right size, so neither the file nor its dimensions would
+  have noticed. `tests/png.js` reads the picture back with nothing installed,
+  Node's own zlib being enough.
+
 - `npm run shots` photographs the plugin in fourteen states, in any theme, into
   `~/.cache/omarchyform/shots/`. It asserts nothing and is not part of
   `tests/run`; it is for the questions only eyes answer.
@@ -40,6 +53,28 @@ since older boards are migrated on load rather than rejected.
   every clone. The bit is committed now, and a test asserts it survives.
 
 ### Changed
+
+- **A board costs what is on the screen, not what is on the board.** Marking
+  everything on a thousand-item board froze it for two thirds of a second, and
+  a search froze it for half of one: every item on the board restyled itself —
+  a ring to draw, a fill to blend, an opacity to change — whether or not it was
+  anywhere a person could see it. An item outside the viewport now reads as
+  unmarked, as no match, and at full strength, and is not drawn at all, so the
+  scene graph can skip it instead of walking it. It tells the truth again the
+  moment the camera reaches it, and the cursor and whatever is being typed in
+  stay live wherever they are, because the keyboard can walk the selection off
+  the edge of the screen.
+
+  Measured with `npm run bench:scene`, 95th-percentile milliseconds per frame
+  at a thousand items: marking 638 → 58, finding 503 → 64, dragging everything
+  94 → 40. Marking a three thousand item board now costs less than marking a
+  hundred-item one used to. What is left scales with the window, not the board.
+
+- Marks are held as a set beside the list rather than searched for in it, the
+  find query is lowered once per keystroke rather than once per item per
+  keystroke, and a batch of items moving asks for one repaint rather than two
+  per item. Each of these was a real cost and none of them was the cost: they
+  are here because they are plainly right, not because the numbers moved.
 
 - The install instructions no longer force the bar icon to the right. `omarchy
   plugin add --enable` asks which section to put it in — left, center or right
