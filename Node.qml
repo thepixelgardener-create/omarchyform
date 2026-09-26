@@ -1,6 +1,8 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import QtQuick.Shapes
+import "BoardStore.js" as Store
 
 // One thing on the board: a note, a box, an ellipse or a diamond.
 // Model roles arrive as required properties; everything else comes from ctl.
@@ -154,41 +156,29 @@ Item {
     font.pixelSize: node.ctl.fontBody
   }
 
-  Canvas {
-    id: shape
+  // Geometry, not a picture of geometry. A Canvas rasterises at the item's own
+  // size and the board then magnifies it with the world transform, so a shape
+  // went soft the moment you zoomed into it: measured at 400%, the outline
+  // smeared across 36 pixels where the selection ring beside it — an ordinary
+  // Rectangle — takes one. A Shape is triangulated by the scene graph at the
+  // size it is finally drawn at, so it stays as sharp as the notes around it.
+  //
+  // It also needs none of the plumbing a Canvas does. The old one repainted
+  // itself from seven Connections handlers, one per property that could change
+  // how it looked, and a new property meant remembering to add an eighth.
+  // These are bindings; there is nothing to remember.
+  Shape {
     anchors.fill: parent
     visible: node.painted
-    onPaint: {
-      var ctx = getContext("2d")
-      ctx.reset()
-      ctx.beginPath()
-      if (node.kind === "ellipse") {
-        ctx.ellipse(1, 1, Math.max(1, width - 2), Math.max(1, height - 2))
-      } else {
-        ctx.moveTo(width / 2, 1)
-        ctx.lineTo(width - 1, height / 2)
-        ctx.lineTo(width / 2, height - 1)
-        ctx.lineTo(1, height / 2)
-        ctx.closePath()
-      }
-      ctx.fillStyle = node.fill
-      ctx.fill()
-      ctx.strokeStyle = node.outline
-      ctx.lineWidth = node.cursor || node.linkSource ? node.ctl.borderWidth * 2 : node.ctl.borderWidth
-      ctx.stroke()
-    }
-    onWidthChanged: requestPaint()
-    onHeightChanged: requestPaint()
-
-    Connections {
-      target: node
-      function onFillChanged() { shape.requestPaint() }
-      function onOutlineChanged() { shape.requestPaint() }
-      function onKindChanged() { shape.requestPaint() }
-      function onSelectedChanged() { shape.requestPaint() }
-      function onCursorChanged() { shape.requestPaint() }
-      function onMarkedChanged() { shape.requestPaint() }
-      function onLinkSourceChanged() { shape.requestPaint() }
+    antialiasing: true
+    ShapePath {
+      fillColor: node.fill
+      strokeColor: node.outline
+      // Unchanged from the canvas, including its disagreement with the
+      // Rectangle above, which thickens on foundMatch rather than on cursor.
+      strokeWidth: node.cursor || node.linkSource ? node.ctl.borderWidth * 2 : node.ctl.borderWidth
+      joinStyle: ShapePath.MiterJoin
+      PathSvg { path: Store.shapePath(node.kind, node.width, node.height) }
     }
   }
 

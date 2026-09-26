@@ -35,6 +35,11 @@ since older boards are migrated on load rather than rejected.
 
 ### Fixed
 
+- CI installs `qml6-module-qtquick-shapes`, which the board now needs. It ships
+  inside `qt6-declarative` on a real Omarchy machine, so there is no new
+  dependency for anyone installing the plugin — only for the Ubuntu runner,
+  which installs its QML modules one package at a time.
+
 - The contract check reads the Qt layout test's stand-in controller too. It
   covered the controller, the session's stub and the one the PNG export
   draws against, but not the stub that drives the toolbar, the help panel and
@@ -61,6 +66,34 @@ since older boards are migrated on load rather than rejected.
   every clone. The bit is committed now, and a test asserts it survives.
 
 ### Changed
+
+- **Ellipses and diamonds are drawn as geometry rather than as a picture of
+  geometry.** They were painted into a `Canvas`, which rasterises at the
+  item's own size — and the board then magnifies that texture with its world
+  transform, so a shape went soft the moment you zoomed into it. Measured at
+  400% on the same pixel row: the outline crossed fifteen interpolated pixels
+  and nineteen shades of red, while the selection ring beside it, an ordinary
+  `Rectangle`, changed colour in one pixel. As a `Shape` it crosses none and
+  takes four — background, stroke, stroke, fill — and looks like the notes
+  around it at any zoom.
+
+  It also drops the plumbing. The canvas repainted itself from seven
+  `Connections` handlers, one per property that could change how it looked,
+  and an eighth property meant remembering to add an eighth handler. The
+  replacement is bindings, and the path itself is arithmetic in `BoardStore.js`
+  where a diamond that misses its own corners can be caught by a test rather
+  than by eye.
+
+  The grid and the connectors stay on `Canvas`: they are drawn in screen
+  space, once per frame, at the size they are displayed, so they were never
+  the ones going soft.
+
+  It is not free. Qt re-tessellates a `Shape` when the scale it is drawn at
+  changes, which is exactly what keeps it crisp, so zooming costs more on
+  boards with many shapes on screen at once: unchanged within noise at a
+  thousand items, and about a quarter slower at three thousand, where zooming
+  was already far from smooth. `Shape.CurveRenderer` would likely remove that,
+  and needs a Qt floor of 6.6 — see the note on the version gap below.
 
 - **The hint lines name their keys the way btop does.** The key a command
   answers to is coloured inside the word that names it, so the word carries
