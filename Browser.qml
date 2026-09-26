@@ -161,8 +161,10 @@ FocusScope {
             opacity: 0.5
             font.family: browser.ctl.fontFamily
             font.pixelSize: browser.ctl.fontBody
+            textFormat: Text.StyledText
             text: browser.ctl.browserTrash ? "the trash is empty"
-              : browser.searching ? "nothing matches" : "empty — a: new board   A: new folder"
+              : browser.searching ? "nothing matches"
+              : "empty — " + Store.hintLine(Store.EMPTY_HINTS, browser.ctl.accentMarkup)
           }
         }
 
@@ -190,11 +192,10 @@ FocusScope {
     opacity: 0.55
     font.family: browser.ctl.fontFamily
     font.pixelSize: browser.ctl.fontBody
-    text: browser.prompting
-      ? "enter: confirm   ·   esc: cancel"
-      : browser.ctl.browserTrash
-        ? "jk: move   ·   l/enter: put it back   ·   x: destroy it   ·   t or esc: back to the boards"
-        : "jk: move   ·   l/enter: open   ·   h: up   ·   /: search   ·   a: board   ·   A: folder   ·   r: rename   ·   x: trash   ·   t: the trash"
+    textFormat: Text.StyledText
+    text: Store.hintLine(browser.prompting ? Store.PROMPT_HINTS
+                         : browser.ctl.browserTrash ? Store.TRASH_HINTS : Store.BROWSER_HINTS,
+                         browser.ctl.accentMarkup, "  ·  ")
   }
 
   Keys.onPressed: function (event) {

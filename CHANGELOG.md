@@ -62,6 +62,21 @@ since older boards are migrated on load rather than rejected.
 
 ### Changed
 
+- **The hint lines name their keys the way btop does.** The key a command
+  answers to is coloured inside the word that names it, so the word carries
+  the key rather than saying it twice: `note`, `rect`, `ellipse`, `menu`,
+  `Fit`, `rename`, `the trash`. Where the key does not lead the word — `esc`,
+  `/`, `x`, a two-key chord — it is still named in front, because a colour
+  cannot point at a letter that is not there. A key in the *middle* of a word
+  was tried and dropped: lighting the `a` of `board` read as a rendering fault
+  rather than as a cue, so `a` and `A` name what they do instead, `add board`
+  and `Add folder`, and lead those.
+
+  These lines are drawn as markup now, so everything reaching them from a
+  board file, a file name or the keyboard is escaped on the way in. The board
+  itself still refuses rich text outright; this is the one place that renders
+  tags, and nothing that arrives from a board can open one.
+
 - **A board costs what is on the screen, not what is on the board.** Marking
   everything on a thousand-item board froze it for two thirds of a second, and
   a search froze it for half of one: every item on the board restyled itself —

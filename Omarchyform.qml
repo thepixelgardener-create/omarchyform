@@ -394,6 +394,10 @@ Item {
   function focusKeys() { if (root.activeBoard) root.activeBoard.focusKeys() }
   function isMarked(id) { return root.markedLookup[id] === true }
   readonly property bool culling: true
+  // The accent as markup understands it. The hint lines name their keys in it,
+  // the way btop colours the letter a menu entry answers to, and StyledText
+  // wants a string where the rest of the board wants a colour.
+  readonly property string accentMarkup: Store.hexColor(root.accent)
 
   // What an operation applies to: everything marked, or the cursor alone.
   // Descending, so removing by index cannot shift the ones still to come.

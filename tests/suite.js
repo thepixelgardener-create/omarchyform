@@ -899,6 +899,65 @@ function tests(S) {
     eq(S.cycle(S.KINDS, "hexagon"), S.KINDS[0], "unknown falls to the first")
   })
 
+  // -------------------------------------------------------------------- hints
+  test("a key that is in the word is coloured in it rather than said twice", () => {
+    eq(S.hintMarkup("n", "note", "#ff0000"), '<font color="#ff0000">n</font>ote', "first letter")
+    eq(S.hintMarkup("f", "Fit", "#ff0000"), '<font color="#ff0000">F</font>it',
+       "a lowercase key matches the capital that starts a word")
+  })
+
+  test("a key in the middle of a word is named in front of it instead", () => {
+    // `a` makes a new board and `board` does contain an a. Colouring it read
+    // as a rendering fault rather than as a cue, so the rule is the first
+    // letter or nothing.
+    eq(S.hintMarkup("a", "board", "#ff0000"), '<font color="#ff0000">a</font>: board',
+       "the middle of a word is not a cue")
+    ok(!S.keyLeads("p", "unpin"), "nor is the middle of this one")
+  })
+
+  test("a key that is not in the word is named in front of it", () => {
+    eq(S.hintMarkup("x", "connect", "#ff0000"), '<font color="#ff0000">x</font>: connect',
+       "no x in connect")
+    eq(S.hintMarkup("esc", "close", "#ff0000"), '<font color="#ff0000">esc</font>: close',
+       "a word is not a letter to colour")
+    // Shift is a different key. Lighting the `a` of `folder` would promise a
+    // key that makes a board instead.
+    eq(S.hintMarkup("A", "folder", "#ff0000"), '<font color="#ff0000">A</font>: folder',
+       "an uppercase key needs an uppercase letter")
+    ok(!S.keyLeads("A", "a folder"), "and does not settle for the lowercase one")
+  })
+
+  test("nothing reaching a hint line can carry markup into it", () => {
+    eq(S.escapeMarkup('<b>&</b>'), "&lt;b&gt;&amp;&lt;/b&gt;", "tags and ampersands are text")
+    // A board name is chosen by whoever made the board, and the status line is
+    // the one place on the board that renders tags.
+    ok(S.hintMarkup("x", "<i>tilt</i>", "#ff0000").indexOf("<i>") < 0,
+       "a label cannot open a tag")
+    ok(S.hintMarkup("<i>", "label", "#ff0000").indexOf("<i>") < 0,
+       "nor can a key")
+  })
+
+  test("a hint line joins its hints and every set is pairs", () => {
+    eq(S.hintLine([["n", "note"], ["x", "cut"]], "#ff0000", " | "),
+       '<font color="#ff0000">n</font>ote | <font color="#ff0000">x</font>: cut', "joined")
+    for (const set of [S.BOARD_HINTS, S.FIND_HINTS, S.ARRANGE_HINTS, S.PINNED_HINTS,
+                       S.BROWSER_HINTS, S.TRASH_HINTS, S.PROMPT_HINTS, S.EMPTY_HINTS,
+                       S.START_HINTS]) {
+      ok(set.length > 0, "a hint set is not empty")
+      for (const row of set) {
+        eq(row.length, 2, `hint ${JSON.stringify(row)} is a key and a label`)
+        ok(row[0].length > 0 && row[1].length > 0, `hint ${JSON.stringify(row)} has no blanks`)
+      }
+    }
+  })
+
+  test("a colour becomes the six digits markup reads", () => {
+    eq(S.hexColor({ r: 1, g: 0.5, b: 0 }), "#ff8000", "rounded to bytes")
+    eq(S.hexColor({ r: 0, g: 0, b: 0 }), "#000000", "and padded")
+    // A QML colour prints its alpha first, which markup would read as red.
+    eq(S.hexColor({ r: 1, g: 1, b: 1, a: 0.5 }), "#ffffff", "alpha is left out")
+  })
+
   // ------------------------------------------------------------------ content
   test("every documented key is a real one and every row is a pair", () => {
     ok(S.KEY_HELP.length > 0, "help is not empty")

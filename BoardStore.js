@@ -40,6 +40,84 @@ function normalizeTint(value) {
 // and a keyboard walk cannot drift out of step with what is on screen.
 var MENU_COMMANDS = ["New", "Boards", "Import", "Save copy", "Export PNG", "Help"]
 
+// ------------------------------------------------------------------- hints
+// btop's way with a menu: the key a command answers to is coloured inside the
+// word that names it, so the word carries the key rather than saying it twice.
+// Where the key is not in the word — esc, /, a two-key chord — it is named in
+// front instead, because a colour cannot point at a letter that is not there.
+//
+// The key has to be the letter the word starts with. btop colours a shortcut
+// wherever it falls, and `a` for a new board did light the middle of `board` —
+// which on screen read as a rendering fault rather than as a cue, so it is not
+// worth the letter it saves. A key that does not lead its word is named in
+// front of it.
+//
+// An uppercase key means shift, so it only matches an uppercase letter: the
+// `A` that makes a folder must not light the `a` that starts a word, which
+// would promise a key that does something else. A lowercase key matches
+// either, so `f` lights the `F` of `Fit`.
+function keyLeads(key, label) {
+  if (typeof key !== "string" || typeof label !== "string" || key.length !== 1) return false
+  if (key >= "A" && key <= "Z") return label.charAt(0) === key
+  return label.charAt(0).toLowerCase() === key.toLowerCase()
+}
+
+// These lines are drawn as markup so one word in them can be a different
+// colour, which means anything reaching them from a board file, a file name or
+// something somebody typed has to arrive as text rather than as tags.
+function escapeMarkup(text) {
+  return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+}
+
+function hex2(value) {
+  var byte = Math.round(Math.max(0, Math.min(1, value)) * 255).toString(16)
+  return byte.length === 1 ? "0" + byte : byte
+}
+
+// A colour as markup understands it. StyledText wants a string, and a QML
+// colour prints its alpha first, which it then reads as red.
+function hexColor(color) {
+  return color ? "#" + hex2(color.r) + hex2(color.g) + hex2(color.b) : "#000000"
+}
+
+function keyMarkup(key, color) {
+  return '<font color="' + color + '">' + escapeMarkup(key) + "</font>"
+}
+
+function hintMarkup(key, label, color) {
+  if (!keyLeads(key, label)) return keyMarkup(key, color) + ": " + escapeMarkup(label)
+  return keyMarkup(label.slice(0, 1), color) + escapeMarkup(label.slice(1))
+}
+
+// The separator is drawn as markup, where a run of spaces collapses to one —
+// so a line separated by spaces alone arrives with its hints run together.
+// Every caller passes something visible.
+function hintLine(hints, color, separator) {
+  var out = []
+  for (var i = 0; i < hints.length; i++) out.push(hintMarkup(hints[i][0], hints[i][1], color))
+  return out.join(separator === undefined ? " · " : separator)
+}
+
+// What each surface offers, as data: the view joins and colours them, and the
+// help panel below stays the one long list.
+var BOARD_HINTS = [["n", "note"], ["r", "rect"], ["e", "ellipse"], ["x", "connect"],
+                   ["/", "find"], ["?", "keys"], ["esc", "close"]]
+var FIND_HINTS = [["enter", "next"], ["esc", "done"]]
+var ARRANGE_HINTS = [["hjkl", "edges"], ["c/m", "centres"], ["HJKL", "spread evenly"],
+                     ["esc", "cancel"]]
+var PINNED_HINTS = [["tab/hjkl or click", "select"], ["p", "unpin"], ["esc", "done"]]
+// `add board` rather than `board`, so the key leads the word and does not have
+// to be said in front of it. The capital on `Add folder` is the shift the key
+// wants, which is the one place capitalisation here is load-bearing.
+var BROWSER_HINTS = [["jk", "move"], ["l/enter", "open"], ["h", "up"], ["/", "search"],
+                     ["a", "add board"], ["A", "Add folder"], ["r", "rename"],
+                     ["x", "trash"], ["t", "the trash"]]
+var TRASH_HINTS = [["jk", "move"], ["l/enter", "put it back"], ["x", "destroy it"],
+                   ["t or esc", "back to the boards"]]
+var PROMPT_HINTS = [["enter", "confirm"], ["esc", "cancel"]]
+var EMPTY_HINTS = [["a", "add a board"], ["A", "Add a folder"]]
+var START_HINTS = [["n", "New note"], ["Ctrl+V", "Paste text"]]
+
 var KEY_HELP = [
   ["ctrl+n / F2", "new board / name the current board"],
   ["ctrl+v", "paste a picture, or clipboard text as a note"],

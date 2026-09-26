@@ -84,7 +84,10 @@ Rectangle {
       anchors.left: identity.right
       anchors.leftMargin: content.gap
       anchors.verticalCenter: parent.verticalCenter
-      text: "menu · m"
+      textFormat: Text.StyledText
+      // btop's convention: the key is the letter it already starts with, in
+      // the accent, rather than the word and then the letter again.
+      text: Store.hintMarkup("m", "menu", toolbar.ctl.accentMarkup)
       opacity: 0.85
       color: toolbar.ctl.barForeground
       font.family: toolbar.ctl.fontFamily
@@ -148,8 +151,9 @@ Rectangle {
         MouseArea { anchors.fill: parent; onClicked: toolbar.ctl.resetView() }
       }
       Text {
-        text: "Fit · f"
-        color: toolbar.ctl.accent
+        textFormat: Text.StyledText
+        text: Store.hintMarkup("f", "Fit", toolbar.ctl.accentMarkup)
+        color: toolbar.ctl.barForeground
         font.family: toolbar.ctl.fontFamily
         font.pixelSize: toolbar.ctl.fontBody
         MouseArea { anchors.fill: parent; onClicked: toolbar.ctl.fitToItems() }
