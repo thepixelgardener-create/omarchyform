@@ -35,6 +35,13 @@ Item {
 
   property color canvasBackground: root.token(function () { return Color.background }, "#101315")
   property color foreground: root.token(function () { return Color.foreground }, "#CACCCC")
+  // The board's own header is a bar, so it is painted in the colours the theme
+  // paints the desktop's bar with rather than in the canvas colour. A theme
+  // that gives its bar its own background and its own text gets both here; one
+  // that does not is back where it started, since those keys derive from the
+  // background and foreground above.
+  property color barBackground: root.token(function () { return Color.bar.background }, root.canvasBackground)
+  property color barForeground: root.token(function () { return Color.bar.text }, root.foreground)
   property color accent: root.token(function () { return Color.accent }, "#CACCCC")
   property color urgent: root.token(function () { return Color.urgent }, "#A55555")
   property color muted: root.token(function () { return Color.muted }, "#707880")

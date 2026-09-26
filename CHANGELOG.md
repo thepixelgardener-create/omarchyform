@@ -68,8 +68,12 @@ since older boards are migrated on load rather than rejected.
   and whatever it is telling you are one block to look at, and the bottom of the
   canvas belongs to the board. In background mode it sits under the mode banner
   rather than behind it.
-- **The header is transparent.** The canvas runs under it; only the hairline
-  edge remains.
+- **The header wears the theme's bar colour.** `bar.background` and `bar.text`
+  from the theme's `shell.toml`, so the board's own menu bar reads as the same
+  kind of surface as the bar it was opened from, and a theme that gives its bar
+  a background of its own gets it here too. It had been the canvas colour, and
+  briefly transparent, which let the dot grid run through the chrome and made
+  the header look like part of the board rather than something sitting on it.
 - **The header is one line.** The board's name and save state sit on the left,
   the menu after them, the zoom on the right — where the name, the state and a
   row of six buttons used to take three stacked rows and most of the bar's
