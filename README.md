@@ -33,10 +33,16 @@ your place. The mode is remembered between sessions.
 omarchy plugin add https://github.com/thepixelgardener-create/omarchyform.git --enable
 ```
 
-Put it on the bar, which is the way to reach it without knowing a keybinding:
+It asks where to put the icon — left, center or right — and puts it there. The
+bar is the way to reach the board without knowing a keybinding, so answer the
+question rather than skipping it.
+
+Nothing asks if you add it non-interactively or with `--yes`, and enabling it
+later with `omarchy plugin enable` does not ask either: both put the icon on
+the right. Say where yourself, then or at any time after:
 
 ```bash
-omarchy bar put thepixelgardener.omarchyform --section right
+omarchy bar move thepixelgardener.omarchyform --section center
 ```
 
 The sticky-note icon opens and closes the board, and carries the accent colour while it is

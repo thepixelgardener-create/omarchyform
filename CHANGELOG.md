@@ -41,6 +41,12 @@ since older boards are migrated on load rather than rejected.
 
 ### Changed
 
+- The install instructions no longer force the bar icon to the right. `omarchy
+  plugin add --enable` asks which section to put it in — left, center or right
+  — and the README said to follow it with a command that names one. It now says
+  to answer the question, and gives `omarchy bar move` for changing your mind
+  or for an install that never asked.
+
 - **`d` no longer deletes.** It sat in the key table beside `s`, `c` and `e`,
   so a finger one key out destroyed what it was aiming at. `del` and
   `backspace` do it, as they did before and as they do everywhere else.
