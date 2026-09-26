@@ -365,7 +365,7 @@ luminance.
 |------|-------|
 | `Omarchyform.qml` | Controller: editing, navigation, and the two surfaces |
 | `Board.qml` | The canvas surface — grid, connectors, keys, cheat sheet |
-| `Node.qml` | One item: note, box, ellipse, diamond or picture |
+| `Node.qml` | One item: note, box, ellipse, diamond or picture. Shapes are `QtQuick.Shapes` geometry, so they stay sharp at any zoom |
 | `Browser.qml` | The board browser |
 | `BoardBar.qml` | The bar widget: the board's presence in the shell |
 | `Help.qml` | Scrollable keyboard help |

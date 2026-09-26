@@ -48,7 +48,7 @@ jobs:
       - name: Install Qt Quick test runtime
         run: |
           sudo apt-get update
-          sudo apt-get install -y qt6-declarative-dev-tools qml6-module-qtqml qml6-module-qtqml-models qml6-module-qtquick qml6-module-qtquick-window qml6-module-qttest qml6-module-qtqml-workerscript
+          sudo apt-get install -y qt6-declarative-dev-tools qml6-module-qtqml qml6-module-qtqml-models qml6-module-qtquick qml6-module-qtquick-shapes qml6-module-qtquick-window qml6-module-qttest qml6-module-qtqml-workerscript
       # A member shadowing a final one stops the shell loading the whole file,
       # and only this check sees it before a live desktop does.
       - name: Final-property check

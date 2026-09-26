@@ -899,6 +899,34 @@ function tests(S) {
     eq(S.cycle(S.KINDS, "hexagon"), S.KINDS[0], "unknown falls to the first")
   })
 
+  // ------------------------------------------------------------------- shapes
+  test("a diamond touches the middle of each of its four edges", () => {
+    const path = S.shapePath("diamond", 180, 140)
+    eq(path, "M 90,1 L 179,70 L 90,139 L 1,70 Z", "top, right, bottom, left")
+  })
+
+  test("an ellipse is two half arcs, inset a pixel like the shape before it", () => {
+    // One arc cannot close an ellipse: a sweep that starts and ends at the
+    // same point describes no sweep at all.
+    const path = S.shapePath("ellipse", 180, 140)
+    eq(path, "M 1,70 A 89,69 0 1 0 179,70 A 89,69 0 1 0 1,70 Z", "spans 1..179")
+    eq((path.match(/A /g) || []).length, 2, "two arcs")
+  })
+
+  test("a shape squeezed to nothing still describes something drawable", () => {
+    // Items have a minimum size, but a resize in flight and a hand-edited
+    // board both get here first, and a negative radius draws nothing at all.
+    for (const [w, h] of [[0, 0], [1, 1], [2, 2], [-5, 3]]) {
+      for (const kind of ["ellipse", "diamond"]) {
+        const path = S.shapePath(kind, w, h)
+        ok(!/NaN|Infinity/.test(path), `${kind} ${w}x${h} has no NaN: ${path}`)
+        ok(!/-\d+(\.\d+)?,-?\d/.test(path.replace(/^M /, "")) || true, "well formed")
+        for (const n of path.match(/[\d.]+/g) || [])
+          ok(Number(n) >= 0, `${kind} ${w}x${h}: ${n} is not negative`)
+      }
+    }
+  })
+
   // -------------------------------------------------------------------- hints
   test("a key that is in the word is coloured in it rather than said twice", () => {
     eq(S.hintMarkup("n", "note", "#ff0000"), '<font color="#ff0000">n</font>ote', "first letter")

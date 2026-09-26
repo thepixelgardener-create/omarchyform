@@ -40,6 +40,32 @@ function normalizeTint(value) {
 // and a keyboard walk cannot drift out of step with what is on screen.
 var MENU_COMMANDS = ["New", "Boards", "Import", "Save copy", "Export PNG", "Help"]
 
+// The outline of a painted shape, as SVG path data for a ShapePath.
+//
+// Arithmetic rather than drawing commands, so it can be checked without a
+// scene: a diamond that misses its own corners, or an ellipse that is a
+// pixel out on one side, is not something a screenshot makes obvious.
+//
+// Inset by a pixel the way the canvas that came before it was, so the stroke
+// sits inside the item's own bounds rather than straddling them.
+function shapePath(kind, w, h) {
+  var cx = w / 2
+  var cy = h / 2
+  if (kind === "ellipse") {
+    // Two half-arcs: SVG cannot draw a full ellipse in one, because a start
+    // and end at the same point describe no sweep at all.
+    var rx = Math.max(0.5, (w - 2) / 2)
+    var ry = Math.max(0.5, (h - 2) / 2)
+    return "M " + (cx - rx) + "," + cy
+      + " A " + rx + "," + ry + " 0 1 0 " + (cx + rx) + "," + cy
+      + " A " + rx + "," + ry + " 0 1 0 " + (cx - rx) + "," + cy + " Z"
+  }
+  var right = Math.max(1, w - 1)
+  var bottom = Math.max(1, h - 1)
+  return "M " + cx + ",1 L " + right + "," + cy + " L " + cx + "," + bottom
+    + " L 1," + cy + " Z"
+}
+
 // ------------------------------------------------------------------- hints
 // btop's way with a menu: the key a command answers to is coloured inside the
 // word that names it, so the word carries the key rather than saying it twice.
