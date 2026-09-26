@@ -151,7 +151,7 @@ the canvas is yours.
 | `tab` | Cycle through every note |
 | `space` | Mark this item as well, so the next command takes both |
 | `a` | Mark everything |
-| `d` / `del` | Delete what is marked, or the one under the cursor |
+| `del` / `backspace` | Delete what is marked, or the one under the cursor |
 | `ctrl+d` | Duplicate it, and the connectors between the copies |
 | `m` | Show or hide the menu in the header |
 | `m` then `h` `l` / `tab` | Walk the menu; `enter` picks, `esc` closes |

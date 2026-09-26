@@ -41,6 +41,10 @@ since older boards are migrated on load rather than rejected.
 
 ### Changed
 
+- **`d` no longer deletes.** It sat in the key table beside `s`, `c` and `e`,
+  so a finger one key out destroyed what it was aiming at. `del` and
+  `backspace` do it, as they did before and as they do everywhere else.
+
 - **The shortcut list reads as two columns.** Titled "Keyboard shortcuts", with
   the keys right-aligned in the theme's accent and the descriptions left-aligned
   beside them, so the eye can run down either column. The key column is measured
