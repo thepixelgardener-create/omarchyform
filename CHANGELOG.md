@@ -7,11 +7,41 @@ since older boards are migrated on load rather than rejected.
 
 ### Added
 
-- `npm run shots` photographs the plugin in thirteen states, in any theme, into
+- **A scroll mark on the panels that scroll.** The shortcut list and the board
+  browser both run past their panel, and neither said so: the list ended
+  mid-row, and a directory of thirty boards looked like a directory of twenty.
+  A slim rule down the inside edge now says how much there is and how far down
+  it you are, and appears only when something is out of sight. It is a mark,
+  not a scrollbar — these panels are driven from the keyboard, and a thumb that
+  invites a grab it does not answer is worse than no thumb at all. The wheel
+  and a drag still work as they did.
+
+- `npm run bench:scene` measures what a board costs to *draw*, at size:
+  delegates, bindings and both canvases, driven through panning, zooming,
+  dragging, marking and finding, reported as milliseconds per frame. `npm run
+  bench` only ever measured marshalling, which is arithmetic over an array and
+  was never the problem — which is why the thing that was went unnoticed. Like
+  `shots`, it asserts nothing and is not part of `tests/run`.
+
+- The live smoke test checks the exported PNG has the board in it rather than
+  only that the export reported success. An item that draws itself as nothing
+  still exports at the right size, so neither the file nor its dimensions would
+  have noticed. `tests/png.js` reads the picture back with nothing installed,
+  Node's own zlib being enough.
+
+- `npm run shots` photographs the plugin in fourteen states, in any theme, into
   `~/.cache/omarchyform/shots/`. It asserts nothing and is not part of
   `tests/run`; it is for the questions only eyes answer.
 
 ### Fixed
+
+- The contract check reads the Qt layout test's stand-in controller too. It
+  covered the controller, the session's stub and the one the PNG export
+  draws against, but not the stub that drives the toolbar, the help panel and
+  the browser — so a member missing from that one was caught by nothing.
+  Reading an undefined colour off it is silent on Qt 6.11 and fatal on the 6.4
+  CI runs, which is a green suite locally and a red one on push. Four members
+  had been missing from it for some time.
 
 - Clicking near the edge of the shortcut panel closed it. The panel is a plain
   rectangle, which lets a click through, and its scroller stops short of the
@@ -31,6 +61,38 @@ since older boards are migrated on load rather than rejected.
   every clone. The bit is committed now, and a test asserts it survives.
 
 ### Changed
+
+- **A board costs what is on the screen, not what is on the board.** Marking
+  everything on a thousand-item board froze it for two thirds of a second, and
+  a search froze it for half of one: every item on the board restyled itself —
+  a ring to draw, a fill to blend, an opacity to change — whether or not it was
+  anywhere a person could see it. An item outside the viewport now reads as
+  unmarked, as no match, and at full strength, and is not drawn at all, so the
+  scene graph can skip it instead of walking it. It tells the truth again the
+  moment the camera reaches it, and the cursor and whatever is being typed in
+  stay live wherever they are, because the keyboard can walk the selection off
+  the edge of the screen.
+
+  Measured with `npm run bench:scene`, 95th-percentile milliseconds per frame
+  at a thousand items: marking 638 → 58, finding 503 → 64, dragging everything
+  94 → 40. Marking a three thousand item board now costs less than marking a
+  hundred-item one used to. What is left scales with the window, not the board.
+
+- Marks are held as a set beside the list rather than searched for in it, the
+  find query is lowered once per keystroke rather than once per item per
+  keystroke, and a batch of items moving asks for one repaint rather than two
+  per item. Each of these was a real cost and none of them was the cost: they
+  are here because they are plainly right, not because the numbers moved.
+
+- The install instructions no longer force the bar icon to the right. `omarchy
+  plugin add --enable` asks which section to put it in — left, center or right
+  — and the README said to follow it with a command that names one. It now says
+  to answer the question, and gives `omarchy bar move` for changing your mind
+  or for an install that never asked.
+
+- **`d` no longer deletes.** It sat in the key table beside `s`, `c` and `e`,
+  so a finger one key out destroyed what it was aiming at. `del` and
+  `backspace` do it, as they did before and as they do everywhere else.
 
 - **The shortcut list reads as two columns.** Titled "Keyboard shortcuts", with
   the keys right-aligned in the theme's accent and the descriptions left-aligned
@@ -55,8 +117,12 @@ since older boards are migrated on load rather than rejected.
   and whatever it is telling you are one block to look at, and the bottom of the
   canvas belongs to the board. In background mode it sits under the mode banner
   rather than behind it.
-- **The header is transparent.** The canvas runs under it; only the hairline
-  edge remains.
+- **The header wears the theme's bar colour.** `bar.background` and `bar.text`
+  from the theme's `shell.toml`, so the board's own menu bar reads as the same
+  kind of surface as the bar it was opened from, and a theme that gives its bar
+  a background of its own gets it here too. It had been the canvas colour, and
+  briefly transparent, which let the dot grid run through the chrome and made
+  the header look like part of the board rather than something sitting on it.
 - **The header is one line.** The board's name and save state sit on the left,
   the menu after them, the zoom on the right — where the name, the state and a
   row of six buttons used to take three stacked rows and most of the bar's

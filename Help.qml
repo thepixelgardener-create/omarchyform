@@ -25,6 +25,18 @@ Rectangle {
   // panel and close it.
   MouseArea { anchors.fill: parent }
 
+  // In the margin ring rather than beside the text: the list is already
+  // measured to the panel, and taking a gutter out of it for a rule three
+  // pixels wide would wrap a description to save one.
+  ScrollHint {
+    ctl: help.ctl
+    view: content
+    anchors.top: content.top
+    anchors.bottom: content.bottom
+    anchors.right: parent.right
+    anchors.rightMargin: help.ctl.sp(10)
+  }
+
   Flickable {
     id: content
     anchors.fill: parent

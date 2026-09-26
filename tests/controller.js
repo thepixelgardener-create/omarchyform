@@ -23,6 +23,12 @@ function controller() {
   // Mirrors the QML binding of the same name: the harness loads functions, not
   // bindings, so a derived property has to be declared here.
   Object.defineProperty(root, 'findDimming', { get: () => root.finding && root.findQuery !== '' })
+  Object.defineProperty(root, 'findNeedle', { get: () => root.findQuery.toLowerCase() })
+  Object.defineProperty(root, 'markedLookup', { get: () => {
+    const lookup = {}
+    for (const id of root.markedIds) lookup[id] = true
+    return lookup
+  } })
   const writes = []
   const persistence = { busy: false, save(path, text) { this.busy = true; writes.push({path,text}) } }
   // Stands in for BoardExchange: the controller hands it filtered paths and

@@ -48,6 +48,14 @@ Item {
     function tintFill(tint, strong) { return picture.ctl.tintFill(tint, false) }
     function tintBorder(tint, strong) { return picture.ctl.tintBorder(tint, false) }
     function isMarked(id) { return false }
+    // An export has no viewport to fall outside of, so nothing is culled and
+    // the camera it would be culled against is never read.
+    property bool culling: false
+    property real zoom: 1
+    property real camX: 0
+    property real camY: 0
+    property real viewW: 0
+    property real viewH: 0
     // An export is not a search result: every item is drawn at full strength.
     readonly property bool findDimming: false
     function matchesFind(text) { return false }

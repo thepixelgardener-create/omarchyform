@@ -130,10 +130,21 @@ ShellRoot {
         plugin.selectOnly(2)
         plugin.removeItem(2)
         plugin.fitToItems()
+        // `d` took whatever was under the cursor, one key away from s, c and e.
+        // It is not a command any more, and the board has to ignore it rather
+        // than fall through to something else.
+        plugin.selectOnly(1)
+        test.key("d")
+        test.switchedAt = test.ticks
+        test.stage = 465
+      } else if (test.stage === 465 && test.ticks > test.switchedAt + 3) {
+        test.check(plugin.items.count === 2, "d no longer deletes")
         test.key("F1")
         test.stage = 461
       } else if (test.stage === 461 && plugin.helpVisible) {
-        test.key("d")
+        // A key that deletes on the board, so the check still means something:
+        // the help panel has to swallow it rather than let it through.
+        test.key("Delete")
         test.switchedAt = test.ticks
         test.stage = 462
       } else if (test.stage === 462 && test.ticks > test.switchedAt + 3) {

@@ -14,6 +14,11 @@ TestCase {
     property bool helpVisible: true
     property color canvasBackground: "#101315"
     property color foreground: "#cccccc"
+    // The header is a bar and takes the theme's bar colours. Distinct from the
+    // canvas here on purpose: these stand for tokens a theme may set to
+    // something of their own.
+    property color barBackground: "#161b22"
+    property color barForeground: "#e6e6e6"
     property color accent: "cyan"
     property string fontFamily: "monospace"
     property int fontBody: 24
@@ -23,7 +28,9 @@ TestCase {
     property int cornerRadius: 0
     property bool browserVisible: false
     property bool menuVisible: false
+    property int menuIndex: 0
     function toggleMenu() { menuVisible = !menuVisible }
+    function runMenu(index) { menuVisible = false }
     property bool browserSearching: false
     property string browserQuery: ""
     property string browserPrompt: ""
@@ -48,6 +55,8 @@ TestCase {
     property string currentBoard: "board.json"
     property var browserRows: []
     property int browserIndex: 0
+    property bool browserTrash: false
+    function browserEnter() {}
     function sp(n) { return n }
     function closeBrowser() { browserVisible = false }
     function browserKey(event) {}
@@ -55,6 +64,20 @@ TestCase {
   Help { id: help; ctl: ctl; anchors.centerIn: parent }
   Browser { id: browser; ctl: ctl; anchors.fill: parent }
   BoardToolbar { id: toolbar; ctl: ctl; width: test.width - 32; height: implicitHeight; visible: false }
+  // The header is a bar, so it is painted in the theme's bar colours rather
+  // than the canvas ones.
+  //
+  // Reading them here is worth little as a guard against a stub missing one:
+  // a stub short of `barForeground` still passes this on Qt 6.11, with no
+  // warning, while the same tree fails on the 6.4 that CI runs. What keeps
+  // that from happening is the name check in tests/contract.js, which does not
+  // depend on which Qt is doing the reading.
+  function test_toolbarTakesTheBarColours() {
+    compare(toolbar.color, ctl.barBackground, "the header takes the bar's background")
+    verify(toolbar.color !== ctl.canvasBackground, "which is its own colour, not the canvas")
+    verify(toolbar.border.color !== ctl.canvasBackground, "and its edge is drawn against it")
+  }
+
   function test_toolbarFitsLargeFonts() {
     verify(toolbar.implicitHeight < test.height - 64)
     verify(toolbar.children[1].width <= toolbar.width)

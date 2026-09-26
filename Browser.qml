@@ -83,78 +83,93 @@ FocusScope {
                        browser.ctl.foreground.b, 0.25)
       }
 
-      ListView {
-        id: list
+      // The list, and the rule that says how much of it you are looking at.
+      // The strip down the right is left out of the list whether or not it is
+      // used: a name re-wrapping the moment the list outgrew the panel would
+      // be a worse answer than a few pixels of air.
+      Item {
         width: parent.width
         height: parent.height - y
-        clip: true
-        model: browser.rows
-        currentIndex: browser.ctl.browserIndex
-        highlightMoveDuration: 0
-        // Keep the cursor in view when it walks off the end of the list.
-        onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
 
-        delegate: Item {
-          required property var modelData
-          required property int index
+        ListView {
+          id: list
+          anchors.fill: parent
+          anchors.rightMargin: browser.ctl.sp(10)
+          clip: true
+          model: browser.rows
+          currentIndex: browser.ctl.browserIndex
+          highlightMoveDuration: 0
+          // Keep the cursor in view when it walks off the end of the list.
+          onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
 
-          width: list.width
-          height: label.implicitHeight + browser.ctl.sp(8)
+          delegate: Item {
+            required property var modelData
+            required property int index
 
-          readonly property bool current: index === browser.ctl.browserIndex
+            width: list.width
+            height: label.implicitHeight + browser.ctl.sp(8)
 
-          Rectangle {
-            anchors.fill: parent
-            visible: parent.current
-            color: Qt.rgba(browser.ctl.accent.r, browser.ctl.accent.g, browser.ctl.accent.b, 0.18)
+            readonly property bool current: index === browser.ctl.browserIndex
+
+            Rectangle {
+              anchors.fill: parent
+              visible: parent.current
+              color: Qt.rgba(browser.ctl.accent.r, browser.ctl.accent.g, browser.ctl.accent.b, 0.18)
+            }
+
+            Text {
+              id: label
+              anchors.verticalCenter: parent.verticalCenter
+              anchors.left: parent.left
+              anchors.right: parent.right
+              anchors.leftMargin: browser.ctl.sp(8)
+              anchors.rightMargin: browser.ctl.sp(8)
+              elide: Text.ElideMiddle
+              color: browser.ctl.foreground
+              opacity: parent.current ? 1.0 : 0.75
+              font.family: browser.ctl.fontFamily
+              font.pixelSize: browser.ctl.fontSubtitle
+              // A folder wears a trailing slash; the open board is marked.
+              // In the trash an entry carries where it came from, since that is
+              // what restoring it will put back.
+              text: browser.ctl.browserTrash
+                ? Store.baseName(parent.modelData.path).replace(/\.json$/, "")
+                  + (parent.modelData.dir ? "/" : "")
+                  + (Store.parentOf(parent.modelData.path)
+                     ? "   from " + Store.parentOf(parent.modelData.path) + "/" : "")
+                : (parent.modelData.dir ? Store.displayName(parent.modelData) + "/"
+                                        : Store.displayName(parent.modelData))
+                    + (browser.searching && Store.parentOf(parent.modelData.path)
+                       ? "   " + Store.parentOf(parent.modelData.path) + "/" : "")
+                    + (!browser.ctl.browserTrash && parent.modelData.path === browser.ctl.currentBoard
+                       ? "   ·open" : "")
+            }
+
+            MouseArea {
+              anchors.fill: parent
+              onClicked: {
+                browser.ctl.browserIndex = parent.index
+                browser.ctl.browserEnter()
+              }
+            }
           }
 
           Text {
-            id: label
-            anchors.verticalCenter: parent.verticalCenter
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.leftMargin: browser.ctl.sp(8)
-            anchors.rightMargin: browser.ctl.sp(8)
-            elide: Text.ElideMiddle
+            anchors.centerIn: parent
+            visible: list.count === 0
             color: browser.ctl.foreground
-            opacity: parent.current ? 1.0 : 0.75
+            opacity: 0.5
             font.family: browser.ctl.fontFamily
-            font.pixelSize: browser.ctl.fontSubtitle
-            // A folder wears a trailing slash; the open board is marked.
-            // In the trash an entry carries where it came from, since that is
-            // what restoring it will put back.
-            text: browser.ctl.browserTrash
-              ? Store.baseName(parent.modelData.path).replace(/\.json$/, "")
-                + (parent.modelData.dir ? "/" : "")
-                + (Store.parentOf(parent.modelData.path)
-                   ? "   from " + Store.parentOf(parent.modelData.path) + "/" : "")
-              : (parent.modelData.dir ? Store.displayName(parent.modelData) + "/"
-                                      : Store.displayName(parent.modelData))
-                  + (browser.searching && Store.parentOf(parent.modelData.path)
-                     ? "   " + Store.parentOf(parent.modelData.path) + "/" : "")
-                  + (!browser.ctl.browserTrash && parent.modelData.path === browser.ctl.currentBoard
-                     ? "   ·open" : "")
-          }
-
-          MouseArea {
-            anchors.fill: parent
-            onClicked: {
-              browser.ctl.browserIndex = parent.index
-              browser.ctl.browserEnter()
-            }
+            font.pixelSize: browser.ctl.fontBody
+            text: browser.ctl.browserTrash ? "the trash is empty"
+              : browser.searching ? "nothing matches" : "empty — a: new board   A: new folder"
           }
         }
 
-        Text {
-          anchors.centerIn: parent
-          visible: list.count === 0
-          color: browser.ctl.foreground
-          opacity: 0.5
-          font.family: browser.ctl.fontFamily
-          font.pixelSize: browser.ctl.fontBody
-          text: browser.ctl.browserTrash ? "the trash is empty"
-            : browser.searching ? "nothing matches" : "empty — a: new board   A: new folder"
+        ScrollHint {
+          ctl: browser.ctl
+          view: list
+          anchors { top: parent.top; bottom: parent.bottom; right: parent.right }
         }
       }
     }

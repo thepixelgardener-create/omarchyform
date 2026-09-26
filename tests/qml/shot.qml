@@ -122,6 +122,20 @@ ShellRoot {
       }
     },
     {
+      // More boards than the panel holds: the one state where the browser
+      // wears the scroll mark, and the only way to see whether the mark clears
+      // the row under the cursor. The entries are planted rather than written
+      // to disk — the isolated HOME has one board in it, and thirty files
+      // would say nothing thirty rows do not.
+      name: "10b-browser-scrolling",
+      setup: function () {
+        var rows = []
+        for (var i = 1; i <= 30; i++) rows.push({ path: "board-" + i + ".json", dir: false })
+        plugin.browserEntries = rows
+        plugin.browserIndex = 12
+      }
+    },
+    {
       // At working zoom, where a ring, a grip and an overflow tab are the size
       // a person actually sees them.
       name: "11-working-zoom",

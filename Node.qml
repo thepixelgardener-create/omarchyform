@@ -21,8 +21,36 @@ Item {
   required property bool ipinned
   required property string isrc
 
+  // Whether this item is somewhere a person could actually be looking. An item
+  // that is not takes no part in how the board looks: it reads as unmarked, as
+  // no match, and at full strength, whatever the board says about it.
+  //
+  // This is where a large board's time went. Marking a thousand items changed
+  // the appearance of a thousand delegates — a ring to draw, a fill to blend,
+  // an opacity to animate — and the frame that did it took two thirds of a
+  // second, whether or not a single one of them was on screen. Measured with
+  // tests/scene.js: 638ms at the 95th percentile before, 55ms after.
+  //
+  // The arithmetic is written out here rather than asked of the controller.
+  // The same test says a function call per item per camera change costs twice
+  // what a zoom costs without one; an expression the engine can see into does
+  // not.
+  readonly property bool onScreen: !node.ctl.culling
+    || (node.ix * node.ctl.zoom + node.ctl.camX < node.ctl.viewW
+        && (node.ix + node.iw) * node.ctl.zoom + node.ctl.camX > 0
+        && node.iy * node.ctl.zoom + node.ctl.camY < node.ctl.viewH
+        && (node.iy + node.ih) * node.ctl.zoom + node.ctl.camY > 0)
+  // The cursor and whatever is being typed in are live wherever they are: the
+  // keyboard can walk the selection off the edge of the screen, and it has to
+  // still be the selection when it gets there.
+  readonly property bool live: node.onScreen || node.cursor || node.ctl.editIndex === node.index
+  // Not drawn when it is not live, which lets the scene graph skip the whole
+  // subtree rather than walking thirteen items to decide each one falls
+  // outside the viewport. On a three thousand item board this is the
+  // difference between an idle frame costing 26ms and costing nothing.
+  visible: node.live
   readonly property bool cursor: node.ctl.selectedIndex === node.index
-  readonly property bool marked: node.ctl.isMarked(node.iid)
+  readonly property bool marked: node.live && node.ctl.isMarked(node.iid)
   // The cursor and a mark both read as selected; the cursor keeps the heavier
   // outline so you can still tell where the keyboard is.
   readonly property bool selected: node.cursor || node.marked
@@ -30,7 +58,7 @@ Item {
   readonly property bool isNote: node.kind === "note"
   readonly property bool isImage: node.kind === "image"
   readonly property bool painted: node.kind === "ellipse" || node.kind === "diamond"
-  readonly property bool foundMatch: node.ctl.matchesFind(node.itext)
+  readonly property bool foundMatch: node.live && node.ctl.matchesFind(node.itext)
   readonly property bool emphasised: node.selected || node.linkSource
   readonly property color fill: node.ctl.tintFill(node.itint, node.emphasised)
   // The item's own border says what tint it carries and nothing else. Selection
@@ -44,7 +72,8 @@ Item {
 
   // Both modes narrow the board the same way: what you are not working on
   // recedes rather than disappearing, so the shape of the board is still there.
-  opacity: node.ctl.showPinned && !node.ipinned ? 0.35
+  opacity: !node.live ? 1
+    : node.ctl.showPinned && !node.ipinned ? 0.35
     : node.ctl.findDimming && !node.foundMatch ? 0.3
     : 1
 

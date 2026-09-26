@@ -53,7 +53,7 @@ function expect(names, available, what, where) {
 }
 
 // The views address the controller as ctl.
-for (const file of ["Board.qml", "Node.qml", "Browser.qml", "Help.qml", "BoardToolbar.qml", "BoardExchange.qml", "BoardImage.qml"]) {
+for (const file of ["Board.qml", "Node.qml", "Browser.qml", "Help.qml", "BoardToolbar.qml", "BoardExchange.qml", "BoardImage.qml", "ScrollHint.qml"]) {
   const source = read(file)
   expect(referenced(source, "ctl."), controller, "the controller", file)
 }
@@ -66,6 +66,18 @@ expect(sessionReads, controller, "the controller", "BoardSession.qml")
 // And the stub that stands in for it during the QML session test.
 const stub = nestedMembers(read("tests/qml/tst_session.qml"), "ctl")
 expect(sessionReads, stub, "the tst_session stub", "tests/qml/tst_session.qml")
+
+// And the stub the Qt layout test puts in its place, which drives the toolbar,
+// the help panel and the browser at once. Added after a missing member got
+// past every check there was: reading an undefined colour off that stub is
+// silent on Qt 6.11 and fatal on the 6.4 CI runs, so the suite was green on
+// the machine it was written on and red the moment it was pushed. Which Qt is
+// reading the name is not something a check on the names can be wrong about.
+//
+// It found four more that had been missing all along.
+const layoutStub = nestedMembers(read("tests/qt/tst_layout.qml"), "ctl")
+for (const file of ["BoardToolbar.qml", "Help.qml", "Browser.qml", "ScrollHint.qml"])
+  expect(referenced(read(file), "ctl."), layoutStub, "the tst_layout stub", file)
 
 const nodeReads = referenced(read("Node.qml"), "ctl.")
 expect(nodeReads, nestedMembers(read("tests/qt/tst_node.qml"), "ctl"),

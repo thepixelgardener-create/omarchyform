@@ -61,7 +61,7 @@ var KEY_HELP = [
   ["tab", "cycle through everything"],
   ["space", "mark this one as well"],
   ["a", "mark everything"],
-  ["d", "delete what is marked, or the one under the cursor"],
+  ["del / backspace", "delete what is marked, or the one under the cursor"],
   ["ctrl+d", "duplicate it, connectors between the copies included"],
   ["m", "show or hide the menu in the header"],
   ["m then h l / tab", "walk the menu; enter picks, esc closes"],

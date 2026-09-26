@@ -7,11 +7,13 @@ import "BoardStore.js" as Store
 Rectangle {
   id: toolbar
   required property var ctl
-  // Transparent: the canvas runs under it, and the board is the thing worth
-  // looking at. The hairline stays, so the chrome still has an edge to it.
-  color: "transparent"
+  // The theme's bar colour, so the board's header reads as the same kind of
+  // surface as the bar it was opened from. It was transparent, which let the
+  // dot grid run through the chrome and made the header look like part of the
+  // canvas rather than something sitting on it.
+  color: ctl.barBackground
   border.width: ctl.borderWidth
-  border.color: Qt.rgba(ctl.foreground.r, ctl.foreground.g, ctl.foreground.b, 0.18)
+  border.color: Qt.rgba(ctl.barForeground.r, ctl.barForeground.g, ctl.barForeground.b, 0.18)
   radius: ctl.cornerRadius
   implicitHeight: content.height + ctl.sp(20)
   MouseArea { anchors.fill: parent }
@@ -44,20 +46,20 @@ Rectangle {
           content.identityMax - separator.implicitWidth - state.implicitWidth - identity.spacing * 2))
         text: toolbar.ctl.boardTitle
         elide: Text.ElideRight
-        color: toolbar.ctl.foreground
+        color: toolbar.ctl.barForeground
         font.family: toolbar.ctl.fontFamily
         font.pixelSize: toolbar.ctl.fontSubtitle
         MouseArea { anchors.fill: parent; onClicked: toolbar.ctl.renameBoard() }
       }
-      // Secondary text is the foreground held back, not the theme's muted token.
-      // A theme is free to set muted almost to its own background — azure-glow
-      // does, at 1.28:1 — and then a plugin using it for text writes in
-      // invisible ink. Held back like this it is 4.9:1 at worst.
+      // Secondary text is the bar's own text held back, not the theme's muted
+      // token. A theme is free to set muted almost to its own background —
+      // azure-glow does, at 1.28:1 — and then a plugin using it for text
+      // writes in invisible ink. Held back like this it is 4.9:1 at worst.
       Text {
         id: separator
         text: "·"
         opacity: 0.85
-        color: toolbar.ctl.foreground
+        color: toolbar.ctl.barForeground
         font.family: toolbar.ctl.fontFamily
         font.pixelSize: toolbar.ctl.fontBody
         anchors.verticalCenter: title.verticalCenter
@@ -66,7 +68,7 @@ Rectangle {
         id: state
         text: toolbar.ctl.boardState
         opacity: toolbar.ctl.saveError !== "" ? 1 : 0.85
-        color: toolbar.ctl.saveError !== "" ? toolbar.ctl.urgent : toolbar.ctl.foreground
+        color: toolbar.ctl.saveError !== "" ? toolbar.ctl.urgent : toolbar.ctl.barForeground
         font.family: toolbar.ctl.fontFamily
         font.pixelSize: toolbar.ctl.fontBody
         anchors.verticalCenter: title.verticalCenter
@@ -84,7 +86,7 @@ Rectangle {
       anchors.verticalCenter: parent.verticalCenter
       text: "menu · m"
       opacity: 0.85
-      color: toolbar.ctl.foreground
+      color: toolbar.ctl.barForeground
       font.family: toolbar.ctl.fontFamily
       font.pixelSize: toolbar.ctl.fontBody
       MouseArea { anchors.fill: parent; onClicked: toolbar.ctl.toggleMenu() }
@@ -112,12 +114,12 @@ Rectangle {
           radius: toolbar.ctl.cornerRadius
           border.width: onIt ? toolbar.ctl.borderWidth * 2 : 1
           border.color: onIt ? toolbar.ctl.accent
-            : Qt.rgba(toolbar.ctl.foreground.r, toolbar.ctl.foreground.g, toolbar.ctl.foreground.b, 0.20)
+            : Qt.rgba(toolbar.ctl.barForeground.r, toolbar.ctl.barForeground.g, toolbar.ctl.barForeground.b, 0.20)
           Text {
             id: label
             anchors.centerIn: parent
             text: modelData
-            color: toolbar.ctl.foreground
+            color: toolbar.ctl.barForeground
             font.family: toolbar.ctl.fontFamily
             font.pixelSize: toolbar.ctl.fontBody
           }
@@ -140,7 +142,7 @@ Rectangle {
       spacing: toolbar.ctl.sp(12)
       Text {
         text: Math.round(toolbar.ctl.zoom * 100) + "%"
-        color: toolbar.ctl.foreground
+        color: toolbar.ctl.barForeground
         font.family: toolbar.ctl.fontFamily
         font.pixelSize: toolbar.ctl.fontBody
         MouseArea { anchors.fill: parent; onClicked: toolbar.ctl.resetView() }

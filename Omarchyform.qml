@@ -35,6 +35,13 @@ Item {
 
   property color canvasBackground: root.token(function () { return Color.background }, "#101315")
   property color foreground: root.token(function () { return Color.foreground }, "#CACCCC")
+  // The board's own header is a bar, so it is painted in the colours the theme
+  // paints the desktop's bar with rather than in the canvas colour. A theme
+  // that gives its bar its own background and its own text gets both here; one
+  // that does not is back where it started, since those keys derive from the
+  // background and foreground above.
+  property color barBackground: root.token(function () { return Color.bar.background }, root.canvasBackground)
+  property color barForeground: root.token(function () { return Color.bar.text }, root.foreground)
   property color accent: root.token(function () { return Color.accent }, "#CACCCC")
   property color urgent: root.token(function () { return Color.urgent }, "#A55555")
   property color muted: root.token(function () { return Color.muted }, "#707880")
@@ -107,6 +114,16 @@ Item {
   // Ids of the items marked alongside the cursor. Ids rather than indices,
   // because a delete renumbers indices and a mark must survive that.
   property var markedIds: []
+  // A lookup beside the list rather than a scan through it. isMarked is a
+  // binding on every delegate, so marking the board used to ask n x m
+  // questions before the next frame could start — a thousand items marked
+  // meant a million comparisons, and a board that stopped for two thirds of a
+  // second. Rebuilt once per change of the list, then read once per item.
+  readonly property var markedLookup: {
+    var lookup = {}
+    for (var mi = 0; mi < root.markedIds.length; mi++) lookup[root.markedIds[mi]] = true
+    return lookup
+  }
   property int editIndex: -1      // -1 means normal mode: every key is a command
   property int linkingFrom: -1    // id of the first end while connecting
   property bool helpVisible: false
@@ -364,9 +381,19 @@ Item {
   readonly property real viewH: root.activeBoard ? root.activeBoard.height : 1080
 
   function repaintGrid() { if (root.activeBoard) root.activeBoard.repaintGrid() }
-  function repaintLinks() { if (root.activeBoard) root.activeBoard.repaintLinks() }
+  // A batch of items moving is still one repaint. Each item writes two
+  // properties, and each write reaches this through the delegate's own
+  // onXChanged, so dragging a marked board asked for a repaint twice per item
+  // per frame. The canvas coalesces the paint; it does not coalesce being
+  // asked. Held off while a batch runs, then asked for once.
+  property bool batching: false
+  function repaintLinks() {
+    if (root.batching) return
+    if (root.activeBoard) root.activeBoard.repaintLinks()
+  }
   function focusKeys() { if (root.activeBoard) root.activeBoard.focusKeys() }
-  function isMarked(id) { return root.markedIds.indexOf(id) >= 0 }
+  function isMarked(id) { return root.markedLookup[id] === true }
+  readonly property bool culling: true
 
   // What an operation applies to: everything marked, or the cursor alone.
   // Descending, so removing by index cannot shift the ones still to come.
@@ -374,8 +401,13 @@ Item {
     var out = []
     if (root.markedIds.length === 0)
       return root.selectedIndex >= 0 && !itemModel.get(root.selectedIndex).ipinned ? [root.selectedIndex] : []
-    for (var i = itemModel.count - 1; i >= 0; i--)
-      if (!itemModel.get(i).ipinned && root.isMarked(itemModel.get(i).iid)) out.push(i)
+    // One read of the row rather than two: get() builds a wrapper object
+    // each time, and this runs on every frame of a drag.
+    var lookup = root.markedLookup
+    for (var i = itemModel.count - 1; i >= 0; i--) {
+      var n = itemModel.get(i)
+      if (!n.ipinned && lookup[n.iid] === true) out.push(i)
+    }
     return out
   }
 
@@ -393,8 +425,10 @@ Item {
 
   function markAll() {
     var m = []
-    for (var i = 0; i < itemModel.count; i++)
-      if (!itemModel.get(i).ipinned) m.push(itemModel.get(i).iid)
+    for (var i = 0; i < itemModel.count; i++) {
+      var n = itemModel.get(i)
+      if (!n.ipinned) m.push(n.iid)
+    }
     root.markedIds = m
     root.flash(m.length + " marked")
     root.repaintLinks()
@@ -407,8 +441,12 @@ Item {
                               Math.min(x0, x1), Math.min(y0, y1),
                               Math.max(x0, x1), Math.max(y0, y1))
     var m = additive ? root.markedIds.slice() : []
+    // A sweep that adds to a large selection scanned the whole of it for
+    // every item it touched; the set says the same thing in one read.
+    var seen = {}
+    for (var s0 = 0; s0 < m.length; s0++) seen[m[s0]] = true
     for (var i = 0; i < ids.length; i++)
-      if (m.indexOf(ids[i]) < 0) m.push(ids[i])
+      if (seen[ids[i]] !== true) { seen[ids[i]] = true; m.push(ids[i]) }
     root.markedIds = m
     // Leave a cursor inside the marked set so the keyboard carries on from
     // where the rectangle finished rather than from wherever it last was.
@@ -604,6 +642,9 @@ Item {
   // One read for the whole board rather than a query test per item: while this
   // is true, anything that does not match recedes.
   readonly property bool findDimming: root.finding && root.findQuery !== ""
+  // Lowered once per keystroke rather than once per item per keystroke:
+  // matchesFind is a binding on every delegate.
+  readonly property string findNeedle: root.findQuery.toLowerCase()
 
   function beginFind() {
     if (itemModel.count === 0) { root.flash("nothing on this board to find yet"); return }
@@ -654,7 +695,7 @@ Item {
   // the model once for every note on the board.
   function matchesFind(text) {
     if (!root.findDimming || typeof text !== "string") return false
-    return text.toLowerCase().indexOf(root.findQuery.toLowerCase()) >= 0
+    return text.toLowerCase().indexOf(root.findNeedle) >= 0
   }
 
   // Arranging is a two-key command: g, then which edge. A mode rather than six
@@ -862,21 +903,29 @@ Item {
   function moveTargets(dx, dy) {
     if (!root.canEdit) return
     var t = root.targets()
-    for (var i = 0; i < t.length; i++) {
-      var n = itemModel.get(t[i])
-      itemModel.setProperty(t[i], "ix", n.ix + dx)
-      itemModel.setProperty(t[i], "iy", n.iy + dy)
-    }
+    root.batching = true
+    try {
+      for (var i = 0; i < t.length; i++) {
+        var n = itemModel.get(t[i])
+        itemModel.setProperty(t[i], "ix", n.ix + dx)
+        itemModel.setProperty(t[i], "iy", n.iy + dy)
+      }
+    } finally { root.batching = false }
+    root.repaintLinks()
   }
 
   function resizeTargets(dx, dy) {
     if (!root.canEdit) return
     var t = root.targets()
-    for (var i = 0; i < t.length; i++) {
-      var n = itemModel.get(t[i])
-      itemModel.setProperty(t[i], "iw", Math.max(root.minItemSize, n.iw + dx))
-      itemModel.setProperty(t[i], "ih", Math.max(root.minItemSize, n.ih + dy))
-    }
+    root.batching = true
+    try {
+      for (var i = 0; i < t.length; i++) {
+        var n = itemModel.get(t[i])
+        itemModel.setProperty(t[i], "iw", Math.max(root.minItemSize, n.iw + dx))
+        itemModel.setProperty(t[i], "ih", Math.max(root.minItemSize, n.ih + dy))
+      }
+    } finally { root.batching = false }
+    root.repaintLinks()
   }
 
   function selectOnly(index) {
