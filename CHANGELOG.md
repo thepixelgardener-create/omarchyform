@@ -35,6 +35,14 @@ since older boards are migrated on load rather than rejected.
 
 ### Fixed
 
+- The contract check reads the Qt layout test's stand-in controller too. It
+  covered the controller, the session's stub and the one the PNG export
+  draws against, but not the stub that drives the toolbar, the help panel and
+  the browser — so a member missing from that one was caught by nothing.
+  Reading an undefined colour off it is silent on Qt 6.11 and fatal on the 6.4
+  CI runs, which is a green suite locally and a red one on push. Four members
+  had been missing from it for some time.
+
 - Clicking near the edge of the shortcut panel closed it. The panel is a plain
   rectangle, which lets a click through, and its scroller stops short of the
   border — so the ring between the two reached the layer that dismisses the
