@@ -19,6 +19,8 @@ TestCase {
     // something of their own.
     property color barBackground: "#161b22"
     property color barForeground: "#e6e6e6"
+    // The accent the hint lines name their keys in, as markup wants it.
+    property string accentMarkup: "#00ffff"
     property color accent: "cyan"
     property string fontFamily: "monospace"
     property int fontBody: 24

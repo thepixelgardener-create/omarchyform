@@ -488,7 +488,8 @@ FocusScope {
     }
     Text {
       anchors.horizontalCenter: parent.horizontalCenter
-      text: "n  Write a note    Ctrl+V  Paste text"
+      textFormat: Text.StyledText
+      text: Store.hintLine(Store.START_HINTS, board.ctl.accentMarkup)
       width: parent.width
       wrapMode: Text.Wrap
       horizontalAlignment: Text.AlignHCenter
@@ -552,27 +553,35 @@ FocusScope {
     font.family: board.ctl.fontFamily
     font.pixelSize: board.ctl.fontBody
     visible: !board.ctl.helpVisible && !board.ctl.browserVisible
-    text: board.ctl.saveError !== "" ? board.ctl.saveError
-      : board.ctl.trashIndexError !== "" ? board.ctl.trashIndexError
+    // Markup, so a key can be a different colour from the word it sits in.
+    // Everything reaching this line from a board file, a file name or the
+    // keyboard is escaped on the way: this is the one place on the board that
+    // renders tags, and a board is a file other people can send you.
+    textFormat: Text.StyledText
+    text: board.ctl.saveError !== "" ? Store.escapeMarkup(board.ctl.saveError)
+      : board.ctl.trashIndexError !== "" ? Store.escapeMarkup(board.ctl.trashIndexError)
       : board.ctl.finding
-      ? "find: " + board.ctl.findQuery + "▏"
+      ? "find: " + Store.escapeMarkup(board.ctl.findQuery) + "▏"
         + (board.ctl.findQuery === "" ? ""
            : " · " + (board.ctl.findCount === 0 ? "no match"
                         : board.ctl.findCount === 1 ? "1 match" : board.ctl.findCount + " matches"))
-        + " · enter: next · esc: done"
-      : board.ctl.arranging ? "arrange · hjkl: edges · c/m: centres · HJKL: spread evenly · esc: cancel"
-      : board.ctl.showPinned ? "backgrounds · tab/hjkl or click: select · p: unpin · esc: done"
-      : board.ctl.statusText !== "" ? board.ctl.statusText
+        + " · " + Store.hintLine(Store.FIND_HINTS, board.ctl.accentMarkup)
+      : board.ctl.arranging
+      ? "arrange · " + Store.hintLine(Store.ARRANGE_HINTS, board.ctl.accentMarkup)
+      : board.ctl.showPinned
+      ? "backgrounds · " + Store.hintLine(Store.PINNED_HINTS, board.ctl.accentMarkup)
+      : board.ctl.statusText !== "" ? Store.escapeMarkup(board.ctl.statusText)
       : board.ctl.pendingBoard !== null ? "saving before switching boards…"
       : board.ctl.saving ? "saving…"
       : board.ctl.damaged && board.ctl.damageReason !== ""
-      ? board.ctl.boardTitle + " " + board.ctl.damageReason + " — not opening it"
+      ? Store.escapeMarkup(board.ctl.boardTitle + " " + board.ctl.damageReason + " — not opening it")
       : board.ctl.damaged
-      ? board.ctl.boardTitle + " could not be read — not saving over it"
+      ? Store.escapeMarkup(board.ctl.boardTitle + " could not be read — not saving over it")
       : board.ctl.editIndex >= 0
-      ? "esc: done typing"
+      ? Store.hintMarkup("esc", "done typing", board.ctl.accentMarkup)
       : board.ctl.linkingFrom >= 0
-        ? "pick the other end, then x to connect · esc: cancel"
-        : "n: note · r/e: shapes · x: connect · /: find · ?: keys · esc: close"
+        ? "pick the other end, then " + Store.keyMarkup("x", board.ctl.accentMarkup)
+          + " to connect · " + Store.hintMarkup("esc", "cancel", board.ctl.accentMarkup)
+        : Store.hintLine(Store.BOARD_HINTS, board.ctl.accentMarkup)
   }
 }
