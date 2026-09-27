@@ -98,7 +98,8 @@ TestCase {
   // that from happening is the name check in tests/contract.js, which does not
   // depend on which Qt is doing the reading.
   function test_toolbarTakesTheBarColours() {
-    compare(toolbar.color, ctl.barBackground, "the header takes the bar's background")
+    compare(toolbar.color, Qt.rgba(ctl.barBackground.r, ctl.barBackground.g, ctl.barBackground.b, 0.92),
+            "the header takes the bar colour with slight transparency")
     verify(toolbar.color !== ctl.canvasBackground, "which is its own colour, not the canvas")
     verify(toolbar.border.color !== ctl.canvasBackground, "and its edge is drawn against it")
   }

@@ -38,7 +38,7 @@ function normalizeTint(value) {
 
 // The header menu. One list, so the view draws what the controller dispatches
 // and a keyboard walk cannot drift out of step with what is on screen.
-var MENU_COMMANDS = ["New", "Boards", "Import", "Save copy", "Export PNG", "Help", "Commands"]
+var MENU_COMMANDS = ["New", "Boards", "Import", "Save copy", "Export PNG", "Help", "Commands", "Fit"]
 
 // The outline of a painted shape, as SVG path data for a ShapePath.
 //

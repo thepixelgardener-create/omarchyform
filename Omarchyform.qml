@@ -739,6 +739,7 @@ Item {
     else if (index === 4) root.choosePng()
     else if (index === 5) root.helpVisible = true
     else if (index === 6) root.beginPalette()
+    else if (index === 7) root.fitToItems()
   }
 
   function toggleHelp() { root.helpVisible = !root.helpVisible }

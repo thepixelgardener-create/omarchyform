@@ -699,7 +699,7 @@ console.log('ok — controller: copying the selection out')
   const c = controller()
   c.session.loadBoard('{"version":5,"items":[]}', false)
   const menu = require('./harness').loadStore().MENU_COMMANDS
-  assert.equal(menu.length, 7, 'seven commands, as the header draws')
+  assert.equal(menu.length, 8, 'eight commands, as the header draws')
 
   c.root.toggleMenu()
   assert.equal(c.root.menuVisible, true)
@@ -722,12 +722,12 @@ console.log('ok — controller: copying the selection out')
   assert.equal(c.root.menuVisible, false)
   assert.equal(c.root.menuIndex, 0)
 
-  // The last is the palette, so a pointer can reach the commands the keys
+  // The palette lets a pointer reach the commands the keys
   // reach without knowing that `:` opens it.
   c.root.helpVisible = false
   c.root.toggleMenu()
   c.root.runMenu(6)
-  assert.equal(c.root.paletteVisible, true, 'the last item opens the palette')
+  assert.equal(c.root.paletteVisible, true, 'Commands opens the palette')
   c.root.endPalette()
 
   // Boards is the browser, and it is the same call a click makes.

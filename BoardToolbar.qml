@@ -7,11 +7,8 @@ import "BoardStore.js" as Store
 Rectangle {
   id: toolbar
   required property var ctl
-  // The theme's bar colour, so the board's header reads as the same kind of
-  // surface as the bar it was opened from. It was transparent, which let the
-  // dot grid run through the chrome and made the header look like part of the
-  // canvas rather than something sitting on it.
-  color: ctl.barBackground
+  // Keep labels crisp while letting a little of the canvas show through.
+  color: Qt.rgba(ctl.barBackground.r, ctl.barBackground.g, ctl.barBackground.b, 0.92)
   border.width: ctl.borderWidth
   border.color: Qt.rgba(ctl.barForeground.r, ctl.barForeground.g, ctl.barForeground.b, 0.18)
   radius: ctl.cornerRadius
@@ -154,14 +151,7 @@ Rectangle {
         font.pixelSize: toolbar.ctl.fontBody
         MouseArea { anchors.fill: parent; onClicked: toolbar.ctl.resetView() }
       }
-      Text {
-        textFormat: Text.StyledText
-        text: Store.hintMarkup("f", "Fit", toolbar.ctl.accentMarkup)
-        color: toolbar.ctl.barForeground
-        font.family: toolbar.ctl.fontFamily
-        font.pixelSize: toolbar.ctl.fontBody
-        MouseArea { anchors.fill: parent; onClicked: toolbar.ctl.fitToItems() }
-      }
+
     }
   }
 }

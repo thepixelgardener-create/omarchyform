@@ -39,7 +39,8 @@ Rectangle {
   readonly property int visibleRows: Math.max(1, Math.min(panel.ctl.paletteMatches.length,
                                                           panel.ctl.paletteRows, panel.fits))
   height: panel.chrome + panel.rowHeight * panel.visibleRows
-  color: panel.ctl.canvasBackground
+  color: Qt.rgba(panel.ctl.canvasBackground.r, panel.ctl.canvasBackground.g,
+                 panel.ctl.canvasBackground.b, 0.92)
   border.width: panel.ctl.borderWidth
   border.color: Qt.rgba(panel.ctl.foreground.r, panel.ctl.foreground.g,
                         panel.ctl.foreground.b, 0.35)
