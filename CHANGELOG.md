@@ -119,6 +119,29 @@ since older boards are migrated on load rather than rejected.
 
 ### Fixed
 
+- **A copy saved to share is a picture of one moment.** Collecting a board's
+  pictures takes long enough for the board to change underneath it: the export
+  read the live models *after* the pictures came back, so editing or switching
+  boards while it ran mixed two moments into one file. Everything the export
+  needs — the board as text, the pictures it names, which board it was and where
+  it is going — is taken when it starts and carried through every step, and an
+  answer belonging to an export that is no longer running is dropped rather than
+  published.
+
+- **A portable copy carries everything it names, or is not written.** A missing
+  picture, or pictures over the 16 MB a copy can carry, used to publish a copy
+  without them and mention it in a line that fades. Both now refuse before the
+  destination is touched, and **Save a copy without its pictures** is a separate
+  thing to ask for by name.
+
+  Coming the other way, a file over 32 MB is refused by its size before it is
+  read; a picture over 32 MB, or a set over 16 MB, is refused from the length of
+  its base64 rather than by decoding it; and a board carrying a picture that
+  cannot be read is refused whole rather than imported with items pointing at
+  nothing. The file you were given is never touched either way. Boards without
+  pictures — which is every board written before this — import as they always
+  did.
+
 - **Nothing resolves two versions of a board except choosing between them.**
   Watching the file caught a board that changed underneath, but the flag that
   said so was cleared by `flushSave()` — which closing, switching boards and

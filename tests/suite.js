@@ -603,9 +603,15 @@ function tests(S) {
   test("a shared copy carries its pictures and is still a board", () => {
     const items = new FakeModel()
     S.fillItems(items, [{ id: 1, kind: "image", src: "one.png" }])
-    const plain = S.writeShared(items, new FakeModel(), 2, {})
-    eq(plain, S.writeFile(items, new FakeModel(), 2), "nothing to carry, nothing added")
-    const shared = S.writeShared(items, new FakeModel(), 2, { "one.png": "QUJD" })
+    // Written from the text the export took at the start, not from the models,
+    // which have had time to move on by the time the pictures are in hand.
+    const taken = S.writeFile(items, new FakeModel(), 2)
+    const plain = S.withEmbeddedImages(taken, {})
+    eq(plain, taken, "nothing to carry, nothing added")
+    items.append({ iid: 9, kind: "note", ix: 0, iy: 0, iw: 60, ih: 60, itint: "foreground",
+                   itext: "added after the snapshot", ipinned: false, isrc: "" })
+    const shared = S.withEmbeddedImages(taken, { "one.png": "QUJD" })
+    eq(S.readFile(shared).items.length, 1, "and what came after is not in it")
     eq(JSON.parse(shared).images["one.png"], "QUJD")
     // Not a format bump: an Omarchyform that knows nothing about this still
     // opens the copy, with the pictures missing as they are missing today.
@@ -622,6 +628,31 @@ function tests(S) {
       "empty.png": "", "number.png": 42, "notbase64.png": "a b c!"
     } }))
     eq(Object.keys(mixed).join(","), "good.png", "only a name this would write itself")
+  })
+
+  test("what a shared copy may carry is bounded before anything is decoded", () => {
+    // Four base64 characters are three bytes, so how big a picture is can be
+    // answered from the text of it — which is the point, because a file that
+    // is too big to accept should be refused before it is turned into bytes.
+    eq(S.decodedSize("QUJD"), 3)
+    eq(S.decodedSize("QUJDRA=="), 4)
+    eq(S.decodedSize("QUJDREU="), 5)
+
+    const big = "A".repeat(Math.ceil(S.MAX_IMAGE_BYTES * 4 / 3) + 8)
+    const oversize = S.sharedImages(JSON.stringify({ images: { "huge.png": big, "fine.png": "QUJD" } }))
+    eq(Object.keys(oversize).join(","), "fine.png", "one picture over the ceiling is refused")
+
+    // And a set of pictures that is fine one at a time and too much together.
+    const half = "A".repeat(Math.ceil(S.MAX_BUNDLE_BYTES * 4 / 3 / 2))
+    const together = S.sharedImages(JSON.stringify({ images: { "a.png": half, "b.png": half, "c.png": half } }))
+    ok(Object.keys(together).length < 3, "the total is bounded as well as each one")
+
+    // What the file says it has, whatever survives being looked at: the
+    // difference is what did not arrive, and the caller refuses the import.
+    eq(S.declaredImageCount(JSON.stringify({ images: { "a.png": "QUJD", "../b.png": "QUJD" } })), 2)
+    eq(Object.keys(S.sharedImages(JSON.stringify({ images: { "a.png": "QUJD", "../b.png": "QUJD" } }))).length, 1)
+    eq(S.declaredImageCount("not json"), 0)
+    eq(S.declaredImageCount(JSON.stringify({ items: [] })), 0, "a board with no pictures says nothing")
   })
 
   test("pictures out of a shared copy are pointed at where they actually landed", () => {

@@ -64,31 +64,112 @@ ShellRoot {
     running: true
     onTriggered: {
       if (test.stage === 0) {
+        // A board carrying something that is not a picture cannot arrive
+        // whole, so it does not arrive at all: an item pointing at nothing is
+        // worse than being told, and the file it came from is still there.
         test.stage = 1
+        exchange.importPath(test.dir + "/broken.omarchyform.json")
+      } else if (test.stage === 1 && test.lastMessage !== "" && !exchange.busy) {
+        test.check(test.importedBoard === "", "a board with an unreadable picture is not imported")
+        test.check(test.lastMessage.indexOf("could not be read") > 0, test.lastMessage)
+        test.check(test.read(test.dir + "/broken.omarchyform.json") !== "", "and the file is left alone")
+        test.check(test.read(ctl.boardsDir + "/broken.json") === "", "with nothing published")
+
+        // A name no board would write is refused before anything is decoded.
+        test.lastMessage = ""
+        test.stage = 2
+        exchange.importPath(test.dir + "/rejected.omarchyform.json")
+      } else if (test.stage === 2 && test.lastMessage !== "" && !exchange.busy) {
+        test.check(test.importedBoard === "", "nor is one naming a picture it may not name")
+        test.check(test.lastMessage.indexOf("cannot accept") > 0, test.lastMessage)
+
+        // And a file too large to read is refused by its size, before it is.
+        test.lastMessage = ""
+        test.stage = 3
+        exchange.importPath(test.dir + "/enormous.omarchyform.json")
+      } else if (test.stage === 3 && test.lastMessage !== "" && !exchange.busy) {
+        test.check(test.lastMessage.indexOf("too large") > 0, test.lastMessage)
+        test.check(test.importedBoard === "", "and nothing was imported")
+
+        // The whole one. Two pictures, one of them named twice, and one of
+        // them under a name this library already gave to different bytes.
+        test.lastMessage = ""
+        test.stage = 4
         exchange.importPath(test.dir + "/shared.omarchyform.json")
-      } else if (test.stage === 1 && test.importedBoard !== "" && !exchange.busy) {
+      } else if (test.stage === 4 && test.importedBoard !== "" && !exchange.busy) {
         test.check(test.importedBoard === "shared.json", "named after the file it came from")
         var board = JSON.parse(test.read(ctl.boardsDir + "/" + test.importedBoard))
         test.check(board.images === undefined, "the bytes do not stay in the board")
         test.check(/^shared-[0-9]+-0\.png$/.test(board.items[0].src),
                    "the picture landed under a name this machine chose: " + board.items[0].src)
-        test.check(test.read(ctl.imagesDir + "/" + board.items[0].src).length > 8,
-                   "and the file it names is there")
-        test.check(board.items[1].src === "", "a picture that could not be read points at nothing")
-        test.check(exchange.createdNote.indexOf("1 picture could not be read") > 0,
-                   "and that is said out loud: " + exchange.createdNote)
-        // The other direction, from a board that names a picture this library has.
+        test.check(board.items[1].src === board.items[0].src,
+                   "a picture named twice is one picture, landed once")
+        test.check(/^shared-[0-9]+-1\.png$/.test(board.items[2].src), "and the other is its own")
+        test.check(board.items[2].src !== board.items[0].src, "under a name of its own")
+        // The bytes, compared rather than assumed: this is the whole promise.
+        test.check(test.read(ctl.imagesDir + "/" + board.items[0].src) === test.read(test.dir + "/raw-other"),
+                   "the bytes of the first arrive unchanged")
+        test.check(test.read(ctl.imagesDir + "/" + board.items[2].src) === test.read(test.dir + "/raw-pixels"),
+                   "and so do the bytes of the second")
+        test.check(test.read(ctl.imagesDir + "/pic.png") === test.read(test.dir + "/raw-pixels"),
+                   "and the picture this library already had is untouched")
+        test.check(exchange.createdNote === "", "nothing to report about it")
+
+        // Out again, from a board that names a picture this library has.
         items.append({iid: 1, kind: "image", ix: 0, iy: 0, iw: 100, ih: 100,
                       itint: "foreground", itext: "", ipinned: false, isrc: "pic.png"})
         ctl.nextId = 2
-        test.stage = 2
+        test.lastMessage = ""
+        test.stage = 5
         exchange.exportJson(test.dir + "/out.omarchyform.json")
-      } else if (test.stage === 2 && test.lastMessage !== "" && !exchange.busy) {
+        // Everything an export could race with while it reads the pictures out
+        // of the library: the board it was taken from is left behind, its
+        // picture is deleted, and something else is typed onto it.
+        ctl.currentBoard = "somewhere-else.json"
+        items.append({iid: 2, kind: "note", ix: 500, iy: 0, iw: 100, ih: 100,
+                      itint: "foreground", itext: "after the snapshot", ipinned: false, isrc: ""})
+        items.remove(0)
+        ctl.nextId = 3
+      } else if (test.stage === 5 && test.lastMessage !== "" && !exchange.busy) {
         var copy = JSON.parse(test.read(test.dir + "/out.omarchyform.json"))
-        test.check(copy.items.length === 1 && copy.items[0].src === "pic.png", "the copy still names its picture")
+        test.check(copy.items.length === 1, "the copy is the board as it was, not as it became")
+        test.check(copy.items[0].src === "pic.png", "the copy still names its picture")
         test.check(copy.images !== undefined && copy.images["pic.png"] === test.pixels,
                    "and carries the bytes of it")
         test.check(test.lastMessage === "Editable copy saved, with its pictures", test.lastMessage)
+
+        // A board naming a picture the library does not have cannot be copied
+        // whole, and a copy that is not whole is not published.
+        items.append({iid: 3, kind: "image", ix: 0, iy: 300, iw: 100, ih: 100,
+                      itint: "foreground", itext: "", ipinned: false, isrc: "gone.png"})
+        test.lastMessage = ""
+        test.stage = 6
+        exchange.exportJson(test.dir + "/incomplete.omarchyform.json")
+      } else if (test.stage === 6 && test.lastMessage !== "" && !exchange.busy) {
+        test.check(test.lastMessage.indexOf("missing from your library") > 0, test.lastMessage)
+        test.check(test.read(test.dir + "/incomplete.omarchyform.json") === "",
+                   "nothing is published when a picture is missing")
+
+        // Asking for it without its pictures is a different thing, by name.
+        test.lastMessage = ""
+        test.stage = 7
+        exchange.omitPictures = true
+        exchange.exportJson(test.dir + "/plain.omarchyform.json")
+      } else if (test.stage === 7 && test.lastMessage !== "" && !exchange.busy) {
+        var plain = JSON.parse(test.read(test.dir + "/plain.omarchyform.json"))
+        test.check(plain.images === undefined, "which arrives without them")
+        test.check(plain.items.length === 2, "and with everything else")
+        test.check(test.lastMessage.indexOf("without its pictures") > 0, test.lastMessage)
+        exchange.omitPictures = false
+
+        // An export that cannot be published leaves whatever is there as it was.
+        test.lastMessage = ""
+        test.stage = 8
+        exchange.exportJson(test.dir + "/locked/there.omarchyform.json")
+      } else if (test.stage === 8 && test.lastMessage !== "" && !exchange.busy) {
+        test.check(test.read(test.dir + "/locked/there.omarchyform.json") === "not mine to replace",
+                   "a failed export does not touch the destination")
+        test.check(exchange.error !== "", "and it says so: " + test.lastMessage)
         console.log("EXCHANGE_TESTS_PASSED")
         Qt.quit()
       }

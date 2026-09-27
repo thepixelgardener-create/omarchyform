@@ -263,9 +263,24 @@ a shared board of screenshots used to arrive as a board of holes. `ctrl+o` reads
 one back in as a new board rather than overwriting the one you are on, writing
 the pictures it carried into your own `images/` under names it picks, so a copy
 you were sent can never end up addressing a picture of yours that happens to
-share a name. A picture that will not decode is reported and its item is left
-empty. Boards whose pictures come to more than 16 MB are copied without them,
-and say so: nobody can act on half a board's pictures. `ctrl+e` renders the board to a PNG for
+share a name.
+
+A copy either carries everything it names or is not written at all. If a picture
+is missing from your library, or the pictures come to more than 16 MB, the copy
+is refused with the reason and the file you were saving over is untouched.
+**Save a copy without its pictures** is the other thing you can ask for, by that
+name, and says so when it is done. An export is a picture of one moment: what it
+writes is the board as it was when you asked, however much you edit or switch
+boards while its pictures are being read.
+
+Coming in, a file over 32 MB is refused by its size before it is read, a picture
+over 32 MB or a set of them over 16 MB is refused from the length of the text
+rather than by decoding it, and a board that carries a picture this cannot read
+is refused whole: nothing is imported, the file you were given is untouched, and
+you are told which. Pictures that had already landed from that attempt stay in
+`images/` unreferenced, in the same way a picture whose item you deleted does.
+A board with no `images` key at all — every board written before this, and every
+board in your own library — imports exactly as it always did. `ctrl+e` renders the board to a PNG for
 sharing. `ctrl+v` asks the clipboard for a picture first and drops it on the board at its
 own proportions; failing that, it turns the text into a note, however many lines
 it is.

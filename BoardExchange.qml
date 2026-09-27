@@ -76,10 +76,38 @@ Item {
     return stage(text, "untitled", true)
   }
 
+  // What a board arriving from outside is allowed to be. A board with its
+  // pictures inside it is a few megabytes; anything beyond this is refused
+  // before it is read into memory rather than after.
+  readonly property int maxImportBytes: 33554432
+
   function importPath(path) {
     if (busy) return
     error = ""
     createdNote = ""
+    busy = true
+    measure.source = path
+    measure.command = exchange.ctl.fileCommand("filesize", [path])
+    measure.running = true
+  }
+
+  Process {
+    id: measure
+    property string source: ""
+    stdout: StdioCollector { id: measured; waitForEnd: true }
+    onExited: function (code) {
+      exchange.busy = false
+      var bytes = code === 0 ? parseInt(measured.text, 10) : 0
+      if (!isFinite(bytes) || bytes <= 0) { exchange.fail("Could not read that board"); return }
+      if (bytes > exchange.maxImportBytes) {
+        exchange.fail("That file is " + Math.round(bytes / 1048576) + " MB — too large for a board")
+        return
+      }
+      exchange.readImport(measure.source)
+    }
+  }
+
+  function readImport(path) {
     // Read it here and now. An asynchronous reload on a view that is not
     // preloaded produced neither loaded nor loadFailed, so the import simply
     // stopped; a chosen file is small enough to read on the spot.
@@ -96,9 +124,19 @@ Item {
     // choosing, before the board can point at them.
     var carried = Store.sharedImages(raw)
     var names = Object.keys(carried)
+    // A picture the file claims but this will not accept — too large, or a
+    // name no board would write — means the board cannot arrive whole. It is
+    // refused rather than opened with holes in it, and the file it came from
+    // is untouched, so there is something left to try again with.
+    var declared = Store.declaredImageCount(raw)
+    if (declared !== names.length) {
+      exchange.fail("That board carries " + (declared - names.length) + " of " + declared
+                    + " pictures this cannot accept; nothing was imported")
+      return
+    }
     if (names.length === 0) { exchange.stage(raw, base, false); return }
     busy = true
-    exchange.sharing = { raw: raw, base: base, images: carried, names: names, at: 0, landed: {}, lost: 0 }
+    exchange.sharing = { raw: raw, base: base, images: carried, names: names, at: 0, landed: {} }
     exchange.nextSharedImage()
   }
 
@@ -110,8 +148,7 @@ Item {
     var job = exchange.sharing
     if (job.at >= job.names.length) {
       exchange.sharing = null
-      exchange.createdNote = job.lost === 0 ? ""
-        : " · " + job.lost + (job.lost === 1 ? " picture could not be read" : " pictures could not be read")
+      exchange.createdNote = ""
       // stage() takes the flag straight back; it is cleared so its own guard,
       // which is there to refuse a second import, does not refuse this one.
       exchange.busy = false
@@ -126,8 +163,16 @@ Item {
 
   function sharedImageDone(name) {
     var job = exchange.sharing
-    if (name === "") job.lost += 1
-    else job.landed[job.names[job.at]] = name
+    // A picture that did not arrive is not something to paper over: the board
+    // would open with an item pointing at nothing, and nothing would say why.
+    // The pictures that did land stay in the pictures folder, unreferenced, in
+    // the same way a picture whose item was deleted does.
+    if (name === "") {
+      exchange.sharing = null
+      exchange.fail("A picture in that board could not be read; nothing was imported")
+      return
+    }
+    job.landed[job.names[job.at]] = name
     job.at += 1
     exchange.nextSharedImage()
   }
@@ -157,30 +202,59 @@ Item {
   // something a process can hand over in one piece.
   readonly property int bundleBudget: 16777216
 
+  // An export is a picture of one board at one moment, and collecting its
+  // pictures takes long enough for that moment to pass: a board switch, a
+  // deleted picture, a note typed into. So everything the export will ever
+  // need is taken at the start and carried through every step — the board as
+  // text, the pictures it names, which board it was and where it is going.
+  // Nothing after this reads the live models.
+  property var snapshot: null
+  property int exportSeq: 0
+
+  // Set by the command that asks for a copy without pictures, and cleared by
+  // the one that asks for an ordinary copy: which of the two was chosen is
+  // decided before the file dialog, not after it.
+  property bool omitPictures: false
+
   function exportJson(path) {
     if (busy || !exchange.ctl.boardLoaded) return
     busy = true
     operation = "export"
     destination = path
-    exportNote = ""
-    var names = Store.imageNames(exchange.ctl.items)
-    if (names.length === 0) { exchange.stageExport({}); return }
+    exportNote = exchange.omitPictures ? " · without its pictures" : ""
+    exchange.exportSeq += 1
+    exchange.snapshot = {
+      id: exchange.exportSeq,
+      board: exchange.ctl.currentBoard,
+      destination: path,
+      text: Store.writeFile(exchange.ctl.items, exchange.ctl.links, exchange.ctl.nextId),
+      names: Store.imageNames(exchange.ctl.items)
+    }
+    if (exchange.omitPictures || exchange.snapshot.names.length === 0) {
+      exchange.stageExport(exchange.snapshot, {})
+      return
+    }
+    collect.forExport = exchange.snapshot.id
     collect.command = exchange.ctl.fileCommand("bundleimages",
-      [exchange.ctl.imagesDir, String(exchange.bundleBudget)].concat(names))
+      [exchange.ctl.imagesDir, String(exchange.bundleBudget)].concat(exchange.snapshot.names))
     collect.running = true
   }
 
-  function stageExport(images) {
+  function stageExport(taken, images) {
     output.path = ""
     output.path = exchange.ctl.dataDir + "/.export-" + Date.now() + ".json"
-    var body = Store.writeShared(exchange.ctl.items, exchange.ctl.links, exchange.ctl.nextId, images)
+    var body = Store.withEmbeddedImages(taken.text, images)
     Qt.callLater(function () { output.setText(body) })
   }
 
   Process {
     id: collect
+    // Which export asked. An answer for an export that is no longer the one
+    // running belongs to nothing and is dropped rather than published.
+    property int forExport: 0
     stdout: StdioCollector { id: collected; waitForEnd: true }
     onExited: function (code) {
+      if (!exchange.snapshot || collect.forExport !== exchange.snapshot.id) return
       if (code !== 0) { exchange.fail("Could not read this board's pictures"); return }
       var images = {}
       var missing = 0
@@ -195,18 +269,31 @@ Item {
         if (body === "!missing") { missing += 1; continue }
         images[name] = body
       }
-      exchange.exportNote = oversize >= 0
-        ? " · its pictures are too large to travel with it (" + Math.round(oversize / 1048576) + " MB)"
-        : missing > 0
-        ? " · " + missing + (missing === 1 ? " picture is" : " pictures are") + " missing from your library"
-        : ", with its pictures"
-      exchange.stageExport(oversize >= 0 ? {} : images)
+      // A copy that is meant to travel is no good without the pictures it
+      // names, so neither of these publishes anything. Saving a copy without
+      // them is a separate thing to ask for, by that name.
+      if (oversize >= 0) {
+        exchange.fail("This board's pictures come to " + Math.round(oversize / 1048576)
+                      + " MB, more than a copy can carry ("
+                      + Math.round(exchange.bundleBudget / 1048576) + " MB)"
+                      + " · save a copy without its pictures instead")
+        return
+      }
+      if (missing > 0) {
+        exchange.fail(missing + (missing === 1 ? " picture this board names is" : " pictures this board names are")
+                      + " missing from your library · save a copy without its pictures instead")
+        return
+      }
+      exchange.exportNote = ", with its pictures"
+      exchange.stageExport(exchange.snapshot, images)
     }
   }
 
   function choose(action) {
     if (busy) return
     exchange.ctl.stopEditing()
+    exchange.omitPictures = action === "plain"
+    if (action === "plain") action = "json"
     operation = action
     picker.title = action === "import" ? "Import a board" : action === "png" ? "Export board as PNG" : "Save an editable copy"
     picker.fileMode = action === "import" ? FileDialog.OpenFile : FileDialog.SaveFile
@@ -257,7 +344,8 @@ Item {
         publish.command = exchange.ctl.fileCommand("publish", [exchange.ctl.boardsDir, exchange.baseName, output.path])
         publish.running = true
       } else {
-        publish.command = exchange.ctl.fileCommand("export", [output.path, exchange.destination, exchange.ctl.dataDir])
+        publish.command = exchange.ctl.fileCommand("export",
+          [output.path, exchange.snapshot.destination, exchange.ctl.dataDir])
         publish.running = true
       }
     }

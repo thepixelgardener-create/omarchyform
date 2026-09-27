@@ -223,6 +223,12 @@ case "$operation" in
   revision)
     revision_of "$1"
     ;;
+  filesize)
+    # Asked before a file is read into memory, so something absurd can be
+    # refused without being loaded. Nothing is a size of its own: a file that
+    # is not there answers 0, and the caller says so.
+    if [[ -f $1 ]]; then printf '%s' "$(stat -Lc '%s' -- "$1")"; else printf 0; fi
+    ;;
   commit)
     # The one write both ends of a board go through, with the board itself on
     # stdin. Under a lock, and only if the file is still the revision the
@@ -268,59 +274,6 @@ case "$operation" in
     mv -fT -- "$staged" "$board"
     revision_of "$board"
     ;;
-  check)
-    # Loading asks first, so a board that could never be saved is not opened.
-    # The revision comes back with the answer: what is read now is what the
-    # next write will expect to still be there.
-    confined "$1" "$2" || exit 3
-    revision_of "$1/$2"
-    ;;
-  revision)
-    revision_of "$1"
-    ;;
-  commit)
-    # The one write both ends of a board go through. Under a lock, and only if
-    # the file is still the revision the writer last saw — so two writers that
-    # both read the same version cannot both believe they are updating it, and
-    # the second one is told rather than winning by arriving later.
-    #
-    # Exit 7 means the file moved underneath, and prints what is there now. The
-    # caller still holds what it meant to write; this refuses to guess which of
-    # the two a person wanted.
-    board=$1 backup=$2 staged=$3 lock=$4 expected=$5 root=${6:-} backup_root=${7:-}
-    [[ -f $staged && ! -L $staged ]]
-    if [[ -n $root ]]; then
-      [[ $board == "$root/"* ]] || exit 3
-      confined "$root" "${board#"$root/"}" || exit 3
-    fi
-    if [[ -n $backup_root ]]; then
-      [[ $backup == "$backup_root/"* ]] || exit 3
-      confined "$backup_root" "${backup#"$backup_root/"}" || exit 3
-    fi
-    [[ ! -L $board && ! -L $backup && ! -L $backup.tmp ]] || exit 3
-    # However this ends, the staged content does not stay in the boards folder.
-    # The caller still holds it in memory; a half-finished write left lying
-    # next to a board is litter in a directory people are invited to read.
-    trap 'rm -f -- "$staged"' EXIT
-    mkdir -p -- "$(dirname -- "$lock")"
-    exec 9>"$lock"
-    flock 9
-    current=$(revision_of "$board")
-    if [[ $expected != "-" && $expected != "$current" ]]; then
-      printf '%s' "$current"
-      exit 7
-    fi
-    mkdir -p -- "$(dirname -- "$backup")"
-    # The version about to be replaced is kept first, whoever is replacing it.
-    if [[ -e $board ]]; then
-      cp -T -- "$board" "$backup.tmp"
-      mv -fT -- "$backup.tmp" "$backup"
-    fi
-    # Staged beside the board, so this is a rename on one filesystem: nothing
-    # can read half of it, and a reader either sees the old one or the new one.
-    mv -fT -- "$staged" "$board"
-    revision_of "$board"
-    ;;
   mkdir)
     confined "$1" "$2"
     mkdir -- "$1/$2"
@@ -329,24 +282,6 @@ case "$operation" in
     [[ $2 != */* ]]
     confined "$1" "$2"
     rm -rf -- "$1/$2"
-    ;;
-  backup)
-    board=$1 backup=$2 root=${3:-} backup_root=${4:-}
-    # Exit 3 marks a refused path, so the caller can say why nothing was saved.
-    if [[ -n $root ]]; then
-      [[ $board == "$root/"* ]] || exit 3
-      confined "$root" "${board#"$root/"}" || exit 3
-    fi
-    if [[ -n $backup_root ]]; then
-      [[ $backup == "$backup_root/"* ]] || exit 3
-      confined "$backup_root" "${backup#"$backup_root/"}" || exit 3
-    fi
-    [[ ! -L $board && ! -L $backup && ! -L $backup.tmp ]] || exit 3
-    mkdir -p -- "$(dirname -- "$backup")"
-    if [[ -e $board ]]; then
-      cp -T -- "$board" "$backup.tmp"
-      mv -fT -- "$backup.tmp" "$backup"
-    fi
     ;;
   *) exit 2 ;;
 esac

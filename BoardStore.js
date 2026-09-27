@@ -199,6 +199,7 @@ var COMMANDS = [
   { name: "Name this board", key: "F2", run: "renameBoard", needs: "" },
   { name: "Import a board", key: "ctrl+o", run: "importBoard", needs: "" },
   { name: "Save a copy to share", key: "ctrl+shift+s", run: "exportBoard", needs: "" },
+  { name: "Save a copy without its pictures", key: "", run: "exportBoardPlain", needs: "" },
   { name: "Export a PNG", key: "ctrl+e", run: "choosePng", needs: "" },
   { name: "Save now", key: "ctrl+s", run: "flushSave", needs: "" },
   // Only offered while two versions of the open board exist. They have no keys
@@ -464,16 +465,47 @@ function imageNames(items) {
   return names
 }
 
-function writeShared(items, links, nextId, images) {
-  var out = JSON.parse(writeFile(items, links, nextId))
-  if (images && Object.keys(images).length > 0) out.images = images
-  return JSON.stringify(out, null, 2) + "\n"
+// Takes the board as text rather than as models, because a copy being saved is
+// a picture of one moment and the models move on while its pictures are being
+// read out of the library.
+function withEmbeddedImages(raw, images) {
+  var parsed
+  try { parsed = JSON.parse(raw) } catch (e) { return raw }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return raw
+  if (images && Object.keys(images).length > 0) parsed.images = images
+  return JSON.stringify(parsed, null, 2) + "\n"
 }
 
 // What a shared copy brought with it. Every byte here was written by someone
 // else, and a name decides a path on disk, so anything that is not a name this
 // would write itself is dropped rather than repaired.
 var BASE64_BODY = /^[A-Za-z0-9+/\r\n]+={0,2}$/
+
+// What a board is allowed to carry. The same ceiling a dropped picture has for
+// one image, and a total that keeps the encoded copy something a process can
+// hand over in one piece. Checked from the length of the base64 rather than by
+// decoding it: four characters are three bytes, and a file that is too big to
+// accept should be refused before it is turned into bytes.
+var MAX_IMAGE_BYTES = 33554432
+var MAX_BUNDLE_BYTES = 16777216
+
+function decodedSize(base64) {
+  var padding = base64.length > 1 && base64.charAt(base64.length - 1) === "="
+    ? (base64.charAt(base64.length - 2) === "=" ? 2 : 1) : 0
+  return Math.floor(base64.length * 3 / 4) - padding
+}
+
+// How many pictures the file says it carries, whether or not they survive
+// being looked at. The difference between this and what sharedImages returns
+// is how much of the board did not arrive.
+function declaredImageCount(raw) {
+  var parsed
+  try { parsed = JSON.parse(raw) } catch (e) { return 0 }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return 0
+  var images = parsed.images
+  if (!images || typeof images !== "object" || Array.isArray(images)) return 0
+  return Object.keys(images).length
+}
 
 function sharedImages(raw) {
   var parsed
@@ -482,11 +514,16 @@ function sharedImages(raw) {
   var images = parsed.images
   if (!images || typeof images !== "object" || Array.isArray(images)) return {}
   var out = {}
+  var total = 0
   var names = Object.keys(images)
   for (var i = 0; i < names.length; i++) {
     var body = images[names[i]]
     if (!imageIsValid(names[i]) || typeof body !== "string" || body === "") continue
     if (!BASE64_BODY.test(body)) continue
+    var size = decodedSize(body)
+    if (size <= 0 || size > MAX_IMAGE_BYTES) continue
+    total += size
+    if (total > MAX_BUNDLE_BYTES) break
     out[names[i]] = body
   }
   return out

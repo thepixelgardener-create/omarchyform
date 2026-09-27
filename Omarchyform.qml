@@ -262,6 +262,10 @@ Item {
   function pasteClipboard() { exchange.paste() }
   function importBoard() { exchange.choose("import") }
   function exportBoard() { exchange.choose("json") }
+  // The copy that deliberately leaves the pictures behind. Asking for it is a
+  // separate thing with a name of its own, because a copy that quietly arrives
+  // without them is what this used to do by accident.
+  function exportBoardPlain() { exchange.choose("plain") }
   function choosePng() { exchange.choose("png") }
   function exportPng(path) { if (root.activeBoard) root.activeBoard.exportPng(path) }
 

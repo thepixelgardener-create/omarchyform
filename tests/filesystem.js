@@ -23,7 +23,6 @@ try {
   assert.notEqual(run('purge',trash,'../boards').status,0)
   fs.symlinkSync(boards,path.join(trash,'link'))
   assert.notEqual(run('purge',trash,'link').status,0)
-  assert.equal(run('backup',path.join(boards,'escape/a.json'),path.join(trash,'backup'),boards).status,3)
   assert.equal(fs.existsSync(path.join(boards,'a.json')),true)
   assert.equal(run('check',boards,'escape/a.json').status,3)
   assert.equal(run('check',boards,'a.json').status,0)
@@ -33,8 +32,13 @@ try {
   fs.mkdirSync(path.join(dir,'backups'))
   fs.symlinkSync(boards,linkedBoards)
   fs.symlinkSync(path.join(dir,'backups'),linkedBackups)
-  assert.equal(run('backup',path.join(linkedBoards,'a.json'),path.join(linkedBackups,'a.json.bak'),linkedBoards,linkedBackups).status,0)
-  assert.equal(fs.readFileSync(path.join(dir,'backups/a.json.bak'),'utf8'),'new')
+  assert.equal(spawnSync('bash',[path.join(__dirname,'../BoardFiles.sh'),'commit',
+    path.join(linkedBoards,'a.json'),path.join(linkedBackups,'a.json.bak'),
+    path.join(dir,'locks','linked.lock'),'-',linkedBoards,linkedBackups],
+    {encoding:'utf8',input:'through a linked root'}).status,0)
+  assert.equal(fs.readFileSync(path.join(dir,'backups/a.json.bak'),'utf8'),'new','the version it replaced')
+  assert.equal(fs.readFileSync(path.join(boards,'a.json'),'utf8'),'through a linked root')
+  fs.writeFileSync(path.join(boards,'a.json'),'new')
   assert.equal(run('purge',trash,'another').status,0)
   const staged=path.join(dir,'staged.json')
   fs.writeFileSync(staged,'{"version":4,"items":[]}')
@@ -201,6 +205,10 @@ try {
   assert.equal(seen.stdout,forced.stdout,'check and commit speak the same revision')
   assert.equal(run('revision',board).stdout,forced.stdout)
   assert.equal(run('revision',path.join(boards,'not-here.json')).stdout,'','and nothing has no revision')
+  // Asked before a file is read into memory, so an absurd one can be refused
+  // without being loaded.
+  assert.equal(Number(run('filesize',board).stdout),fs.statSync(board).size)
+  assert.equal(run('filesize',path.join(boards,'not-here.json')).stdout,'0')
 
   // And the same thing for real: two writers that both read the same revision,
   // started together. The lock decides which goes first; the revision check
