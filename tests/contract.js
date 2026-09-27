@@ -174,7 +174,7 @@ for (const command of byKey.values())
 // del, F2, enter — are named in KEY_HELP and checked by eye.
 const board = read("Board.qml")
 for (const command of Store.COMMANDS) {
-  const chord = /^ctrl\+([a-z])$/.exec(command.key)
+  const chord = /^(?:ctrl|super)\+([a-z])$/.exec(command.key)
   if (!chord) continue
   const branch = new RegExp("Key_" + chord[1].toUpperCase() + "\\b[^\\n]*board\\.ctl\\." + command.run + "\\(")
   if (!branch.test(board))

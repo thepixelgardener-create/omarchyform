@@ -7,6 +7,10 @@ since older boards are migrated on load rather than rejected.
 
 ### Added
 
+- Super+C and Super+V are the primary copy/paste shortcuts in the help and
+  command palette. The canvas accepts them directly; Ctrl+C and Ctrl+V remain
+  available. Omarchy’s universal clipboard bindings continue to work.
+
 - **What can be done with what is selected, on `.` or a right-click.** The same
   panel the command palette uses, narrowed to the commands that act on a
   selection — shape, colour, connect, duplicate, pin or unpin, layer order,

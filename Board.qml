@@ -456,6 +456,16 @@ FocusScope {
         return
       }
 
+      // Omarchy normally forwards Super+C/V as Ctrl+C/V. Handle Meta
+      // directly too when the compositor leaves those chords to the app.
+      if ((event.modifiers & Qt.MetaModifier) !== 0) {
+        if (event.key === Qt.Key_C) board.ctl.copySelection()
+        else if (event.key === Qt.Key_V) board.ctl.pasteClipboard()
+        else return
+        event.accepted = true
+        return
+      }
+
       if (ctrl) {
         // Ctrl plus a movement key resizes, the same way Shift plus one moves.
         var rd = keys.direction(event.key, "")

@@ -179,7 +179,7 @@ colours apart, and the controls carry names and roles for a screen reader.
 | `u` / `ctrl+r` | Undo / redo |
 | `ctrl+n` | New board, already waiting for the first note |
 | `F2` | Rename the board you are on |
-| `ctrl+v` | Paste a picture from the clipboard, or text as a note |
+| `super+v` / `ctrl+v` | Paste a picture from the clipboard, or text as a note |
 | `ctrl+o` | Open a board file from anywhere |
 | `ctrl+shift+s` | Save a copy of this board somewhere else |
 | `ctrl+e` | Export the board as a PNG |
@@ -195,7 +195,7 @@ colours apart, and the controls carry names and roles for a screen reader.
 | `ctrl+d` | Duplicate it, and the connectors between the copies |
 | `m` | Show or hide the menu in the header |
 | `m` then `h` `l` / `tab` | Walk the menu; `enter` picks, `esc` closes |
-| `ctrl+c` | Copy it out: a picture as a picture, anything else as its text |
+| `super+c` / `ctrl+c` | Copy it out: a picture as a picture, anything else as its text |
 | `/` | Find: type to search the notes, `enter` steps through the matches |
 | `g` then `h` `j` `k` `l` | Align the marked items on that edge |
 | `g` then `c` / `m` | Align their centres on one vertical / horizontal line |

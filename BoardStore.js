@@ -200,8 +200,8 @@ var COMMANDS = [
   { name: "Mark everything", key: "a", run: "markAll", needs: "" },
   { name: "Undo", key: "u", run: "undo", needs: "edit" },
   { name: "Redo", key: "ctrl+r", run: "redo", needs: "edit" },
-  { name: "Copy out", key: "ctrl+c", run: "copySelection", needs: "" },
-  { name: "Paste in", key: "ctrl+v", run: "pasteClipboard", needs: "edit" },
+  { name: "Copy out", key: "super+c", run: "copySelection", needs: "" },
+  { name: "Paste in", key: "super+v", run: "pasteClipboard", needs: "edit" },
   { name: "Find in this board", key: "/", run: "beginFind", needs: "" },
   { name: "Fit the board on screen", key: "f", run: "fitToItems", needs: "" },
   { name: "Reset the view", key: "0", run: "resetView", needs: "" },
@@ -264,7 +264,7 @@ function commandByName(name) {
 
 var KEY_HELP = [
   ["ctrl+n / F2", "new board / name the current board"],
-  ["ctrl+v", "paste a picture, or clipboard text as a note"],
+  ["super+v", "paste a picture or text (also ctrl+v)"],
   ["ctrl+o", "import a native board"],
   ["ctrl+shift+s / ctrl+e", "export editable copy / PNG"],
   ["n", "new note beside the selected one"],
@@ -287,7 +287,7 @@ var KEY_HELP = [
   ["ctrl+d", "duplicate it, connectors between the copies included"],
   ["m", "show or hide the menu in the header"],
   ["m then h l / tab", "walk the menu; enter picks, esc closes"],
-  ["ctrl+c", "copy it out: a picture as a picture, anything else as its text"],
+  ["super+c", "copy a picture or text (also ctrl+c)"],
   ["/", "find: type to search the notes, enter steps through matches"],
   ["g then h j k l", "align the marked items on that edge"],
   ["g then c / m", "align their centres on one line"],
