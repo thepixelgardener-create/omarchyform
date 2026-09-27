@@ -91,7 +91,7 @@ ShellRoot {
       // matchesFind on each one.
       step: function () {
         var q = ["n", "no", "not", "note"][Math.floor(Math.max(0, bench.seen) / 8) % 4]
-        if (plugin.findQuery !== q) { plugin.endFind(); plugin.beginFind(); for (var i = 0; i < q.length; i++) plugin.extendFind(q[i]) }
+        if (plugin.findQuery !== q) { plugin.endFind(); plugin.beginFind(); plugin.setFindQuery(q) }
       }
     }
   ]

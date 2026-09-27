@@ -407,14 +407,11 @@ FocusScope {
         return
       }
 
-      // While finding, every printable key is the query. Enter steps to the
+      // The query is a text field with the keyboard in it, so what reaches
+      // here while finding is what the field does not want. Enter steps to the
       // next match rather than ending, because stepping is the common case.
       if (board.ctl.finding) {
-        if (event.key === Qt.Key_Escape) board.ctl.endFind()
-        else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) board.ctl.nextMatch()
-        else if (event.key === Qt.Key_Backspace) board.ctl.trimFind()
-        else if (event.text && event.text >= " " && !ctrl) board.ctl.extendFind(event.text)
-        event.accepted = true
+        board.findKey(event)
         return
       }
 
@@ -563,6 +560,98 @@ FocusScope {
     ctl: board.ctl
   }
 
+  // What the query field does not own. The field has the keyboard while
+  // finding, so this is what it hands back; the board's own handler calls the
+  // same function, because a field that has somehow not been given the
+  // keyboard must not leave escape meaning "close the board".
+  function findKey(event) {
+    if (event.key === Qt.Key_Escape) board.ctl.endFind()
+    else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) board.ctl.nextMatch()
+    else return
+    event.accepted = true
+  }
+
+  // The find query, in the status line's place while it is being typed. A
+  // drawn cursor after a string that only ever grew at the end could not be
+  // moved through, selected, pasted into, or composed in a language that needs
+  // an input method — and the board it searches can be written in one.
+  Row {
+    id: findLine
+    visible: board.ctl.finding && !board.ctl.helpVisible && !board.ctl.browserVisible
+    anchors.horizontalCenter: parent.horizontalCenter
+    anchors.top: banner.visible ? banner.bottom : toolbar.bottom
+    anchors.topMargin: board.ctl.sp(8)
+    width: Math.min(parent.width - board.ctl.sp(32), implicitWidth)
+    height: implicitHeight
+
+    Text {
+      id: findLabel
+      text: "find: "
+      color: board.ctl.foreground
+      opacity: 0.85
+      font.family: board.ctl.fontFamily
+      font.pixelSize: board.ctl.fontBody
+    }
+
+    TextInput {
+      id: findField
+      // Wide enough to see the caret in an empty query, and it grows with what
+      // is typed rather than reserving a box the board has to look at.
+      width: Math.max(board.ctl.sp(24), Math.min(implicitWidth + board.ctl.sp(2), board.width / 3))
+      clip: true
+      color: board.ctl.foreground
+      selectionColor: board.ctl.accent
+      selectedTextColor: board.ctl.canvasBackground
+      selectByMouse: true
+      font.family: board.ctl.fontFamily
+      font.pixelSize: board.ctl.fontBody
+
+      // Typed into, it is the query. Set from anywhere else — a test, the
+      // screenshot harness, a find reopened on the query it had — it follows,
+      // so the two cannot show different things. Both sides check before
+      // writing, so neither can chase the other.
+      onTextChanged: board.ctl.setFindQuery(text)
+      readonly property string query: board.ctl.findQuery
+      onQueryChanged: if (findField.query !== findField.text) findField.text = findField.query
+
+      // Deferred for the same reason the browser's field defers: whatever
+      // else is being set as finding begins lands here on its own, and
+      // selecting has to be the last thing that happens.
+      readonly property bool wanted: board.ctl.finding
+      onWantedChanged: {
+        if (!wanted) { board.ctl.focusKeys(); return }
+        Qt.callLater(function () {
+          if (!board.ctl.finding) return
+          findField.text = board.ctl.findQuery
+          findField.forceActiveFocus()
+          findField.selectAll()
+        })
+      }
+
+      // The board decides what these two mean; everything else is typing.
+      Keys.onPressed: function (event) { board.findKey(event) }
+    }
+
+    Text {
+      textFormat: Text.StyledText
+      // As wide as it needs, and no wider: a Row is as wide as its children,
+      // and one child claiming the rest of the window pushes the line it is
+      // centred in over to the left. A theme with large text in a small window
+      // wraps it instead, the way the status line it stands in for wrapped.
+      width: Math.min(implicitWidth,
+                      Math.max(0, board.width - board.ctl.sp(32) - findLabel.width - findField.width))
+      wrapMode: Text.Wrap
+      color: board.ctl.foreground
+      opacity: 0.85
+      font.family: board.ctl.fontFamily
+      font.pixelSize: board.ctl.fontBody
+      text: (board.ctl.findQuery === "" ? ""
+             : " · " + (board.ctl.findCount === 0 ? "no match"
+                        : board.ctl.findCount === 1 ? "1 match" : board.ctl.findCount + " matches"))
+            + " · " + Store.hintLine(Store.FIND_HINTS, board.ctl.accentMarkup)
+    }
+  }
+
   // Under the header rather than at the far edge: the name, the commands and
   // whatever the board is saying are one block to look at, and the bottom of
   // the canvas is left to the board.
@@ -580,7 +669,7 @@ FocusScope {
     opacity: 0.85
     font.family: board.ctl.fontFamily
     font.pixelSize: board.ctl.fontBody
-    visible: !board.ctl.helpVisible && !board.ctl.browserVisible
+    visible: !board.ctl.helpVisible && !board.ctl.browserVisible && !board.ctl.finding
     // Markup, so a key can be a different colour from the word it sits in.
     // Everything reaching this line from a board file, a file name or the
     // keyboard is escaped on the way: this is the one place on the board that
@@ -590,12 +679,6 @@ FocusScope {
       : board.ctl.trashIndexError !== "" ? Store.escapeMarkup(board.ctl.trashIndexError)
       : board.ctl.paletteVisible
       ? "commands · " + Store.hintLine(Store.PALETTE_HINTS, board.ctl.accentMarkup)
-      : board.ctl.finding
-      ? "find: " + Store.escapeMarkup(board.ctl.findQuery) + "▏"
-        + (board.ctl.findQuery === "" ? ""
-           : " · " + (board.ctl.findCount === 0 ? "no match"
-                        : board.ctl.findCount === 1 ? "1 match" : board.ctl.findCount + " matches"))
-        + " · " + Store.hintLine(Store.FIND_HINTS, board.ctl.accentMarkup)
       : board.ctl.arranging
       ? "arrange · " + Store.hintLine(Store.ARRANGE_HINTS, board.ctl.accentMarkup)
       : board.ctl.showPinned

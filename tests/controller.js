@@ -497,8 +497,9 @@ console.log('ok — controller: the arrange mode, aligning and spreading')
   assert.equal(c.root.finding, true)
   assert.equal(c.root.findDimming, false, 'an empty query dims nothing')
 
-  c.root.extendFind('s')
-  c.root.extendFind('h')
+  // What the field on the board calls as it is typed into.
+  c.root.setFindQuery('s')
+  c.root.setFindQuery('sh')
   assert.equal(c.root.findQuery, 'sh')
   assert.equal(c.root.findCount, 2)
   assert.equal(c.root.selectedIndex, 0, 'the board follows the typing to the first match')
@@ -512,13 +513,13 @@ console.log('ok — controller: the arrange mode, aligning and spreading')
   c.root.nextMatch()
   assert.equal(c.root.selectedIndex, 0, 'and comes back round')
 
-  // Backspace widens the query again.
-  c.root.trimFind()
+  // Taking a letter back widens the query again.
+  c.root.setFindQuery('s')
   assert.equal(c.root.findQuery, 's')
   assert.equal(c.root.findCount, 2)
 
   // A query that matches nothing leaves the selection where it was.
-  c.root.extendFind('zz')
+  c.root.setFindQuery('szz')
   assert.equal(c.root.findCount, 0)
   assert.equal(c.root.selectedIndex, 0, 'no match does not throw the cursor away')
 
@@ -540,7 +541,7 @@ console.log('ok — controller: the arrange mode, aligning and spreading')
   ro.items.append({ iid: 1, kind: 'note', ix: 0, iy: 0, iw: 100, ih: 100,
     itint: 'foreground', itext: 'still findable', ipinned: false, isrc: '' })
   ro.root.beginFind()
-  ro.root.extendFind('find')
+  ro.root.setFindQuery('find')
   assert.equal(ro.root.finding, true, 'a board that cannot be edited can still be searched')
   assert.equal(ro.root.findCount, 1)
   assert.equal(ro.writes.length, 0, 'and searching never writes')

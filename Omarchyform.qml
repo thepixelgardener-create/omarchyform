@@ -792,13 +792,12 @@ Item {
     root.findCount = 0
   }
 
-  function extendFind(text) {
-    root.findQuery += text
-    root.refreshFind()
-  }
-
-  function trimFind() {
-    root.findQuery = root.findQuery.slice(0, -1)
+  // One way for the query to change, whether it came from the field on the
+  // board, a test, or the screenshot harness — so what is exercised without a
+  // scene is what typing into it does.
+  function setFindQuery(text) {
+    if (text === root.findQuery) return
+    root.findQuery = text
     root.refreshFind()
   }
 
@@ -1286,6 +1285,12 @@ Item {
     root.browserInput = initial || ""
   }
 
+  function cancelPrompt() {
+    root.browserAction = ""
+    root.browserPrompt = ""
+    root.browserInput = ""
+  }
+
   function commitPrompt() {
     if (!root.filesystemReady()) return
     var name = root.browserInput.trim()
@@ -1417,7 +1422,7 @@ Item {
 
     // While typing a name, every printable key is input.
     if (root.browserPrompt !== "") {
-      if (event.key === Qt.Key_Escape) { root.browserPrompt = ""; root.browserInput = ""; root.browserAction = "" }
+      if (event.key === Qt.Key_Escape) root.cancelPrompt()
       else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) root.commitPrompt()
       else if (event.key === Qt.Key_Backspace) root.browserInput = root.browserInput.slice(0, -1)
       else if (text && text >= " ") root.browserInput += text

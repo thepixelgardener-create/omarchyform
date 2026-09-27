@@ -124,6 +124,20 @@ ShellRoot {
         test.key("b")
         test.stage = 45
       } else if (test.stage === 45 && plugin.browserVisible) {
+        // A name is typed into a real text field now. Only a real key can say
+        // whether the keyboard reaches it: the harness calls functions, and a
+        // field nothing has focused looks exactly the same from there.
+        plugin.prompt("rename", "new name:", "already-here")
+        test.stage = 451
+      } else if (test.stage === 451 && plugin.browserPrompt !== "") {
+        test.key("z")
+        test.stage = 452
+      } else if (test.stage === 452 && plugin.browserInput === "z") {
+        test.check(true, "one keystroke replaces the name the field opens with")
+        plugin.browserKey({key: Qt.Key_Escape, text: "", modifiers: 0})
+        test.check(plugin.browserPrompt === "", "and the field lets go")
+        // Which the browser behind it has to notice: this closes it, so the
+        // keyboard came back rather than staying in a field that is gone.
         test.key("Escape")
         test.stage = 46
       } else if (test.stage === 46 && !plugin.browserVisible) {

@@ -93,8 +93,7 @@ ShellRoot {
         plugin.showPinned = false
         plugin.selectedIndex = 0
         plugin.beginFind()
-        plugin.extendFind("m")
-        plugin.extendFind("a")
+        plugin.setFindQuery("ma")
       }
     },
     {
@@ -142,8 +141,17 @@ ShellRoot {
       // the row under the cursor. The entries are planted rather than written
       // to disk — the isolated HOME has one board in it, and thirty files
       // would say nothing thirty rows do not.
+      // Naming a board: the one place the browser shows a text field, with the
+      // name it opened on selected so a keystroke replaces it.
+      name: "10a-naming",
+      setup: function () {
+        plugin.prompt("rename", "new name:", "quarterly plan")
+      }
+    },
+    {
       name: "10b-browser-scrolling",
       setup: function () {
+        plugin.cancelPrompt()
         var rows = []
         for (var i = 1; i <= 30; i++) rows.push({ path: "board-" + i + ".json", dir: false })
         plugin.browserEntries = rows

@@ -22,6 +22,16 @@ since older boards are migrated on load rather than rejected.
   itself — so a key that moves, or a function that is renamed, cannot leave the
   list teaching something that is no longer true.
 
+- **The find box and the name box are real text fields.** Both were a string
+  that grew at the end with a cursor drawn after it, so neither could be moved
+  through, selected in, pasted into, or typed in a language that needs an input
+  method — and a board can be written in one. They are `TextInput`s now, which
+  brings the caret keys, selection, the clipboard and composition with them.
+  Renaming opens with the current name selected, so one keystroke still replaces
+  it and an arrow key now edits it instead. The keys the board owns — `esc`,
+  `enter` — are handed back to it from one place, so a field that has somehow
+  not been given the keyboard cannot leave `esc` meaning "close the board".
+
 - **A copy saved to share carries its pictures.** A board in the library keeps
   only the file name of a picture, so a screenshot is stored once however many
   boards use it — and a copy sent to someone else arrived as a board of holes,
