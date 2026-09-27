@@ -35,6 +35,21 @@ function ask(command) {
   } catch { return null }
 }
 
+// The screen the numbers were measured on, scale included. A fractionally
+// scaled display draws more pixels than its resolution says, and that is the
+// first thing to check when a frame time will not reproduce elsewhere.
+function display() {
+  try {
+    const out = spawnSync('hyprctl', ['-j', 'monitors'], { encoding: 'utf8', timeout: 5000 })
+    const monitors = JSON.parse(out.stdout || '[]')
+    if (monitors.length === 0) return null
+    const one = monitors.find(m => m.focused) || monitors[0]
+    const scale = Number(one.scale)
+    return `${one.width}\u00d7${one.height} at ${scale}x, `
+      + (monitors.length > 1 ? `${monitors.length} outputs` : 'single output')
+  } catch { return null }
+}
+
 function provenance() {
   return [
     ['Qt', ask('qmake6 -query QT_VERSION || /usr/lib/qt6/bin/qmake6 -query QT_VERSION')],
@@ -44,7 +59,11 @@ function provenance() {
     ['GPU', ask(`lspci 2>/dev/null | grep -iE 'vga|3d' | head -1 | sed 's/.*: //'`)],
     ['CPU', ask(`sed -n 's/^model name[ \t]*: //p' /proc/cpuinfo | head -1`)],
     ['OS', ask(`. /etc/os-release 2>/dev/null && echo "$PRETTY_NAME"`)],
-    ['Omarchy', ask(`cat ${omarchy}/version 2>/dev/null`)]
+    // The two ways this machine names its Omarchy disagree — the version file
+    // says the release, the package says the revision. A bug report carries the
+    // package version, so that is the one recorded here and in the README.
+    ['Omarchy', ask(`omarchy-version 2>/dev/null || cat ${omarchy}/version 2>/dev/null`)],
+    ['Display', display()]
   ].filter(row => row[1])
 }
 
