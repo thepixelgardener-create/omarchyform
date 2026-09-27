@@ -564,6 +564,8 @@ function tests(S) {
     ok(mine.every(c => ["target", "item", "group"].indexOf(c.needs) >= 0),
        "only the ones that need something selected")
     ok(mine.some(c => c.name === "Align left edges"), "including the arrangement chord's answers")
+    ok(mine.some(c => c.name === "Change colour"), "and the plain ones that act on what is selected")
+    ok(mine.some(c => c.name === "Bring to front"), "and the ones a background counts for")
     ok(mine.some(c => c.name === "Pin or unpin as background"), "and the one that takes it out of the background")
     ok(!mine.some(c => c.name === "New board"), "and nothing that is about the board itself")
     eq(S.matchCommands("align", "selection").length, 6, "narrowing still works inside it")
@@ -630,6 +632,17 @@ function tests(S) {
     // rather than passing through itself.
     eq(after(board, [2, 4], "forward"), "abdce", "the one at the top stays, the other moves")
     eq(after(board, [0, 2], "backward"), "acbde")
+
+    // Three of them, and handed over in no particular order: what is selected
+    // arrives in the order it was marked in, not sorted.
+    eq(after(board, [3, 0, 2], "front"), "beacd", "three to the front, in board order")
+    eq(after(board, [4, 1, 2], "back"), "bcead", "and three to the back")
+    eq(after(board, [3, 1], "front"), after(board, [1, 3], "front"), "the order they arrive in is not the answer")
+    eq(after(board, [2, 0], "back"), after(board, [0, 2], "back"))
+
+    // A set that is at neither end and asked for the end it is not at.
+    eq(after(board, [1, 2], "front"), "adebc")
+    eq(after(board, [2, 3], "back"), "cdabe")
   })
 
   test("a copy saved to share lists every picture on the board once", () => {
@@ -697,6 +710,33 @@ function tests(S) {
     eq(Object.keys(S.sharedImages(JSON.stringify({ images: { "a.png": "QUJD", "../b.png": "QUJD" } }))).length, 1)
     eq(S.declaredImageCount("not json"), 0)
     eq(S.declaredImageCount(JSON.stringify({ items: [] })), 0, "a board with no pictures says nothing")
+
+    // JSON that is not a board at all. A list and a null parse cleanly and are
+    // not objects with pictures in them, which is a different thing from being
+    // unparseable and has to be refused just as plainly.
+    for (const notABoard of ["[1,2,3]", "null", "\"a string\"", "42"]) {
+      eq(S.declaredImageCount(notABoard), 0, notABoard)
+      eq(Object.keys(S.sharedImages(notABoard)).length, 0, notABoard)
+      eq(S.withEmbeddedImages(notABoard, { "a.png": "QUJD" }), notABoard, notABoard + " is left as it is")
+    }
+    eq(S.declaredImageCount(JSON.stringify({ images: ["a.png"] })), 0, "a list of names is not a set of pictures")
+
+    // A picture that is refused does not stop the ones after it being taken.
+    const mixedOrder = S.sharedImages(JSON.stringify({ images: {
+      "../first.png": "QUJD", "second.png": "not base64!", "third.png": "QUJD"
+    } }))
+    eq(Object.keys(mixedOrder).join(","), "third.png", "the good one behind two bad ones")
+
+    // The ceiling itself. One picture is bounded by both limits, so the one
+    // that decides is the smaller: what a whole copy may carry. Exactly that
+    // much is allowed and one group of four characters more is not.
+    ok(S.MAX_BUNDLE_BYTES <= S.MAX_IMAGE_BYTES, "a copy carries no more than one picture may be")
+    const atLimit = "A".repeat(Math.ceil(S.MAX_BUNDLE_BYTES * 4 / 3))
+    eq(S.decodedSize(atLimit), S.MAX_BUNDLE_BYTES, "exactly the ceiling")
+    eq(Object.keys(S.sharedImages(JSON.stringify({ images: { "a.png": atLimit } }))).length, 1,
+       "a picture exactly at the ceiling is allowed")
+    eq(Object.keys(S.sharedImages(JSON.stringify({ images: { "a.png": atLimit + "AAAA" } }))).length, 0,
+       "and one over it is not")
   })
 
   test("pictures out of a shared copy are pointed at where they actually landed", () => {
