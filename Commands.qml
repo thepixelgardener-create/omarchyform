@@ -11,34 +11,39 @@ import "BoardStore.js" as Store
 // not being asked for: the same bargain the menu makes. It does not take the
 // keyboard focus, because the board's own key handler owns this mode the way it
 // owns finding — one place where what a keystroke means is decided.
+// Deliberately not called `palette`: an Item has a `palette` property of its
+// own, and inside a delegate Qt 6.4 resolves that name to it rather than to
+// this id — every binding in the rows then reads off undefined. Qt 6.11
+// resolves the id and says nothing, so it is a name that only breaks on the
+// version CI runs. The same reason this file is not called Palette.qml.
 Rectangle {
-  id: palette
+  id: panel
   required property var ctl
   // The board behind it, which owns what a key means: the field hands back
   // the ones the panel uses rather than deciding them a second time.
   required property var board
 
-  visible: palette.ctl.paletteVisible
-  width: Math.min(parent.width - palette.ctl.sp(64), palette.ctl.sp(560))
+  visible: panel.ctl.paletteVisible
+  width: Math.min(parent.width - panel.ctl.sp(64), panel.ctl.sp(560))
 
   // How many rows there is room for, rather than how many there are. A list of
   // nine at a theme's large font is taller than a small window, and a panel
   // that runs off the bottom hides the very commands it exists to show.
-  readonly property int room: Math.max(palette.rowHeight * 2, parent.height - y - palette.ctl.sp(24))
+  readonly property int room: Math.max(panel.rowHeight * 2, parent.height - y - panel.ctl.sp(24))
   // Everything in the panel that is not a row: the padding above and below, the
   // two gaps the column leaves, the line you type into and the rule under it.
   // Measured off the parts themselves, because a number guessed here crops the
   // bottom row — which is what it did.
   readonly property int chrome: body.y * 2 + body.spacing * 2 + query.implicitHeight + rule.height
-  readonly property int fits: Math.max(1, Math.floor((palette.room - palette.chrome) / palette.rowHeight))
-  readonly property int visibleRows: Math.max(1, Math.min(palette.ctl.paletteMatches.length,
-                                                          palette.ctl.paletteRows, palette.fits))
-  height: palette.chrome + palette.rowHeight * palette.visibleRows
-  color: palette.ctl.canvasBackground
-  border.width: palette.ctl.borderWidth
-  border.color: Qt.rgba(palette.ctl.foreground.r, palette.ctl.foreground.g,
-                        palette.ctl.foreground.b, 0.35)
-  radius: palette.ctl.cornerRadius
+  readonly property int fits: Math.max(1, Math.floor((panel.room - panel.chrome) / panel.rowHeight))
+  readonly property int visibleRows: Math.max(1, Math.min(panel.ctl.paletteMatches.length,
+                                                          panel.ctl.paletteRows, panel.fits))
+  height: panel.chrome + panel.rowHeight * panel.visibleRows
+  color: panel.ctl.canvasBackground
+  border.width: panel.ctl.borderWidth
+  border.color: Qt.rgba(panel.ctl.foreground.r, panel.ctl.foreground.g,
+                        panel.ctl.foreground.b, 0.35)
+  radius: panel.ctl.cornerRadius
 
   // Swallow clicks so they do not reach the board underneath.
   MouseArea { anchors.fill: parent }
@@ -50,17 +55,17 @@ Rectangle {
     id: ruler
     visible: false
     text: "Ag"
-    font.family: palette.ctl.fontFamily
-    font.pixelSize: palette.ctl.fontSubtitle
+    font.family: panel.ctl.fontFamily
+    font.pixelSize: panel.ctl.fontSubtitle
   }
-  readonly property int rowHeight: ruler.implicitHeight + palette.ctl.sp(8)
+  readonly property int rowHeight: ruler.implicitHeight + panel.ctl.sp(8)
 
   Column {
     id: body
-    y: palette.ctl.sp(16)
-    x: palette.ctl.sp(16)
-    width: parent.width - palette.ctl.sp(32)
-    spacing: palette.ctl.sp(10)
+    y: panel.ctl.sp(16)
+    x: panel.ctl.sp(16)
+    width: parent.width - panel.ctl.sp(32)
+    spacing: panel.ctl.sp(10)
 
     Row {
       width: parent.width
@@ -69,9 +74,9 @@ Rectangle {
       Text {
         id: query
         text: "run: "
-        color: palette.ctl.foreground
-        font.family: palette.ctl.fontFamily
-        font.pixelSize: palette.ctl.fontSubtitle
+        color: panel.ctl.foreground
+        font.family: panel.ctl.fontFamily
+        font.pixelSize: panel.ctl.fontSubtitle
       }
 
       // A real field: a query that only grew at the end could not be moved
@@ -81,59 +86,59 @@ Rectangle {
         id: typed
         width: parent.width - query.width
         clip: true
-        color: palette.ctl.foreground
-        selectionColor: palette.ctl.accent
-        selectedTextColor: palette.ctl.canvasBackground
+        color: panel.ctl.foreground
+        selectionColor: panel.ctl.accent
+        selectedTextColor: panel.ctl.canvasBackground
         selectByMouse: true
-        font.family: palette.ctl.fontFamily
-        font.pixelSize: palette.ctl.fontSubtitle
+        font.family: panel.ctl.fontFamily
+        font.pixelSize: panel.ctl.fontSubtitle
 
         Accessible.role: Accessible.EditableText
         Accessible.name: "Command to run"
-        Accessible.description: palette.ctl.paletteMatches.length + " commands match"
+        Accessible.description: panel.ctl.paletteMatches.length + " commands match"
 
-        onTextChanged: palette.ctl.setPaletteQuery(typed.text)
-        readonly property string held: palette.ctl.paletteQuery
+        onTextChanged: panel.ctl.setPaletteQuery(typed.text)
+        readonly property string held: panel.ctl.paletteQuery
         onHeldChanged: if (typed.held !== typed.text) typed.text = typed.held
 
         // Deferred for the same reason the board's find field defers: whatever
         // else is set as the palette opens lands here on its own, and taking
         // the keyboard has to be the last thing that happens.
-        readonly property bool wanted: palette.ctl.paletteVisible
+        readonly property bool wanted: panel.ctl.paletteVisible
         onWantedChanged: {
-          if (!wanted) { palette.ctl.focusKeys(); return }
+          if (!wanted) { panel.ctl.focusKeys(); return }
           Qt.callLater(function () {
-            if (!palette.ctl.paletteVisible) return
-            typed.text = palette.ctl.paletteQuery
+            if (!panel.ctl.paletteVisible) return
+            typed.text = panel.ctl.paletteQuery
             typed.forceActiveFocus()
             typed.selectAll()
           })
         }
 
         // The panel decides what these mean; everything else is typing.
-        Keys.onPressed: function (event) { palette.board.paletteKey(event) }
+        Keys.onPressed: function (event) { panel.board.paletteKey(event) }
       }
     }
 
     Rectangle {
       id: rule
       width: parent.width
-      height: palette.ctl.borderWidth
-      color: Qt.rgba(palette.ctl.foreground.r, palette.ctl.foreground.g,
-                     palette.ctl.foreground.b, 0.25)
+      height: panel.ctl.borderWidth
+      color: Qt.rgba(panel.ctl.foreground.r, panel.ctl.foreground.g,
+                     panel.ctl.foreground.b, 0.25)
     }
 
     Item {
       width: parent.width
-      height: palette.rowHeight * palette.visibleRows
+      height: panel.rowHeight * panel.visibleRows
 
       ListView {
         id: list
         anchors.fill: parent
-        anchors.rightMargin: palette.ctl.sp(10)
+        anchors.rightMargin: panel.ctl.sp(10)
         clip: true
-        model: palette.ctl.paletteMatches
-        currentIndex: palette.ctl.paletteIndex
+        model: panel.ctl.paletteMatches
+        currentIndex: panel.ctl.paletteIndex
         highlightMoveDuration: 0
         // Keep the cursor in view when the list is longer than the panel: the
         // rest are reached by typing, but walking to them has to work too.
@@ -144,30 +149,30 @@ Rectangle {
           required property var modelData
           required property int index
           width: list.width
-          height: palette.rowHeight
+          height: panel.rowHeight
 
-          readonly property bool current: row.index === palette.ctl.paletteIndex
+          readonly property bool current: row.index === panel.ctl.paletteIndex
 
           // Named for anything reading the screen rather than looking at it:
           // what the command is, what it answers to, and why it cannot run.
           Accessible.role: Accessible.Button
           Accessible.name: row.modelData.name
                            + (row.modelData.key === "" ? "" : ", " + row.modelData.key)
-          Accessible.description: row.ready ? "" : palette.ctl.commandExcuse(row.modelData.needs)
+          Accessible.description: row.ready ? "" : panel.ctl.commandExcuse(row.modelData.needs)
           Accessible.focused: row.current
           Accessible.onPressAction: {
-            palette.ctl.paletteIndex = row.index
-            palette.ctl.runPaletteChoice()
+            panel.ctl.paletteIndex = row.index
+            panel.ctl.runPaletteChoice()
           }
           // Dimmed rather than hidden. A command that cannot run now is still
           // one this board has, and hiding it would teach that it does not
           // exist; the line below says what it is waiting for.
-          readonly property bool ready: palette.ctl.commandReady(row.modelData.needs)
+          readonly property bool ready: panel.ctl.commandReady(row.modelData.needs)
 
           Rectangle {
             anchors.fill: parent
             visible: row.current
-            color: Qt.rgba(palette.ctl.accent.r, palette.ctl.accent.g, palette.ctl.accent.b, 0.18)
+            color: Qt.rgba(panel.ctl.accent.r, panel.ctl.accent.g, panel.ctl.accent.b, 0.18)
           }
 
           // The cursor is a mark as well as a colour, so which row is current
@@ -176,26 +181,26 @@ Rectangle {
             id: marker
             anchors.verticalCenter: parent.verticalCenter
             anchors.left: parent.left
-            anchors.leftMargin: palette.ctl.sp(8)
+            anchors.leftMargin: panel.ctl.sp(8)
             text: row.current ? "›" : " "
-            color: palette.ctl.accent
-            font.family: palette.ctl.fontFamily
-            font.pixelSize: palette.ctl.fontSubtitle
+            color: panel.ctl.accent
+            font.family: panel.ctl.fontFamily
+            font.pixelSize: panel.ctl.fontSubtitle
           }
 
           Text {
             id: name
             anchors.verticalCenter: parent.verticalCenter
             anchors.left: marker.right
-            anchors.leftMargin: palette.ctl.sp(6)
+            anchors.leftMargin: panel.ctl.sp(6)
             anchors.right: excuse.left
-            anchors.rightMargin: palette.ctl.sp(12)
+            anchors.rightMargin: panel.ctl.sp(12)
             elide: Text.ElideRight
             text: row.modelData.name
-            color: palette.ctl.foreground
+            color: panel.ctl.foreground
             opacity: !row.ready ? 0.4 : row.current ? 1.0 : 0.75
-            font.family: palette.ctl.fontFamily
-            font.pixelSize: palette.ctl.fontSubtitle
+            font.family: panel.ctl.fontFamily
+            font.pixelSize: panel.ctl.fontSubtitle
           }
 
           // Why it cannot run, where the eye is already going to look for how
@@ -205,32 +210,32 @@ Rectangle {
             id: excuse
             anchors.verticalCenter: parent.verticalCenter
             anchors.right: shortcut.left
-            anchors.rightMargin: palette.ctl.sp(10)
+            anchors.rightMargin: panel.ctl.sp(10)
             visible: !row.ready
-            text: palette.ctl.commandExcuse(row.modelData.needs)
-            color: palette.ctl.foreground
+            text: panel.ctl.commandExcuse(row.modelData.needs)
+            color: panel.ctl.foreground
             opacity: 0.45
-            font.family: palette.ctl.fontFamily
-            font.pixelSize: palette.ctl.fontBody
+            font.family: panel.ctl.fontFamily
+            font.pixelSize: panel.ctl.fontBody
           }
 
           Text {
             id: shortcut
             anchors.verticalCenter: parent.verticalCenter
             anchors.right: parent.right
-            anchors.rightMargin: palette.ctl.sp(8)
+            anchors.rightMargin: panel.ctl.sp(8)
             text: row.modelData.key
-            color: palette.ctl.accent
+            color: panel.ctl.accent
             opacity: row.ready ? 0.9 : 0.4
-            font.family: palette.ctl.fontFamily
-            font.pixelSize: palette.ctl.fontSubtitle
+            font.family: panel.ctl.fontFamily
+            font.pixelSize: panel.ctl.fontSubtitle
           }
 
           MouseArea {
             anchors.fill: parent
             onClicked: {
-              palette.ctl.paletteIndex = row.index
-              palette.ctl.runPaletteChoice()
+              panel.ctl.paletteIndex = row.index
+              panel.ctl.runPaletteChoice()
             }
           }
         }
@@ -238,16 +243,16 @@ Rectangle {
         Text {
           anchors.centerIn: parent
           visible: list.count === 0
-          color: palette.ctl.foreground
+          color: panel.ctl.foreground
           opacity: 0.5
-          font.family: palette.ctl.fontFamily
-          font.pixelSize: palette.ctl.fontBody
+          font.family: panel.ctl.fontFamily
+          font.pixelSize: panel.ctl.fontBody
           text: "nothing goes by that"
         }
       }
 
       ScrollHint {
-        ctl: palette.ctl
+        ctl: panel.ctl
         view: list
         anchors { top: parent.top; bottom: parent.bottom; right: parent.right }
       }

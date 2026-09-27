@@ -87,7 +87,7 @@ TestCase {
   // The panel hands the keys it does not use back to the board; here there is
   // no board, so it hands them to something that answers the same way.
   QtObject { id: keyboardless; function paletteKey(event) {} }
-  Commands { id: palette; ctl: ctl; board: keyboardless; y: 40; anchors.horizontalCenter: parent.horizontalCenter }
+  Commands { id: commandList; ctl: ctl; board: keyboardless; y: 40; anchors.horizontalCenter: parent.horizontalCenter }
   Conflict { id: decision; ctl: ctl; y: 40; anchors.horizontalCenter: parent.horizontalCenter }
   // The header is a bar, so it is painted in the theme's bar colours rather
   // than the canvas ones.
@@ -130,24 +130,24 @@ TestCase {
   // Every command at a theme's large font is taller than a small window, and a
   // panel that runs off the bottom hides the commands it exists to show.
   function test_paletteFitsASmallWindow() {
-    verify(palette.visible)
+    verify(commandList.visible)
     verify(ctl.paletteMatches.length > ctl.paletteRows, "there are more commands than rows")
-    verify(palette.width <= test.width - 32, "it fits across")
-    verify(palette.y + palette.height <= test.height, "and does not run off the bottom")
-    verify(palette.visibleRows >= 1, "while still showing something")
-    verify(palette.visibleRows <= ctl.paletteRows, "and never more rows than it offers")
+    verify(commandList.width <= test.width - 32, "it fits across")
+    verify(commandList.y + commandList.height <= test.height, "and does not run off the bottom")
+    verify(commandList.visibleRows >= 1, "while still showing something")
+    verify(commandList.visibleRows <= ctl.paletteRows, "and never more rows than it offers")
   }
 
   // Narrowing the query shrinks the panel rather than leaving empty rows.
   function test_paletteShrinksToWhatMatches() {
-    const many = palette.height
+    const many = commandList.height
     ctl.paletteQuery = "colour"
-    verify(waitForRendering(palette))
+    verify(waitForRendering(commandList))
     compare(ctl.paletteMatches.length, 1)
-    verify(palette.height < many, "one match is a shorter panel than thirty")
+    verify(commandList.height < many, "one match is a shorter panel than thirty")
     ctl.paletteQuery = ""
-    verify(waitForRendering(palette))
-    compare(palette.height, many)
+    verify(waitForRendering(commandList))
+    compare(commandList.height, many)
   }
 
   // The question about two versions of a board arrives on whatever window is

@@ -43,7 +43,7 @@ Rectangle {
         // beside the name rather than against the far edge. A long name elides
         // at the cap instead of pushing the rest off.
         width: Math.min(implicitWidth, Math.max(toolbar.ctl.sp(40),
-          content.identityMax - separator.implicitWidth - state.implicitWidth - identity.spacing * 2))
+          content.identityMax - separator.implicitWidth - saveState.implicitWidth - identity.spacing * 2))
         text: toolbar.ctl.boardTitle
         elide: Text.ElideRight
         color: toolbar.ctl.barForeground
@@ -65,7 +65,7 @@ Rectangle {
         anchors.verticalCenter: title.verticalCenter
       }
       Text {
-        id: state
+        id: saveState
         text: toolbar.ctl.boardState
         opacity: toolbar.ctl.saveError !== "" ? 1 : 0.85
         color: toolbar.ctl.saveError !== "" ? toolbar.ctl.urgent : toolbar.ctl.barForeground

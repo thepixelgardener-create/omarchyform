@@ -186,6 +186,28 @@ for (const command of Store.COMMANDS)
   if (!controller.has(command.run))
     failures.push(`BoardStore.js: "${command.name}" runs ${command.run}(), which the controller does not have`)
 
+// An id that is also a property every Item has is a name Qt may resolve two
+// ways. `palette` is one: inside a delegate, Qt 6.4 resolves it to the item's
+// own palette rather than to the id, and every binding under it then reads off
+// undefined — while Qt 6.11 resolves the id and says nothing. That is a green
+// suite here and a red one on the version CI runs, which is the same trap the
+// name `Palette` set for the file itself.
+const reservedIds = new Set([
+  "palette", "anchors", "parent", "children", "childrenRect", "visibleChildren",
+  "data", "resources", "state", "states", "transitions", "transform", "layer",
+  "opacity", "visible", "enabled", "clip", "focus", "activeFocus", "activeFocusOnTab",
+  "x", "y", "z", "width", "height", "implicitWidth", "implicitHeight",
+  "scale", "rotation", "smooth", "antialiasing", "baselineOffset", "containmentMask"
+])
+
+for (const file of [...fs.readdirSync(root).filter(f => f.endsWith(".qml")),
+                    ...fs.readdirSync(path.join(root, "tests/qml")).map(f => "tests/qml/" + f),
+                    ...fs.readdirSync(path.join(root, "tests/qt")).map(f => "tests/qt/" + f)]) {
+  for (const m of read(file).matchAll(/^\s*id:\s*(\w+)\s*$/gm))
+    if (reservedIds.has(m[1]))
+      failures.push(`${file}: "${m[1]}" is a property every Item has, so it is not a safe id`)
+}
+
 if (failures.length) {
   for (const line of failures) console.error("  " + line)
   console.error(`FAILED — ${failures.length} missing member(s)`)
