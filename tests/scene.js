@@ -22,7 +22,37 @@ const { spawnSync } = require('child_process')
 const repo = path.join(__dirname, '..')
 const omarchy = process.env.OMARCHY_PATH || '/usr/share/omarchy'
 
-const sizes = process.argv.slice(2).map(Number).filter(n => n > 0)
+// What the numbers were measured on. A frame time means nothing without it —
+// the same board is vsync-bound at 60Hz and drops frames at 144 — and a figure
+// quoted in a changelog a year from now is only checkable against the machine
+// that produced it. Everything here is read from what is already installed and
+// every probe is allowed to fail: a missing tool costs one row, not a run.
+function ask(command) {
+  try {
+    const out = spawnSync('sh', ['-c', command], { encoding: 'utf8', timeout: 5000 })
+    const text = (out.stdout || '').trim()
+    return text === '' ? null : text.split('\n')[0]
+  } catch { return null }
+}
+
+function provenance() {
+  return [
+    ['Qt', ask('qmake6 -query QT_VERSION || /usr/lib/qt6/bin/qmake6 -query QT_VERSION')],
+    ['Quickshell', ask(`qs --version 2>&1 | sed 's/^Quickshell //; s/ *(revision.*//'`)],
+    ['Compositor', ask(`hyprctl version -j 2>/dev/null | sed -n 's/.*"version": *"\\([^"]*\\)".*/Hyprland \\1/p'`)],
+    ['Refresh', ask(`hyprctl monitors -j 2>/dev/null | sed -n 's/.*"refreshRate": *\\([0-9]*\\.[0-9]\\).*/\\1 Hz/p'`)],
+    ['GPU', ask(`lspci 2>/dev/null | grep -iE 'vga|3d' | head -1 | sed 's/.*: //'`)],
+    ['CPU', ask(`sed -n 's/^model name[ \t]*: //p' /proc/cpuinfo | head -1`)],
+    ['OS', ask(`. /etc/os-release 2>/dev/null && echo "$PRETTY_NAME"`)],
+    ['Omarchy', ask(`cat ${omarchy}/version 2>/dev/null`)]
+  ].filter(row => row[1])
+}
+
+const args = process.argv.slice(2)
+// --record writes docs/performance.md as well as printing, so the numbers a
+// changelog quotes have a checked-in record of the machine that produced them.
+const record = args.includes('--record')
+const sizes = args.filter(a => a !== '--record').map(Number).filter(n => n > 0)
 const plan = sizes.length ? sizes : [100, 500, 1000, 3000]
 
 function measure(size) {
@@ -75,6 +105,11 @@ if (!process.env.WAYLAND_DISPLAY) {
   process.exit(2)
 }
 
+const facts = provenance()
+const factWidth = Math.max(...facts.map(f => f[0].length))
+for (const [label, value] of facts) process.stdout.write(`${label.padEnd(factWidth)}  ${value}\n`)
+process.stdout.write('\n')
+
 const table = []
 for (const size of plan) {
   const rows = measure(size)
@@ -92,4 +127,34 @@ for (let i = 0; i < names.length; i++) {
   })
   process.stdout.write(names[i].padEnd(width) + cells.join('') + '\n')
 }
-process.stdout.write('\nms per frame, mean/p95.\n')
+// The idle row is the refresh interval this machine actually achieved, which
+// is the budget every other row should be read against — measured rather than
+// taken from what the monitor claims.
+if (record) {
+  const lines = ['# What a board costs to draw', '',
+    'Written by `npm run bench:scene -- --record` on '
+      + new Date().toISOString().slice(0, 10) + '. Every frame time quoted in the',
+    'changelog was measured here; a frame time without the machine under it is',
+    'not a number anyone can check.', '',
+    '## Measured on', '', '| Part | Value |', '| --- | --- |']
+  for (const [label, value] of facts) lines.push(`| ${label} | ${value} |`)
+  lines.push('', '## Milliseconds per frame, mean/p95', '',
+    '| phase | ' + table.map(t => t.size + ' items').join(' | ') + ' |',
+    '| --- | ' + table.map(() => '---').join(' | ') + ' |')
+  for (let i = 0; i < names.length; i++)
+    lines.push(`| ${names[i]} | ` + table.map(t => `${t.rows[i].mean.toFixed(1)}/${t.rows[i].p95.toFixed(1)}`).join(' | ') + ' |')
+  const idleRow = table[0].rows.find(r => r.name === 'idle')
+  lines.push('', 'The `idle` row is the refresh interval this machine actually reached, and',
+    'is the budget the rest are read against: a phase at '
+      + (idleRow ? idleRow.mean.toFixed(1) : '?') + 'ms is vsync-bound and',
+    'has room to spare, and a phase above it drops frames while the board is',
+    'in use.')
+  fs.writeFileSync(path.join(repo, 'docs/performance.md'), lines.join('\n') + '\n')
+  process.stdout.write('\nwritten docs/performance.md\n')
+}
+
+const idle = table[0].rows.find(r => r.name === 'idle')
+const budget = idle ? idle.mean : 0
+process.stdout.write('\nms per frame, mean/p95.'
+  + (budget ? ` One frame here is ${budget.toFixed(1)}ms; a row at that is vsync-bound.` : '')
+  + '\n')

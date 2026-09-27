@@ -7,6 +7,15 @@ since older boards are migrated on load rather than rejected.
 
 ### Added
 
+- `npm run bench:scene` prints what it measured on before what it measured —
+  Qt, Quickshell, the compositor, the refresh rate, the GPU, the CPU — and
+  `--record` writes that and the table to `docs/performance.md`. Every frame
+  time this changelog quotes was measured on one machine at one refresh rate,
+  and none of it said so: the same board is vsync-bound at 60Hz and dropping
+  frames at 144, so a figure without the machine under it is not a number
+  anyone can check. Borrowed from omashow's `bin/sbom`, which records the
+  versions its published numbers were measured against.
+
 - **A scroll mark on the panels that scroll.** The shortcut list and the board
   browser both run past their panel, and neither said so: the list ended
   mid-row, and a directory of thirty boards looked like a directory of twenty.

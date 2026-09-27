@@ -406,7 +406,15 @@ columns.
 ```bash
 npm run bench:scene            # 100, 500, 1000 and 3000 items
 npm run bench:scene -- 3000    # one size
+npm run bench:scene -- --record  # and write docs/performance.md
 ```
+
+It prints what it measured on before what it measured — Qt, Quickshell, the
+compositor, the refresh rate, the GPU — because a frame time without the
+machine under it is not a number anyone can check, and the same board is
+vsync-bound at 60Hz and dropping frames at 144. `--record` writes that and the
+table to [docs/performance.md](docs/performance.md), which is where the figures
+quoted in the changelog come from.
 
 `npm run shots` puts the real plugin through fourteen states — empty, a cursor
 beside a mark, typing, backgrounds, finding, arranging, help, the browser, a
