@@ -339,7 +339,16 @@ left untouched; new saves use the mirrored paths to avoid naming collisions. The
 with unchanged contents do not rotate it. Malformed or unsupported board files
 open read-only; no edits or saves are allowed over them. Back it up, sync it,
 edit it by hand, put it in git — it is your file, and a board that changes while
-it is open is noticed rather than overwritten. Older boards are migrated on load: v1 had no ids or
+it is open is noticed rather than overwritten.
+
+Every write to a board goes through one coordinated step: the file is replaced
+under a lock, and only if it is still the version the writer last read. The
+version it replaces is kept first. So two writers that both read the same board
+cannot both believe they are updating it — the second one is told. That applies
+to the plugin and to `bin/omarchyform` alike, because both go through the same
+helper. Locks live in `~/.local/share/omarchyform/locks/` and never beside your
+boards. This needs `flock` (util-linux) on the path, alongside the `bash` and
+coreutils the plugin already uses. Older boards are migrated on load: v1 had no ids or
 shapes, v2 stored fixed pastel hexes which are mapped onto theme roles. Version 4 adds
 background pinning, version 5 pasted pictures; older plugin versions open these
 files read-only instead of silently losing that state.
@@ -429,11 +438,27 @@ bin/omarchyform ops          # what apply accepts, the kinds, the theme roles
 
 Boards written into `~/.local/share/omarchyform/boards/` appear in the browser
 on `b`. Writing the board that is open is fine too: the board watches its file,
-so a board the CLI changes appears in front of you. If you have unsaved changes
-on screen as well, they are kept and autosaving stops rather than overwriting the
-newer file — the header says `Changed on disk`, and `ctrl+s` decides for what is
-on screen, with the version it replaces kept in backups. Writing happens through
-a temporary that is renamed into place, so nothing can read half a board.
+so a board the CLI changes appears in front of you.
+
+If you have unsaved changes on screen as well, both versions are kept and
+neither is guessed at. Autosaving stops, the header says `Changed on disk`, and
+`ctrl+s` puts the three choices on screen:
+
+| | |
+|-|-|
+| Keep the version from disk | what is on screen is lost |
+| Save my changes as a copy | both versions survive, the copy under a name of its own |
+| Replace the version on disk | the one it replaces goes to backups |
+
+Nothing else resolves it. Leaving the board, closing it, renaming it and the
+autosave timer all leave both versions where they are, and switching boards
+waits until you have chosen. Until then your edits live only on screen, so the
+choice is worth making rather than leaving.
+
+The CLI is told the same way. An `apply` whose board changed between being read
+and being written answers `{"ok": false, "error": "… changed since it was read"}`
+and exits 1, leaving the other writer's board alone; `--force` is the explicit
+overwrite, and keeps what it replaced.
 
 It cannot draw: a picture of a board needs the running shell, so `ctrl+e`
 on an open board exports a PNG and nothing here does.

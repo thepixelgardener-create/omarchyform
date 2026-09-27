@@ -12,14 +12,20 @@ function controller() {
     finding: false, findQuery: '', findCount: 0, imageQueue: [],
     menuVisible: false, menuIndex: 0, helpVisible: false,
     paletteVisible: false, paletteQuery: '', paletteIndex: 0, paletteRows: 9,
+    conflictVisible: false, conflictIndex: 0,
     boardsDir: '/boards', backupsDir: '/backups', worldStep: 40, minItemSize: 60, viewW: 1000, viewH: 700 }
   const session = { ctl: root, boardLoaded: true, damaged: false, pendingBoard: null,
-    lastSavedCount: 0, lastSavedText: '', saveError: '' }
+    lastSavedCount: 0, lastSavedText: '', saveError: '',
+    // The conflict state the QML declares, mirrored here: an undeclared
+    // property reads as undefined, which is not what a string property does.
+    conflict: false, conflictText: '', conflictBoard: '', resolving: '',
+    revision: '', forceNextSave: false }
   Object.defineProperty(session, 'canEdit', {
     get: () => session.boardLoaded && !session.damaged && session.pendingBoard === null
   })
   for (const key of ['boardLoaded', 'damaged', 'pendingBoard', 'saveError', 'canEdit'])
     Object.defineProperty(root, key, { get: () => session[key] })
+  Object.defineProperty(root, 'diskChanged', { get: () => session.conflict })
   Object.defineProperty(root, 'boardPath', { get: () => '/boards/' + root.currentBoard })
   // Mirrors the QML binding of the same name: the harness loads functions, not
   // bindings, so a derived property has to be declared here.
@@ -33,12 +39,18 @@ function controller() {
     return lookup
   } })
   const writes = []
-  const persistence = { busy: false, save(path, text) { this.busy = true; writes.push({path,text}) } }
+  const persistence = { busy: false, contents: '',
+    save(path, text, backup, root, backupRoot, lock, expected) {
+      this.busy = true
+      this.contents = text
+      writes.push({ path, text, expected })
+    } }
   // Stands in for BoardExchange: the controller hands it filtered paths and
   // never learns what happens to them.
-  const exchange = { imported: [], copied: [],
+  const exchange = { imported: [], copied: [], copies: [],
     importDropped(entries) { exchange.imported.push(...entries) },
-    copyItems(indices) { exchange.copied.push(Array.from(indices)) } }
+    copyItems(indices) { exchange.copied.push(Array.from(indices)) },
+    saveCopy(text, name) { exchange.copies.push({ text, name }); return true } }
   // The browser reaches for the trash index and a directory listing; neither is
   // the subject of these tests, so both are present and inert.
   const trashIndexFile = { reload() {}, setText() {} }
@@ -54,10 +66,24 @@ function controller() {
   }
   loadFunctions(root, source)
   loadFunctions(session, fs.readFileSync(require('path').join(__dirname, '../BoardSession.qml'), 'utf8'))
+  // Two of the session's functions reach for a FileView and a Process. What
+  // they fetch is what matters here, so they fetch it from the test instead.
+  session.diskText = ''
+  session.readDisk = () => session.diskText
+  session.refreshRevision = () => { session.revision = 'rev-fresh' }
+  let revisions = 0
   return { root, session, items, links, writes, persistence, exchange, complete() {
     const write = writes[writes.length - 1]
     persistence.busy = false
-    session.savedBoard(write.path, write.text)
+    session.savedBoard(write.path, write.text, 'rev-' + (++revisions))
+  },
+  // The helper refused the write: the file is no longer what this session
+  // last saw. `disk` is what is there instead.
+  refuse(disk) {
+    const write = writes[writes.length - 1]
+    persistence.busy = false
+    session.diskText = disk
+    session.staleSave(write.path, 'rev-external')
   } }
 }
 {
@@ -792,3 +818,112 @@ console.log('ok — controller: walking the header menu and running its commands
     assert.equal(typeof c.root[command.run], 'function', `${command.name} runs ${command.run}`)
 }
 console.log('ok — controller: the command palette and one dispatch for every command')
+{
+  // Two versions of one board. Nothing here may lose either of them, and
+  // nothing but a choice may resolve it.
+  const S = loadStore()
+  const disk = (texts) => JSON.stringify({ version: 5, nextId: texts.length + 1,
+    items: texts.map((t, i) => ({ id: i + 1, kind: 'note', x: i * 200, y: 0, w: 180, h: 140,
+                                  tint: 'foreground', text: t, pinned: false })), links: [] }) + '\n'
+
+  function conflicted() {
+    const c = controller()
+    c.session.loadBoard(disk(['theirs']), false)
+    c.session.revision = 'rev-1'
+    // An edit on screen that has not been written, and a different version
+    // underneath it. The write is refused because the file moved.
+    c.root.addItem('note', 40, 40)
+    c.items.setProperty(c.root.selectedIndex, 'itext', 'mine')
+    c.root.save()
+    c.session.diskText = disk(['theirs', 'and more of theirs'])
+    c.refuse(c.session.diskText)
+    return c
+  }
+
+  {
+    const c = conflicted()
+    assert.equal(c.session.conflict, true, 'a refused write raises the question')
+    assert.equal(c.items.count, 2, 'and the edits are still on screen')
+    assert.equal(c.session.revision, 'rev-external', 'with what is on disk now recorded')
+    assert.equal(c.root.diskChanged, true, 'which the board says out loud')
+
+    // Everything that is not a choice leaves both versions alone.
+    const wrote = c.writes.length
+    c.root.save()
+    c.session.scheduleSave()
+    c.session.flushSave()
+    assert.equal(c.writes.length, wrote, 'autosave and flushing write nothing')
+    assert.equal(c.session.conflict, true, 'and resolve nothing')
+
+    c.root.openBoard('b.json')
+    assert.equal(c.root.currentBoard, 'a.json', 'leaving waits for the choice')
+    assert.equal(c.items.count, 2, 'with the edits still there')
+    assert.equal(c.root.conflictVisible, true, 'and the choices on screen')
+
+    // ctrl+s is no longer a save while this is outstanding: it is the moment
+    // someone asked about it.
+    c.root.endConflictChoice()
+    c.root.flushSave()
+    assert.equal(c.root.conflictVisible, true, 'ctrl+s asks the question again')
+  }
+
+  {
+    // Choice one: what is on disk wins, whole.
+    const c = conflicted()
+    c.root.conflictUseDisk()
+    assert.equal(c.session.conflict, false)
+    assert.equal(c.items.count, 2, 'the board is what was on disk')
+    assert.equal(c.items.get(1).itext, 'and more of theirs')
+    assert.equal(c.session.revision, 'rev-fresh', 'and the revision is read again')
+  }
+
+  {
+    // Choice two: the edits are written somewhere of their own first, and only
+    // then does the board take the version from disk.
+    const c = conflicted()
+    c.root.conflictSaveCopy()
+    assert.equal(c.exchange.copies.length, 1, 'the copy is handed to the publisher')
+    assert.match(c.exchange.copies[0].name, /-mine$/)
+    assert.match(c.exchange.copies[0].text, /mine/, 'and it holds what was on screen')
+    assert.equal(c.session.conflict, true, 'which is not resolved until it lands')
+    assert.equal(c.items.count, 2, 'and the edits are still on screen')
+
+    c.session.keptAsCopy('a-mine.json')
+    assert.equal(c.session.conflict, false)
+    assert.equal(c.items.get(1).itext, 'and more of theirs', 'now the board takes the disk version')
+    assert.match(c.root.statusText, /a-mine\.json/, 'and says where the other one went')
+  }
+
+  {
+    // Choice three: this version wins, and the write says so explicitly rather
+    // than pretending it is still updating what it read.
+    const c = conflicted()
+    c.root.conflictReplaceDisk()
+    assert.equal(c.session.conflict, false)
+    const write = c.writes[c.writes.length - 1]
+    assert.equal(write.expected, '-', 'the write is an overwrite, and says so')
+    assert.match(write.text, /mine/)
+
+    // And a resolution that fails is not a resolution: the question comes back
+    // with the edits still in hand.
+    c.session.failedSave('disk full')
+    assert.equal(c.session.conflict, true, 'the choice is put back')
+    assert.equal(c.items.count, 2, 'with nothing lost')
+  }
+
+  {
+    // A refusal that turns out to be our own write after all is not a question
+    // for anyone: it retries against what is actually there.
+    const c = controller()
+    c.session.loadBoard(disk(['one']), false)
+    c.session.revision = 'rev-1'
+    c.root.addItem('note', 0, 0)
+    c.root.save()
+    const sent = c.writes[c.writes.length - 1].text
+    c.session.diskText = sent
+    c.refuse(sent)
+    assert.equal(c.session.conflict, false, 'the disk already says what we sent')
+    assert.equal(c.session.lastSavedText, sent)
+  }
+}
+console.log('ok — controller: two versions of a board, and the three ways out')

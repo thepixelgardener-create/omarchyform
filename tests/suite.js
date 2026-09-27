@@ -578,9 +578,9 @@ function tests(S) {
     for (const command of S.COMMANDS) {
       ok(typeof command.name === "string" && command.name !== "", "a name")
       ok(typeof command.run === "string" && command.run !== "", command.name + " runs something")
-      ok(["", "edit", "target"].indexOf(command.needs) >= 0, command.name + " needs something known")
+      ok(["", "edit", "target", "conflict"].indexOf(command.needs) >= 0, command.name + " needs something known")
       eq(names[command.name], undefined, "one entry called " + command.name)
-      eq(keys[command.key], undefined, "one command on " + command.key)
+      if (command.key !== "") eq(keys[command.key], undefined, "one command on " + command.key)
       names[command.name] = true
       keys[command.key] = true
       eq(S.commandByName(command.name), command, "and it can be found by name")

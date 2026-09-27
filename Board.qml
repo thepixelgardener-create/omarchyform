@@ -391,6 +391,22 @@ FocusScope {
         return
       }
 
+      // Two versions of the board, and a question that does not go away. It
+      // takes the keyboard while it is up, but closing it decides nothing.
+      if (board.ctl.conflictVisible) {
+        var cd = keys.direction(event.key, event.text)
+        if (event.key === Qt.Key_Escape) board.ctl.endConflictChoice()
+        else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) board.ctl.runConflictChoice()
+        else if (event.text === "1") { board.ctl.conflictIndex = 0; board.ctl.runConflictChoice() }
+        else if (event.text === "2") { board.ctl.conflictIndex = 1; board.ctl.runConflictChoice() }
+        else if (event.text === "3") { board.ctl.conflictIndex = 2; board.ctl.runConflictChoice() }
+        else if (event.key === Qt.Key_Tab) board.ctl.moveConflict(shift ? -1 : 1)
+        else if (event.key === Qt.Key_Backtab) board.ctl.moveConflict(-1)
+        else if (cd) board.ctl.moveConflict(cd[1] !== 0 ? cd[1] : cd[0])
+        event.accepted = true
+        return
+      }
+
       // The palette is open: every printable key is the query, so the list is
       // walked with the arrows or tab rather than j and k — here those are
       // letters, the same way they are while finding.
@@ -530,6 +546,15 @@ FocusScope {
       font.family: board.ctl.fontFamily
       font.pixelSize: board.ctl.fontBody
     }
+  }
+
+  // Where the palette goes, for the same reason, and never both at once.
+  Conflict {
+    id: conflictPanel
+    objectName: "conflict-panel"
+    ctl: board.ctl
+    anchors.horizontalCenter: parent.horizontalCenter
+    y: toolbar.y + toolbar.height + board.ctl.sp(24)
   }
 
   // Under the header, where the eye already is when a command is wanted, and
@@ -688,7 +713,7 @@ FocusScope {
       // waiting on it, so the line keeps saying so until one side wins.
       : board.ctl.diskChanged
       ? Store.escapeMarkup(board.ctl.boardTitle) + " changed on disk · "
-        + Store.hintMarkup("ctrl+s", "keep what is on screen", board.ctl.accentMarkup)
+        + Store.hintMarkup("ctrl+s", "choose which version to keep", board.ctl.accentMarkup)
       : board.ctl.pendingBoard !== null ? "saving before switching boards…"
       : board.ctl.saving ? "saving…"
       : board.ctl.damaged && board.ctl.damageReason !== ""

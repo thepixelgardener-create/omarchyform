@@ -16,8 +16,49 @@
 // scene, and the scene needs the shell. `ctrl+e` on an open board exports a
 // PNG; nothing here does.
 const fs = require("fs")
+const os = require("os")
 const path = require("path")
+const { spawnSync } = require("child_process")
 const { loadStore, RowModel } = require("./store")
+
+// Writing goes through the same helper the board itself writes through, so
+// there is one coordinated write protocol rather than two that drift: the file
+// is replaced under a lock, only if it is still the revision this process
+// read, and the version it replaces is kept. That means bash, flock and
+// coreutils on the path — the plugin already needs all three.
+const HELPER = path.join(__dirname, "..", "BoardFiles.sh")
+// The same HOME the plugin reads, so a run under an isolated one — a test, a
+// sandbox — keeps its locks and its backups there too.
+const LIBRARY = path.join(process.env.HOME || os.homedir(), ".local/share/omarchyform")
+
+function helper(verb, args, input) {
+  return spawnSync("bash", [HELPER, verb, ...args], { encoding: "utf8", input: input === undefined ? "" : input })
+}
+
+function revisionOf(file) {
+  const out = helper("revision", [path.resolve(file)])
+  return out.status === 0 ? out.stdout : ""
+}
+
+// Where the previous version goes, and where the lock lives.
+//
+// A board inside the library uses exactly the folders the plugin uses, because
+// a lock only serializes anything if both ends pick the same file for the same
+// board. Anything else gets a lock in the same place, keyed by its full path:
+// locks never sit beside somebody's board, and the boards folder stays free of
+// files that are not boards. The previous version, though, is kept beside a
+// board that lives outside the library — there is nowhere else it belongs.
+function aside(file, kind) {
+  const target = path.resolve(file)
+  const boards = path.join(LIBRARY, "boards")
+  const inLibrary = target.startsWith(boards + path.sep)
+  if (kind === "backup")
+    return inLibrary ? path.join(LIBRARY, "backups", "v2", target.slice(boards.length + 1) + ".bak")
+                     : target + ".bak"
+  const key = inLibrary ? target.slice(boards.length + 1).split(path.sep).join("__")
+                        : encodeURIComponent(target)
+  return path.join(LIBRARY, "locks", key + ".lock")
+}
 
 const S = loadStore()
 
@@ -50,6 +91,9 @@ function declaredVersion(text) {
 
 function readBoard(file) {
   let text
+  // The revision first: what is read is a version of the file, and a write
+  // later on has to be able to say which version it was working from.
+  const revision = revisionOf(file)
   try { text = fs.readFileSync(file, "utf8") }
   catch (error) { die("cannot read " + file, error.code || String(error)) }
   const version = declaredVersion(text)
@@ -63,25 +107,23 @@ function readBoard(file) {
   const links = new RowModel()
   S.fillItems(items, data.items)
   S.fillLinks(links, items, data.links)
-  return { items, links, nextId: S.nextFreeId(items, data.nextId), version }
+  return { items, links, nextId: S.nextFreeId(items, data.nextId), version, revision }
 }
 
 // The board may be open in the shell, which watches the file and reads it when
-// it changes. So it is put there in one step: a temporary beside it shares the
-// filesystem, which makes the rename atomic, and a half-written board is never
-// something anything else can see.
-function writeBoard(board, file) {
+// it changes. So it is put there in one step, under the lock, and only onto
+// the revision this process read: two writers that both read the same version
+// cannot both believe they are updating it. `expected` is "-" when the caller
+// has said outright to write over whatever is there.
+function writeBoard(board, file, expected) {
   const text = S.writeFile(board.items, board.links, board.nextId)
   const target = path.resolve(file)
-  fs.mkdirSync(path.dirname(target), { recursive: true })
-  const staged = path.join(path.dirname(target), "." + path.basename(target) + ".new-" + process.pid)
-  try {
-    fs.writeFileSync(staged, text)
-    fs.renameSync(staged, target)
-  } catch (error) {
-    try { fs.unlinkSync(staged) } catch { /* nothing left to clean up */ }
-    die("cannot write " + file, error.code || String(error))
-  }
+  const written = helper("commit",
+    [target, aside(target, "backup"), aside(target, "lock"), expected === undefined ? "-" : expected], text)
+  if (written.status === 7)
+    die(file + " changed since it was read", "another writer got there first; read it again, or pass --force")
+  if (written.status !== 0)
+    die("cannot write " + file, (written.stderr || "").trim() || "exit " + written.status)
   return text.length
 }
 
@@ -242,7 +284,9 @@ function verbNew(args) {
   for (let i = 0; i < args.length; i++) if (args[i] === "--note") notes.push(args[++i])
   // Laid out along a row, far enough apart to read as separate thoughts.
   notes.forEach((text, i) => OPS.add.run(board, ["note", i * 260, 0, 220, 160, text]))
-  const bytes = writeBoard(board, file)
+  // Nothing is expected to be there. With --force, whatever is there is what
+  // this was told to replace.
+  const bytes = writeBoard(board, file, args.includes("--force") ? "-" : "")
   answer({ ok: true, file, items: board.items.count, bytes })
 }
 
@@ -323,7 +367,11 @@ function verbApply(args) {
     answer({ ok: true, file, dryRun: true, applied: results, items: board.items.count, links: board.links.count })
     return
   }
-  const bytes = writeBoard(board, out)
+  // Writing back to the board it came from expects that board to still be the
+  // version it was read from. Writing somewhere else is a new file's business.
+  const expected = path.resolve(out) === path.resolve(file) && !args.includes("--force")
+    ? board.revision : "-"
+  const bytes = writeBoard(board, out, expected)
   answer({ ok: true, file: out, applied: results, items: board.items.count, links: board.links.count, bytes })
 }
 

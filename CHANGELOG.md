@@ -119,6 +119,27 @@ since older boards are migrated on load rather than rejected.
 
 ### Fixed
 
+- **Nothing resolves two versions of a board except choosing between them.**
+  Watching the file caught a board that changed underneath, but the flag that
+  said so was cleared by `flushSave()` — which closing, switching boards and
+  renaming all call. So walking away from a board wrote over the other version
+  without anyone deciding to. Flushing is routine again and resolves nothing;
+  switching boards waits for the choice; and the choice is three named
+  outcomes, on screen with what each one costs: keep the version from disk,
+  save your changes as a copy under a name of their own, or replace the version
+  on disk and keep what it replaced in backups. A resolution that fails puts
+  the question back with the edits still in hand.
+
+- **Every write to a board is coordinated.** Watching a file cannot be enough on
+  its own: a write can land before its notification arrives. Both the plugin and
+  `bin/omarchyform` now go through one helper that takes a lock, checks the file
+  is still the revision the writer read, keeps the version it is replacing, and
+  renames the new one into place. Two writers that read the same board cannot
+  both believe they are updating it — the second is refused and told, and the
+  CLI says so in its JSON and exits 1 rather than winning by arriving later.
+  `--force` is the explicit overwrite. This adds `flock` (util-linux) to the
+  `bash` and coreutils the plugin already needed.
+
 - **The command line and an open board no longer overwrite each other.** The
   CLI writes a board straight to disk; the board kept its own copy in memory
   and never looked at the file again, so `omarchyform apply` on the board you

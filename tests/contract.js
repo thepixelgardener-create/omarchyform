@@ -53,7 +53,7 @@ function expect(names, available, what, where) {
 }
 
 // The views address the controller as ctl.
-for (const file of ["Board.qml", "Node.qml", "Browser.qml", "Help.qml", "BoardToolbar.qml", "BoardExchange.qml", "BoardImage.qml", "ScrollHint.qml", "Commands.qml"]) {
+for (const file of ["Board.qml", "Node.qml", "Browser.qml", "Help.qml", "BoardToolbar.qml", "BoardExchange.qml", "BoardImage.qml", "ScrollHint.qml", "Commands.qml", "Conflict.qml"]) {
   const source = read(file)
   expect(referenced(source, "ctl."), controller, "the controller", file)
 }
@@ -82,7 +82,7 @@ expect(referenced(read("BoardExchange.qml"), "ctl."),
 //
 // It found four more that had been missing all along.
 const layoutStub = nestedMembers(read("tests/qt/tst_layout.qml"), "ctl")
-for (const file of ["BoardToolbar.qml", "Help.qml", "Browser.qml", "ScrollHint.qml", "Commands.qml"])
+for (const file of ["BoardToolbar.qml", "Help.qml", "Browser.qml", "ScrollHint.qml", "Commands.qml", "Conflict.qml"])
   expect(referenced(read(file), "ctl."), layoutStub, "the tst_layout stub", file)
 
 const nodeReads = referenced(read("Node.qml"), "ctl.")
@@ -116,7 +116,7 @@ function declaredSignals(source) {
 // bar come from a type that is not in this repository.
 for (const file of ["Omarchyform.qml", "BoardSession.qml", "BoardPersistence.qml", "BoardExchange.qml",
                     "Board.qml", "Node.qml", "Browser.qml", "Help.qml", "BoardToolbar.qml",
-                    "BoardImage.qml", "ScrollHint.qml", "Commands.qml"]) {
+                    "BoardImage.qml", "ScrollHint.qml", "Commands.qml", "Conflict.qml"]) {
   const source = read(file)
   const rootId = (source.match(/^\s*id:\s*(\w+)\s*$/m) || [])[1]
   if (!rootId) { failures.push(`${file}: no id on the root object to check against`); continue }

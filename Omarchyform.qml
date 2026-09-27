@@ -323,6 +323,10 @@ Item {
       root.flash(editFirst ? "New board · F2 to name it" : "Board imported" + exchange.createdNote)
     }
     onFinished: function(message) { root.flash(message) }
+    onCopied: function(name) {
+      root.rescan()
+      session.keptAsCopy(name)
+    }
   }
 
   // A line that says what just happened and then goes away. Deleting is one
@@ -347,8 +351,58 @@ Item {
   readonly property string damageReason: session.damageReason
   readonly property string saveError: session.saveError
   // Someone else wrote this board while it was open and the screen has changes
-  // of its own, so autosave is waiting for ctrl+s to say which one survives.
-  readonly property bool diskChanged: session.externalChange
+  // of its own. Autosave is waiting, and nothing but a choice clears it.
+  readonly property bool diskChanged: session.conflict
+  // The panel that offers the three ways out. The conflict itself is shown
+  // whether or not this is open, because it does not go away by being ignored.
+  property bool conflictVisible: false
+  property int conflictIndex: 0
+
+  function decideConflict() {
+    if (!root.diskChanged) return
+    root.stopEditing()
+    root.paletteVisible = false
+    root.menuVisible = false
+    root.conflictVisible = true
+    root.conflictIndex = 0
+    root.focusKeys()
+  }
+
+  function endConflictChoice() {
+    root.conflictVisible = false
+    root.focusKeys()
+  }
+
+  function moveConflict(step) {
+    var n = 3
+    root.conflictIndex = ((root.conflictIndex + step) % n + n) % n
+  }
+
+  function runConflictChoice() {
+    if (root.conflictIndex === 0) root.conflictUseDisk()
+    else if (root.conflictIndex === 1) root.conflictSaveCopy()
+    else root.conflictReplaceDisk()
+  }
+
+  function conflictUseDisk() {
+    root.conflictVisible = false
+    session.useDisk()
+  }
+
+  function conflictReplaceDisk() {
+    root.conflictVisible = false
+    session.replaceDisk()
+  }
+
+  // The copy is written through the same publisher a new board goes through,
+  // so it lands under a name nothing else has. Only once it is actually there
+  // does the board take the version from disk.
+  function conflictSaveCopy() {
+    if (!root.diskChanged || root.exchangeBusy) return
+    root.conflictVisible = false
+    var base = Store.baseName(root.currentBoard).replace(/\.json$/i, "")
+    exchange.saveCopy(Store.writeFile(itemModel, linkModel, root.nextId), base + "-mine")
+  }
   readonly property bool saving: session.busy
   readonly property var pendingBoard: session.pendingBoard
   readonly property bool canEdit: session.canEdit && !root.browserBusy && !root.imageBusy
@@ -736,10 +790,12 @@ Item {
   function commandReady(needs) {
     if (needs === "edit") return root.canEdit
     if (needs === "target") return root.canEdit && root.targets().length > 0
+    if (needs === "conflict") return root.diskChanged
     return true
   }
 
   function commandExcuse(needs) {
+    if (needs === "conflict") return "this board has not changed underneath you"
     if (!root.canEdit) return root.damaged ? "this board is read-only" : "the board is not ready yet"
     return needs === "target" ? "nothing is selected" : "not now"
   }
@@ -1308,6 +1364,10 @@ Item {
       mkdirProc.command = root.fileCommand("mkdir", [root.boardsDir, dir])
       mkdirProc.running = true
     } else if (action === "rename" || action === "rename-current") {
+      if (root.diskChanged) {
+        root.browserMessage = "two versions of this board exist — esc, then ctrl+s to choose"
+        return
+      }
       root.flushSave()
       if (session.busy || root.saveError !== "") {
         root.browserMessage = "finish saving before renaming; try again"
@@ -1485,7 +1545,13 @@ Item {
     if (root.trashIndexNeedsRead) root.refreshTrashIndex()
     else root.saveTrashIndex(root.trashEntries)
   }
-  function flushSave() { root.retryTrashIndex(); session.flushSave() }
+  // ctrl+s with a conflict outstanding is not a save: it is the moment someone
+  // is asking about it, which is when the choices are worth putting on screen.
+  function flushSave() {
+    root.retryTrashIndex()
+    if (root.diskChanged) { root.decideConflict(); return }
+    session.flushSave()
+  }
   function save(allowEmpty) { session.save(allowEmpty) }
   function openBoard(path, fresh) { session.openBoard(path, fresh) }
 
@@ -1613,6 +1679,12 @@ Item {
   // board in the trash still points at its images, and so does a copy someone
   // exported last month. An orphan costs disk; a missing one costs the board.
   readonly property string imagesDir: root.dataDir + "/images"
+  // One lock per board, outside the boards tree: the folder people are invited
+  // to browse, hand-edit and commit stays free of files that are not boards.
+  readonly property string locksDir: root.dataDir + "/locks"
+  function lockPathFor(relative) {
+    return root.locksDir + "/" + String(relative).replace(/\//g, "__") + ".lock"
+  }
 
   // The only way a file name out of a board file becomes a URL to load.
   function imagePath(name) {
@@ -1644,7 +1716,7 @@ Item {
   Process {
     id: initProc
     running: true
-    command: ["mkdir", "-p", root.boardsDir, root.backupsDir, root.trashDir, root.imagesDir]
+    command: ["mkdir", "-p", root.boardsDir, root.backupsDir, root.trashDir, root.imagesDir, root.locksDir]
     onExited: migrateProc.running = true
   }
 

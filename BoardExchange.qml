@@ -23,6 +23,9 @@ Item {
   readonly property bool dialogOpen: picker.visible
   signal created(string path, bool editFirst)
   signal finished(string message)
+  // A board written into the library that is not the one to open: the copy
+  // someone keeps when two versions of a board have to survive.
+  signal copied(string name)
 
   // Every way out of a failed operation comes through here. The busy flag is
   // what refuses the next import, so leaving it set after a failure strands
@@ -45,6 +48,22 @@ Item {
     // goes to the path the view still holds, and onSaved never arrives.
     output.path = ""
     output.path = exchange.ctl.dataDir + "/.import-" + Date.now() + ".json"
+    var body = text
+    Qt.callLater(function () { output.setText(body) })
+    return true
+  }
+
+  // Put this text in the library under a name nothing else has, and say what
+  // that name turned out to be. The publisher does the same work it does for a
+  // new board, so a copy cannot land on top of anything.
+  function saveCopy(text, name) {
+    if (busy) return false
+    busy = true
+    error = ""
+    baseName = Store.nameIsValid(name) ? name : "copy"
+    operation = "copy"
+    output.path = ""
+    output.path = exchange.ctl.dataDir + "/.copy-" + Date.now() + ".json"
     var body = text
     Qt.callLater(function () { output.setText(body) })
     return true
@@ -234,7 +253,7 @@ Item {
                     + FileViewError.toString(reason))
     }
     onSaved: {
-      if (exchange.operation === "publish") {
+      if (exchange.operation === "publish" || exchange.operation === "copy") {
         publish.command = exchange.ctl.fileCommand("publish", [exchange.ctl.boardsDir, exchange.baseName, output.path])
         publish.running = true
       } else {
@@ -249,7 +268,8 @@ Item {
     onExited: function(code) {
       exchange.busy = false
       if (code !== 0) { exchange.fail("Could not save there; choose a location outside the app data folder"); return }
-      if (exchange.operation === "publish") exchange.created(published.text, exchange.firstNote)
+      if (exchange.operation === "copy") exchange.copied(published.text)
+      else if (exchange.operation === "publish") exchange.created(published.text, exchange.firstNote)
       else exchange.finished("Editable copy saved" + exchange.exportNote)
     }
   }

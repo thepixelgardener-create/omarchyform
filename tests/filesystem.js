@@ -155,6 +155,78 @@ try {
   for (const bad of ['../escape','a/b','.hidden','-dash'])
     assert.notEqual(drop(bad,'shot.png').status,0,bad)
 
+  // The coordinated write: under a lock, and only onto the revision the writer
+  // last saw. Two writers that both read the same version is the whole point —
+  // the second one has to be told rather than win by arriving later.
+  const board=path.join(boards,'coordinated.json')
+  const lock=path.join(dir,'locks','coordinated.lock')
+  const backup=path.join(dir,'backups','coordinated.json.bak')
+  // The board itself goes in on stdin: one process does the whole write, so
+  // there is no half-written file of ours to leave behind.
+  const commit=(text,expected)=>spawnSync('bash',
+    [path.join(__dirname,'../BoardFiles.sh'),'commit',board,backup,lock,expected,boards,path.join(dir,'backups')],
+    {encoding:'utf8',input:text})
+
+  const wrote1=commit('one','')
+  assert.equal(wrote1.status,0,'nothing there yet is the empty revision')
+  assert.equal(fs.readFileSync(board,'utf8'),'one')
+  assert.ok(wrote1.stdout.length>0,'and it answers with the revision it wrote')
+  assert.equal(fs.existsSync(backup),false,'with nothing to keep the first time')
+
+  const wrote2=commit('two',wrote1.stdout)
+  assert.equal(wrote2.status,0)
+  assert.equal(fs.readFileSync(board,'utf8'),'two')
+  assert.equal(fs.readFileSync(backup,'utf8'),'one','the version it replaced is kept')
+  assert.notEqual(wrote2.stdout,wrote1.stdout,'and the revision moves')
+
+  // The stale write: the second writer read revision one and is still holding
+  // it while someone else has moved the file on.
+  const stale=commit('three',wrote1.stdout)
+  assert.equal(stale.status,7,'a distinct code, so the caller can ask a person')
+  assert.equal(fs.readFileSync(board,'utf8'),'two','and nothing was written')
+  assert.equal(stale.stdout,wrote2.stdout,'it says what is there now')
+  assert.deepEqual(fs.readdirSync(boards).filter(f=>f.startsWith('.omarchyform-')),[],
+    'the refused content is not left lying in the boards folder')
+
+  // `-` is the explicit overwrite: someone was asked and chose this version.
+  const forced=commit('four','-')
+  assert.equal(forced.status,0)
+  assert.equal(fs.readFileSync(board,'utf8'),'four')
+  assert.equal(fs.readFileSync(backup,'utf8'),'two','which still keeps what it replaced')
+
+  // The same revision the commit answered with is what `check` reports, so a
+  // board opened and a board written agree about what version they are on.
+  const seen=run('check',boards,'coordinated.json')
+  assert.equal(seen.status,0)
+  assert.equal(seen.stdout,forced.stdout,'check and commit speak the same revision')
+  assert.equal(run('revision',board).stdout,forced.stdout)
+  assert.equal(run('revision',path.join(boards,'not-here.json')).stdout,'','and nothing has no revision')
+
+  // And the same thing for real: two writers that both read the same revision,
+  // started together. The lock decides which goes first; the revision check
+  // decides that the other one is stale. Without the lock both could see the
+  // revision they expected before either had written.
+  const script=path.join(__dirname,'../BoardFiles.sh')
+  const backupsDir=path.join(dir,'backups')
+  const racer=(text,out)=>
+    `printf %s ${JSON.stringify(text)} | bash ${JSON.stringify(script)} commit ${JSON.stringify(board)} `
+    + `${JSON.stringify(backup)} ${JSON.stringify(lock)} ${JSON.stringify(run('revision',board).stdout)} `
+    + `${JSON.stringify(boards)} ${JSON.stringify(backupsDir)} >${JSON.stringify(out)} 2>&1; `
+    + `echo $? >${JSON.stringify(out + '.code')}`
+  const outA=path.join(dir,'race-a'),outB=path.join(dir,'race-b')
+  spawnSync('bash',['-c',`{ ${racer('racer A',outA)} ; } & { ${racer('racer B',outB)} ; } & wait`])
+  const codes=[outA,outB].map(f=>Number(fs.readFileSync(f+'.code','utf8').trim()))
+  assert.deepEqual(codes.slice().sort((x,y)=>x-y),[0,7],'exactly one of the two got through')
+  const winner=codes[0]===0?'racer A':'racer B'
+  assert.equal(fs.readFileSync(board,'utf8'),winner,'and the file holds that one, whole')
+  assert.equal(fs.readFileSync(backup,'utf8'),'four','with the version it replaced kept')
+
+  // The rules the old backup step had, kept: a path through a symlink is
+  // refused before anything is written.
+  const behindLink=spawnSync('bash',[path.join(__dirname,'../BoardFiles.sh'),'commit',
+    path.join(boards,'escape/a.json'),backup,lock,'-',boards,path.join(dir,'backups')],{encoding:'utf8',input:'x'})
+  assert.equal(behindLink.status,3)
+
   // A copy saved to share carries its pictures inside it, so the bytes come out
   // of the images folder here and go back into someone else's below.
   const bundle=(budget,...names)=>run('bundleimages',images,String(budget),...names)

@@ -44,6 +44,7 @@ ShellRoot {
     // Somewhere other than beside the board, which is the point, but without
     // needing a directory the app would have created at startup.
     function backupPathFor(relative) { return test.dir + "/bak__" + String(relative).replace(/\//g, "__") + ".bak" }
+    function lockPathFor(relative) { return test.dir + "/lock__" + String(relative).replace(/\//g, "__") + ".lock" }
     property var undoStack: []
     property var redoStack: []
     property var markedIds: []
@@ -62,6 +63,9 @@ ShellRoot {
     function repaintLinks() {}
     function focusKeys() {}
     function flash(text) {}
+    // The board puts the three choices on screen; this only has to be callable.
+    property int decisions: 0
+    function decideConflict() { ctl.decisions += 1 }
   }
   BoardSession { id: session; ctl: ctl }
   Timer {
@@ -115,18 +119,29 @@ ShellRoot {
         ctl.items.append({iid: 9, kind: "note", ix: 0, iy: 0, iw: 180, ih: 140, itint: "accent", itext: "mine"})
         test.stage = 7
         test.writeOutside(test.dir + "/a.json", test.boardOf(["theirs", "also theirs", "and theirs"]))
-      } else if (test.stage === 7 && session.externalChange) {
+      } else if (test.stage === 7 && session.conflict) {
         test.check(ctl.items.count === 2, "the unsaved screen is kept rather than reloaded")
+        // Everything that is not someone choosing has to leave both versions
+        // alone. This is the regression: flushing is what closing, switching
+        // and renaming all call, and it used to resolve the conflict silently.
         session.save()
         session.scheduleSave()
-        test.check(!session.busy, "autosave does not start while the two disagree")
-        test.check(JSON.parse(test.read(test.dir + "/a.json")).items.length === 3,
-                   "and the newer file is still the one on disk")
         session.flushSave()
+        test.check(!session.busy, "no write starts while the two disagree")
+        test.check(session.conflict, "and flushing is not a decision")
+        test.check(JSON.parse(test.read(test.dir + "/a.json")).items.length === 3,
+                   "so the newer file is still the one on disk")
+        // Nor is walking away from the board: the edits are only on screen.
+        session.openBoard("b.json")
+        test.check(ctl.currentBoard === "a.json", "switching waits for the choice")
+        test.check(ctl.decisions > 0, "and asks for it")
+        test.check(ctl.items.count === 2, "with the edits still there to choose")
+        // Choice three: this version wins, and the other goes to backups.
+        session.replaceDisk()
         test.stage = 8
-      } else if (test.stage === 8 && !session.externalChange && !session.busy) {
+      } else if (test.stage === 8 && !session.conflict && !session.busy) {
         var written = JSON.parse(test.read(test.dir + "/a.json"))
-        test.check(written.items.length === 2, "ctrl+s writes what is on screen")
+        test.check(written.items.length === 2, "replacing writes what is on screen")
         test.check(written.items[1].text === "mine", "including the edit that was never autosaved")
         test.check(JSON.parse(test.read(ctl.backupPathFor("a.json"))).items.length === 3,
                    "and the version it replaced is in backups")
@@ -137,6 +152,24 @@ ShellRoot {
         test.writeOutside(test.dir + "/a.json", test.boardOf(["after", "our", "own", "write"]))
       } else if (test.stage === 9 && ctl.items.count === 4) {
         test.check(ctl.items.get(3).itext === "write", "the board is still watched after this session saves it")
+        // And choice one: the version on disk wins, whatever is on screen.
+        ctl.items.append({iid: 21, kind: "note", ix: 0, iy: 0, iw: 180, ih: 140, itint: "accent", itext: "doomed"})
+        test.stage = 10
+        test.writeOutside(test.dir + "/a.json", test.boardOf(["theirs alone"]))
+      } else if (test.stage === 10 && session.conflict) {
+        session.useDisk()
+        test.stage = 11
+      } else if (test.stage === 11 && !session.conflict && ctl.items.count === 1) {
+        test.check(ctl.items.get(0).itext === "theirs alone", "keeping the disk version takes it whole")
+        test.check(session.canEdit, "and the board is editable again")
+        // Which leaves the revision fresh enough to write against without a
+        // second conflict: this is the write that used to be refused for ever.
+        ctl.items.append({iid: 22, kind: "note", ix: 0, iy: 0, iw: 180, ih: 140, itint: "accent", itext: "after"})
+        session.save()
+        test.stage = 12
+      } else if (test.stage === 12 && !session.busy && !session.conflict) {
+        test.check(JSON.parse(test.read(test.dir + "/a.json")).items.length === 2,
+                   "a board that took the disk version can be written to again")
         console.log("SESSION_TESTS_PASSED")
         Qt.quit()
       }

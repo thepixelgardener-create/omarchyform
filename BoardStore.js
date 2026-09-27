@@ -145,6 +145,10 @@ var BROWSER_HINTS = [["jk", "move"], ["l/enter", "open"], ["h", "up"], ["/", "se
 var TRASH_HINTS = [["jk", "move"], ["l/enter", "put it back"], ["x", "destroy it"],
                    ["t or esc", "back to the boards"]]
 var PALETTE_HINTS = [["tab", "next"], ["enter", "run"], ["esc", "close"]]
+// Leaving is a real answer here, so it says what leaving means rather than
+// calling itself "close": the two versions are both still there afterwards.
+var CONFLICT_HINTS = [["1 2 3 or tab", "choose"], ["enter", "do it"],
+                      ["esc", "decide later; nothing is lost either way"]]
 var PROMPT_HINTS = [["enter", "confirm"], ["esc", "cancel"]]
 var EMPTY_HINTS = [["a", "add a board"], ["A", "Add a folder"]]
 var START_HINTS = [["n", "New note"], ["Ctrl+V", "Paste text"]]
@@ -162,6 +166,8 @@ var START_HINTS = [["n", "New note"], ["Ctrl+V", "Paste text"]]
 // nothing is worse than one that says why. `key` is the label shown beside the
 // name — tests/contract.js checks the single-character ones against the key
 // table in Board.qml, so the two cannot disagree about which letter does what.
+// An empty key means there is no keystroke for it: it is reached by name, or
+// from the panel that offers it.
 var COMMANDS = [
   { name: "New note", key: "n", run: "addRelative", arg: "note", needs: "edit" },
   { name: "New box", key: "r", run: "addRelative", arg: "rect", needs: "edit" },
@@ -195,6 +201,12 @@ var COMMANDS = [
   { name: "Save a copy to share", key: "ctrl+shift+s", run: "exportBoard", needs: "" },
   { name: "Export a PNG", key: "ctrl+e", run: "choosePng", needs: "" },
   { name: "Save now", key: "ctrl+s", run: "flushSave", needs: "" },
+  // Only offered while two versions of the open board exist. They have no keys
+  // of their own: the panel that appears with the conflict numbers them, and
+  // this is how they are found by name.
+  { name: "Keep the version from disk", key: "", run: "conflictUseDisk", needs: "conflict" },
+  { name: "Save my changes as a copy", key: "", run: "conflictSaveCopy", needs: "conflict" },
+  { name: "Replace the version on disk", key: "", run: "conflictReplaceDisk", needs: "conflict" },
   { name: "Menu in the header", key: "m", run: "toggleMenu", needs: "" },
   { name: "Keys", key: "?", run: "toggleHelp", needs: "" },
   // The way in does not list itself.

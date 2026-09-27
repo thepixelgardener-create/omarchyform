@@ -70,6 +70,9 @@ TestCase {
     readonly property var paletteMatches: Store.matchCommands(ctl.paletteQuery)
     function commandReady(needs) { return needs !== "target" }
     function runPaletteChoice() {}
+    property bool conflictVisible: true
+    property int conflictIndex: 0
+    function runConflictChoice() {}
     function closeBrowser() { browserVisible = false }
     function browserKey(event) {}
   }
@@ -79,6 +82,7 @@ TestCase {
   // Where the board puts it: under the header, with the rest of the window
   // below it to fit into.
   Commands { id: palette; ctl: ctl; y: 40; anchors.horizontalCenter: parent.horizontalCenter }
+  Conflict { id: decision; ctl: ctl; y: 40; anchors.horizontalCenter: parent.horizontalCenter }
   // The header is a bar, so it is painted in the theme's bar colours rather
   // than the canvas ones.
   //
@@ -138,6 +142,14 @@ TestCase {
     ctl.paletteQuery = ""
     verify(waitForRendering(palette))
     compare(palette.height, many)
+  }
+
+  // The question about two versions of a board arrives on whatever window is
+  // open, which may be a small one with a theme that sets large text.
+  function test_conflictPanelFitsASmallWindow() {
+    verify(decision.visible)
+    verify(decision.width <= test.width - 32, "it fits across")
+    verify(decision.y + decision.height <= test.height, "and does not run off the bottom")
   }
 
   function test_helpFitsAndScrolls() {

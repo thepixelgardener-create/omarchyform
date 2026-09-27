@@ -33,6 +33,17 @@ image_extension() {
   esac
 }
 
+# What a board looked like when someone last read it: size, inode and the
+# modification time to the nanosecond. Empty means the file was not there,
+# which is a revision like any other — "nothing was here yet".
+revision_of() {
+  [[ -f $1 ]] || return 0
+  # No trailing newline: this is compared against what a caller kept from the
+  # last answer, and a newline on one side of that comparison is a false
+  # conflict every time.
+  printf '%s' "$(stat -Lc '%s|%i|%y' -- "$1" | tr -d ' ')"
+}
+
 confined() {
   local base=$1 relative=$2 component current
   local -a components
@@ -204,7 +215,111 @@ case "$operation" in
     ;;
   check)
     # Loading asks first, so a board that could never be saved is not opened.
+    # The revision comes back with the answer: what is read now is what the
+    # next write will expect to still be there.
     confined "$1" "$2" || exit 3
+    revision_of "$1/$2"
+    ;;
+  revision)
+    revision_of "$1"
+    ;;
+  commit)
+    # The one write both ends of a board go through, with the board itself on
+    # stdin. Under a lock, and only if the file is still the revision the
+    # writer last saw — so two writers that both read the same version cannot
+    # both believe they are updating it, and the second is told rather than
+    # winning by arriving later.
+    #
+    # Exit 7 means the file moved underneath, and prints what is there now. The
+    # caller still holds what it meant to write; this refuses to guess which of
+    # the two versions a person wanted.
+    board=$1 backup=$2 lock=$3 expected=$4 root=${5:-} backup_root=${6:-}
+    if [[ -n $root ]]; then
+      [[ $board == "$root/"* ]] || exit 3
+      confined "$root" "${board#"$root/"}" || exit 3
+    fi
+    if [[ -n $backup_root ]]; then
+      [[ $backup == "$backup_root/"* ]] || exit 3
+      confined "$backup_root" "${backup#"$backup_root/"}" || exit 3
+    fi
+    [[ ! -L $board && ! -L $backup && ! -L $backup.tmp ]] || exit 3
+    # Staged beside the board it will become: a rename is only atomic within
+    # one filesystem, and a boards folder may be a symlink to another.
+    mkdir -p -- "$(dirname -- "$board")"
+    staged=$(mktemp -- "$(dirname -- "$board")/.omarchyform-XXXXXX")
+    # However this ends, the half-written board does not stay in the folder
+    # people are invited to read. The caller still holds what it sent.
+    trap 'rm -f -- "$staged"' EXIT
+    cat > "$staged"
+    mkdir -p -- "$(dirname -- "$lock")"
+    exec 9>"$lock"
+    flock 9
+    current=$(revision_of "$board")
+    if [[ $expected != "-" && $expected != "$current" ]]; then
+      printf '%s' "$current"
+      exit 7
+    fi
+    mkdir -p -- "$(dirname -- "$backup")"
+    # The version about to be replaced is kept first, whoever is replacing it.
+    if [[ -e $board ]]; then
+      cp -T -- "$board" "$backup.tmp"
+      mv -fT -- "$backup.tmp" "$backup"
+    fi
+    mv -fT -- "$staged" "$board"
+    revision_of "$board"
+    ;;
+  check)
+    # Loading asks first, so a board that could never be saved is not opened.
+    # The revision comes back with the answer: what is read now is what the
+    # next write will expect to still be there.
+    confined "$1" "$2" || exit 3
+    revision_of "$1/$2"
+    ;;
+  revision)
+    revision_of "$1"
+    ;;
+  commit)
+    # The one write both ends of a board go through. Under a lock, and only if
+    # the file is still the revision the writer last saw — so two writers that
+    # both read the same version cannot both believe they are updating it, and
+    # the second one is told rather than winning by arriving later.
+    #
+    # Exit 7 means the file moved underneath, and prints what is there now. The
+    # caller still holds what it meant to write; this refuses to guess which of
+    # the two a person wanted.
+    board=$1 backup=$2 staged=$3 lock=$4 expected=$5 root=${6:-} backup_root=${7:-}
+    [[ -f $staged && ! -L $staged ]]
+    if [[ -n $root ]]; then
+      [[ $board == "$root/"* ]] || exit 3
+      confined "$root" "${board#"$root/"}" || exit 3
+    fi
+    if [[ -n $backup_root ]]; then
+      [[ $backup == "$backup_root/"* ]] || exit 3
+      confined "$backup_root" "${backup#"$backup_root/"}" || exit 3
+    fi
+    [[ ! -L $board && ! -L $backup && ! -L $backup.tmp ]] || exit 3
+    # However this ends, the staged content does not stay in the boards folder.
+    # The caller still holds it in memory; a half-finished write left lying
+    # next to a board is litter in a directory people are invited to read.
+    trap 'rm -f -- "$staged"' EXIT
+    mkdir -p -- "$(dirname -- "$lock")"
+    exec 9>"$lock"
+    flock 9
+    current=$(revision_of "$board")
+    if [[ $expected != "-" && $expected != "$current" ]]; then
+      printf '%s' "$current"
+      exit 7
+    fi
+    mkdir -p -- "$(dirname -- "$backup")"
+    # The version about to be replaced is kept first, whoever is replacing it.
+    if [[ -e $board ]]; then
+      cp -T -- "$board" "$backup.tmp"
+      mv -fT -- "$backup.tmp" "$backup"
+    fi
+    # Staged beside the board, so this is a rename on one filesystem: nothing
+    # can read half of it, and a reader either sees the old one or the new one.
+    mv -fT -- "$staged" "$board"
+    revision_of "$board"
     ;;
   mkdir)
     confined "$1" "$2"
