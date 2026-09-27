@@ -67,6 +67,12 @@ expect(sessionReads, controller, "the controller", "BoardSession.qml")
 const stub = nestedMembers(read("tests/qml/tst_session.qml"), "ctl")
 expect(sessionReads, stub, "the tst_session stub", "tests/qml/tst_session.qml")
 
+// And the stub the exchange runs against while a shared board goes out through
+// the real helper script and comes back in.
+expect(referenced(read("BoardExchange.qml"), "ctl."),
+  nestedMembers(read("tests/qml/tst_exchange.qml"), "ctl"),
+  "the tst_exchange stub", "tests/qml/tst_exchange.qml")
+
 // And the stub the Qt layout test puts in its place, which drives the toolbar,
 // the help panel and the browser at once. Added after a missing member got
 // past every check there was: reading an undefined colour off that stub is

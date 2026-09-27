@@ -57,11 +57,12 @@ try {
   const images=path.join(dir,'images'),stubs=path.join(dir,'stubs')
   for (const d of [images,stubs]) fs.mkdirSync(d)
   fs.writeFileSync(path.join(stubs,'wl-paste'),
-    '#!/usr/bin/env bash\nfor a in "$@"; do [[ $a == --list-types ]] && { printf \'%s\\n\' "$FAKE_TYPES"; exit 0; }; done\nprintf \'%s\' "$FAKE_BYTES"\n')
+    '#!/usr/bin/env bash\nfor a in "$@"; do [[ $a == --list-types ]] && { printf \'%s\\n\' "$FAKE_TYPES"; exit 0; }; done\nif [[ -n ${FAKE_FILE:-} ]]; then cat "$FAKE_FILE"; else printf \'%s\' "$FAKE_BYTES"; fi\n')
   fs.chmodSync(path.join(stubs,'wl-paste'),0o755)
-  const paste=(types,bytes,root,name)=>spawnSync('bash',
+  const paste=(types,bytes,root,name,file)=>spawnSync('bash',
     [path.join(__dirname,'../BoardFiles.sh'),'clipimage',root,name],
-    {encoding:'utf8',env:{...process.env,PATH:stubs+':'+process.env.PATH,FAKE_TYPES:types,FAKE_BYTES:bytes}})
+    {encoding:'utf8',env:{...process.env,PATH:stubs+':'+process.env.PATH,FAKE_TYPES:types,FAKE_BYTES:bytes,
+      FAKE_FILE:file===undefined?'':file}})
 
   assert.equal(paste('text/plain','hello',images,'paste-1').status,4,'no picture on the clipboard is not a failure')
   assert.deepEqual(fs.readdirSync(images),[],'and nothing is left behind')
@@ -144,10 +145,58 @@ try {
   assert.equal(drop('drop-5','huge.png').status,5,'a distinct code, so the message can differ')
   assert.equal(fs.existsSync(path.join(images,'drop-5.png')),false)
 
+  // A picture is a picture however it arrived, so the clipboard is held to the
+  // same limit. Checked here because the oversize fixture is written once.
+  assert.equal(paste('image/png','',images,'paste-4',path.join(source,'huge.png')).status,5)
+  assert.equal(fs.existsSync(path.join(images,'paste-4.png')),false)
+
   assert.equal(run('importimage',images,'drop-6',path.join(source,'absent.png')).status,4,'a path that is not there')
   assert.equal(run('importimage',images,'drop-7',source).status,4,'a directory is not a file')
   for (const bad of ['../escape','a/b','.hidden','-dash'])
     assert.notEqual(drop(bad,'shot.png').status,0,bad)
+
+  // A copy saved to share carries its pictures inside it, so the bytes come out
+  // of the images folder here and go back into someone else's below.
+  const bundle=(budget,...names)=>run('bundleimages',images,String(budget),...names)
+  const carried=bundle(33554432,'drop-1.png','absent.png','copy-me.png')
+  assert.equal(carried.status,0)
+  const carriedLines=carried.stdout.replace(/\n$/,'').split('\n').map(l=>l.split('\t'))
+  assert.deepEqual(carriedLines.map(l=>l[0]),['drop-1.png','absent.png','copy-me.png'],
+    'one line each, in the order they were asked for')
+  assert.equal(carriedLines[1][1],'!missing','a picture the board names and the folder does not have')
+  assert.deepEqual(Buffer.from(carriedLines[0][1],'base64'),pngBytes,'and the bytes come back unchanged')
+  for (const bad of ['../escape.png','sub/dir.png','.hidden.png'])
+    assert.equal(bundle(33554432,bad).stdout.split('\t')[1].trim(),'!missing','no name a board would write: '+bad)
+
+  // The whole set or none of it: half a board's pictures is not something the
+  // person saving the copy could do anything about.
+  const overBudget=bundle(4,'drop-1.png','copy-me.png')
+  assert.equal(overBudget.status,0)
+  assert.match(overBudget.stdout,/^!toolarge\t\d+\n$/,'and it says how much there was')
+  assert.equal(overBudget.stdout.split('\t')[1].trim() > 4,true)
+
+  // Back in. The name is the caller's, the extension comes from the decoded
+  // bytes, and a picture that arrived inside a board is held to the same limit
+  // as one dropped onto it.
+  const staging=path.join(dir,'staged.b64')
+  const unbundle=(name,body)=>{fs.writeFileSync(staging,body); return run('unbundleimage',images,staging,name)}
+  const landed=unbundle('shared-1',pngBytes.toString('base64'))
+  assert.equal(landed.status,0)
+  assert.equal(landed.stdout,'shared-1.png','the caller is told the name it got')
+  assert.deepEqual(fs.readFileSync(path.join(images,'shared-1.png')),pngBytes)
+  assert.equal(fs.existsSync(staging),false,'and the staged bytes do not linger')
+
+  assert.equal(unbundle('shared-1',pngBytes.toString('base64')).status,6,'a name already taken')
+  assert.equal(unbundle('shared-2',Buffer.from('this is not a picture').toString('base64')).status,4,
+    'bytes that decode to something that is not a picture')
+  assert.equal(unbundle('shared-3','!! not base64 !!').status,4,'and bytes that do not decode at all')
+  assert.equal(unbundle('shared-4',
+    Buffer.concat([pngBytes,Buffer.alloc(33554433-pngBytes.length)]).toString('base64')).status,5,
+    'too large for a board, whichever way it arrived')
+  for (const bad of ['../escape','a/b','.hidden','-dash'])
+    assert.notEqual(unbundle(bad,pngBytes.toString('base64')).status,0,bad)
+  assert.deepEqual(fs.readdirSync(images).filter(f=>f.startsWith('shared-')),['shared-1.png'],
+    'nothing else landed')
 
   assert.deepEqual(fs.readdirSync(images).filter(f=>f.startsWith('.')),[],'no temporaries left behind')
 

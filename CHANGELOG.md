@@ -7,6 +7,27 @@ since older boards are migrated on load rather than rejected.
 
 ### Added
 
+- **A copy saved to share carries its pictures.** A board in the library keeps
+  only the file name of a picture, so a screenshot is stored once however many
+  boards use it — and a copy sent to someone else arrived as a board of holes,
+  because a file name means nothing on a machine that has never seen your
+  `images/`. `ctrl+shift+s` now writes the bytes into the copy, base64 in an
+  `images` object beside the items, and `ctrl+o` writes them into your own
+  `images/` under names it picks before pointing the board at them.
+
+  Not a format bump: a key an older Omarchyform does not know is a key it
+  ignores, so such a copy still opens there with its pictures missing exactly as
+  they are missing today. A name that did not land is cleared rather than left
+  alone — a name from somebody else's board must never end up addressing a
+  picture in your library that happens to share it — and a picture that will not
+  decode is reported instead of leaving a hole. A board whose pictures come to
+  more than 16 MB is copied without them and says so, because half a board's
+  pictures is not something the person saving it could act on.
+
+  A pasted picture is held to the same 32 MB limit a dropped one always was. The
+  clipboard can hold a screenshot of a 4K desktop, and only one of the two ways
+  in was checking.
+
 - **A board you were sent opens by double-clicking it.** The installer now
   registers a file type and a small `omarchyform-open` command beside the
   launcher entry, and the board accepts a path from the shell — so a file

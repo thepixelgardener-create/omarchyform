@@ -15,6 +15,24 @@ place_new() {
   mv -T -- "$temporary" "$destination"
 }
 
+# A picture bigger than this has no business on a board, whichever way it
+# arrived: dropped, pasted, or carried inside a shared copy.
+max_image_bytes=33554432
+
+# The type comes from the bytes, never from the name: a dropped path and a
+# shared board are both somebody else's idea of what a file is called. Exit 4
+# is "not an image this can take", which every caller reports as such.
+image_extension() {
+  case "$(file -bL --mime-type -- "$1")" in
+    image/png) printf png ;;
+    image/jpeg) printf jpg ;;
+    image/webp) printf webp ;;
+    image/gif) printf gif ;;
+    image/bmp) printf bmp ;;
+    *) return 4 ;;
+  esac
+}
+
 confined() {
   local base=$1 relative=$2 component current
   local -a components
@@ -92,6 +110,10 @@ case "$operation" in
     trap 'rm -f -- "$temporary"' EXIT
     timeout 10 wl-paste --no-newline --type "$mime" > "$temporary" || exit 4
     [[ -s $temporary ]] || exit 4
+    # The same limit a dropped file gets. A picture is a picture however it
+    # arrived, and the clipboard can hold a screenshot of a 4K desktop.
+    size=$(stat -Lc %s -- "$temporary") || exit 4
+    (( size <= max_image_bytes )) || exit 5
     place_new "$temporary" "$images_root/$base_name.$extension"
     printf '%s' "$base_name.$extension"
     ;;
@@ -122,19 +144,61 @@ case "$operation" in
     [[ -f $source_path ]] || exit 4
     size=$(stat -Lc %s -- "$source_path") || exit 4
     (( size > 0 )) || exit 4
-    (( size <= 33554432 )) || exit 5
-    case "$(file -bL --mime-type -- "$source_path")" in
-      image/png) extension=png ;;
-      image/jpeg) extension=jpg ;;
-      image/webp) extension=webp ;;
-      image/gif) extension=gif ;;
-      image/bmp) extension=bmp ;;
-      *) exit 4 ;;
-    esac
+    (( size <= max_image_bytes )) || exit 5
+    extension=$(image_extension "$source_path") || exit 4
     confined "$images_root" "$base_name.$extension"
     temporary=$(mktemp -- "$images_root/.omarchyform-drop-XXXXXX")
     trap 'rm -f -- "$temporary"' EXIT
     cp -- "$source_path" "$temporary"
+    place_new "$temporary" "$images_root/$base_name.$extension"
+    printf '%s' "$base_name.$extension"
+    ;;
+  bundleimages)
+    # The bytes of every picture on a board, so a copy of it makes sense on a
+    # machine that has never seen this one's images folder. base64, because it
+    # has to sit inside a JSON file; one line per picture, because assembling
+    # JSON in a shell is how a filename becomes a syntax error. A picture that
+    # is not there is reported rather than skipped: the board says it has one.
+    #
+    # The sizes are totalled before anything is encoded, so the answer is either
+    # the whole set or none of it. Half a board's pictures is not something the
+    # person saving the copy could act on.
+    images_root=$1 budget=$2
+    shift 2
+    total=0
+    for name in "$@"; do
+      if confined "$images_root" "$name" && [[ -f $images_root/$name && ! -L $images_root/$name ]]; then
+        size=$(stat -Lc %s -- "$images_root/$name") || exit 1
+        total=$((total + size))
+      fi
+    done
+    if (( total > budget )); then printf '!toolarge\t%s\n' "$total"; exit 0; fi
+    for name in "$@"; do
+      if confined "$images_root" "$name" && [[ -f $images_root/$name && ! -L $images_root/$name ]]; then
+        printf '%s\t' "$name"
+        base64 -w0 -- "$images_root/$name"
+        printf '\n'
+      else
+        printf '%s\t!missing\n' "$name"
+      fi
+    done
+    ;;
+  unbundleimage)
+    # A picture that arrived inside a board. The name it came with is not used
+    # for anything: the caller picks the name, the type comes from the decoded
+    # bytes, and the size is held to the same limit a dropped file is. Exit 4
+    # means the bytes are not a picture, 5 that they are too big for a board.
+    images_root=$1 staged=$2 base_name=$3
+    [[ $base_name != */* && $base_name =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]
+    [[ -f $staged && ! -L $staged ]]
+    temporary=$(mktemp -- "$images_root/.omarchyform-shared-XXXXXX")
+    trap 'rm -f -- "$temporary" "$staged"' EXIT
+    base64 -d -- "$staged" > "$temporary" 2>/dev/null || exit 4
+    size=$(stat -Lc %s -- "$temporary") || exit 4
+    (( size > 0 )) || exit 4
+    (( size <= max_image_bytes )) || exit 5
+    extension=$(image_extension "$temporary") || exit 4
+    confined "$images_root" "$base_name.$extension"
     place_new "$temporary" "$images_root/$base_name.$extension"
     printf '%s' "$base_name.$extension"
     ;;

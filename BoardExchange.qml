@@ -16,6 +16,10 @@ Item {
   property string destination: ""
   property string error: ""
   property string pasteBoard: ""
+  // What else to say about a copy that was saved, or a board that arrived:
+  // both are reported by the controller, which owns the status line.
+  property string exportNote: ""
+  property string createdNote: ""
   readonly property bool dialogOpen: picker.visible
   signal created(string path, bool editFirst)
   signal finished(string message)
@@ -56,6 +60,7 @@ Item {
   function importPath(path) {
     if (busy) return
     error = ""
+    createdNote = ""
     // Read it here and now. An asynchronous reload on a view that is not
     // preloaded produced neither loaded nor loadFailed, so the import simply
     // stopped; a chosen file is small enough to read on the spot.
@@ -66,18 +71,118 @@ Item {
     var raw = input.text()
     if (!raw) { exchange.fail("Could not read that board"); return }
     if (!Store.readFile(raw)) { exchange.fail("That file is not a supported board"); return }
-    exchange.stage(raw, Store.baseName(path).replace(/(\.omarchyform)?\.json$/i, ""), false)
+    var base = Store.baseName(path).replace(/(\.omarchyform)?\.json$/i, "")
+    // A copy saved to share carries its pictures inside it. They have to be
+    // written into this machine's own images folder, under names of its
+    // choosing, before the board can point at them.
+    var carried = Store.sharedImages(raw)
+    var names = Object.keys(carried)
+    if (names.length === 0) { exchange.stage(raw, base, false); return }
+    busy = true
+    exchange.sharing = { raw: raw, base: base, images: carried, names: names, at: 0, landed: {}, lost: 0 }
+    exchange.nextSharedImage()
   }
+
+  // One picture at a time, and through a staged file rather than an argument:
+  // an argument list is measured in kilobytes and a screenshot is not.
+  property var sharing: null
+
+  function nextSharedImage() {
+    var job = exchange.sharing
+    if (job.at >= job.names.length) {
+      exchange.sharing = null
+      exchange.createdNote = job.lost === 0 ? ""
+        : " · " + job.lost + (job.lost === 1 ? " picture could not be read" : " pictures could not be read")
+      // stage() takes the flag straight back; it is cleared so its own guard,
+      // which is there to refuse a second import, does not refuse this one.
+      exchange.busy = false
+      exchange.stage(Store.withSharedImages(job.raw, job.landed), job.base, false)
+      return
+    }
+    bytes.path = ""
+    bytes.path = exchange.ctl.dataDir + "/.shared-" + Date.now() + "-" + job.at + ".b64"
+    var body = job.images[job.names[job.at]]
+    Qt.callLater(function () { bytes.setText(body) })
+  }
+
+  function sharedImageDone(name) {
+    var job = exchange.sharing
+    if (name === "") job.lost += 1
+    else job.landed[job.names[job.at]] = name
+    job.at += 1
+    exchange.nextSharedImage()
+  }
+
+  FileView {
+    id: bytes
+    preload: false
+    atomicWrites: true
+    printErrors: false
+    onSaved: {
+      unbundle.command = exchange.ctl.fileCommand("unbundleimage",
+        [exchange.ctl.imagesDir, bytes.path, "shared-" + Date.now() + "-" + exchange.sharing.at])
+      unbundle.running = true
+    }
+    onSaveFailed: exchange.sharedImageDone("")
+  }
+
+  Process {
+    id: unbundle
+    stdout: StdioCollector { id: unbundled; waitForEnd: true }
+    onExited: function (code) {
+      exchange.sharedImageDone(code === 0 && unbundled.text ? unbundled.text : "")
+    }
+  }
+
+  // Generous for a board and small enough that the encoded copy of it stays
+  // something a process can hand over in one piece.
+  readonly property int bundleBudget: 16777216
 
   function exportJson(path) {
     if (busy || !exchange.ctl.boardLoaded) return
     busy = true
     operation = "export"
     destination = path
+    exportNote = ""
+    var names = Store.imageNames(exchange.ctl.items)
+    if (names.length === 0) { exchange.stageExport({}); return }
+    collect.command = exchange.ctl.fileCommand("bundleimages",
+      [exchange.ctl.imagesDir, String(exchange.bundleBudget)].concat(names))
+    collect.running = true
+  }
+
+  function stageExport(images) {
     output.path = ""
     output.path = exchange.ctl.dataDir + "/.export-" + Date.now() + ".json"
-    var body = Store.writeFile(exchange.ctl.items, exchange.ctl.links, exchange.ctl.nextId)
+    var body = Store.writeShared(exchange.ctl.items, exchange.ctl.links, exchange.ctl.nextId, images)
     Qt.callLater(function () { output.setText(body) })
+  }
+
+  Process {
+    id: collect
+    stdout: StdioCollector { id: collected; waitForEnd: true }
+    onExited: function (code) {
+      if (code !== 0) { exchange.fail("Could not read this board's pictures"); return }
+      var images = {}
+      var missing = 0
+      var oversize = -1
+      var lines = collected.text.split("\n")
+      for (var i = 0; i < lines.length; i++) {
+        var at = lines[i].indexOf("\t")
+        if (at < 0) continue
+        var name = lines[i].slice(0, at)
+        var body = lines[i].slice(at + 1)
+        if (name === "!toolarge") { oversize = parseInt(body, 10); break }
+        if (body === "!missing") { missing += 1; continue }
+        images[name] = body
+      }
+      exchange.exportNote = oversize >= 0
+        ? " · its pictures are too large to travel with it (" + Math.round(oversize / 1048576) + " MB)"
+        : missing > 0
+        ? " · " + missing + (missing === 1 ? " picture is" : " pictures are") + " missing from your library"
+        : ", with its pictures"
+      exchange.stageExport(oversize >= 0 ? {} : images)
+    }
   }
 
   function choose(action) {
@@ -145,7 +250,7 @@ Item {
       exchange.busy = false
       if (code !== 0) { exchange.fail("Could not save there; choose a location outside the app data folder"); return }
       if (exchange.operation === "publish") exchange.created(published.text, exchange.firstNote)
-      else exchange.finished("Editable copy saved")
+      else exchange.finished("Editable copy saved" + exchange.exportNote)
     }
   }
   // Copying out. One picture on its own goes as the picture, so it can be

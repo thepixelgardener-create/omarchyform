@@ -320,7 +320,7 @@ Item {
       if (editFirst) root.pendingFirstNote = path
       root.openBoard(path, false)
       root.rescan()
-      root.flash(editFirst ? "New board · F2 to name it" : "Board imported")
+      root.flash(editFirst ? "New board · F2 to name it" : "Board imported" + exchange.createdNote)
     }
     onFinished: function(message) { root.flash(message) }
   }

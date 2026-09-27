@@ -250,8 +250,15 @@ something, and it asks twice.
 ## Getting things in and out
 
 A board is a file, so it can leave and come back. `ctrl+shift+s` writes a copy
-wherever you choose; `ctrl+o` reads one back in as a new board rather than
-overwriting the one you are on. `ctrl+e` renders the board to a PNG for
+wherever you choose, with its pictures inside it — the board in your library
+keeps only their file names, which mean nothing on the machine you send it to, so
+a shared board of screenshots used to arrive as a board of holes. `ctrl+o` reads
+one back in as a new board rather than overwriting the one you are on, writing
+the pictures it carried into your own `images/` under names it picks, so a copy
+you were sent can never end up addressing a picture of yours that happens to
+share a name. A picture that will not decode is reported and its item is left
+empty. Boards whose pictures come to more than 16 MB are copied without them,
+and say so: nobody can act on half a board's pictures. `ctrl+e` renders the board to a PNG for
 sharing. `ctrl+v` asks the clipboard for a picture first and drops it on the board at its
 own proportions; failing that, it turns the text into a note, however many lines
 it is.
@@ -331,9 +338,13 @@ background pinning, version 5 pasted pictures; older plugin versions open these
 files read-only instead of silently losing that state.
 
 A pasted picture is written to `images/` and the item keeps only its file name,
-so a screenshot is not re-encoded into every autosave. Nothing deletes those
-files: a board in the trash still points at its pictures, and so does a copy
-exported last month. An item whose picture has gone says so on the board rather
+so a screenshot is not re-encoded into every autosave — and the same picture on
+four boards is stored once. A copy saved to share is the exception: it carries
+the bytes in an `images` object beside the items, because a file name is not
+something another machine can resolve. That key is ignored by anything that does
+not know it, so such a copy still opens in an older Omarchyform. Nothing deletes
+the files in `images/`: a board in the trash still points at its pictures, and so
+does a copy exported last month. An item whose picture has gone says so on the board rather
 than drawing an empty frame.
 
 ```json

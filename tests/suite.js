@@ -551,6 +551,61 @@ function tests(S) {
       eq(S.imageIsValid(good), true, good)
   })
 
+  test("a copy saved to share lists every picture on the board once", () => {
+    const items = new FakeModel()
+    S.fillItems(items, [
+      { id: 1, kind: "image", src: "one.png" },
+      { id: 2, kind: "image", src: "one.png" },
+      { id: 3, kind: "image", src: "two.png" },
+      { id: 4, kind: "note", src: "three.png" },
+      { id: 5, kind: "image", src: "../escape.png" }
+    ])
+    eq(S.imageNames(items).join(","), "one.png,two.png")
+  })
+
+  test("a shared copy carries its pictures and is still a board", () => {
+    const items = new FakeModel()
+    S.fillItems(items, [{ id: 1, kind: "image", src: "one.png" }])
+    const plain = S.writeShared(items, new FakeModel(), 2, {})
+    eq(plain, S.writeFile(items, new FakeModel(), 2), "nothing to carry, nothing added")
+    const shared = S.writeShared(items, new FakeModel(), 2, { "one.png": "QUJD" })
+    eq(JSON.parse(shared).images["one.png"], "QUJD")
+    // Not a format bump: an Omarchyform that knows nothing about this still
+    // opens the copy, with the pictures missing as they are missing today.
+    ok(S.readFile(shared) !== null, "an older reader still accepts it")
+    eq(S.readFile(shared).items.length, 1)
+  })
+
+  test("what a shared copy claims to carry is checked before it is believed", () => {
+    eq(Object.keys(S.sharedImages("not json")).length, 0)
+    eq(Object.keys(S.sharedImages(JSON.stringify({ items: [] }))).length, 0)
+    eq(Object.keys(S.sharedImages(JSON.stringify({ images: ["QUJD"] }))).length, 0)
+    const mixed = S.sharedImages(JSON.stringify({ images: {
+      "good.png": "QUJD", "../escape.png": "QUJD", "a/b.png": "QUJD", ".hidden.png": "QUJD",
+      "empty.png": "", "number.png": 42, "notbase64.png": "a b c!"
+    } }))
+    eq(Object.keys(mixed).join(","), "good.png", "only a name this would write itself")
+  })
+
+  test("pictures out of a shared copy are pointed at where they actually landed", () => {
+    const raw = JSON.stringify({
+      version: 5, nextId: 4,
+      items: [{ id: 1, kind: "image", src: "one.png" }, { id: 2, kind: "image", src: "two.png" },
+              { id: 3, kind: "note", text: "x" }],
+      links: [{ from: 1, to: 2 }],
+      images: { "one.png": "QUJD", "two.png": "QUJD" }
+    })
+    const back = JSON.parse(S.withSharedImages(raw, { "one.png": "shared-7-0.png" }))
+    eq(back.images, undefined, "the bytes are in the images folder now, not the board")
+    eq(back.items[0].src, "shared-7-0.png")
+    // A name that did not land must not be left addressing a file in this
+    // machine's library, which is somebody else's picture.
+    eq(back.items[1].src, "")
+    eq(back.items[2].src, undefined, "an item that never had one is left alone")
+    eq(back.links.length, 1, "the rest of the board is untouched")
+    eq(S.withSharedImages("not json", {}), "not json", "and nothing it cannot read is rewritten")
+  })
+
   test("an image keeps its file name and nothing else does", () => {
     const items = new FakeModel()
     S.fillItems(items, [

@@ -340,6 +340,85 @@ function writeFile(items, links, nextId) {
   }, null, 2) + "\n"
 }
 
+// ------------------------------------------------------------------- sharing
+// A board in the library keeps only the file name of a picture; the bytes live
+// once in images/, so the same screenshot on four boards is stored once. That is
+// the right shape for one machine with one library and the wrong shape for a
+// copy someone is sent, where the name means nothing — a shared board of
+// screenshots arrived as a board of holes.
+//
+// So a copy saved to share carries its pictures inside it, base64 in an `images`
+// object beside the items. One file, which is the whole point of being able to
+// send someone a board.
+//
+// Deliberately not a format bump, for the same reason the marker was not: a key
+// an older Omarchyform does not know is a key it ignores, so a copy saved here
+// still opens there, with its pictures missing exactly as they are missing
+// today.
+function imageNames(items) {
+  var seen = {}
+  var names = []
+  for (var i = 0; i < items.count; i++) {
+    var row = items.get(i)
+    if (row.kind !== "image" || !imageIsValid(row.isrc) || seen[row.isrc]) continue
+    seen[row.isrc] = true
+    names.push(row.isrc)
+  }
+  return names
+}
+
+function writeShared(items, links, nextId, images) {
+  var out = JSON.parse(writeFile(items, links, nextId))
+  if (images && Object.keys(images).length > 0) out.images = images
+  return JSON.stringify(out, null, 2) + "\n"
+}
+
+// What a shared copy brought with it. Every byte here was written by someone
+// else, and a name decides a path on disk, so anything that is not a name this
+// would write itself is dropped rather than repaired.
+var BASE64_BODY = /^[A-Za-z0-9+/\r\n]+={0,2}$/
+
+function sharedImages(raw) {
+  var parsed
+  try { parsed = JSON.parse(raw) } catch (e) { return {} }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {}
+  var images = parsed.images
+  if (!images || typeof images !== "object" || Array.isArray(images)) return {}
+  var out = {}
+  var names = Object.keys(images)
+  for (var i = 0; i < names.length; i++) {
+    var body = images[names[i]]
+    if (!imageIsValid(names[i]) || typeof body !== "string" || body === "") continue
+    if (!BASE64_BODY.test(body)) continue
+    out[names[i]] = body
+  }
+  return out
+}
+
+// The pictures landed under names this machine chose, because the ones they
+// arrived with may already be taken here. Point the items at where the bytes
+// actually are and drop the bytes themselves: they are in images/ now.
+//
+// A name that did not land is cleared rather than left alone. A shared copy is
+// self-contained by construction, so a picture it did not carry is not one this
+// machine has — and a name from someone else's board must never end up
+// addressing a file in this one's library. Cleared, the item loads as an empty
+// note, because "image" is not one of KINDS without a picture to be.
+function withSharedImages(raw, landed) {
+  var parsed
+  try { parsed = JSON.parse(raw) } catch (e) { return raw }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return raw
+  delete parsed.images
+  var rows = Array.isArray(parsed.items) ? parsed.items
+    : (Array.isArray(parsed.notes) ? parsed.notes : [])
+  for (var i = 0; i < rows.length; i++) {
+    if (!rows[i] || typeof rows[i] !== "object" || Array.isArray(rows[i])) continue
+    if (rows[i].src === undefined || rows[i].src === "") continue
+    rows[i].src = landed[rows[i].src] === undefined ? "" : landed[rows[i].src]
+  }
+  return JSON.stringify(parsed, null, 2) + "\n"
+}
+
 // ------------------------------------------------------------------- library
 // Boards live in a real directory tree under the data dir. Paths here are
 // always relative to that root, use "/" and never start or end with one.
