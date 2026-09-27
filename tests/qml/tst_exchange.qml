@@ -11,6 +11,7 @@ ShellRoot {
   id: test
   property string dir: Quickshell.env("OMARCHYFORM_TEST_DIR")
   property int stage: 0
+  property string pastedImage: ""
   property string importedBoard: ""
   property string lastMessage: ""
   function check(condition, message) {
@@ -46,7 +47,7 @@ ShellRoot {
     function focusKeys() {}
     function stopEditing() {}
     function exportPng(path) {}
-    function imagePasted(name) {}
+    function imagePasted(name) { test.pastedImage = name }
     function imageDropped(name, x, y) {}
     function pasteText(text) {}
   }
@@ -188,6 +189,11 @@ ShellRoot {
         test.check(test.read(test.dir + "/locked/there.omarchyform.json") === "not mine to replace",
                    "a failed export does not touch the destination")
         test.check(exchange.error !== "", "and it says so: " + test.lastMessage)
+        test.stage = 9
+        test.lastMessage = ""
+        exchange.paste()
+      } else if (test.stage === 9 && (test.pastedImage !== "" || test.lastMessage !== "")) {
+        test.check(/^paste-[0-9]+\.png$/.test(test.pastedImage), "clipboard image reaches controller: " + test.lastMessage)
         console.log("EXCHANGE_TESTS_PASSED")
         Qt.quit()
       }

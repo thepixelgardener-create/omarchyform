@@ -28,6 +28,8 @@ for (const scenario of ['persistence', 'session', 'timeout', 'exchange']) {
       fs.writeFileSync(path.join(dir, 'other.b64'), other.toString('base64'))
       // The bytes themselves, to compare a landed picture against.
       fs.writeFileSync(path.join(dir, 'raw-pixels'), pixels)
+      fs.mkdirSync(path.join(dir, 'stubs'))
+      fs.writeFileSync(path.join(dir, 'stubs/wl-paste'), '#!/bin/bash\nif [[ $1 == --list-types ]]; then echo image/png; else cat "$OMARCHYFORM_TEST_DIR/raw-pixels"; fi\n', {mode: 0o755})
       fs.writeFileSync(path.join(dir, 'raw-other'), other)
       const item = (id, x, src) => ({ id, kind: 'image', x, y: 0, w: 100, h: 100,
                                       tint: 'foreground', text: '', pinned: false, src })
@@ -71,6 +73,7 @@ for (const scenario of ['persistence', 'session', 'timeout', 'exchange']) {
     const result = spawnSync('qs', ['--no-color', '-p', path.join(dir, 'shell.qml')], {
       encoding: 'utf8', timeout: 15000,
       env: { ...process.env, QT_QPA_PLATFORM: 'offscreen', QT_QPA_PLATFORMTHEME: '',
+        PATH: path.join(dir, 'stubs') + ':' + process.env.PATH,
         QT_QUICK_CONTROLS_STYLE: 'Basic', XDG_RUNTIME_DIR: dir, OMARCHYFORM_TEST_DIR: dir }
     })
     const output = (result.stdout || '') + (result.stderr || '')

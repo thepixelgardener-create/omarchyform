@@ -520,6 +520,7 @@ npm run mutate  # mutation testing
 npm run bench   # board marshalling cost at size
 npm run bench:scene # what a board costs to draw, at size; needs a compositor
 npm run test:qml # headless persistence tests; requires installed Quickshell
+npm run test:paste # live canvas image paste test; uses an isolated clipboard stub and board library
 npm run test:ui  # Qt Quick pointer, theme, and layout tests
 npm run test:omarchy -- --keep # live desktop smoke test, isolated board data
 npm run shots   # photograph every state, for judging by eye

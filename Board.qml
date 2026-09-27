@@ -286,12 +286,12 @@ FocusScope {
     asynchronous: true
     property string pending: ""
     onStatusChanged: {
-      if (pending === "" || (status !== Image.Ready && status !== Image.Error)) return
+      if (pending === "" || (sizeProbe.status !== Image.Ready && sizeProbe.status !== Image.Error)) return
       var name = pending
       // Read off before the source is cleared: clearing it takes the natural
       // size with it.
-      var w = status === Image.Ready ? implicitWidth : 0
-      var h = status === Image.Ready ? implicitHeight : 0
+      var w = sizeProbe.status === Image.Ready ? sizeProbe.implicitWidth : 0
+      var h = sizeProbe.status === Image.Ready ? sizeProbe.implicitHeight : 0
       pending = ""
       source = ""
       board.ctl.pasteImage(name, w, h)

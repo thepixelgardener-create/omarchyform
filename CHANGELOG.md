@@ -143,6 +143,10 @@ since older boards are migrated on load rather than rejected.
 
 ### Fixed
 
+- Pasted and dropped pictures now finish loading onto the canvas. The image
+  probe explicitly reads its own status instead of the status label in scope.
+  Added a live canvas regression for repeated pastes, undo/redo and saving.
+
 - Conflict resolution now reads the latest disk content and its revision under
   the same lock as writes. Late replies cannot replace another board or newer
   local edits. Failed replacements retain the disk snapshot and local edits,
