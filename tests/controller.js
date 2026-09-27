@@ -1042,3 +1042,56 @@ console.log('ok — controller: two versions of a board, and the three ways out'
   assert.equal(ro.items.count, 0)
 }
 console.log('ok — controller: bringing things forward and sending them back')
+{
+  // Everything a first board needs, done only by the names in the list — no
+  // keys, no chords. If this can be done here it can be done by someone who
+  // has never seen the keyboard shortcuts.
+  const S = loadStore()
+  const c = controller()
+  c.session.loadBoard('{"version":5,"items":[]}', false)
+  const offered = (name) => {
+    const found = S.matchCommands(name).filter(m => m.name === name)
+    assert.equal(found.length, 1, name + ' is offered by name')
+    c.root.runCommand(name)
+  }
+
+  offered('New note')
+  offered('New box')
+  assert.equal(c.items.count, 2, 'two things on the board')
+
+  // Connecting is two steps, the way it is with the key: the first says which
+  // end, the second says the other. The cursor moves between them the way it
+  // moves on the board — selecting afresh is what cancels a half-made link.
+  c.root.selectOnly(0)
+  offered('Connect to another')
+  assert.equal(c.root.linkingFrom, c.items.get(0).iid, 'one end is held')
+  c.root.selectedIndex = 1
+  offered('Connect to another')
+  assert.equal(c.links.count, 1, 'connected')
+
+  const wasTint = c.items.get(1).itint
+  offered('Change colour')
+  assert.notEqual(c.items.get(1).itint, wasTint, 'recoloured')
+
+  // Aligning needs two, and the list says so rather than doing nothing.
+  c.root.statusText = ''
+  offered('Align left edges')
+  assert.match(c.root.statusText, /mark two or more/, 'with one selected it says what it needs')
+  c.root.markedIds = [c.items.get(0).iid, c.items.get(1).iid]
+  c.items.setProperty(1, 'ix', 400)
+  offered('Align left edges')
+  assert.equal(c.items.get(1).ix, c.items.get(0).ix, 'aligned')
+
+  const before = c.items.count
+  offered('Duplicate')
+  assert.equal(c.items.count, before + 2, 'both copies, since both were marked')
+  assert.equal(c.links.count, 2, 'and the connector between them was copied too')
+
+  // And the same list, narrowed to what can be done with what is selected, is
+  // where all of those came from.
+  const actions = S.matchCommands('', 'selection').map(m => m.name)
+  for (const name of ['Connect to another', 'Change colour', 'Change shape', 'Duplicate',
+                      'Align left edges', 'Bring to front', 'Pin or unpin as background', 'Delete'])
+    assert.ok(actions.includes(name), name + ' is in the actions for a selection')
+}
+console.log('ok — controller: a first board built only from names in the list')
