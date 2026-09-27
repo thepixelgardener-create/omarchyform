@@ -1764,7 +1764,7 @@ Item {
   // to browse, hand-edit and commit stays free of files that are not boards.
   readonly property string locksDir: root.dataDir + "/locks"
   function lockPathFor(relative) {
-    return root.locksDir + "/" + String(relative).replace(/\//g, "__") + ".lock"
+    return root.locksDir + "/" + Store.lockKey(String(relative)) + ".lock"
   }
 
   // The only way a file name out of a board file becomes a URL to load.

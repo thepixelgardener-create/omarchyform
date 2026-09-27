@@ -55,9 +55,8 @@ function aside(file, kind) {
   if (kind === "backup")
     return inLibrary ? path.join(LIBRARY, "backups", "v2", target.slice(boards.length + 1) + ".bak")
                      : target + ".bak"
-  const key = inLibrary ? target.slice(boards.length + 1).split(path.sep).join("__")
-                        : encodeURIComponent(target)
-  return path.join(LIBRARY, "locks", key + ".lock")
+  return path.join(LIBRARY, "locks",
+    S.lockKey(inLibrary ? target.slice(boards.length + 1) : target) + ".lock")
 }
 
 const S = loadStore()

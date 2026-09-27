@@ -291,6 +291,31 @@ try {
     assert.equal(JSON.parse(fs.readFileSync(file + '.bak', 'utf8')).items[0].text, 'written by somebody else')
   }
 
+  {
+    // Two boards in the library that used to share one lock: a board in a
+    // folder, and a board whose name is what flattening that folder produced.
+    // Each has to get its own, or two unrelated boards wait on each other.
+    const boards = path.join(dir, '.local/share/omarchyform/boards')
+    fs.mkdirSync(path.join(boards, 'work'), { recursive: true })
+    const nested = path.join(boards, 'work/a.json')
+    const flat = path.join(boards, 'work__a.json')
+    for (const file of [nested, flat]) {
+      const made = run('new', file, '--note', 'in the library')
+      assert.equal(made.status, 0, made.raw)
+    }
+    const locks = fs.readdirSync(path.join(dir, '.local/share/omarchyform/locks')).sort()
+    assert.ok(locks.includes(S.lockKey('work/a.json') + '.lock'), `nested lock missing from ${locks}`)
+    assert.ok(locks.includes(S.lockKey('work__a.json') + '.lock'), `flat lock missing from ${locks}`)
+    assert.notEqual(S.lockKey('work/a.json'), S.lockKey('work__a.json'))
+
+    // The lock the plugin would take for the same board. Both ends read the
+    // key off BoardStore.js now, so this is the agreement itself rather than a
+    // second copy of the rule that could drift away from it.
+    const plugin = path.join(dir, '.local/share/omarchyform/locks',
+                             S.lockKey('work/a.json') + '.lock')
+    assert.ok(fs.existsSync(plugin), 'the CLI took the lock the plugin would take')
+  }
+
   console.log('ok — command line: boards built headlessly, loaded the way the plugin loads them')
 } finally {
   fs.rmSync(dir, { recursive: true, force: true })
