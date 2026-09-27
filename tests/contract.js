@@ -136,8 +136,8 @@ for (const file of ["Omarchyform.qml", "BoardSession.qml", "BoardPersistence.qml
 const Store = require("../bin/store").loadStore()
 
 const keyTable = new Map()
-for (const m of read("Board.qml").matchAll(/^\s*"(.+?)": function \(\) \{ board\.ctl\.(\w+)\(/gm))
-  keyTable.set(m[1], m[2])
+for (const m of read("Board.qml").matchAll(/^\s*"(.+?)": function \(\) \{ board\.ctl\.(\w+)\((.*?)\)/gm))
+  keyTable.set(m[1], { run: m[2], arg: m[3].trim() })
 
 // Two keys are spelt differently in a list than they arrive in an event, and
 // one is an alias: `=` is `+` without the shift on the keyboards that put it
@@ -148,12 +148,21 @@ const byKey = new Map()
 for (const command of Store.COMMANDS)
   if (command.key.length === 1 || command.key === "space") byKey.set(command.key, command)
 
-for (const [key, run] of keyTable) {
+for (const [key, bound] of keyTable) {
   const named = spelt.get(key) || key
   const command = byKey.get(named)
-  if (!command) failures.push(`Board.qml: the key "${key}" runs ${run}(), which no command names`)
-  else if (command.run !== run)
-    failures.push(`Board.qml: "${key}" runs ${run}(), but "${command.name}" says ${command.run}()`)
+  if (!command) {
+    failures.push(`Board.qml: the key "${key}" runs ${bound.run}(), which no command names`)
+    continue
+  }
+  if (command.run !== bound.run)
+    failures.push(`Board.qml: "${key}" runs ${bound.run}(), but "${command.name}" says ${command.run}()`)
+  // Four commands differ only by what they are handed — which shape to add,
+  // which way to move a thing through the stack — so the argument matters as
+  // much as the name. Compared only when it is a string: an arithmetic one in
+  // the key table is a number by the time the command table has it.
+  if (typeof command.arg === "string" && bound.arg.replace(/['"]/g, "") !== command.arg)
+    failures.push(`Board.qml: "${key}" runs ${bound.run}(${bound.arg}), but "${command.name}" passes "${command.arg}"`)
 }
 const reachable = new Set([...keyTable.keys()].map(k => spelt.get(k) || k))
 for (const command of byKey.values())

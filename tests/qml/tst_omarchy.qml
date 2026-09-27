@@ -53,6 +53,21 @@ ShellRoot {
   function check(condition, message) {
     if (!condition) { console.error("FAIL: " + message); Qt.quit(); throw new Error(message) }
   }
+  // Painting order is the order the delegates sit in under their parent: the
+  // last one is drawn over the ones before it. Nothing exposes that as a
+  // property, so it is read off the scene.
+  function drawnAfter(later, earlier) {
+    var a = test.findItem(plugin.activeBoard, later)
+    var b = test.findItem(plugin.activeBoard, earlier)
+    if (!a || !b || a.parent !== b.parent) return false
+    var kids = a.parent.children
+    var at = -1, before = -1
+    for (var i = 0; i < kids.length; i++) {
+      if (kids[i] === a) at = i
+      if (kids[i] === b) before = i
+    }
+    return at >= 0 && before >= 0 && at > before
+  }
   Host.PluginShellApi {
     id: facade
     pluginId: "thepixelgardener.omarchyform"
@@ -199,6 +214,26 @@ ShellRoot {
           test.stage = 6
         }), "overlay capture scheduled")
       } else if (test.stage === 6) {
+        // Which item is drawn over which, in the scene rather than in the
+        // model: the two notes are put on top of each other, and the order
+        // they are drawn in is the order their delegates sit in.
+        plugin.items.setProperty(1, "ix", plugin.items.get(0).ix + 20)
+        plugin.items.setProperty(1, "iy", plugin.items.get(0).iy + 20)
+        plugin.selectOnly(0)
+        test.check(test.drawnAfter("board-item-2", "board-item-1"), "the later item starts on top")
+        plugin.layerTargets("front")
+        test.stage = 61
+      } else if (test.stage === 61 && !plugin.saving) {
+        test.check(test.drawnAfter("board-item-1", "board-item-2"),
+                   "bringing one forward draws it over the other")
+        test.check(test.boardData(plugin.currentBoard).items[1].id === 1,
+                   "and the file says so too, which is what reopening reads")
+        plugin.undo()
+        test.stage = 62
+      } else if (test.stage === 62 && !plugin.saving) {
+        test.check(test.drawnAfter("board-item-2", "board-item-1"), "undo puts the order back")
+        test.stage = 66
+      } else if (test.stage === 66) {
         // Pin an existing item after foreground items already exist.
         plugin.selectOnly(0)
         plugin.togglePin()

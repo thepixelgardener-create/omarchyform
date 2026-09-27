@@ -588,6 +588,38 @@ function tests(S) {
     eq(S.commandByName("no such thing"), null)
   })
 
+  test("layer order moves rows and keeps a group's own order", () => {
+    // Applied the way a ListModel applies them, in the order they come back.
+    const after = (list, indices, where) => {
+      const rows = list.slice()
+      for (const move of S.layerMoves(rows.length, indices, where)) {
+        const [held] = rows.splice(move.from, 1)
+        rows.splice(move.to, 0, held)
+      }
+      return rows.join("")
+    }
+    const board = ["a", "b", "c", "d", "e"]
+
+    eq(after(board, [1, 3], "front"), "acebd", "both to the front, in the order they were in")
+    eq(after(board, [1, 3], "back"), "bdace", "and both to the back, still in that order")
+    eq(after(board, [1, 3], "forward"), "acbed", "one step each")
+    eq(after(board, [1, 3], "backward"), "badce")
+
+    // Nothing to do is no moves at all, so the caller can say so rather than
+    // writing the board again for nothing.
+    eq(S.layerMoves(5, [3, 4], "forward").length, 0, "already at the front")
+    eq(S.layerMoves(5, [0, 1], "backward").length, 0, "already at the back")
+    eq(S.layerMoves(5, [0, 1, 2, 3, 4], "front").length, 0, "everything is already in order")
+    eq(S.layerMoves(5, [0, 1, 2, 3, 4], "back").length, 0)
+    eq(S.layerMoves(1, [0], "front").length, 0, "one item has nothing to be in front of")
+    eq(S.layerMoves(5, [], "front").length, 0)
+
+    // A group that is blocked by one of its own members moves as far as it can
+    // rather than passing through itself.
+    eq(after(board, [2, 4], "forward"), "abdce", "the one at the top stays, the other moves")
+    eq(after(board, [0, 2], "backward"), "acbde")
+  })
+
   test("a copy saved to share lists every picture on the board once", () => {
     const items = new FakeModel()
     S.fillItems(items, [

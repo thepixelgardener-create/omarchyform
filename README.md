@@ -193,8 +193,16 @@ what it is waiting for rather than doing nothing when you pick it.
 | `f` | Fit the whole board on screen |
 | `0` | Reset the view |
 | `+` / `-` | Zoom |
+| `]` / `[` | Bring forward / send backward, where things overlap |
+| `}` / `{` | Bring right to the front / send right to the back |
 | `?` / `F1` | Keybinding list |
 | `:` / `ctrl+p` | Run any command by name, without knowing its key |
+
+Overlapping items are drawn in the order the board file lists them, and `]` `[`
+`}` `{` move the selected ones through that order. Several at once keep their
+order relative to each other, ids and connectors are untouched, and undo puts it
+back. Pinning is separate: a background stays a background, and reordering it
+moves it among the other backgrounds.
 
 `space` marks the item under the cursor. Moving, resizing, recolouring,
 changing shape and deleting then apply to everything marked, and the cursor

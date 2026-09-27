@@ -927,3 +927,85 @@ console.log('ok — controller: the command palette and one dispatch for every c
   }
 }
 console.log('ok — controller: two versions of a board, and the three ways out')
+{
+  // Which item is drawn over which: rows move, and nothing else does.
+  const c = controller()
+  c.session.loadBoard('{"version":5,"items":[]}', false)
+  const S = loadStore()
+  const named = (n) => {
+    c.root.addItem('note', 0, 0)
+    c.items.setProperty(c.root.selectedIndex, 'itext', n)
+    return c.items.get(c.root.selectedIndex).iid
+  }
+  const order = () => S.itemRows(c.items).map(r => r.text).join('')
+  const first = named('a'), second = named('b'), third = named('c')
+  assert.equal(order(), 'abc')
+
+  // The cursor is on c; sending it back takes it with it.
+  c.root.selectOnly(2)
+  c.root.layerTargets('back')
+  assert.equal(order(), 'cab')
+  assert.equal(c.items.get(c.root.selectedIndex).itext, 'c', 'the cursor follows its item, not its place')
+  assert.equal(c.items.get(c.root.selectedIndex).iid, third, 'which keeps the id it always had')
+
+  // Undo puts the order back, and redo takes it forward again.
+  c.root.undo()
+  assert.equal(order(), 'abc', 'undo restores the order')
+  c.root.redo()
+  assert.equal(order(), 'cab', 'and redo puts it back')
+
+  // Connectors are between ids, so reordering cannot touch them.
+  c.root.addLink(first, third)
+  const links = S.linkRows(c.links).map(l => l.from + '>' + l.to).join(',')
+  c.root.selectOnly(0)
+  c.root.layerTargets('front')
+  assert.equal(S.linkRows(c.links).map(l => l.from + '>' + l.to).join(','), links,
+    'the connectors are unchanged')
+
+  // Several at once keep their order relative to each other, and marks are by
+  // id so they survive the move.
+  assert.equal(order(), 'abc')
+  c.root.markedIds = [first, second]
+  c.root.selectedIndex = -1
+  c.root.layerTargets('front')
+  assert.equal(order(), 'cab', 'both came forward, in the order they were in')
+  assert.deepEqual(c.root.markedIds.slice().sort(), [first, second].sort(), 'the marks are still on them')
+
+  // Nothing to do says so rather than writing the board again.
+  const writes = c.writes.length
+  c.root.statusText = ''
+  c.root.layerTargets('front')
+  assert.equal(c.writes.length, writes, 'no move, no write')
+  assert.equal(order(), 'cab')
+  assert.match(c.root.statusText, /already at the front/)
+
+  // The order is what the file says, so it comes back the way it went in.
+  c.root.markedIds = []
+  c.root.selectOnly(0)
+  c.root.layerTargets('front')
+  const saved = S.writeFile(c.items, c.links, c.root.nextId)
+  const reopened = controller()
+  reopened.session.loadBoard(saved, false)
+  assert.equal(S.itemRows(reopened.items).map(r => r.text).join(''), order(),
+    'saving and opening again keeps the order')
+
+  // A background can be reordered among the backgrounds, and comes out of it
+  // still a background: which layer an item is in is not what this changes.
+  c.root.selectOnly(0)
+  const backgroundId = c.items.get(0).iid
+  c.root.togglePin()
+  assert.equal(S.itemRows(c.items).filter(r => r.pinned).length, 1)
+  c.root.togglePinnedSelection()
+  assert.equal(c.items.get(c.root.selectedIndex).iid, backgroundId, 'the backgrounds mode selects it')
+  c.root.layerTargets('front')
+  assert.equal(c.items.get(c.items.count - 1).iid, backgroundId, 'it moved')
+  assert.equal(c.items.get(c.items.count - 1).ipinned, true, 'and is still a background')
+  assert.equal(S.itemRows(c.items).filter(r => r.pinned).length, 1, 'with nothing else pinned or unpinned')
+
+  // A board that cannot be written to cannot be reordered either.
+  const ro = controller()
+  ro.session.loadBoard('{broken', false)
+  ro.root.layerTargets('front')
+  assert.equal(ro.items.count, 0)
+}
+console.log('ok — controller: bringing things forward and sending them back')

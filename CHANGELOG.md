@@ -7,6 +7,15 @@ since older boards are migrated on load rather than rejected.
 
 ### Added
 
+- **Bring things forward, send them back.** `]` and `[` move the selected items
+  one step through the order overlapping things are drawn in; `}` and `{` take
+  them right to the front or the back. Several at once keep their order relative
+  to each other, so a group that overlaps itself moves as a group. Ids and
+  connectors are untouched — this moves rows in the board, which is what the
+  order has always been — so it survives saving, reopening, duplicating and
+  exporting, and undo puts it back. Pinning stays a separate thing: a background
+  is still a background afterwards, reordered among the other backgrounds.
+
 - **Every command by name, on `:`.** The keys are quick once they are in the
   hands and useless before that: a board you have not opened in a month was a
   list of letters to remember, and the header menu only ever held six of them.

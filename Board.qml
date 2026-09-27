@@ -350,7 +350,11 @@ FocusScope {
       "=": function () { board.ctl.zoomCentre(1.2) },
       "-": function () { board.ctl.zoomCentre(1 / 1.2) },
       "?": function () { board.ctl.toggleHelp() },
-      ":": function () { board.ctl.beginPalette() }
+      ":": function () { board.ctl.beginPalette() },
+      "]": function () { board.ctl.layerTargets("forward") },
+      "[": function () { board.ctl.layerTargets("backward") },
+      "}": function () { board.ctl.layerTargets("front") },
+      "{": function () { board.ctl.layerTargets("back") }
     })
 
     // Matched on key codes as well as text: holding Ctrl turns the letter in

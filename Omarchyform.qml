@@ -994,6 +994,34 @@ Item {
 
   // The cursor item decides the next value and the rest follow it, so a mixed
   // selection lands on one colour rather than each cycling from its own.
+  // Which item is drawn over which. The order of the model is the order they
+  // are painted in, so this moves rows and nothing else: an item keeps its id,
+  // its connectors and whether it is pinned — backgrounds are a layer of their
+  // own and stay one, so this changes the order within that layer rather than
+  // taking anything out of it.
+  function layerTargets(where) {
+    if (!root.canEdit) return
+    // A background under the cursor is its own target, the way unpinning
+    // treats it: targets() leaves backgrounds out of the commands that act on
+    // the working canvas, and which background is on top is still a question.
+    var here = root.selected()
+    var t = here && here.ipinned ? [root.selectedIndex] : root.targets()
+    if (t.length === 0) { root.flash("nothing selected to move"); return }
+    var moves = Store.layerMoves(itemModel.count, t, where)
+    if (moves.length === 0) {
+      root.flash(where === "front" || where === "forward" ? "already at the front" : "already at the back")
+      return
+    }
+    root.pushUndo()
+    // The cursor follows its item rather than its position, which is about to
+    // be somebody else's.
+    var cursor = root.selectedIndex >= 0 ? itemModel.get(root.selectedIndex).iid : -1
+    for (var i = 0; i < moves.length; i++) itemModel.move(moves[i].from, moves[i].to, 1)
+    if (cursor >= 0) root.selectedIndex = Store.indexOfId(itemModel, cursor)
+    root.save()
+    root.repaintLinks()
+  }
+
   function recolorItem() {
     if (!root.canEdit) return
     var n = root.selected()

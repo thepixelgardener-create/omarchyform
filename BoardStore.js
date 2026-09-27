@@ -180,6 +180,10 @@ var COMMANDS = [
   { name: "Duplicate", key: "ctrl+d", run: "duplicateTargets", needs: "target" },
   { name: "Delete", key: "del", run: "removeTargets", needs: "target" },
   { name: "Align and spread", key: "g", run: "beginArrange", needs: "edit" },
+  { name: "Bring forward", key: "]", run: "layerTargets", arg: "forward", needs: "target" },
+  { name: "Send backward", key: "[", run: "layerTargets", arg: "backward", needs: "target" },
+  { name: "Bring to front", key: "}", run: "layerTargets", arg: "front", needs: "target" },
+  { name: "Send to back", key: "{", run: "layerTargets", arg: "back", needs: "target" },
   { name: "Pin as background", key: "p", run: "togglePin", needs: "target" },
   { name: "Select backgrounds", key: "P", run: "togglePinnedSelection", needs: "" },
   { name: "Mark this one as well", key: "space", run: "toggleMark", needs: "" },
@@ -271,6 +275,8 @@ var KEY_HELP = [
   ["g then h j k l", "align the marked items on that edge"],
   ["g then c / m", "align their centres on one line"],
   ["g then H J K L", "spread them evenly, outermost two staying put"],
+  ["] / [", "bring forward / send backward, where they overlap"],
+  ["} / {", "bring right to the front / send right to the back"],
   ["c", "change its colour"],
   ["w", "fullscreen or windowed"],
   ["f", "fit the whole board on screen"],
@@ -436,6 +442,66 @@ function writeFile(items, links, nextId) {
     items: itemRows(items),
     links: linkRows(links)
   }, null, 2) + "\n"
+}
+
+// --------------------------------------------------------------- layer order
+// Which item is drawn over which. The model's order is the paint order, so
+// moving an item within it is what "bring forward" means — nothing else about
+// the item changes, including whether it is pinned, which is a layer of its
+// own and stays one.
+//
+// Answers in moves rather than a new order, because a ListModel moves rows and
+// rebuilding it would tear down every delegate on the board. Applied in the
+// order they come back.
+//
+// Several items keep their order relative to each other: sending three items
+// to the back puts them at the back in the order they were already in, which
+// is what makes this usable on a group of things that overlap each other.
+function layerMoves(count, indices, where) {
+  var moves = []
+  if (!indices || indices.length === 0 || count <= 1) return moves
+  var picked = indices.slice().sort(function (a, b) { return a - b })
+  var i
+  // Already where it is being asked to go. Worth answering with nothing rather
+  // than a set of moves that cancel out: the board would be written again, and
+  // the person would be told something happened when it did not.
+  var settled = true
+  for (i = 0; i < picked.length; i++) {
+    var want = where === "front" ? count - picked.length + i : i
+    if ((where === "front" || where === "back") && picked[i] !== want) { settled = false; break }
+  }
+  if ((where === "front" || where === "back") && settled) return moves
+  if (where === "front") {
+    // Each one to the end, earliest first; every move shifts the ones after it
+    // down by one, which is what `moved` counts.
+    for (i = 0; i < picked.length; i++) {
+      var fromFront = picked[i] - i
+      if (fromFront !== count - 1) moves.push({ from: fromFront, to: count - 1 })
+    }
+  } else if (where === "back") {
+    // Each one to the start, latest first, so the earliest ends up first.
+    for (i = picked.length - 1; i >= 0; i--) {
+      var fromBack = picked[i] + (picked.length - 1 - i)
+      if (fromBack !== 0) moves.push({ from: fromBack, to: 0 })
+    }
+  } else if (where === "forward") {
+    // One step each, from the top down, and never past another of the picked
+    // ones: a group moving up keeps its shape.
+    var ceiling = count
+    for (i = picked.length - 1; i >= 0; i--) {
+      if (picked[i] + 1 >= ceiling) { ceiling = picked[i]; continue }
+      moves.push({ from: picked[i], to: picked[i] + 1 })
+      ceiling = picked[i] + 1
+    }
+  } else if (where === "backward") {
+    var floor = -1
+    for (i = 0; i < picked.length; i++) {
+      if (picked[i] - 1 <= floor) { floor = picked[i]; continue }
+      moves.push({ from: picked[i], to: picked[i] - 1 })
+      floor = picked[i] - 1
+    }
+  }
+  return moves
 }
 
 // ------------------------------------------------------------------- sharing
