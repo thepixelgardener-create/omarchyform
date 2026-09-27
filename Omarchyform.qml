@@ -1690,7 +1690,10 @@ Item {
   // the same cleanup before notifying the scoped shell facade.
   function close() {
     if (root.imageBusy) { root.flash("Finishing image export…"); return }
-    root.flushSave()
+    // Closing is not a decision either. A board with two versions keeps both —
+    // the edits stay in the session, and the question is still there when it
+    // comes back — rather than being asked on the way out of the window.
+    if (!root.diskChanged) root.flushSave()
     root.opened = false
     root.markedIds = []
     root.showPinned = false

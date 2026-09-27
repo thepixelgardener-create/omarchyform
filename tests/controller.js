@@ -889,6 +889,15 @@ console.log('ok — controller: the command palette and one dispatch for every c
     c.root.endConflictChoice()
     c.root.flushSave()
     assert.equal(c.root.conflictVisible, true, 'ctrl+s asks the question again')
+
+    // And closing the board is not an answer: the edits stay in the session,
+    // so the question is still there when it comes back.
+    c.root.endConflictChoice()
+    const closed = c.writes.length
+    c.root.close()
+    assert.equal(c.writes.length, closed, 'closing writes nothing over the other version')
+    assert.equal(c.session.conflict, true, 'and leaves the question standing')
+    assert.equal(c.items.count, 2, 'with the edits still in hand')
   }
 
   {
