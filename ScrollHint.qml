@@ -13,6 +13,7 @@ import QtQuick
 Item {
   id: hint
   required property var ctl
+  readonly property var theme: hint.ctl.theme
   required property Flickable view
 
   // How much is out of sight. One pixel of slack, so a rounding error in a
@@ -23,26 +24,26 @@ Item {
     : 0
 
   visible: hint.hidden > 1
-  width: hint.ctl.sp(3)
+  width: hint.theme.sp(3)
 
   // Square by default, like everything else here: Omarchy rounds nothing
   // unless the theme says to.
-  readonly property int rounding: hint.ctl.cornerRadius > 0 ? Math.ceil(hint.width / 2) : 0
+  readonly property int rounding: hint.theme.cornerRadius > 0 ? Math.ceil(hint.width / 2) : 0
 
   Rectangle {
     anchors.fill: parent
     radius: hint.rounding
-    color: Qt.rgba(hint.ctl.foreground.r, hint.ctl.foreground.g, hint.ctl.foreground.b, 0.15)
+    color: Qt.rgba(hint.theme.foreground.r, hint.theme.foreground.g, hint.theme.foreground.b, 0.15)
   }
 
   Rectangle {
     width: parent.width
     // Never shorter than a thumb the eye can find: a very long list would
     // otherwise wear a dot, which says there is more but not how much more.
-    height: Math.max(hint.ctl.sp(20),
+    height: Math.max(hint.theme.sp(20),
                      hint.height * Math.min(1, hint.view.height / Math.max(1, hint.view.contentHeight)))
     y: (hint.height - height) * hint.progress
     radius: hint.rounding
-    color: hint.ctl.accent
+    color: hint.theme.accent
   }
 }

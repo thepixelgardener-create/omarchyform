@@ -10,9 +10,10 @@ import "BoardStore.js" as Store
 Rectangle {
   id: decision
   required property var ctl
+  readonly property var theme: decision.ctl.theme
 
   visible: decision.ctl.conflictVisible
-  width: Math.min(parent.width - decision.ctl.sp(64), decision.ctl.sp(640))
+  width: Math.min(parent.width - decision.theme.sp(64), decision.theme.sp(640))
 
   readonly property var choices: [
     { name: "Keep the version from disk", cost: "what is on screen is lost" },
@@ -24,35 +25,35 @@ Rectangle {
     id: ruler
     visible: false
     text: "Ag"
-    font.family: decision.ctl.fontFamily
-    font.pixelSize: decision.ctl.fontSubtitle
+    font.family: decision.theme.fontFamily
+    font.pixelSize: decision.theme.fontSubtitle
   }
-  readonly property int rowHeight: ruler.implicitHeight + decision.ctl.sp(10)
+  readonly property int rowHeight: ruler.implicitHeight + decision.theme.sp(10)
   // All three choices are always shown — a question with a choice missing is
   // not the question. What gives way when there is no room is the line of
   // hints and the column saying what each choice costs, in that order.
-  readonly property int room: Math.max(decision.rowHeight * 3, parent.height - y - decision.ctl.sp(16))
+  readonly property int room: Math.max(decision.rowHeight * 3, parent.height - y - decision.theme.sp(16))
   readonly property int chrome: body.y * 2 + body.spacing * 2 + heading.implicitHeight + rule.height
-  readonly property int fullHeight: decision.chrome + decision.ctl.sp(10)
+  readonly property int fullHeight: decision.chrome + decision.theme.sp(10)
                                     + footer.implicitHeight + decision.rowHeight * 3
   readonly property bool compact: decision.fullHeight > decision.room
   height: decision.compact ? decision.chrome + decision.rowHeight * 3 : decision.fullHeight
 
-  color: decision.ctl.canvasBackground
-  border.width: decision.ctl.borderWidth
+  color: decision.theme.canvasBackground
+  border.width: decision.theme.borderWidth
   // Not the ordinary panel edge: this one is asking a question that does not
   // go away, and the theme has a colour for exactly that.
-  border.color: decision.ctl.urgent
-  radius: decision.ctl.cornerRadius
+  border.color: decision.theme.urgent
+  radius: decision.theme.cornerRadius
 
   MouseArea { anchors.fill: parent }
 
   Column {
     id: body
-    x: decision.ctl.sp(16)
-    y: decision.ctl.sp(16)
-    width: parent.width - decision.ctl.sp(32)
-    spacing: decision.ctl.sp(10)
+    x: decision.theme.sp(16)
+    y: decision.theme.sp(16)
+    width: parent.width - decision.theme.sp(32)
+    spacing: decision.theme.sp(10)
 
     Text {
       id: heading
@@ -60,18 +61,18 @@ Rectangle {
       Accessible.name: heading.text
       width: parent.width
       wrapMode: Text.Wrap
-      color: decision.ctl.foreground
-      font.family: decision.ctl.fontFamily
-      font.pixelSize: decision.ctl.fontSubtitle
+      color: decision.theme.foreground
+      font.family: decision.theme.fontFamily
+      font.pixelSize: decision.theme.fontSubtitle
       text: decision.ctl.boardTitle + " changed on disk while you had it open."
     }
 
     Rectangle {
       id: rule
       width: parent.width
-      height: decision.ctl.borderWidth
-      color: Qt.rgba(decision.ctl.foreground.r, decision.ctl.foreground.g,
-                     decision.ctl.foreground.b, 0.25)
+      height: decision.theme.borderWidth
+      color: Qt.rgba(decision.theme.foreground.r, decision.theme.foreground.g,
+                     decision.theme.foreground.b, 0.25)
     }
 
     Repeater {
@@ -97,7 +98,7 @@ Rectangle {
         Rectangle {
           anchors.fill: parent
           visible: row.current
-          color: Qt.rgba(decision.ctl.accent.r, decision.ctl.accent.g, decision.ctl.accent.b, 0.18)
+          color: Qt.rgba(decision.theme.accent.r, decision.theme.accent.g, decision.theme.accent.b, 0.18)
         }
 
         // The cursor is a mark as well as a colour: a row that is only
@@ -107,22 +108,22 @@ Rectangle {
           anchors.verticalCenter: parent.verticalCenter
           anchors.left: parent.left
           text: (row.current ? "›" : " ") + " " + (row.index + 1) + "  "
-          color: decision.ctl.accent
-          font.family: decision.ctl.fontFamily
-          font.pixelSize: decision.ctl.fontSubtitle
+          color: decision.theme.accent
+          font.family: decision.theme.fontFamily
+          font.pixelSize: decision.theme.fontSubtitle
         }
 
         Text {
           anchors.verticalCenter: parent.verticalCenter
           anchors.left: marker.right
           anchors.right: cost.left
-          anchors.rightMargin: decision.ctl.sp(12)
+          anchors.rightMargin: decision.theme.sp(12)
           elide: Text.ElideRight
           text: row.modelData.name
-          color: decision.ctl.foreground
+          color: decision.theme.foreground
           opacity: row.current ? 1.0 : 0.8
-          font.family: decision.ctl.fontFamily
-          font.pixelSize: decision.ctl.fontSubtitle
+          font.family: decision.theme.fontFamily
+          font.pixelSize: decision.theme.fontSubtitle
         }
 
         Text {
@@ -131,10 +132,10 @@ Rectangle {
           anchors.verticalCenter: parent.verticalCenter
           anchors.right: parent.right
           text: row.modelData.cost
-          color: decision.ctl.foreground
+          color: decision.theme.foreground
           opacity: 0.55
-          font.family: decision.ctl.fontFamily
-          font.pixelSize: decision.ctl.fontBody
+          font.family: decision.theme.fontFamily
+          font.pixelSize: decision.theme.fontBody
         }
 
         MouseArea {
@@ -153,10 +154,10 @@ Rectangle {
       width: parent.width
       wrapMode: Text.Wrap
       textFormat: Text.StyledText
-      color: decision.ctl.foreground
+      color: decision.theme.foreground
       opacity: 0.55
-      font.family: decision.ctl.fontFamily
-      font.pixelSize: decision.ctl.fontBody
+      font.family: decision.theme.fontFamily
+      font.pixelSize: decision.theme.fontBody
       text: Store.hintLine(Store.CONFLICT_HINTS, decision.ctl.accentMarkup)
     }
   }

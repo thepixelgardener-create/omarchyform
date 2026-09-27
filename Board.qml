@@ -9,6 +9,7 @@ FocusScope {
   id: board
 
   required property var ctl
+  readonly property var theme: board.ctl.theme
 
   focus: true
   readonly property real headerHeight: toolbar.y + toolbar.height
@@ -41,7 +42,7 @@ FocusScope {
     ctx.lineTo(toX - size * Math.cos(angle - spread), toY - size * Math.sin(angle - spread))
     ctx.lineTo(toX - size * Math.cos(angle + spread), toY - size * Math.sin(angle + spread))
     ctx.closePath()
-    ctx.fillStyle = board.ctl.foreground
+    ctx.fillStyle = board.theme.foreground
     ctx.fill()
   }
 
@@ -55,8 +56,10 @@ FocusScope {
 
   function focusKeys() { keys.forceActiveFocus() }
 
+  // Both canvases paint with colours rather than bind to them, so a theme
+  // change has to be told to them.
   Connections {
-    target: board.ctl
+    target: board.theme
     function onDotColorChanged() { board.repaintGrid() }
     function onForegroundChanged() { board.repaintLinks() }
   }
@@ -71,7 +74,7 @@ FocusScope {
 
   Rectangle {
     anchors.fill: parent
-    color: board.ctl.canvasBackground
+    color: board.theme.canvasBackground
   }
 
   // Dots and connectors are drawn in screen space so they keep their weight
@@ -85,7 +88,7 @@ FocusScope {
       ctx.reset()
       var step = 40 * board.ctl.zoom
       if (step < 8) return
-      ctx.fillStyle = board.ctl.dotColor
+      ctx.fillStyle = board.theme.dotColor
       var r = Math.max(1, 1.2 * board.ctl.zoom)
       for (var x = board.ctl.camX % step; x < width; x += step)
         for (var y = board.ctl.camY % step; y < height; y += step) {
@@ -181,7 +184,7 @@ FocusScope {
     onPaint: {
       var ctx = getContext("2d")
       ctx.reset()
-      ctx.strokeStyle = board.ctl.foreground
+      ctx.strokeStyle = board.theme.foreground
       ctx.lineWidth = Math.max(1, 1.5 * board.ctl.zoom)
       ctx.globalAlpha = 0.55
 
@@ -269,10 +272,10 @@ FocusScope {
     y: screenTop
     width: Math.abs(board.ctl.toScreenX(toX) - board.ctl.toScreenX(fromX))
     height: Math.abs(board.ctl.toScreenY(toY) - board.ctl.toScreenY(fromY))
-    color: Qt.rgba(board.ctl.accent.r, board.ctl.accent.g, board.ctl.accent.b, 0.12)
-    border.width: board.ctl.borderWidth
-    border.color: board.ctl.accent
-    radius: board.ctl.cornerRadius
+    color: Qt.rgba(board.theme.accent.r, board.theme.accent.g, board.theme.accent.b, 0.12)
+    border.width: board.theme.borderWidth
+    border.color: board.theme.accent
+    radius: board.theme.cornerRadius
   }
 
   // A pasted picture is measured before it is placed, so it lands at its own
@@ -318,9 +321,9 @@ FocusScope {
     anchors.fill: parent
     visible: dropTarget.containsDrag
     color: "transparent"
-    border.width: board.ctl.borderWidth * 2
-    border.color: board.ctl.accent
-    radius: board.ctl.cornerRadius
+    border.width: board.theme.borderWidth * 2
+    border.color: board.theme.accent
+    radius: board.theme.cornerRadius
   }
 
   // Keyboard owner. Lives above the canvas so Escape always lands here.
@@ -380,8 +383,8 @@ FocusScope {
     Keys.onPressed: function (event) {
       if (board.ctl.helpVisible) {
         if (event.key === Qt.Key_Escape || event.key === Qt.Key_F1 || event.text === "?") board.ctl.helpVisible = false
-        else if (event.key === Qt.Key_Down || event.text === "j") help.scroll(board.ctl.fontBody * 2)
-        else if (event.key === Qt.Key_Up || event.text === "k") help.scroll(-board.ctl.fontBody * 2)
+        else if (event.key === Qt.Key_Down || event.text === "j") help.scroll(board.theme.fontBody * 2)
+        else if (event.key === Qt.Key_Up || event.text === "k") help.scroll(-board.theme.fontBody * 2)
         else if (event.key === Qt.Key_PageDown) help.scroll(help.height * 0.8)
         else if (event.key === Qt.Key_PageUp) help.scroll(-help.height * 0.8)
         event.accepted = true
@@ -519,23 +522,23 @@ FocusScope {
     id: toolbar
     objectName: "board-toolbar"
     ctl: board.ctl
-    anchors { top: parent.top; left: parent.left; right: parent.right; margins: board.ctl.sp(16) }
+    anchors { top: parent.top; left: parent.left; right: parent.right; margins: board.theme.sp(16) }
     height: implicitHeight
     visible: !board.ctl.browserVisible && !board.ctl.helpVisible
   }
 
   Column {
-    width: parent.width - board.ctl.sp(64)
+    width: parent.width - board.theme.sp(64)
     anchors.horizontalCenter: parent.horizontalCenter
     y: toolbar.y + toolbar.height + Math.max(24, (board.height-toolbar.height-height)/2 - 32)
-    spacing: board.ctl.sp(12)
+    spacing: board.theme.sp(12)
     visible: board.ctl.boardLoaded && board.ctl.items.count === 0 && !board.ctl.browserVisible && !board.ctl.helpVisible
     Text {
       anchors.horizontalCenter: parent.horizontalCenter
       text: "Start with a thought."
-      color: board.ctl.foreground
-      font.family: board.ctl.fontFamily
-      font.pixelSize: board.ctl.fontHeading
+      color: board.theme.foreground
+      font.family: board.theme.fontFamily
+      font.pixelSize: board.theme.fontHeading
     }
     Text {
       anchors.horizontalCenter: parent.horizontalCenter
@@ -544,27 +547,27 @@ FocusScope {
       width: parent.width
       wrapMode: Text.Wrap
       horizontalAlignment: Text.AlignHCenter
-      color: board.ctl.foreground
-      font.family: board.ctl.fontFamily
-      font.pixelSize: board.ctl.fontBody
+      color: board.theme.foreground
+      font.family: board.theme.fontFamily
+      font.pixelSize: board.theme.fontBody
     }
   }
 
   Rectangle {
     id: banner
-    anchors { left: parent.left; right: parent.right; top: toolbar.bottom; topMargin: board.ctl.sp(8); margins: board.ctl.sp(16) }
-    height: board.ctl.sp(36)
+    anchors { left: parent.left; right: parent.right; top: toolbar.bottom; topMargin: board.theme.sp(8); margins: board.theme.sp(16) }
+    height: board.theme.sp(36)
     visible: board.ctl.showPinned
-    color: board.ctl.accent
+    color: board.theme.accent
     Text {
       anchors.centerIn: parent
       // Names the mode only: the keys live on the line below, where they live
       // for every other mode. Saying them twice, differently, was worse than
       // saying them once.
       text: "BACKGROUNDS"
-      color: board.ctl.canvasBackground
-      font.family: board.ctl.fontFamily
-      font.pixelSize: board.ctl.fontBody
+      color: board.theme.canvasBackground
+      font.family: board.theme.fontFamily
+      font.pixelSize: board.theme.fontBody
     }
   }
 
@@ -574,7 +577,7 @@ FocusScope {
     objectName: "conflict-panel"
     ctl: board.ctl
     anchors.horizontalCenter: parent.horizontalCenter
-    y: toolbar.y + toolbar.height + board.ctl.sp(24)
+    y: toolbar.y + toolbar.height + board.theme.sp(24)
   }
 
   // Under the header, where the eye already is when a command is wanted, and
@@ -585,7 +588,7 @@ FocusScope {
     ctl: board.ctl
     board: board
     anchors.horizontalCenter: parent.horizontalCenter
-    y: toolbar.y + toolbar.height + board.ctl.sp(24)
+    y: toolbar.y + toolbar.height + board.theme.sp(24)
   }
 
   // The board browser sits above the canvas and takes the keyboard while open.
@@ -642,31 +645,31 @@ FocusScope {
     visible: board.ctl.finding && !board.ctl.helpVisible && !board.ctl.browserVisible
     anchors.horizontalCenter: parent.horizontalCenter
     anchors.top: banner.visible ? banner.bottom : toolbar.bottom
-    anchors.topMargin: board.ctl.sp(8)
-    width: Math.min(parent.width - board.ctl.sp(32), implicitWidth)
+    anchors.topMargin: board.theme.sp(8)
+    width: Math.min(parent.width - board.theme.sp(32), implicitWidth)
     height: implicitHeight
 
     Text {
       id: findLabel
       text: "find: "
-      color: board.ctl.foreground
+      color: board.theme.foreground
       opacity: 0.85
-      font.family: board.ctl.fontFamily
-      font.pixelSize: board.ctl.fontBody
+      font.family: board.theme.fontFamily
+      font.pixelSize: board.theme.fontBody
     }
 
     TextInput {
       id: findField
       // Wide enough to see the caret in an empty query, and it grows with what
       // is typed rather than reserving a box the board has to look at.
-      width: Math.max(board.ctl.sp(24), Math.min(implicitWidth + board.ctl.sp(2), board.width / 3))
+      width: Math.max(board.theme.sp(24), Math.min(implicitWidth + board.theme.sp(2), board.width / 3))
       clip: true
-      color: board.ctl.foreground
-      selectionColor: board.ctl.accent
-      selectedTextColor: board.ctl.canvasBackground
+      color: board.theme.foreground
+      selectionColor: board.theme.accent
+      selectedTextColor: board.theme.canvasBackground
       selectByMouse: true
-      font.family: board.ctl.fontFamily
-      font.pixelSize: board.ctl.fontBody
+      font.family: board.theme.fontFamily
+      font.pixelSize: board.theme.fontBody
 
       // Typed into, it is the query. Set from anywhere else — a test, the
       // screenshot harness, a find reopened on the query it had — it follows,
@@ -705,12 +708,12 @@ FocusScope {
       // centred in over to the left. A theme with large text in a small window
       // wraps it instead, the way the status line it stands in for wrapped.
       width: Math.min(implicitWidth,
-                      Math.max(0, board.width - board.ctl.sp(32) - findLabel.width - findField.width))
+                      Math.max(0, board.width - board.theme.sp(32) - findLabel.width - findField.width))
       wrapMode: Text.Wrap
-      color: board.ctl.foreground
+      color: board.theme.foreground
       opacity: 0.85
-      font.family: board.ctl.fontFamily
-      font.pixelSize: board.ctl.fontBody
+      font.family: board.theme.fontFamily
+      font.pixelSize: board.theme.fontBody
       text: (board.ctl.findQuery === "" ? ""
              : " · " + (board.ctl.findCount === 0 ? "no match"
                         : board.ctl.findCount === 1 ? "1 match" : board.ctl.findCount + " matches"))
@@ -725,16 +728,16 @@ FocusScope {
     id: status
     anchors.left: parent.left
     anchors.right: parent.right
-    anchors.leftMargin: board.ctl.sp(16)
-    anchors.rightMargin: board.ctl.sp(16)
+    anchors.leftMargin: board.theme.sp(16)
+    anchors.rightMargin: board.theme.sp(16)
     horizontalAlignment: Text.AlignHCenter
     wrapMode: Text.Wrap
     anchors.top: banner.visible ? banner.bottom : toolbar.bottom
-    anchors.topMargin: board.ctl.sp(8)
-    color: board.ctl.foreground
+    anchors.topMargin: board.theme.sp(8)
+    color: board.theme.foreground
     opacity: 0.85
-    font.family: board.ctl.fontFamily
-    font.pixelSize: board.ctl.fontBody
+    font.family: board.theme.fontFamily
+    font.pixelSize: board.theme.fontBody
     visible: !board.ctl.helpVisible && !board.ctl.browserVisible && !board.ctl.finding
     // Markup, so a key can be a different colour from the word it sits in.
     // Everything reaching this line from a board file, a file name or the

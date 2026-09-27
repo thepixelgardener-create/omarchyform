@@ -37,6 +37,31 @@ function nestedMembers(source, blockId) {
   return names
 }
 
+// The body of an object assigned to a property, for a theme that lives inside
+// a stub. Braces are matched rather than indentation guessed, so a member that
+// sits after the block cannot be counted as part of it.
+function blockBody(source, marker) {
+  const at = source.indexOf(marker)
+  if (at < 0) return ""
+  const open = source.indexOf("{", at)
+  if (open < 0) return ""
+  let depth = 0
+  for (let i = open; i < source.length; i++) {
+    if (source[i] === "{") depth++
+    else if (source[i] === "}" && --depth === 0) return source.slice(open, i)
+  }
+  return ""
+}
+
+function membersAt(body, indent) {
+  const pad = " ".repeat(indent)
+  const names = new Set()
+  for (const m of body.matchAll(new RegExp(`^${pad}(?:readonly\\s+)?property\\s+(?:alias\\s+)?[\\w.<>]+\\s+(\\w+)`, "gm")))
+    names.add(m[1])
+  for (const m of body.matchAll(new RegExp(`^${pad}function\\s+(\\w+)\\s*\\(`, "gm"))) names.add(m[1])
+  return names
+}
+
 function referenced(source, prefix) {
   const names = new Set()
   const pattern = new RegExp(prefix.replace(/\./g, "\\.") + "([A-Za-z_]\\w*)", "g")
@@ -57,6 +82,14 @@ for (const file of ["Board.qml", "Node.qml", "Browser.qml", "Help.qml", "BoardTo
   const source = read(file)
   expect(referenced(source, "ctl."), controller, "the controller", file)
 }
+
+// The palette, the fonts and the metrics come off a theme object now rather
+// than off the controller, so the same check applies to it: a panel that reads
+// a token Theme.qml does not declare is a TypeError on a desktop.
+const themeTokens = declaredMembers(read("Theme.qml"))
+const themed = ["Board.qml", "Node.qml", "Browser.qml", "Help.qml", "BoardToolbar.qml",
+                "BoardImage.qml", "ScrollHint.qml", "Commands.qml", "Conflict.qml"]
+for (const file of themed) expect(referenced(read(file), "theme."), themeTokens, "Theme.qml", file)
 
 // The session addresses it as session.ctl.
 const session = read("BoardSession.qml")
@@ -81,9 +114,30 @@ expect(referenced(read("BoardExchange.qml"), "ctl."),
 // reading the name is not something a check on the names can be wrong about.
 //
 // It found four more that had been missing all along.
-const layoutStub = nestedMembers(read("tests/qt/tst_layout.qml"), "ctl")
-for (const file of ["BoardToolbar.qml", "Help.qml", "Browser.qml", "ScrollHint.qml", "Commands.qml", "Conflict.qml"])
+const layoutSource = read("tests/qt/tst_layout.qml")
+const layoutStub = nestedMembers(layoutSource, "ctl")
+// Its palette is written out rather than instantiated, because Theme.qml reads
+// Omarchy's own singletons and that suite runs where there is only Qt. This is
+// what keeps the copy honest: everything a panel reads has to be in both.
+const layoutTheme = membersAt(blockBody(layoutSource, "property QtObject theme:"), 6)
+for (const file of ["BoardToolbar.qml", "Help.qml", "Browser.qml", "ScrollHint.qml", "Commands.qml", "Conflict.qml"]) {
   expect(referenced(read(file), "ctl."), layoutStub, "the tst_layout stub", file)
+  expect(referenced(read(file), "theme."), layoutTheme, "the tst_layout stub's theme", file)
+}
+
+// Help is driven a second time through a rig of its own, with a stub the check
+// above never saw because it is a ctl by another name. A member missing from it
+// is the same TypeError, in a test that would otherwise pass for the wrong
+// reason — which is how this one was found.
+const roomy = blockBody(layoutSource, "id: roomyHelp")
+const helpReads = read("Help.qml")
+// Sliced from the id rather than a brace: the object's own brace opens before
+// its id, so there is nothing to match from there.
+const rigCtl = roomy.slice(roomy.indexOf("id: c"))
+expect(referenced(helpReads, "ctl."), membersAt(rigCtl, 8),
+  "the roomyHelp rig's ctl", "tests/qt/tst_layout.qml")
+expect(referenced(helpReads, "theme."), membersAt(blockBody(roomy, "property QtObject theme:"), 10),
+  "the roomyHelp rig's theme", "tests/qt/tst_layout.qml")
 
 const nodeReads = referenced(read("Node.qml"), "ctl.")
 expect(nodeReads, nestedMembers(read("tests/qt/tst_node.qml"), "ctl"),
@@ -94,6 +148,9 @@ expect(nodeReads, nestedMembers(read("tests/qt/tst_node.qml"), "ctl"),
 // added to Node would have gone missing from every exported image in silence.
 expect(nodeReads, nestedMembers(read("BoardImage.qml"), "renderCtl"),
   "the PNG export's renderCtl", "BoardImage.qml")
+expect(referenced(read("Node.qml"), "theme."),
+  membersAt(blockBody(read("BoardImage.qml"), "property QtObject theme:"), 6),
+  "the PNG export's theme", "BoardImage.qml")
 
 // A file also reaches into itself by its own id, and QML resolves that name the
 // same way it resolves ctl. — at runtime, in code paths a green suite may never
@@ -116,7 +173,8 @@ function declaredSignals(source) {
 // bar come from a type that is not in this repository.
 for (const file of ["Omarchyform.qml", "BoardSession.qml", "BoardPersistence.qml", "BoardExchange.qml",
                     "Board.qml", "Node.qml", "Browser.qml", "Help.qml", "BoardToolbar.qml",
-                    "BoardImage.qml", "ScrollHint.qml", "Commands.qml", "Conflict.qml"]) {
+                    "BoardImage.qml", "ScrollHint.qml", "Commands.qml", "Conflict.qml",
+                    "Theme.qml"]) {
   const source = read(file)
   const rootId = (source.match(/^\s*id:\s*(\w+)\s*$/m) || [])[1]
   if (!rootId) { failures.push(`${file}: no id on the root object to check against`); continue }

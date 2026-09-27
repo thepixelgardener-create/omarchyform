@@ -10,6 +10,7 @@ FocusScope {
   id: browser
 
   required property var ctl
+  readonly property var theme: browser.ctl.theme
 
   readonly property var rows: browser.ctl.browserRows
   readonly property bool searching: browser.ctl.browserSearching
@@ -31,8 +32,8 @@ FocusScope {
   // Dim the board behind without hiding it entirely.
   Rectangle {
     anchors.fill: parent
-    color: Qt.rgba(browser.ctl.canvasBackground.r, browser.ctl.canvasBackground.g,
-                   browser.ctl.canvasBackground.b, 0.86)
+    color: Qt.rgba(browser.theme.canvasBackground.r, browser.theme.canvasBackground.g,
+                   browser.theme.canvasBackground.b, 0.86)
   }
 
   MouseArea {
@@ -44,22 +45,22 @@ FocusScope {
     id: panel
     objectName: "browser-panel"
     anchors.horizontalCenter: parent.horizontalCenter
-    y: Math.max(browser.ctl.sp(16), (parent.height - browserFooter.height - browser.ctl.sp(32) - height) / 2)
-    width: Math.min(parent.width - browser.ctl.sp(80), browser.ctl.sp(720))
-    height: Math.max(0, Math.min(parent.height - browserFooter.height - browser.ctl.sp(48), browser.ctl.sp(560)))
-    color: browser.ctl.canvasBackground
-    border.width: browser.ctl.borderWidth
-    border.color: Qt.rgba(browser.ctl.foreground.r, browser.ctl.foreground.g,
-                          browser.ctl.foreground.b, 0.35)
-    radius: browser.ctl.cornerRadius
+    y: Math.max(browser.theme.sp(16), (parent.height - browserFooter.height - browser.theme.sp(32) - height) / 2)
+    width: Math.min(parent.width - browser.theme.sp(80), browser.theme.sp(720))
+    height: Math.max(0, Math.min(parent.height - browserFooter.height - browser.theme.sp(48), browser.theme.sp(560)))
+    color: browser.theme.canvasBackground
+    border.width: browser.theme.borderWidth
+    border.color: Qt.rgba(browser.theme.foreground.r, browser.theme.foreground.g,
+                          browser.theme.foreground.b, 0.35)
+    radius: browser.theme.cornerRadius
 
     // Swallow clicks so they do not reach the dismiss layer behind.
     MouseArea { anchors.fill: parent }
 
     Column {
       anchors.fill: parent
-      anchors.margins: browser.ctl.sp(16)
-      spacing: browser.ctl.sp(10)
+      anchors.margins: browser.theme.sp(16)
+      spacing: browser.theme.sp(10)
 
       // A name being typed, or a query, is a real text field: a drawn cursor
       // after a string that only ever grew at the end could not be moved
@@ -75,9 +76,9 @@ FocusScope {
           width: parent.width
           visible: !browser.typing
           elide: Text.ElideMiddle
-          color: browser.ctl.foreground
-          font.family: browser.ctl.fontFamily
-          font.pixelSize: browser.ctl.fontSubtitle
+          color: browser.theme.foreground
+          font.family: browser.theme.fontFamily
+          font.pixelSize: browser.theme.fontSubtitle
           text: browser.ctl.trashIndexError !== "" ? browser.ctl.trashIndexError
             : browser.ctl.browserMessage !== "" ? browser.ctl.browserMessage
             : browser.here
@@ -87,9 +88,9 @@ FocusScope {
           id: label
           visible: browser.typing
           text: browser.prompting ? browser.ctl.browserPrompt + " " : "/"
-          color: browser.ctl.foreground
-          font.family: browser.ctl.fontFamily
-          font.pixelSize: browser.ctl.fontSubtitle
+          color: browser.theme.foreground
+          font.family: browser.theme.fontFamily
+          font.pixelSize: browser.theme.fontSubtitle
         }
 
         TextInput {
@@ -99,12 +100,12 @@ FocusScope {
           anchors.left: label.right
           anchors.right: parent.right
           clip: true
-          color: browser.ctl.foreground
-          selectionColor: browser.ctl.accent
-          selectedTextColor: browser.ctl.canvasBackground
+          color: browser.theme.foreground
+          selectionColor: browser.theme.accent
+          selectedTextColor: browser.theme.canvasBackground
           selectByMouse: true
-          font.family: browser.ctl.fontFamily
-          font.pixelSize: browser.ctl.fontSubtitle
+          font.family: browser.theme.fontFamily
+          font.pixelSize: browser.theme.fontSubtitle
           Accessible.role: Accessible.EditableText
           Accessible.name: browser.prompting ? browser.ctl.browserPrompt : "Search the boards"
 
@@ -155,9 +156,9 @@ FocusScope {
 
       Rectangle {
         width: parent.width
-        height: browser.ctl.borderWidth
-        color: Qt.rgba(browser.ctl.foreground.r, browser.ctl.foreground.g,
-                       browser.ctl.foreground.b, 0.25)
+        height: browser.theme.borderWidth
+        color: Qt.rgba(browser.theme.foreground.r, browser.theme.foreground.g,
+                       browser.theme.foreground.b, 0.25)
       }
 
       // The list, and the rule that says how much of it you are looking at.
@@ -171,7 +172,7 @@ FocusScope {
         ListView {
           id: list
           anchors.fill: parent
-          anchors.rightMargin: browser.ctl.sp(10)
+          anchors.rightMargin: browser.theme.sp(10)
           clip: true
           model: browser.rows
           currentIndex: browser.ctl.browserIndex
@@ -184,7 +185,7 @@ FocusScope {
             required property int index
 
             width: list.width
-            height: label.implicitHeight + browser.ctl.sp(8)
+            height: label.implicitHeight + browser.theme.sp(8)
 
             readonly property bool current: index === browser.ctl.browserIndex
 
@@ -195,7 +196,7 @@ FocusScope {
             Rectangle {
               anchors.fill: parent
               visible: parent.current
-              color: Qt.rgba(browser.ctl.accent.r, browser.ctl.accent.g, browser.ctl.accent.b, 0.18)
+              color: Qt.rgba(browser.theme.accent.r, browser.theme.accent.g, browser.theme.accent.b, 0.18)
             }
 
             // The cursor is a mark as well as a tint, so which row it is on
@@ -204,11 +205,11 @@ FocusScope {
               id: cursor
               anchors.verticalCenter: parent.verticalCenter
               anchors.left: parent.left
-              anchors.leftMargin: browser.ctl.sp(8)
+              anchors.leftMargin: browser.theme.sp(8)
               text: parent.current ? "›" : " "
-              color: browser.ctl.accent
-              font.family: browser.ctl.fontFamily
-              font.pixelSize: browser.ctl.fontSubtitle
+              color: browser.theme.accent
+              font.family: browser.theme.fontFamily
+              font.pixelSize: browser.theme.fontSubtitle
             }
 
             Text {
@@ -216,13 +217,13 @@ FocusScope {
               anchors.verticalCenter: parent.verticalCenter
               anchors.left: cursor.right
               anchors.right: parent.right
-              anchors.leftMargin: browser.ctl.sp(6)
-              anchors.rightMargin: browser.ctl.sp(8)
+              anchors.leftMargin: browser.theme.sp(6)
+              anchors.rightMargin: browser.theme.sp(8)
               elide: Text.ElideMiddle
-              color: browser.ctl.foreground
+              color: browser.theme.foreground
               opacity: parent.current ? 1.0 : 0.75
-              font.family: browser.ctl.fontFamily
-              font.pixelSize: browser.ctl.fontSubtitle
+              font.family: browser.theme.fontFamily
+              font.pixelSize: browser.theme.fontSubtitle
               // A folder wears a trailing slash; the open board is marked.
               // In the trash an entry carries where it came from, since that is
               // what restoring it will put back.
@@ -251,10 +252,10 @@ FocusScope {
           Text {
             anchors.centerIn: parent
             visible: list.count === 0
-            color: browser.ctl.foreground
+            color: browser.theme.foreground
             opacity: 0.5
-            font.family: browser.ctl.fontFamily
-            font.pixelSize: browser.ctl.fontBody
+            font.family: browser.theme.fontFamily
+            font.pixelSize: browser.theme.fontBody
             textFormat: Text.StyledText
             text: browser.ctl.browserTrash ? "the trash is empty"
               : browser.searching ? "nothing matches"
@@ -276,16 +277,16 @@ FocusScope {
     objectName: "browser-footer"
     anchors.left: parent.left
     anchors.right: parent.right
-    anchors.leftMargin: browser.ctl.sp(16)
-    anchors.rightMargin: browser.ctl.sp(16)
+    anchors.leftMargin: browser.theme.sp(16)
+    anchors.rightMargin: browser.theme.sp(16)
     horizontalAlignment: Text.AlignHCenter
     wrapMode: Text.Wrap
     anchors.bottom: parent.bottom
-    anchors.bottomMargin: browser.ctl.sp(16)
-    color: browser.ctl.foreground
+    anchors.bottomMargin: browser.theme.sp(16)
+    color: browser.theme.foreground
     opacity: 0.55
-    font.family: browser.ctl.fontFamily
-    font.pixelSize: browser.ctl.fontBody
+    font.family: browser.theme.fontFamily
+    font.pixelSize: browser.theme.fontBody
     textFormat: Text.StyledText
     text: Store.hintLine(browser.prompting ? Store.PROMPT_HINTS
                          : browser.ctl.browserTrash ? Store.TRASH_HINTS : Store.BROWSER_HINTS,

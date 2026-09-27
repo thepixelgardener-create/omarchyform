@@ -82,8 +82,8 @@ ShellRoot {
       test.ticks++
       test.check(test.ticks < 400, "runtime test completes (stage " + test.stage + ")")
       if (test.stage === 0 && plugin.boardLoaded) {
-        test.check(plugin.fontBody === Style.font.body, "body font uses Style")
-        test.check(plugin.canvasBackground === Color.background, "background uses Color")
+        test.check(plugin.theme.fontBody === Style.font.body, "body font uses Style")
+        test.check(plugin.theme.canvasBackground === Color.background, "background uses Color")
         plugin.windowMode = true
         plugin.open("{}")
         test.stage = 1
@@ -195,7 +195,7 @@ ShellRoot {
           test.stage = 47
         }), "window capture scheduled")
       } else if (test.stage === 47 && test.ticks > test.switchedAt + 5) {
-        test.check(plugin.foreground === Color.foreground, "theme binding updates")
+        test.check(plugin.theme.foreground === Color.foreground, "theme binding updates")
         test.stage = 48
         test.check(plugin.activeBoard.grabToImage(function(result) {
           test.check(result.saveToFile(Quickshell.env("OMARCHYFORM_TEST_DIR") + "/window-themed.png"), "theme capture")
