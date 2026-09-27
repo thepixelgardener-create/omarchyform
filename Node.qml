@@ -23,13 +23,11 @@ Item {
   required property bool ipinned
   required property string isrc
 
-  // What this is, for anything reading the board rather than looking at it.
-  // A picture says it is one; everything else is what it says.
-  Accessible.role: node.kind === "image" ? Accessible.Graphic : Accessible.StaticText
-  Accessible.name: node.kind === "image" ? "picture" + (node.isrc === "" ? " that is missing" : "")
-                   : node.itext === "" ? "empty " + node.kind : node.itext
-  Accessible.description: node.ipinned ? "background" : node.kind
-  Accessible.focused: node.ctl.selectedIndex === node.index
+  // Deliberately not carrying Accessible properties. Attaching them to the
+  // delegate broke grabToImage — the screenshot harness stopped producing a
+  // single picture, and the PNG export goes through the same call — so the
+  // names live on the chrome, where there are a handful of them rather than
+  // one per item on the board. What an item says is in its own text.
 
   // Whether this item is somewhere a person could actually be looking. An item
   // that is not takes no part in how the board looks: it reads as unmarked, as

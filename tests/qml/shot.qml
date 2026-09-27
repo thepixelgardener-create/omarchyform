@@ -135,9 +135,19 @@ ShellRoot {
       }
     },
     {
-      name: "09-help",
+      // Two versions of one board. The panel is what a person is asked, so it
+      // is worth looking at in every theme the board is drawn in.
+      name: "08e-two-versions",
       setup: function () {
         plugin.endPalette()
+        plugin.conflictVisible = true
+        plugin.conflictIndex = 1
+      }
+    },
+    {
+      name: "09-help",
+      setup: function () {
+        plugin.conflictVisible = false
         plugin.markedIds = []
         plugin.helpVisible = true
       }
