@@ -1,5 +1,10 @@
 # Omarchy compatibility review
 
+**This is the record of a review, not a status page.** It says what was true on
+2026-09-24 and is left that way on purpose; counts, findings and limits below
+have all moved since. What has changed is at the end, and the changelog is the
+running account. Do not read a limit here as an open one without checking.
+
 Reviewed on 2026-09-24 against the installed system:
 
 - Omarchy `4.0.0.r2158.gd174d4a-1`
@@ -120,7 +125,10 @@ editor, and exercise help/browser layout at 480×360 with a 24px body font.
   durable save journal remains follow-up work.
 - Large-board performance, IME/accessibility, and external sync conflict
   handling still need dedicated work. The existing one-generation backup is
-  not conflict detection or version history.
+  not conflict detection or version history. *(Conflict handling has since
+  shipped — see "Since this review". Large boards now have measured frame
+  times in [performance.md](performance.md). IME and accessibility have not
+  been addressed.)*
 
 ## Reproduction
 
@@ -135,3 +143,32 @@ npm run test:omarchy -- --keep  # actual Omarchy desktop; opens test surfaces
 The live command prints an artifact directory containing the runtime log and
 captures of the window, help, themed canvas, and overlay. All board operations
 use its temporary home. Without `--keep`, it removes the directory afterward.
+
+## Since this review
+
+Recorded 2026-09-27 at `1a3935f`, so this section dates too.
+
+**External sync conflict handling shipped.** The limit above is no longer open.
+A board watches its file; a version on disk that differs from the one on screen
+is a question with three named answers rather than a race. Every write goes
+through one coordinated step — take a `flock`, check the file is still the
+revision the writer last read, keep the version being replaced, rename the new
+one into place — and a write that no longer finds the revision it expected is
+refused rather than landing. `bin/omarchyform` goes through the same helper, so
+the command line and the open board cannot overwrite each other in silence.
+`flock` became a runtime dependency with it.
+
+**The counts have all moved.** Against the figures quoted above:
+
+| | at this review | 2026-09-27 |
+| --- | --- | --- |
+| pure tests | 69, later 79 | 116 |
+| Qt results | 12, later 13 | 27 |
+| mutants killed | 137/151, later 174/190 | 409/469 |
+| survivors | 14, later 16 | 60 |
+
+The mutation score fell from 91.6% to 87.2% over that period: the code grew
+faster than the suite chasing it.
+
+**The live artifact directories named above are gone.** They were temporary,
+as the text says; nothing is recoverable from them now.
