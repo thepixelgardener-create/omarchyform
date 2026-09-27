@@ -138,6 +138,24 @@ ShellRoot {
                    "and carries the bytes of it")
         test.check(test.lastMessage === "Editable copy saved, with its pictures", test.lastMessage)
 
+        // The whole point, in one run: the copy that was just written is read
+        // back in, and the bytes that come out of it are the bytes that went
+        // in — under a name of this library's choosing, because the name it
+        // travelled under is already taken here.
+        test.lastMessage = ""
+        test.importedBoard = ""
+        test.stage = 51
+        exchange.importPath(test.dir + "/out.omarchyform.json")
+      } else if (test.stage === 51 && test.importedBoard !== "" && !exchange.busy) {
+        var back = JSON.parse(test.read(ctl.boardsDir + "/" + test.importedBoard))
+        test.check(back.items.length === 1, "the board comes back whole")
+        test.check(back.images === undefined, "with its bytes in the pictures folder")
+        test.check(back.items[0].src !== "pic.png", "under a name that was free: " + back.items[0].src)
+        test.check(test.read(ctl.imagesDir + "/" + back.items[0].src) === test.read(test.dir + "/raw-pixels"),
+                   "and the picture is the one that was sent")
+        test.check(test.read(ctl.imagesDir + "/pic.png") === test.read(test.dir + "/raw-pixels"),
+                   "with the library's own copy untouched")
+
         // A board naming a picture the library does not have cannot be copied
         // whole, and a copy that is not whole is not published.
         items.append({iid: 3, kind: "image", ix: 0, iy: 300, iw: 100, ih: 100,
