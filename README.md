@@ -324,7 +324,8 @@ and committed without `.bak` files in the way. Older flattened backups are
 left untouched; new saves use the mirrored paths to avoid naming collisions. The backup completes before replacement, and saves
 with unchanged contents do not rotate it. Malformed or unsupported board files
 open read-only; no edits or saves are allowed over them. Back it up, sync it,
-edit it by hand, put it in git — it is your file. Older boards are migrated on load: v1 had no ids or
+edit it by hand, put it in git — it is your file, and a board that changes while
+it is open is noticed rather than overwritten. Older boards are migrated on load: v1 had no ids or
 shapes, v2 stored fixed pastel hexes which are mapped onto theme roles. Version 4 adds
 background pinning, version 5 pasted pictures; older plugin versions open these
 files read-only instead of silently losing that state.
@@ -409,7 +410,14 @@ bin/omarchyform ops          # what apply accepts, the kinds, the theme roles
 ```
 
 Boards written into `~/.local/share/omarchyform/boards/` appear in the browser
-on `b`. It cannot draw: a picture of a board needs the running shell, so `ctrl+e`
+on `b`. Writing the board that is open is fine too: the board watches its file,
+so a board the CLI changes appears in front of you. If you have unsaved changes
+on screen as well, they are kept and autosaving stops rather than overwriting the
+newer file — the header says `Changed on disk`, and `ctrl+s` decides for what is
+on screen, with the version it replaces kept in backups. Writing happens through
+a temporary that is renamed into place, so nothing can read half a board.
+
+It cannot draw: a picture of a board needs the running shell, so `ctrl+e`
 on an open board exports a PNG and nothing here does.
 
 `skills/omarchyform/SKILL.md` ships alongside it, so a coding agent asked to

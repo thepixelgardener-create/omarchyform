@@ -73,6 +73,45 @@ since older boards are migrated on load rather than rejected.
 
 ### Fixed
 
+- **The command line and an open board no longer overwrite each other.** The
+  CLI writes a board straight to disk; the board kept its own copy in memory
+  and never looked at the file again, so `omarchyform apply` on the board you
+  had open was undone by your next keystroke, and the reverse lost whatever the
+  CLI had just written. The open board watches its file now. With nothing
+  unsaved on screen the newer version simply appears — run the CLI against the
+  open board and you watch it change. With changes on both sides the screen is
+  kept and autosave stops, the header says `Changed on disk` and the board says
+  what `ctrl+s` will do; an explicit save, or leaving the board, decides for the
+  screen and the version it replaces goes to backups like any other.
+
+  The CLI writes through a temporary and renames it into place, because
+  something watching the file must never be able to read half a board. A write
+  it cannot make is now an answer — `{"ok": false, …}` and exit 1 — instead of a
+  stack trace, and nothing is left beside the board.
+
+- Import and export had no way to report a failure. Three error paths called an
+  `exchange.fail()` that was never written, and a staging write that failed had
+  no handler at all — so a board that could not be read, a file that was not a
+  board, and a full disk each raised a `TypeError` or nothing, left the busy
+  flag set, and stranded importing and exporting for the rest of the session.
+  There is a `fail()` now: it clears the flag and says what happened.
+
+- The contract check reads what each file calls on itself. It had always
+  compared the names the views read off `ctl` against the controller, but a file
+  addressing itself by its own id was checked by nothing, which is how three
+  calls to a function that did not exist sat in `BoardExchange` until a review
+  found them. Only calls are checked: a property read off an id can come from
+  the base type, a method almost never does.
+
+- A picture dropped just before a board switch could land on the wrong board.
+  Each queued drop already remembered the board it was let go of, but the check
+  ran before the copy rather than after it, and the size the scene measures
+  comes back later still — so switching boards while a drop was in flight put
+  the picture on whatever was open when the measurement arrived, at a point that
+  was never on that board. The board is carried all the way through both
+  queues now, and anything answering for a board that has closed is dropped
+  with a line saying so.
+
 - CI installs `qml6-module-qtquick-shapes`, which the board now needs. It ships
   inside `qt6-declarative` on a real Omarchy machine, so there is no new
   dependency for anyone installing the plugin — only for the Ubuntu runner,

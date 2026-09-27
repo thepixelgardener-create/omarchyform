@@ -12,6 +12,22 @@ ShellRoot {
   }
   function read(path) { reader.path = path; reader.reload(); reader.waitForJob(); return reader.text() }
   FileView { id: reader; blockLoading: true; blockAllReads: true; printErrors: false }
+  // Stands in for anything that is not this session: the command line, an
+  // editor, a file sync. Deferred like every other write through a FileView,
+  // because a path assigned in the same turn is not the one the write goes to.
+  FileView { id: outside; preload: false; atomicWrites: true; printErrors: false }
+  function writeOutside(path, text) {
+    outside.path = ""
+    outside.path = path
+    Qt.callLater(function () { outside.setText(text) })
+  }
+  function boardOf(texts) {
+    var items = []
+    for (var i = 0; i < texts.length; i++)
+      items.push({id: i + 1, kind: "note", x: i * 260, y: 0, w: 220, h: 160,
+                  text: texts[i], tint: "foreground", pinned: false})
+    return JSON.stringify({version: 4, nextId: texts.length + 1, items: items, links: []}) + "\n"
+  }
   Item {
     id: ctl
     property alias items: items
@@ -45,6 +61,7 @@ ShellRoot {
     function writeState() {}
     function repaintLinks() {}
     function focusKeys() {}
+    function flash(text) {}
   }
   BoardSession { id: session; ctl: ctl }
   Timer {
@@ -86,6 +103,40 @@ ShellRoot {
         session.openBoard("a.json")
       } else if (test.stage === 5 && session.boardLoaded) {
         test.check(session.damageReason === "" && session.canEdit, "a normal board opens after a refused one")
+        // Something else writes the open board. Nothing is unsaved on screen, so
+        // the newer version is what there is, and it appears.
+        test.stage = 6
+        test.writeOutside(test.dir + "/a.json", test.boardOf(["from outside"]))
+      } else if (test.stage === 6 && ctl.items.count === 1) {
+        test.check(ctl.items.get(0).itext === "from outside", "an external write is adopted when nothing is unsaved")
+        test.check(session.canEdit && !session.externalChange, "and the board stays editable")
+        // Now both ends change: an edit on screen that has not been saved yet,
+        // and three items written underneath it.
+        ctl.items.append({iid: 9, kind: "note", ix: 0, iy: 0, iw: 180, ih: 140, itint: "accent", itext: "mine"})
+        test.stage = 7
+        test.writeOutside(test.dir + "/a.json", test.boardOf(["theirs", "also theirs", "and theirs"]))
+      } else if (test.stage === 7 && session.externalChange) {
+        test.check(ctl.items.count === 2, "the unsaved screen is kept rather than reloaded")
+        session.save()
+        session.scheduleSave()
+        test.check(!session.busy, "autosave does not start while the two disagree")
+        test.check(JSON.parse(test.read(test.dir + "/a.json")).items.length === 3,
+                   "and the newer file is still the one on disk")
+        session.flushSave()
+        test.stage = 8
+      } else if (test.stage === 8 && !session.externalChange && !session.busy) {
+        var written = JSON.parse(test.read(test.dir + "/a.json"))
+        test.check(written.items.length === 2, "ctrl+s writes what is on screen")
+        test.check(written.items[1].text === "mine", "including the edit that was never autosaved")
+        test.check(JSON.parse(test.read(ctl.backupPathFor("a.json"))).items.length === 3,
+                   "and the version it replaced is in backups")
+        // Every save replaces the file rather than changing it, which is enough
+        // to end a watch on the old one. So the watch has to still be there
+        // after this session's own write, or it only stops noticing.
+        test.stage = 9
+        test.writeOutside(test.dir + "/a.json", test.boardOf(["after", "our", "own", "write"]))
+      } else if (test.stage === 9 && ctl.items.count === 4) {
+        test.check(ctl.items.get(3).itext === "write", "the board is still watched after this session saves it")
         console.log("SESSION_TESTS_PASSED")
         Qt.quit()
       }

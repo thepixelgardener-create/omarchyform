@@ -571,6 +571,11 @@ FocusScope {
       : board.ctl.showPinned
       ? "backgrounds · " + Store.hintLine(Store.PINNED_HINTS, board.ctl.accentMarkup)
       : board.ctl.statusText !== "" ? Store.escapeMarkup(board.ctl.statusText)
+      // The flash that said this fades; the choice does not, and autosave is
+      // waiting on it, so the line keeps saying so until one side wins.
+      : board.ctl.diskChanged
+      ? Store.escapeMarkup(board.ctl.boardTitle) + " changed on disk · "
+        + Store.hintMarkup("ctrl+s", "keep what is on screen", board.ctl.accentMarkup)
       : board.ctl.pendingBoard !== null ? "saving before switching boards…"
       : board.ctl.saving ? "saving…"
       : board.ctl.damaged && board.ctl.damageReason !== ""

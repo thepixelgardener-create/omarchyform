@@ -214,6 +214,27 @@ try {
     assert.deepEqual(listed.out.tints, S.TINTS, 'and so do tints')
   }
 
+  {
+    // A board arrives in one step, because the shell watches the file while the
+    // board is open: a write anything else can see half of arrives there as a
+    // damaged board. And when it cannot be written at all, that is an answer
+    // like any other rather than a stack trace, with nothing left beside it.
+    const folder = path.join(dir, 'read-only')
+    fs.mkdirSync(folder)
+    const file = path.join(folder, 'i.json')
+    assert.equal(run('new', file).status, 0)
+    fs.chmodSync(folder, 0o500)
+    try {
+      const refused = pipe(JSON.stringify([{ op: 'add', args: ['note', 0, 0] }]), 'apply', file)
+      assert.equal(refused.status, 1, refused.raw)
+      assert.equal(refused.out.ok, false)
+      assert.match(refused.out.error, /cannot write/)
+      assert.deepEqual(fs.readdirSync(folder), ['i.json'], 'and nothing is left behind')
+    } finally { fs.chmodSync(folder, 0o700) }
+    // The original is untouched: it was never opened for writing.
+    assert.equal(asThePluginWouldLoad(file).rows.length, 0)
+  }
+
   console.log('ok — command line: boards built headlessly, loaded the way the plugin loads them')
 } finally {
   fs.rmSync(dir, { recursive: true, force: true })

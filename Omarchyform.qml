@@ -133,7 +133,8 @@ Item {
   property bool imageBusy: false
   readonly property bool exchangeBusy: exchange.busy
   readonly property bool dialogOpen: exchange.dialogOpen
-  readonly property string boardState: root.damaged ? "Read only" : root.saveError !== "" ? "Save failed" : root.saving ? "Saving…" : "Saved locally"
+  readonly property string boardState: root.damaged ? "Read only" : root.saveError !== "" ? "Save failed"
+    : root.diskChanged ? "Changed on disk" : root.saving ? "Saving…" : "Saved locally"
   onBoardLoadedChanged: if (root.boardLoaded && root.pendingFirstNote === root.currentBoard) {
     root.pendingFirstNote = ""
     Qt.callLater(function() {
@@ -173,12 +174,24 @@ Item {
 
   function enqueueImage(name, wx, wy, atPoint) {
     var q = root.imageQueue.slice()
-    q.push({ name: name, x: wx, y: wy, atPoint: atPoint })
+    q.push({ name: name, x: wx, y: wy, atPoint: atPoint, board: root.currentBoard })
     root.imageQueue = q
     if (q.length === 1) root.pumpImages()
   }
 
+  // Each waiting picture names the board it was meant for. Measuring is a round
+  // trip through the scene, so a board switch can happen between asking and
+  // being answered, and anything waiting for a board that is no longer open is
+  // dropped here instead of landing on the one that is.
   function pumpImages() {
+    var waiting = root.imageQueue
+    var stale = 0
+    while (waiting.length > stale && waiting[stale].board !== root.currentBoard) stale += 1
+    if (stale > 0) {
+      root.imageQueue = waiting.slice(stale)
+      root.flash(stale === 1 ? "Board changed; that picture was not added"
+                             : "Board changed; " + stale + " pictures were not added")
+    }
     if (root.imageQueue.length === 0) return
     if (root.activeBoard) root.activeBoard.probeImage(root.imageQueue[0].name)
     else root.pasteImage(root.imageQueue[0].name, 0, 0)
@@ -208,6 +221,13 @@ Item {
     var placing = root.imageQueue.length > 0 && root.imageQueue[0].name === name
       ? root.imageQueue[0] : null
     if (placing) root.imageQueue = root.imageQueue.slice(1)
+    // The size arrived after a board switch. The point this was meant for
+    // belongs to a board that is no longer open, so the picture is not placed.
+    if (placing && placing.board !== root.currentBoard) {
+      root.flash("Board changed; that picture was not added")
+      root.pumpImages()
+      return
+    }
     if (!root.canEdit || !Store.imageIsValid(name)) { root.pumpImages(); return }
     var w = naturalWidth > 0 ? naturalWidth : 320
     var h = naturalHeight > 0 ? naturalHeight : 240
@@ -326,6 +346,9 @@ Item {
   readonly property bool damaged: session.damaged
   readonly property string damageReason: session.damageReason
   readonly property string saveError: session.saveError
+  // Someone else wrote this board while it was open and the screen has changes
+  // of its own, so autosave is waiting for ctrl+s to say which one survives.
+  readonly property bool diskChanged: session.externalChange
   readonly property bool saving: session.busy
   readonly property var pendingBoard: session.pendingBoard
   readonly property bool canEdit: session.canEdit && !root.browserBusy && !root.imageBusy

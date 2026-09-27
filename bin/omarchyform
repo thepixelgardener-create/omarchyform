@@ -66,10 +66,22 @@ function readBoard(file) {
   return { items, links, nextId: S.nextFreeId(items, data.nextId), version }
 }
 
+// The board may be open in the shell, which watches the file and reads it when
+// it changes. So it is put there in one step: a temporary beside it shares the
+// filesystem, which makes the rename atomic, and a half-written board is never
+// something anything else can see.
 function writeBoard(board, file) {
   const text = S.writeFile(board.items, board.links, board.nextId)
-  fs.mkdirSync(path.dirname(path.resolve(file)), { recursive: true })
-  fs.writeFileSync(file, text)
+  const target = path.resolve(file)
+  fs.mkdirSync(path.dirname(target), { recursive: true })
+  const staged = path.join(path.dirname(target), "." + path.basename(target) + ".new-" + process.pid)
+  try {
+    fs.writeFileSync(staged, text)
+    fs.renameSync(staged, target)
+  } catch (error) {
+    try { fs.unlinkSync(staged) } catch { /* nothing left to clean up */ }
+    die("cannot write " + file, error.code || String(error))
+  }
   return text.length
 }
 

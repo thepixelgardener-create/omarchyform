@@ -89,6 +89,38 @@ expect(nodeReads, nestedMembers(read("tests/qt/tst_node.qml"), "ctl"),
 expect(nodeReads, nestedMembers(read("BoardImage.qml"), "renderCtl"),
   "the PNG export's renderCtl", "BoardImage.qml")
 
+// A file also reaches into itself by its own id, and QML resolves that name the
+// same way it resolves ctl. — at runtime, in code paths a green suite may never
+// take. Three calls to a fail() that was never written sat in BoardExchange
+// until a review found them, and each one turned a handled failure into a
+// TypeError that left importing busy for the rest of the session.
+//
+// Only calls are checked. Properties read off an id include everything the base
+// type brings with it, which is not in this file to be found; a method call is
+// almost always the file's own, and the few that are not are named here.
+const inheritedMethods = new Set(["forceActiveFocus", "grabToImage", "mapToItem", "mapFromItem", "destroy"])
+
+function declaredSignals(source) {
+  const names = new Set()
+  for (const m of source.matchAll(/^ {2}signal\s+(\w+)/gm)) names.add(m[1])
+  return names
+}
+
+// BoardBar is left out: it extends the shell's own BarWidget, so setting() and
+// bar come from a type that is not in this repository.
+for (const file of ["Omarchyform.qml", "BoardSession.qml", "BoardPersistence.qml", "BoardExchange.qml",
+                    "Board.qml", "Node.qml", "Browser.qml", "Help.qml", "BoardToolbar.qml",
+                    "BoardImage.qml", "ScrollHint.qml"]) {
+  const source = read(file)
+  const rootId = (source.match(/^\s*id:\s*(\w+)\s*$/m) || [])[1]
+  if (!rootId) { failures.push(`${file}: no id on the root object to check against`); continue }
+  const own = new Set([...declaredMembers(source), ...declaredSignals(source)])
+  const called = new Set()
+  for (const m of source.matchAll(new RegExp("\\b" + rootId + "\\.(\\w+)\\s*\\(", "g"))) called.add(m[1])
+  for (const name of [...called].sort())
+    if (!own.has(name) && !inheritedMethods.has(name)) failures.push(`${file}: ${rootId} has no ${name}()`)
+}
+
 if (failures.length) {
   for (const line of failures) console.error("  " + line)
   console.error(`FAILED — ${failures.length} missing member(s)`)

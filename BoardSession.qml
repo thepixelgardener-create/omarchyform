@@ -18,6 +18,10 @@ Item {
   property int lastSavedCount: -1
   property var pendingBoard: null
   property bool createWhenLoaded: false
+  // A newer version of the open board is on disk and the screen has changes of
+  // its own. Autosave stops while this is set, so nothing is written over until
+  // someone decides.
+  property bool externalChange: false
   readonly property bool canEdit: boardLoaded && !damaged && pendingBoard === null
   readonly property bool busy: persistence.busy
 
@@ -27,8 +31,12 @@ Item {
     saveTimer.restart()
   }
 
+  // An explicit save decides for the screen — and so does leaving the board,
+  // which is the same choice made by walking away from it. The version being
+  // written over goes to backups first, like every other previous version.
   function flushSave() {
     if (saveTimer.running) saveTimer.stop()
+    session.externalChange = false
     session.save()
   }
 
@@ -61,6 +69,10 @@ Item {
 
   function save(allowEmpty) {
     if (!session.boardLoaded) return
+    // Something else wrote this board and the screen disagrees with it. Waiting
+    // is the only safe answer: a debounced keystroke must not be what decides
+    // whose version survives.
+    if (session.externalChange) return
     if (session.ctl.items.count === 0 && session.lastSavedCount > 0 && allowEmpty !== true) return
     if (persistence.busy) return // Completion serializes the latest model again.
     var text = Store.writeFile(session.ctl.items, session.ctl.links, session.ctl.nextId)
@@ -133,6 +145,41 @@ Item {
     if (!session.ctl.browserVisible) session.ctl.focusKeys()
   }
 
+  // The board is a file in a folder people are invited to hand-edit, and the
+  // command line writes boards too. Without watching it, the two ends overwrite
+  // each other in silence: the shell keeps its own copy in memory and the next
+  // keystroke saves it over whatever arrived.
+  function externalWrite() {
+    if (!session.boardLoaded || session.pendingBoard !== null) return
+    reader.path = ""
+    reader.path = session.ctl.boardPath
+    reader.reload()
+    reader.waitForJob()
+    var raw = reader.text()
+    if (raw === "") return
+    var mine = Store.writeFile(session.ctl.items, session.ctl.links, session.ctl.nextId)
+    // Our own writes arrive here as well, and the content is what tells them
+    // apart. Comparing text rather than watching the writer means a
+    // notification that arrives late is still recognised as ours.
+    if (raw === mine || raw === session.lastSavedText || raw === persistence.contents) return
+    if (mine === session.lastSavedText) {
+      // Nothing unsaved on screen, so the newer version simply wins: a board
+      // built by the command line appears instead of being overwritten.
+      session.loadBoard(raw, false)
+      session.ctl.flash("Board changed on disk; reloaded")
+      return
+    }
+    session.externalChange = true
+    session.ctl.flash("Board changed on disk; ctrl+s keeps what is on screen")
+  }
+
+  FileView {
+    id: reader
+    blockLoading: true
+    blockAllReads: true
+    printErrors: false
+  }
+
   BoardPersistence {
     id: persistence
     onCompleted: function(path, text) { session.savedBoard(path, text) }
@@ -185,7 +232,8 @@ Item {
     // board as loaded, and the next save would write that emptiness over a
     // real file.
     path: session.wantedPath !== "" && session.checkedPath === session.wantedPath ? session.wantedPath : ""
-    watchChanges: false
+    watchChanges: true
+    onFileChanged: session.externalWrite()
     atomicWrites: true
     printErrors: false
     // Loading and writing use separate FileViews. Ignore duplicate load

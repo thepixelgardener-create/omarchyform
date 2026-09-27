@@ -20,6 +20,15 @@ Item {
   signal created(string path, bool editFirst)
   signal finished(string message)
 
+  // Every way out of a failed operation comes through here. The busy flag is
+  // what refuses the next import, so leaving it set after a failure strands
+  // importing and exporting for the rest of the session, and a failure nobody
+  // is told about looks exactly like nothing having happened.
+  function fail(message) {
+    busy = false
+    error = message
+    finished(message)
+  }
 
   function stage(text, name, editFirst) {
     if (busy) return false
@@ -111,6 +120,14 @@ Item {
     preload: false
     atomicWrites: true
     printErrors: false
+    // Staging writes into the app's own data folder, so this is a full disk or
+    // a permission problem rather than anything the user chose. It still has to
+    // end the operation: without this the board never arrives and nothing else
+    // can be imported afterwards.
+    onSaveFailed: function (reason) {
+      exchange.fail((exchange.operation === "export" ? "Could not prepare the copy: " : "Could not prepare that board: ")
+                    + FileViewError.toString(reason))
+    }
     onSaved: {
       if (exchange.operation === "publish") {
         publish.command = exchange.ctl.fileCommand("publish", [exchange.ctl.boardsDir, exchange.baseName, output.path])
@@ -204,7 +221,13 @@ Item {
     onExited: function (code) {
       var done = exchange.dropQueue[0]
       exchange.dropQueue = exchange.dropQueue.slice(1)
-      if (code === 0 && importedName.text) exchange.ctl.imageDropped(importedName.text, done.x, done.y)
+      // Checking the board before starting the copy is not enough: the switch
+      // can happen while it runs. A picture on the wrong board is worse than
+      // one that has to be dropped again, so the copy is abandoned in the
+      // pictures folder rather than placed anywhere.
+      if (code === 0 && importedName.text && done.board !== exchange.ctl.currentBoard)
+        exchange.finished("Board changed; drop that picture again")
+      else if (code === 0 && importedName.text) exchange.ctl.imageDropped(importedName.text, done.x, done.y)
       // 5 is the helper's way of saying the file is too big to put on a board,
       // which is worth saying differently from "that is not a picture".
       else if (code === 5) exchange.finished("That file is too large to put on a board")

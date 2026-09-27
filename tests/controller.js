@@ -603,6 +603,32 @@ console.log('ok — controller: finding, stepping through matches and dimming th
   assert.equal(c.items.count, before, 'the bad name is refused')
   assert.equal(c.root.imageQueue.length, 1, 'and the one behind it is still waiting')
   assert.equal(probes[probes.length - 1], 'after.png', 'which is now the one being measured')
+
+  // A measurement that comes back after a board switch answers for a board that
+  // is no longer open. Placing it would put the picture on whatever is open now,
+  // at a point that was never on this board.
+  const switched = controller()
+  switched.root.activeBoard = { probeImage() {}, repaintLinks() {}, focusKeys() {} }
+  switched.root.imageDropped('late.png', 40, 50)
+  switched.root.currentBoard = 'b.json'
+  switched.root.pasteImage('late.png', 200, 100)
+  assert.equal(switched.items.count, 0, 'the late picture does not land on the board that is open now')
+  assert.equal(switched.root.imageQueue.length, 0, 'and it stops waiting')
+
+  // The rest of the queue is sorted the same way: everything still waiting for
+  // the board that closed is dropped, and the next one meant for this board is
+  // measured instead of being stuck behind them.
+  const mixed = controller()
+  const seen = []
+  mixed.root.activeBoard = { probeImage(name) { seen.push(name) }, repaintLinks() {}, focusKeys() {} }
+  mixed.root.imageDropped('a-1.png', 0, 0)
+  mixed.root.imageDropped('a-2.png', 0, 0)
+  mixed.root.currentBoard = 'b.json'
+  mixed.root.imageDropped('b-1.png', 0, 0)
+  mixed.root.pasteImage('a-1.png', 100, 100)
+  assert.equal(mixed.items.count, 0, 'nothing meant for the closed board is placed')
+  assert.deepEqual(seen, ['a-1.png', 'b-1.png'], 'the queue skips to the picture meant for this board')
+  assert.equal(mixed.root.imageQueue.length, 1, 'which is the only one left')
 }
 console.log('ok — controller: dropped files, their paths and where they land')
 {
