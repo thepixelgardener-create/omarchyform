@@ -391,6 +391,22 @@ function tests(S) {
     eq(S.filterEntries(e, "", "z").map(x => x.path), ["z.json", "azzz.json"], "score beats alphabet")
   })
 
+  test("one lock per board, and never one lock for two", () => {
+    // The defect this replaced: separators were flattened to __, so a board in
+    // a folder and a board actually called that shared a lock and waited on
+    // each other. Nothing was lost — a shared lock is too much serialising,
+    // not too little — but the two had nothing to do with one another.
+    ok(S.lockKey("work/a.json") !== S.lockKey("work__a.json"), "a folder is not an underscore")
+    // Encoding its own output again is still a different key, so a board named
+    // after an encoded path cannot collide with the path it looks like.
+    ok(S.lockKey(S.lockKey("work/a.json")) !== S.lockKey("work/a.json"), "encoding is not idempotent")
+    // The command line keys a board outside the library by its full path, and
+    // that must not collide with anything relative inside it.
+    ok(S.lockKey("/home/someone/a.json") !== S.lockKey("home/someone/a.json"), "absolute is not relative")
+    // Reversible, so a lock file still says which board it belongs to.
+    eq(decodeURIComponent(S.lockKey("work/a b.json")), "work/a b.json")
+  })
+
   test("nameIsValid refuses anything that is not one path segment", () => {
     ok(S.nameIsValid("project a"), "spaces are fine")
     ok(S.nameIsValid("2026-plans"), "dashes and digits are fine")

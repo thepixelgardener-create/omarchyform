@@ -748,6 +748,23 @@ function nameIsValid(name) {
   return !/[\/\\\x00-\x1f\x7f]/.test(name)
 }
 
+// The name of the lock for a board, from the board's path.
+//
+// It lives here because both writers have to arrive at the same string: a lock
+// only serialises anything if the plugin and `bin/omarchyform` pick the same
+// file for the same board, and two implementations of that rule is one more
+// than can be kept in step. The plugin passes a path relative to the library,
+// the command line passes the same for a board inside it and the full path for
+// one outside; each of those is a different key here, which is the point.
+//
+// Percent-encoding rather than flattening separators: `work/a.json` and a board
+// actually called `work__a.json` used to map to one lock, so two unrelated
+// boards waited on each other. Encoding is reversible, so no two paths share a
+// key, and a lock file can still be read back to the board it belongs to.
+function lockKey(path) {
+  return encodeURIComponent(path)
+}
+
 // Relative paths in state/trash may have been edited outside the application.
 function safeRelative(path) {
   if (typeof path !== "string" || !path) return false
