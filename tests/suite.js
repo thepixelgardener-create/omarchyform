@@ -551,6 +551,213 @@ function tests(S) {
       eq(S.imageIsValid(good), true, good)
   })
 
+  test("the command list offers what was typed, best first", () => {
+    // Nothing typed is the whole table, minus the ways into the list itself.
+    const all = S.matchCommands("")
+    eq(all.length, S.COMMANDS.filter(c => c.listed !== false).length)
+    ok(all.every(c => c.listed !== false), "the ways in do not list themselves")
+
+    // Asked for a selection, it is the commands that act on one — which is
+    // what a menu of actions for the selection offers, from the same table.
+    const mine = S.matchCommands("", "selection")
+    ok(mine.length > 0 && mine.length < all.length)
+    ok(mine.every(c => ["target", "item", "group"].indexOf(c.needs) >= 0),
+       "only the ones that need something selected")
+    ok(mine.some(c => c.name === "Align left edges"), "including the arrangement chord's answers")
+    ok(mine.some(c => c.name === "Change colour"), "and the plain ones that act on what is selected")
+    ok(mine.some(c => c.name === "Bring to front"), "and the ones a background counts for")
+    ok(mine.some(c => c.name === "Pin or unpin as background"), "and the one that takes it out of the background")
+    ok(!mine.some(c => c.name === "New board"), "and nothing that is about the board itself")
+    eq(S.matchCommands("align", "selection").length, 6, "narrowing still works inside it")
+
+    // A name that starts with the query was meant more often than one that
+    // merely contains it, whatever order the table puts them in.
+    const names = S.matchCommands("new").map(c => c.name)
+    eq(names[0], "New note")
+    ok(names.indexOf("New board") > 0, "and the rest still follow")
+    ok(names.indexOf("Rename") < 0)
+
+    eq(S.matchCommands("  COLOUR ").map(c => c.name).join(","), "Change colour",
+       "case and stray spaces are not the point")
+
+    // Half-remembering the letter should work too: type it and see what it does.
+    eq(S.matchCommands("g")[0].name, "Align and spread")
+    eq(S.matchCommands("zzz").length, 0)
+  })
+
+  test("every command names a function and a key, once", () => {
+    const names = {}
+    const keys = {}
+    for (const command of S.COMMANDS) {
+      ok(typeof command.name === "string" && command.name !== "", "a name")
+      ok(typeof command.run === "string" && command.run !== "", command.name + " runs something")
+      ok(["", "edit", "target", "item", "group", "conflict"].indexOf(command.needs) >= 0,
+         command.name + " needs something known")
+      eq(names[command.name], undefined, "one entry called " + command.name)
+      if (command.key !== "") eq(keys[command.key], undefined, "one command on " + command.key)
+      names[command.name] = true
+      keys[command.key] = true
+      eq(S.commandByName(command.name), command, "and it can be found by name")
+    }
+    eq(S.commandByName("no such thing"), null)
+  })
+
+  test("layer order moves rows and keeps a group's own order", () => {
+    // Applied the way a ListModel applies them, in the order they come back.
+    const after = (list, indices, where) => {
+      const rows = list.slice()
+      for (const move of S.layerMoves(rows.length, indices, where)) {
+        const [held] = rows.splice(move.from, 1)
+        rows.splice(move.to, 0, held)
+      }
+      return rows.join("")
+    }
+    const board = ["a", "b", "c", "d", "e"]
+
+    eq(after(board, [1, 3], "front"), "acebd", "both to the front, in the order they were in")
+    eq(after(board, [1, 3], "back"), "bdace", "and both to the back, still in that order")
+    eq(after(board, [1, 3], "forward"), "acbed", "one step each")
+    eq(after(board, [1, 3], "backward"), "badce")
+
+    // Nothing to do is no moves at all, so the caller can say so rather than
+    // writing the board again for nothing.
+    eq(S.layerMoves(5, [3, 4], "forward").length, 0, "already at the front")
+    eq(S.layerMoves(5, [0, 1], "backward").length, 0, "already at the back")
+    eq(S.layerMoves(5, [0, 1, 2, 3, 4], "front").length, 0, "everything is already in order")
+    eq(S.layerMoves(5, [0, 1, 2, 3, 4], "back").length, 0)
+    eq(S.layerMoves(1, [0], "front").length, 0, "one item has nothing to be in front of")
+    eq(S.layerMoves(5, [], "front").length, 0)
+
+    // A group that is blocked by one of its own members moves as far as it can
+    // rather than passing through itself.
+    eq(after(board, [2, 4], "forward"), "abdce", "the one at the top stays, the other moves")
+    eq(after(board, [0, 2], "backward"), "acbde")
+
+    // Three of them, and handed over in no particular order: what is selected
+    // arrives in the order it was marked in, not sorted.
+    eq(after(board, [3, 0, 2], "front"), "beacd", "three to the front, in board order")
+    eq(after(board, [4, 1, 2], "back"), "bcead", "and three to the back")
+    eq(after(board, [3, 1], "front"), after(board, [1, 3], "front"), "the order they arrive in is not the answer")
+    eq(after(board, [2, 0], "back"), after(board, [0, 2], "back"))
+
+    // A set that is at neither end and asked for the end it is not at.
+    eq(after(board, [1, 2], "front"), "adebc")
+    eq(after(board, [2, 3], "back"), "cdabe")
+  })
+
+  test("a copy saved to share lists every picture on the board once", () => {
+    const items = new FakeModel()
+    S.fillItems(items, [
+      { id: 1, kind: "image", src: "one.png" },
+      { id: 2, kind: "image", src: "one.png" },
+      { id: 3, kind: "image", src: "two.png" },
+      { id: 4, kind: "note", src: "three.png" },
+      { id: 5, kind: "image", src: "../escape.png" }
+    ])
+    eq(S.imageNames(items).join(","), "one.png,two.png")
+  })
+
+  test("a shared copy carries its pictures and is still a board", () => {
+    const items = new FakeModel()
+    S.fillItems(items, [{ id: 1, kind: "image", src: "one.png" }])
+    // Written from the text the export took at the start, not from the models,
+    // which have had time to move on by the time the pictures are in hand.
+    const taken = S.writeFile(items, new FakeModel(), 2)
+    const plain = S.withEmbeddedImages(taken, {})
+    eq(plain, taken, "nothing to carry, nothing added")
+    items.append({ iid: 9, kind: "note", ix: 0, iy: 0, iw: 60, ih: 60, itint: "foreground",
+                   itext: "added after the snapshot", ipinned: false, isrc: "" })
+    const shared = S.withEmbeddedImages(taken, { "one.png": "QUJD" })
+    eq(S.readFile(shared).items.length, 1, "and what came after is not in it")
+    eq(JSON.parse(shared).images["one.png"], "QUJD")
+    // Not a format bump: an Omarchyform that knows nothing about this still
+    // opens the copy, with the pictures missing as they are missing today.
+    ok(S.readFile(shared) !== null, "an older reader still accepts it")
+    eq(S.readFile(shared).items.length, 1)
+  })
+
+  test("what a shared copy claims to carry is checked before it is believed", () => {
+    eq(Object.keys(S.sharedImages("not json")).length, 0)
+    eq(Object.keys(S.sharedImages(JSON.stringify({ items: [] }))).length, 0)
+    eq(Object.keys(S.sharedImages(JSON.stringify({ images: ["QUJD"] }))).length, 0)
+    const mixed = S.sharedImages(JSON.stringify({ images: {
+      "good.png": "QUJD", "../escape.png": "QUJD", "a/b.png": "QUJD", ".hidden.png": "QUJD",
+      "empty.png": "", "number.png": 42, "notbase64.png": "a b c!"
+    } }))
+    eq(Object.keys(mixed).join(","), "good.png", "only a name this would write itself")
+  })
+
+  test("what a shared copy may carry is bounded before anything is decoded", () => {
+    // Four base64 characters are three bytes, so how big a picture is can be
+    // answered from the text of it — which is the point, because a file that
+    // is too big to accept should be refused before it is turned into bytes.
+    eq(S.decodedSize("QUJD"), 3)
+    eq(S.decodedSize("QUJDRA=="), 4)
+    eq(S.decodedSize("QUJDREU="), 5)
+
+    const big = "A".repeat(Math.ceil(S.MAX_IMAGE_BYTES * 4 / 3) + 8)
+    const oversize = S.sharedImages(JSON.stringify({ images: { "huge.png": big, "fine.png": "QUJD" } }))
+    eq(Object.keys(oversize).join(","), "fine.png", "one picture over the ceiling is refused")
+
+    // And a set of pictures that is fine one at a time and too much together.
+    const half = "A".repeat(Math.ceil(S.MAX_BUNDLE_BYTES * 4 / 3 / 2))
+    const together = S.sharedImages(JSON.stringify({ images: { "a.png": half, "b.png": half, "c.png": half } }))
+    ok(Object.keys(together).length < 3, "the total is bounded as well as each one")
+
+    // What the file says it has, whatever survives being looked at: the
+    // difference is what did not arrive, and the caller refuses the import.
+    eq(S.declaredImageCount(JSON.stringify({ images: { "a.png": "QUJD", "../b.png": "QUJD" } })), 2)
+    eq(Object.keys(S.sharedImages(JSON.stringify({ images: { "a.png": "QUJD", "../b.png": "QUJD" } }))).length, 1)
+    eq(S.declaredImageCount("not json"), 0)
+    eq(S.declaredImageCount(JSON.stringify({ items: [] })), 0, "a board with no pictures says nothing")
+
+    // JSON that is not a board at all. A list and a null parse cleanly and are
+    // not objects with pictures in them, which is a different thing from being
+    // unparseable and has to be refused just as plainly.
+    for (const notABoard of ["[1,2,3]", "null", "\"a string\"", "42"]) {
+      eq(S.declaredImageCount(notABoard), 0, notABoard)
+      eq(Object.keys(S.sharedImages(notABoard)).length, 0, notABoard)
+      eq(S.withEmbeddedImages(notABoard, { "a.png": "QUJD" }), notABoard, notABoard + " is left as it is")
+    }
+    eq(S.declaredImageCount(JSON.stringify({ images: ["a.png"] })), 0, "a list of names is not a set of pictures")
+
+    // A picture that is refused does not stop the ones after it being taken.
+    const mixedOrder = S.sharedImages(JSON.stringify({ images: {
+      "../first.png": "QUJD", "second.png": "not base64!", "third.png": "QUJD"
+    } }))
+    eq(Object.keys(mixedOrder).join(","), "third.png", "the good one behind two bad ones")
+
+    // The ceiling itself. One picture is bounded by both limits, so the one
+    // that decides is the smaller: what a whole copy may carry. Exactly that
+    // much is allowed and one group of four characters more is not.
+    ok(S.MAX_BUNDLE_BYTES <= S.MAX_IMAGE_BYTES, "a copy carries no more than one picture may be")
+    const atLimit = "A".repeat(Math.ceil(S.MAX_BUNDLE_BYTES * 4 / 3))
+    eq(S.decodedSize(atLimit), S.MAX_BUNDLE_BYTES, "exactly the ceiling")
+    eq(Object.keys(S.sharedImages(JSON.stringify({ images: { "a.png": atLimit } }))).length, 1,
+       "a picture exactly at the ceiling is allowed")
+    eq(Object.keys(S.sharedImages(JSON.stringify({ images: { "a.png": atLimit + "AAAA" } }))).length, 0,
+       "and one over it is not")
+  })
+
+  test("pictures out of a shared copy are pointed at where they actually landed", () => {
+    const raw = JSON.stringify({
+      version: 5, nextId: 4,
+      items: [{ id: 1, kind: "image", src: "one.png" }, { id: 2, kind: "image", src: "two.png" },
+              { id: 3, kind: "note", text: "x" }],
+      links: [{ from: 1, to: 2 }],
+      images: { "one.png": "QUJD", "two.png": "QUJD" }
+    })
+    const back = JSON.parse(S.withSharedImages(raw, { "one.png": "shared-7-0.png" }))
+    eq(back.images, undefined, "the bytes are in the images folder now, not the board")
+    eq(back.items[0].src, "shared-7-0.png")
+    // A name that did not land must not be left addressing a file in this
+    // machine's library, which is somebody else's picture.
+    eq(back.items[1].src, "")
+    eq(back.items[2].src, undefined, "an item that never had one is left alone")
+    eq(back.links.length, 1, "the rest of the board is untouched")
+    eq(S.withSharedImages("not json", {}), "not json", "and nothing it cannot read is rewritten")
+  })
+
   test("an image keeps its file name and nothing else does", () => {
     const items = new FakeModel()
     S.fillItems(items, [

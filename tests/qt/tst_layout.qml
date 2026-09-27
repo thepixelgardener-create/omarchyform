@@ -1,6 +1,7 @@
 import QtQuick
 import QtTest
 import "../.."
+import "../../BoardStore.js" as Store
 
 TestCase {
   id: test
@@ -30,6 +31,7 @@ TestCase {
     property int cornerRadius: 0
     property bool browserVisible: false
     property bool menuVisible: false
+    property bool zoomMenuVisible: false
     property int menuIndex: 0
     function toggleMenu() { menuVisible = !menuVisible }
     function runMenu(index) { menuVisible = false }
@@ -60,12 +62,34 @@ TestCase {
     property bool browserTrash: false
     function browserEnter() {}
     function sp(n) { return n }
+    // The palette draws the real command table, so what this renders is what a
+    // board renders — including how many of them there are.
+    property bool paletteVisible: true
+    property string paletteQuery: ""
+    property int paletteIndex: 0
+    property int paletteRows: 9
+    readonly property var paletteMatches: Store.matchCommands(ctl.paletteQuery)
+    function commandReady(needs) { return needs !== "target" }
+    function commandExcuse(needs) { return "nothing is selected" }
+    function setPaletteQuery(text) { ctl.paletteQuery = text }
+    function runPaletteChoice() {}
+    function focusKeys() {}
+    property bool conflictVisible: true
+    property int conflictIndex: 0
+    function runConflictChoice() {}
     function closeBrowser() { browserVisible = false }
     function browserKey(event) {}
   }
   Help { id: help; ctl: ctl; anchors.centerIn: parent }
   Browser { id: browser; ctl: ctl; anchors.fill: parent }
   BoardToolbar { id: toolbar; ctl: ctl; width: test.width - 32; height: implicitHeight; visible: false }
+  // Where the board puts it: under the header, with the rest of the window
+  // below it to fit into.
+  // The panel hands the keys it does not use back to the board; here there is
+  // no board, so it hands them to something that answers the same way.
+  QtObject { id: keyboardless; function paletteKey(event) {} }
+  Commands { id: commandList; ctl: ctl; board: keyboardless; y: 40; anchors.horizontalCenter: parent.horizontalCenter }
+  Conflict { id: decision; ctl: ctl; y: 40; anchors.horizontalCenter: parent.horizontalCenter }
   // The header is a bar, so it is painted in the theme's bar colours rather
   // than the canvas ones.
   //
@@ -75,7 +99,8 @@ TestCase {
   // that from happening is the name check in tests/contract.js, which does not
   // depend on which Qt is doing the reading.
   function test_toolbarTakesTheBarColours() {
-    compare(toolbar.color, ctl.barBackground, "the header takes the bar's background")
+    compare(toolbar.color, Qt.rgba(ctl.barBackground.r, ctl.barBackground.g, ctl.barBackground.b, 0.92),
+            "the header takes the bar colour with slight transparency")
     verify(toolbar.color !== ctl.canvasBackground, "which is its own colour, not the canvas")
     verify(toolbar.border.color !== ctl.canvasBackground, "and its edge is drawn against it")
   }
@@ -104,6 +129,37 @@ TestCase {
     compare(toolbar.implicitHeight, closed)
     toolbar.visible = false
   }
+  // Every command at a theme's large font is taller than a small window, and a
+  // panel that runs off the bottom hides the commands it exists to show.
+  function test_paletteFitsASmallWindow() {
+    verify(commandList.visible)
+    verify(ctl.paletteMatches.length > ctl.paletteRows, "there are more commands than rows")
+    verify(commandList.width <= test.width - 32, "it fits across")
+    verify(commandList.y + commandList.height <= test.height, "and does not run off the bottom")
+    verify(commandList.visibleRows >= 1, "while still showing something")
+    verify(commandList.visibleRows <= ctl.paletteRows, "and never more rows than it offers")
+  }
+
+  // Narrowing the query shrinks the panel rather than leaving empty rows.
+  function test_paletteShrinksToWhatMatches() {
+    const many = commandList.height
+    ctl.paletteQuery = "colour"
+    verify(waitForRendering(commandList))
+    compare(ctl.paletteMatches.length, 1)
+    verify(commandList.height < many, "one match is a shorter panel than thirty")
+    ctl.paletteQuery = ""
+    verify(waitForRendering(commandList))
+    compare(commandList.height, many)
+  }
+
+  // The question about two versions of a board arrives on whatever window is
+  // open, which may be a small one with a theme that sets large text.
+  function test_conflictPanelFitsASmallWindow() {
+    verify(decision.visible)
+    verify(decision.width <= test.width - 32, "it fits across")
+    verify(decision.y + decision.height <= test.height, "and does not run off the bottom")
+  }
+
   function test_helpFitsAndScrolls() {
     verify(help.width <= test.width - 32)
     verify(help.height <= test.height - 32)

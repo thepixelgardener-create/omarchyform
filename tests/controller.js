@@ -10,32 +10,47 @@ function controller() {
     undoStack: [], redoStack: [], selectedIndex: -1, editIndex: -1,
     camX: 0, camY: 0, zoom: 1, activeBoard: null, markedIds: [], showPinned: false, arranging: false,
     finding: false, findQuery: '', findCount: 0, imageQueue: [],
-    menuVisible: false, menuIndex: 0, helpVisible: false,
+    menuVisible: false, zoomMenuVisible: false, menuIndex: 0, helpVisible: false,
+    paletteVisible: false, paletteQuery: '', paletteIndex: 0, paletteRows: 9,
+    conflictVisible: false, conflictIndex: 0, paletteScope: 'all',
     boardsDir: '/boards', backupsDir: '/backups', worldStep: 40, minItemSize: 60, viewW: 1000, viewH: 700 }
   const session = { ctl: root, boardLoaded: true, damaged: false, pendingBoard: null,
-    lastSavedCount: 0, lastSavedText: '', saveError: '' }
+    lastSavedCount: 0, lastSavedText: '', saveError: '',
+    // The conflict state the QML declares, mirrored here: an undeclared
+    // property reads as undefined, which is not what a string property does.
+    conflict: false, conflictText: '', conflictBoard: '', resolving: '',
+    revision: '', forceNextSave: false, diskReading: false }
   Object.defineProperty(session, 'canEdit', {
     get: () => session.boardLoaded && !session.damaged && session.pendingBoard === null
   })
   for (const key of ['boardLoaded', 'damaged', 'pendingBoard', 'saveError', 'canEdit'])
     Object.defineProperty(root, key, { get: () => session[key] })
+  Object.defineProperty(root, 'diskChanged', { get: () => session.conflict })
   Object.defineProperty(root, 'boardPath', { get: () => '/boards/' + root.currentBoard })
   // Mirrors the QML binding of the same name: the harness loads functions, not
   // bindings, so a derived property has to be declared here.
   Object.defineProperty(root, 'findDimming', { get: () => root.finding && root.findQuery !== '' })
   Object.defineProperty(root, 'findNeedle', { get: () => root.findQuery.toLowerCase() })
+  Object.defineProperty(root, 'paletteMatches', { get: () =>
+    root.paletteVisible ? loadStore().matchCommands(root.paletteQuery, root.paletteScope) : [] })
   Object.defineProperty(root, 'markedLookup', { get: () => {
     const lookup = {}
     for (const id of root.markedIds) lookup[id] = true
     return lookup
   } })
   const writes = []
-  const persistence = { busy: false, save(path, text) { this.busy = true; writes.push({path,text}) } }
+  const persistence = { busy: false, contents: '',
+    save(path, text, backup, root, backupRoot, lock, expected) {
+      this.busy = true
+      this.contents = text
+      writes.push({ path, text, expected })
+    } }
   // Stands in for BoardExchange: the controller hands it filtered paths and
   // never learns what happens to them.
-  const exchange = { imported: [], copied: [],
+  const exchange = { imported: [], copied: [], copies: [],
     importDropped(entries) { exchange.imported.push(...entries) },
-    copyItems(indices) { exchange.copied.push(Array.from(indices)) } }
+    copyItems(indices) { exchange.copied.push(Array.from(indices)) },
+    saveCopy(text, name) { exchange.copies.push({ text, name }); return true } }
   // The browser reaches for the trash index and a directory listing; neither is
   // the subject of these tests, so both are present and inert.
   const trashIndexFile = { reload() {}, setText() {} }
@@ -51,10 +66,25 @@ function controller() {
   }
   loadFunctions(root, source)
   loadFunctions(session, fs.readFileSync(require('path').join(__dirname, '../BoardSession.qml'), 'utf8'))
+  // Two of the session's functions reach for a FileView and a Process. What
+  // they fetch is what matters here, so they fetch it from the test instead.
+  session.diskText = ''
+  session.readDisk = () => session.diskText
+  session.requestDisk = resolve => session.acceptDisk(root.currentBoard,
+    loadStore().writeFile(items, links, root.nextId), resolve, 'rev-fresh\n' + session.diskText)
+  let revisions = 0
   return { root, session, items, links, writes, persistence, exchange, complete() {
     const write = writes[writes.length - 1]
     persistence.busy = false
-    session.savedBoard(write.path, write.text)
+    session.savedBoard(write.path, write.text, 'rev-' + (++revisions))
+  },
+  // The helper refused the write: the file is no longer what this session
+  // last saw. `disk` is what is there instead.
+  refuse(disk) {
+    const write = writes[writes.length - 1]
+    persistence.busy = false
+    session.diskText = disk
+    session.staleSave(write.path, 'rev-external')
   } }
 }
 {
@@ -494,8 +524,9 @@ console.log('ok — controller: the arrange mode, aligning and spreading')
   assert.equal(c.root.finding, true)
   assert.equal(c.root.findDimming, false, 'an empty query dims nothing')
 
-  c.root.extendFind('s')
-  c.root.extendFind('h')
+  // What the field on the board calls as it is typed into.
+  c.root.setFindQuery('s')
+  c.root.setFindQuery('sh')
   assert.equal(c.root.findQuery, 'sh')
   assert.equal(c.root.findCount, 2)
   assert.equal(c.root.selectedIndex, 0, 'the board follows the typing to the first match')
@@ -509,13 +540,13 @@ console.log('ok — controller: the arrange mode, aligning and spreading')
   c.root.nextMatch()
   assert.equal(c.root.selectedIndex, 0, 'and comes back round')
 
-  // Backspace widens the query again.
-  c.root.trimFind()
+  // Taking a letter back widens the query again.
+  c.root.setFindQuery('s')
   assert.equal(c.root.findQuery, 's')
   assert.equal(c.root.findCount, 2)
 
   // A query that matches nothing leaves the selection where it was.
-  c.root.extendFind('zz')
+  c.root.setFindQuery('szz')
   assert.equal(c.root.findCount, 0)
   assert.equal(c.root.selectedIndex, 0, 'no match does not throw the cursor away')
 
@@ -537,7 +568,7 @@ console.log('ok — controller: the arrange mode, aligning and spreading')
   ro.items.append({ iid: 1, kind: 'note', ix: 0, iy: 0, iw: 100, ih: 100,
     itint: 'foreground', itext: 'still findable', ipinned: false, isrc: '' })
   ro.root.beginFind()
-  ro.root.extendFind('find')
+  ro.root.setFindQuery('find')
   assert.equal(ro.root.finding, true, 'a board that cannot be edited can still be searched')
   assert.equal(ro.root.findCount, 1)
   assert.equal(ro.writes.length, 0, 'and searching never writes')
@@ -603,6 +634,32 @@ console.log('ok — controller: finding, stepping through matches and dimming th
   assert.equal(c.items.count, before, 'the bad name is refused')
   assert.equal(c.root.imageQueue.length, 1, 'and the one behind it is still waiting')
   assert.equal(probes[probes.length - 1], 'after.png', 'which is now the one being measured')
+
+  // A measurement that comes back after a board switch answers for a board that
+  // is no longer open. Placing it would put the picture on whatever is open now,
+  // at a point that was never on this board.
+  const switched = controller()
+  switched.root.activeBoard = { probeImage() {}, repaintLinks() {}, focusKeys() {} }
+  switched.root.imageDropped('late.png', 40, 50)
+  switched.root.currentBoard = 'b.json'
+  switched.root.pasteImage('late.png', 200, 100)
+  assert.equal(switched.items.count, 0, 'the late picture does not land on the board that is open now')
+  assert.equal(switched.root.imageQueue.length, 0, 'and it stops waiting')
+
+  // The rest of the queue is sorted the same way: everything still waiting for
+  // the board that closed is dropped, and the next one meant for this board is
+  // measured instead of being stuck behind them.
+  const mixed = controller()
+  const seen = []
+  mixed.root.activeBoard = { probeImage(name) { seen.push(name) }, repaintLinks() {}, focusKeys() {} }
+  mixed.root.imageDropped('a-1.png', 0, 0)
+  mixed.root.imageDropped('a-2.png', 0, 0)
+  mixed.root.currentBoard = 'b.json'
+  mixed.root.imageDropped('b-1.png', 0, 0)
+  mixed.root.pasteImage('a-1.png', 100, 100)
+  assert.equal(mixed.items.count, 0, 'nothing meant for the closed board is placed')
+  assert.deepEqual(seen, ['a-1.png', 'b-1.png'], 'the queue skips to the picture meant for this board')
+  assert.equal(mixed.root.imageQueue.length, 1, 'which is the only one left')
 }
 console.log('ok — controller: dropped files, their paths and where they land')
 {
@@ -642,7 +699,7 @@ console.log('ok — controller: copying the selection out')
   const c = controller()
   c.session.loadBoard('{"version":5,"items":[]}', false)
   const menu = require('./harness').loadStore().MENU_COMMANDS
-  assert.equal(menu.length, 6, 'six commands, as the header draws')
+  assert.equal(menu.length, 9, 'nine commands, as the header draws')
 
   c.root.toggleMenu()
   assert.equal(c.root.menuVisible, true)
@@ -661,9 +718,33 @@ console.log('ok — controller: copying the selection out')
   // Running the highlighted item closes the menu and resets the walk.
   c.root.menuIndex = 5
   c.root.runMenu(c.root.menuIndex)
-  assert.equal(c.root.helpVisible, true, 'the last item is Help')
+  assert.equal(c.root.helpVisible, true, 'the sixth item is Help')
   assert.equal(c.root.menuVisible, false)
   assert.equal(c.root.menuIndex, 0)
+
+  // The palette lets a pointer reach the commands the keys
+  // reach without knowing that `:` opens it.
+  c.root.helpVisible = false
+  c.root.toggleMenu()
+  c.root.runMenu(6)
+  assert.equal(c.root.paletteVisible, true, 'Commands opens the palette')
+  c.root.endPalette()
+
+  c.root.toggleMenu()
+  c.root.runMenu(menu.indexOf('Zoom'))
+  assert.equal(c.root.zoomMenuVisible, true)
+  const zoomMenu = require('./harness').loadStore().ZOOM_COMMANDS
+  assert.equal(zoomMenu[c.root.menuIndex], '100%')
+  c.root.moveMenu(1)
+  c.root.runMenu(c.root.menuIndex)
+  assert.equal(c.root.zoom, 1.25)
+  assert.equal(c.root.menuVisible, false)
+  assert.equal(c.root.toWorldX(c.root.viewW / 2), 500, 'preset keeps the canvas centre fixed')
+  c.root.toggleMenu()
+  c.root.runMenu(menu.indexOf('Zoom'))
+  c.root.runMenu(0)
+  assert.equal(c.root.zoomMenuVisible, false)
+  assert.equal(c.root.menuIndex, menu.indexOf('Zoom'))
 
   // Boards is the browser, and it is the same call a click makes.
   c.root.helpVisible = false
@@ -681,3 +762,408 @@ console.log('ok — controller: copying the selection out')
   assert.equal(c.root.menuIndex, 0)
 }
 console.log('ok — controller: walking the header menu and running its commands')
+{
+  // The palette: every command by name, and one dispatch for it and the keys.
+  const S = loadStore()
+  const c = controller()
+  c.session.loadBoard('{"version":5,"items":[]}', false)
+
+  c.root.beginPalette()
+  assert.equal(c.root.paletteVisible, true)
+  assert.equal(c.root.paletteQuery, '')
+  assert.equal(c.root.paletteIndex, 0, 'opens on the first, ready to run')
+  assert.equal(c.root.paletteMatches.length, S.COMMANDS.filter(x => x.listed !== false).length,
+    'every command but the ways into this list')
+
+  // Typing narrows it, and the cursor goes back to the top rather than staying
+  // on a row that now means something else.
+  c.root.movePalette(2)
+  assert.equal(c.root.paletteIndex, 2)
+  c.root.setPaletteQuery('col')
+  assert.equal(c.root.paletteIndex, 0)
+  assert.deepEqual(c.root.paletteMatches.map(m => m.name), ['Change colour'])
+  c.root.setPaletteQuery('')
+  assert.equal(c.root.paletteQuery, '')
+
+  // Wrapping both ways, so neither end of the list is a dead stop.
+  c.root.movePalette(-1)
+  assert.equal(c.root.paletteIndex, c.root.paletteMatches.length - 1)
+  c.root.movePalette(1)
+  assert.equal(c.root.paletteIndex, 0)
+
+  // Running one closes the palette and does the thing.
+  c.root.paletteQuery = 'new note'
+  c.root.runPaletteChoice()
+  assert.equal(c.root.paletteVisible, false, 'running closes it')
+  assert.equal(c.root.paletteQuery, '', 'and forgets what was typed')
+  assert.equal(c.items.count, 1, 'and the note is on the board')
+
+  // A command with an argument carries it: two names, one function.
+  const before = c.root.zoom
+  c.root.runCommand('Zoom in')
+  assert.ok(c.root.zoom > before)
+  c.root.runCommand('Zoom out')
+  assert.equal(Math.round(c.root.zoom * 1000), Math.round(before * 1000))
+
+  // A command that cannot do anything now says so rather than appearing to run.
+  c.root.selectedIndex = -1
+  c.root.markedIds = []
+  c.root.statusText = ''
+  c.root.runCommand('Change colour')
+  assert.match(c.root.statusText, /nothing is selected/)
+
+  // A read-only board refuses the ones that would write to it, by the same
+  // rule, and still allows the ones that only look.
+  const ro = controller()
+  ro.session.loadBoard('{broken', false)
+  ro.root.runCommand('New note')
+  assert.equal(ro.items.count, 0)
+  assert.match(ro.root.statusText, /read-only/)
+  ro.root.runCommand('Fit the board on screen')
+  assert.equal(ro.root.statusText.indexOf('Fit') , -1, 'looking is not refused')
+
+  // The actions for what is selected: the same panel, opened on the commands
+  // that act on a selection, and closed again by running one.
+  c.root.endPalette()
+  c.root.selectedIndex = -1
+  c.root.markedIds = []
+  c.root.statusText = ''
+  c.root.beginSelectionActions()
+  assert.equal(c.root.paletteVisible, false, 'with nothing selected there is nothing to offer')
+  assert.match(c.root.statusText, /nothing selected/)
+
+  c.root.addItem('note', 0, 0)
+  c.root.beginSelectionActions()
+  assert.equal(c.root.paletteVisible, true)
+  assert.equal(c.root.paletteScope, 'selection')
+  assert.ok(c.root.paletteMatches.length > 0)
+  assert.ok(c.root.paletteMatches.every(m => ['target', 'item', 'group'].includes(m.needs)),
+    'only what acts on the selection')
+  // Alignment is offered by name, so the second key of the chord is something
+  // to learn rather than something to know already.
+  assert.ok(c.root.paletteMatches.some(m => m.name === 'Align left edges'))
+  c.root.endPalette()
+  assert.equal(c.root.paletteScope, 'selection', 'the scope belongs to the opening, not the closing')
+  c.root.beginPalette()
+  assert.equal(c.root.paletteScope, 'all', 'and opening it plainly is everything again')
+  c.root.endPalette()
+
+  // A name the table does not have runs nothing at all.
+  c.root.statusText = ''
+  c.root.runCommand('Delete everything forever')
+  assert.equal(c.root.statusText, '')
+
+  // Every command names a function the controller actually has, and every
+  // single-key one agrees with the key table the board dispatches through.
+  for (const command of S.COMMANDS)
+    assert.equal(typeof c.root[command.run], 'function', `${command.name} runs ${command.run}`)
+}
+console.log('ok — controller: the command palette and one dispatch for every command')
+{
+  // Two versions of one board. Nothing here may lose either of them, and
+  // nothing but a choice may resolve it.
+  const S = loadStore()
+  const disk = (texts) => JSON.stringify({ version: 5, nextId: texts.length + 1,
+    items: texts.map((t, i) => ({ id: i + 1, kind: 'note', x: i * 200, y: 0, w: 180, h: 140,
+                                  tint: 'foreground', text: t, pinned: false })), links: [] }) + '\n'
+
+  function conflicted() {
+    const c = controller()
+    c.session.loadBoard(disk(['theirs']), false)
+    c.session.revision = 'rev-1'
+    // An edit on screen that has not been written, and a different version
+    // underneath it. The write is refused because the file moved.
+    c.root.addItem('note', 40, 40)
+    c.items.setProperty(c.root.selectedIndex, 'itext', 'mine')
+    c.root.save()
+    c.session.diskText = disk(['theirs', 'and more of theirs'])
+    c.refuse(c.session.diskText)
+    return c
+  }
+
+  {
+    const c = conflicted()
+    assert.equal(c.session.conflict, true, 'a refused write raises the question')
+    assert.equal(c.items.count, 2, 'and the edits are still on screen')
+    assert.equal(c.session.revision, 'rev-external', 'with what is on disk now recorded')
+    assert.equal(c.root.diskChanged, true, 'which the board says out loud')
+
+    // Everything that is not a choice leaves both versions alone.
+    const wrote = c.writes.length
+    c.root.save()
+    c.session.scheduleSave()
+    c.session.flushSave()
+    assert.equal(c.writes.length, wrote, 'autosave and flushing write nothing')
+    assert.equal(c.session.conflict, true, 'and resolve nothing')
+
+    c.root.openBoard('b.json')
+    assert.equal(c.root.currentBoard, 'a.json', 'leaving waits for the choice')
+    assert.equal(c.items.count, 2, 'with the edits still there')
+    assert.equal(c.root.conflictVisible, true, 'and the choices on screen')
+
+    // ctrl+s is no longer a save while this is outstanding: it is the moment
+    // someone asked about it.
+    c.root.endConflictChoice()
+    c.root.flushSave()
+    assert.equal(c.root.conflictVisible, true, 'ctrl+s asks the question again')
+
+    // And closing the board is not an answer: the edits stay in the session,
+    // so the question is still there when it comes back.
+    c.root.endConflictChoice()
+    const closed = c.writes.length
+    c.root.close()
+    assert.equal(c.writes.length, closed, 'closing writes nothing over the other version')
+    assert.equal(c.session.conflict, true, 'and leaves the question standing')
+    assert.equal(c.items.count, 2, 'with the edits still in hand')
+  }
+
+  {
+    // Choice one: what is on disk wins, whole.
+    const c = conflicted()
+    c.root.conflictUseDisk()
+    assert.equal(c.session.conflict, false)
+    assert.equal(c.items.count, 2, 'the board is what was on disk')
+    assert.equal(c.items.get(1).itext, 'and more of theirs')
+    assert.equal(c.session.revision, 'rev-fresh', 'and the revision is read again')
+  }
+
+  {
+    // Choice two: the edits are written somewhere of their own first, and only
+    // then does the board take the version from disk.
+    const c = conflicted()
+    c.root.conflictSaveCopy()
+    assert.equal(c.exchange.copies.length, 1, 'the copy is handed to the publisher')
+    assert.match(c.exchange.copies[0].name, /-mine$/)
+    assert.match(c.exchange.copies[0].text, /mine/, 'and it holds what was on screen')
+    assert.equal(c.session.conflict, true, 'which is not resolved until it lands')
+    assert.equal(c.items.count, 2, 'and the edits are still on screen')
+
+    c.session.keptAsCopy('a-mine.json')
+    assert.equal(c.session.conflict, false)
+    assert.equal(c.items.get(1).itext, 'and more of theirs', 'now the board takes the disk version')
+    assert.match(c.root.statusText, /a-mine\.json/, 'and says where the other one went')
+  }
+
+  {
+    // Choice three: this version wins, and the write says so explicitly rather
+    // than pretending it is still updating what it read.
+    const c = conflicted()
+    c.root.conflictReplaceDisk()
+    assert.equal(c.session.conflict, false)
+    const write = c.writes[c.writes.length - 1]
+    assert.equal(write.expected, '-', 'the write is an overwrite, and says so')
+    assert.match(write.text, /mine/)
+
+    // And a resolution that fails is not a resolution: the question comes back
+    // with the edits still in hand.
+    c.session.failedSave('disk full')
+    assert.equal(c.session.conflict, true, 'the choice is put back')
+    assert.equal(c.items.count, 2, 'with nothing lost')
+  }
+
+  {
+    // A refusal that turns out to be our own write after all is not a question
+    // for anyone: it retries against what is actually there.
+    const c = controller()
+    c.session.loadBoard(disk(['one']), false)
+    c.session.revision = 'rev-1'
+    c.root.addItem('note', 0, 0)
+    c.root.save()
+    const sent = c.writes[c.writes.length - 1].text
+    c.session.diskText = sent
+    c.refuse(sent)
+    assert.equal(c.session.conflict, false, 'the disk already says what we sent')
+    assert.equal(c.session.lastSavedText, sent)
+  }
+}
+{
+  const disk = text => JSON.stringify({version: 5, nextId: 2, items: [
+    {id: 1, kind: 'note', x: 0, y: 0, w: 180, h: 140, text}], links: []})
+  function dirty() {
+    const c = controller()
+    c.session.loadBoard(disk('baseline'), false)
+    c.items.setProperty(0, 'itext', 'local')
+    c.session.diskText = disk('external')
+    return c
+  }
+  {
+    const c = dirty()
+    c.session.raiseConflict(c.session.diskText)
+    c.session.replaceDisk()
+    c.persistence.busy = false
+    c.session.failedSave('disk full')
+    assert.equal(c.session.conflictText, c.session.diskText, 'failed replacement retains the disk snapshot')
+    c.session.useDisk()
+    assert.equal(c.items.get(0).itext, 'external', 'use disk works after failed replacement')
+    assert.equal(c.session.damaged, false)
+  }
+  {
+    const c = dirty()
+    c.root.openBoard('b.json')
+    c.refuse(c.session.diskText)
+    c.session.useDisk()
+    assert.equal(c.session.pendingBoard, null, 'a rejected switch is cancelled')
+    assert.equal(c.session.canEdit, true, 'resolution restores editing')
+    assert.equal(c.root.currentBoard, 'a.json')
+  }
+  {
+    const c = dirty()
+    c.session.raiseConflict(c.session.diskText)
+    c.session.diskText = disk('external updated again')
+    c.session.useDisk()
+    assert.equal(c.items.get(0).itext, 'external updated again', 'resolution reads the latest disk content')
+  }
+}
+{
+  const c = controller()
+  const S = loadStore()
+  c.session.loadBoard(JSON.stringify({version:5, items:[], links:[]}), false)
+  const baseline = S.writeFile(c.items, c.links, c.root.nextId)
+  c.session.revision = 'original'
+  c.session.acceptDisk('other.json', baseline, true, 'wrong\n' + baseline)
+  assert.equal(c.session.revision, 'original', 'late reply cannot change another board revision')
+  c.session.raiseConflict(baseline)
+  c.session.acceptDisk('a.json', baseline, true, 'bad\n{broken')
+  assert.equal(c.session.conflict, true, 'invalid read keeps the conflict unresolved')
+  assert.equal(c.session.damaged, false, 'invalid read does not replace local content')
+  c.items.append({iid:1, kind:'note', ix:0, iy:0, iw:180, ih:140, itext:'new local edit', itint:'accent', ipinned:false, isrc:''})
+  c.session.acceptDisk('a.json', baseline, true, 'new\n' + baseline)
+  assert.equal(c.items.count, 1, 'edits made after read began are retained')
+  assert.equal(c.session.conflict, true)
+}
+console.log('ok — controller: two versions of a board, and the three ways out')
+{
+  // Which item is drawn over which: rows move, and nothing else does.
+  const c = controller()
+  c.session.loadBoard('{"version":5,"items":[]}', false)
+  const S = loadStore()
+  const named = (n) => {
+    c.root.addItem('note', 0, 0)
+    c.items.setProperty(c.root.selectedIndex, 'itext', n)
+    return c.items.get(c.root.selectedIndex).iid
+  }
+  const order = () => S.itemRows(c.items).map(r => r.text).join('')
+  const first = named('a'), second = named('b'), third = named('c')
+  assert.equal(order(), 'abc')
+
+  // The cursor is on c; sending it back takes it with it.
+  c.root.selectOnly(2)
+  c.root.layerTargets('back')
+  assert.equal(order(), 'cab')
+  assert.equal(c.items.get(c.root.selectedIndex).itext, 'c', 'the cursor follows its item, not its place')
+  assert.equal(c.items.get(c.root.selectedIndex).iid, third, 'which keeps the id it always had')
+
+  // Undo puts the order back, and redo takes it forward again.
+  c.root.undo()
+  assert.equal(order(), 'abc', 'undo restores the order')
+  c.root.redo()
+  assert.equal(order(), 'cab', 'and redo puts it back')
+
+  // Connectors are between ids, so reordering cannot touch them.
+  c.root.addLink(first, third)
+  const links = S.linkRows(c.links).map(l => l.from + '>' + l.to).join(',')
+  c.root.selectOnly(0)
+  c.root.layerTargets('front')
+  assert.equal(S.linkRows(c.links).map(l => l.from + '>' + l.to).join(','), links,
+    'the connectors are unchanged')
+
+  // Several at once keep their order relative to each other, and marks are by
+  // id so they survive the move.
+  assert.equal(order(), 'abc')
+  c.root.markedIds = [first, second]
+  c.root.selectedIndex = -1
+  c.root.layerTargets('front')
+  assert.equal(order(), 'cab', 'both came forward, in the order they were in')
+  assert.deepEqual(c.root.markedIds.slice().sort(), [first, second].sort(), 'the marks are still on them')
+
+  // Nothing to do says so rather than writing the board again.
+  const writes = c.writes.length
+  c.root.statusText = ''
+  c.root.layerTargets('front')
+  assert.equal(c.writes.length, writes, 'no move, no write')
+  assert.equal(order(), 'cab')
+  assert.match(c.root.statusText, /already at the front/)
+
+  // The order is what the file says, so it comes back the way it went in.
+  c.root.markedIds = []
+  c.root.selectOnly(0)
+  c.root.layerTargets('front')
+  const saved = S.writeFile(c.items, c.links, c.root.nextId)
+  const reopened = controller()
+  reopened.session.loadBoard(saved, false)
+  assert.equal(S.itemRows(reopened.items).map(r => r.text).join(''), order(),
+    'saving and opening again keeps the order')
+
+  // A background can be reordered among the backgrounds, and comes out of it
+  // still a background: which layer an item is in is not what this changes.
+  c.root.selectOnly(0)
+  const backgroundId = c.items.get(0).iid
+  c.root.togglePin()
+  assert.equal(S.itemRows(c.items).filter(r => r.pinned).length, 1)
+  c.root.togglePinnedSelection()
+  assert.equal(c.items.get(c.root.selectedIndex).iid, backgroundId, 'the backgrounds mode selects it')
+  c.root.layerTargets('front')
+  assert.equal(c.items.get(c.items.count - 1).iid, backgroundId, 'it moved')
+  assert.equal(c.items.get(c.items.count - 1).ipinned, true, 'and is still a background')
+  assert.equal(S.itemRows(c.items).filter(r => r.pinned).length, 1, 'with nothing else pinned or unpinned')
+
+  // A board that cannot be written to cannot be reordered either.
+  const ro = controller()
+  ro.session.loadBoard('{broken', false)
+  ro.root.layerTargets('front')
+  assert.equal(ro.items.count, 0)
+}
+console.log('ok — controller: bringing things forward and sending them back')
+{
+  // Everything a first board needs, done only by the names in the list — no
+  // keys, no chords. If this can be done here it can be done by someone who
+  // has never seen the keyboard shortcuts.
+  const S = loadStore()
+  const c = controller()
+  c.session.loadBoard('{"version":5,"items":[]}', false)
+  const offered = (name) => {
+    const found = S.matchCommands(name).filter(m => m.name === name)
+    assert.equal(found.length, 1, name + ' is offered by name')
+    c.root.runCommand(name)
+  }
+
+  offered('New note')
+  offered('New box')
+  assert.equal(c.items.count, 2, 'two things on the board')
+
+  // Connecting is two steps, the way it is with the key: the first says which
+  // end, the second says the other. The cursor moves between them the way it
+  // moves on the board — selecting afresh is what cancels a half-made link.
+  c.root.selectOnly(0)
+  offered('Connect to another')
+  assert.equal(c.root.linkingFrom, c.items.get(0).iid, 'one end is held')
+  c.root.selectedIndex = 1
+  offered('Connect to another')
+  assert.equal(c.links.count, 1, 'connected')
+
+  const wasTint = c.items.get(1).itint
+  offered('Change colour')
+  assert.notEqual(c.items.get(1).itint, wasTint, 'recoloured')
+
+  // Aligning needs two, and the list says so rather than doing nothing.
+  c.root.statusText = ''
+  offered('Align left edges')
+  assert.match(c.root.statusText, /mark two or more/, 'with one selected it says what it needs')
+  c.root.markedIds = [c.items.get(0).iid, c.items.get(1).iid]
+  c.items.setProperty(1, 'ix', 400)
+  offered('Align left edges')
+  assert.equal(c.items.get(1).ix, c.items.get(0).ix, 'aligned')
+
+  const before = c.items.count
+  offered('Duplicate')
+  assert.equal(c.items.count, before + 2, 'both copies, since both were marked')
+  assert.equal(c.links.count, 2, 'and the connector between them was copied too')
+
+  // And the same list, narrowed to what can be done with what is selected, is
+  // where all of those came from.
+  const actions = S.matchCommands('', 'selection').map(m => m.name)
+  for (const name of ['Connect to another', 'Change colour', 'Change shape', 'Duplicate',
+                      'Align left edges', 'Bring to front', 'Pin or unpin as background', 'Delete'])
+    assert.ok(actions.includes(name), name + ' is in the actions for a selection')
+}
+console.log('ok — controller: a first board built only from names in the list')

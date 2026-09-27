@@ -17,15 +17,19 @@ const S = loadStore()
 const cli = path.join(__dirname, '..', 'bin', 'omarchyform')
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'omarchyform-cli-'))
 
+// An isolated HOME: the CLI keeps its locks and backups under the library, and
+// a suite that writes into the library it is checking is not a suite.
+const env = { ...process.env, HOME: dir }
+
 function run(...args) {
-  const out = spawnSync(process.execPath, [cli, ...args], { encoding: 'utf8', input: '' })
+  const out = spawnSync(process.execPath, [cli, ...args], { encoding: 'utf8', input: '', env })
   let parsed = null
   try { parsed = JSON.parse(out.stdout) } catch { /* reported by the caller */ }
   return { status: out.status, out: parsed, raw: out.stdout + out.stderr }
 }
 
 function pipe(stdin, ...args) {
-  const out = spawnSync(process.execPath, [cli, ...args], { encoding: 'utf8', input: stdin })
+  const out = spawnSync(process.execPath, [cli, ...args], { encoding: 'utf8', input: stdin, env })
   let parsed = null
   try { parsed = JSON.parse(out.stdout) } catch { /* reported by the caller */ }
   return { status: out.status, out: parsed, raw: out.stdout + out.stderr }
@@ -212,6 +216,79 @@ try {
     }
     assert.deepEqual(listed.out.kinds, S.KINDS, 'kinds come from the board, not a copy')
     assert.deepEqual(listed.out.tints, S.TINTS, 'and so do tints')
+  }
+
+  {
+    // A board arrives in one step, because the shell watches the file while the
+    // board is open: a write anything else can see half of arrives there as a
+    // damaged board. And when it cannot be written at all, that is an answer
+    // like any other rather than a stack trace, with nothing left beside it.
+    const folder = path.join(dir, 'read-only')
+    fs.mkdirSync(folder)
+    const file = path.join(folder, 'i.json')
+    assert.equal(run('new', file).status, 0)
+    fs.chmodSync(folder, 0o500)
+    try {
+      const refused = pipe(JSON.stringify([{ op: 'add', args: ['note', 0, 0] }]), 'apply', file)
+      assert.equal(refused.status, 1, refused.raw)
+      assert.equal(refused.out.ok, false)
+      assert.match(refused.out.error, /cannot write/)
+      assert.deepEqual(fs.readdirSync(folder), ['i.json'], 'and nothing is left behind')
+    } finally { fs.chmodSync(folder, 0o700) }
+    // The original is untouched: it was never opened for writing.
+    assert.equal(asThePluginWouldLoad(file).rows.length, 0)
+  }
+
+  {
+    // The previous version is kept, whoever replaced it.
+    const file = path.join(dir, 'kept.json')
+    run('new', file, '--note', 'first')
+    const before = fs.readFileSync(file, 'utf8')
+    pipe(JSON.stringify([{ op: 'add', args: ['note', 0, 0, 200, 140, 'second'] }]), 'apply', file)
+    assert.equal(asThePluginWouldLoad(file).rows.length, 2)
+    assert.equal(fs.readFileSync(file + '.bak', 'utf8'), before, 'the version it replaced is beside it')
+
+    // And `new --force` over an existing board keeps that one too.
+    run('new', file, '--force', '--note', 'third')
+    assert.equal(asThePluginWouldLoad(file).rows.length, 1)
+    assert.equal(asThePluginWouldLoad(file + '.bak').rows.length, 2, 'the two-note board is the backup now')
+  }
+
+  {
+    // The write that arrives second. Something else takes the lock, changes
+    // the board while holding it, and lets go: the CLI read the version before
+    // that and has to be told rather than writing over it.
+    //
+    // The lock is where the plugin's own writes take it, so this is the same
+    // serialization both ends use, not a rehearsal of it.
+    const file = path.join(dir, 'contested.json')
+    run('new', file, '--note', 'original')
+    const lock = path.join(dir, '.local/share/omarchyform/locks',
+                           encodeURIComponent(path.resolve(file)) + '.lock')
+    fs.mkdirSync(path.dirname(lock), { recursive: true })
+    const other = JSON.stringify({ kind: 'omarchyform.board', version: 5, nextId: 2,
+      items: [{ id: 1, kind: 'note', x: 0, y: 0, w: 180, h: 140, tint: 'foreground',
+                text: 'written by somebody else', pinned: false }], links: [] })
+    const holder = require('child_process').spawn('bash',
+      ['-c', `flock ${JSON.stringify(lock)} -c 'sleep 0.4; printf %s ${JSON.stringify(other)} > ${JSON.stringify(file)}'`],
+      { detached: true, stdio: 'ignore' })
+    // Long enough for the lock to be held, short enough to be inside the sleep.
+    spawnSync('bash', ['-c', 'sleep 0.15'])
+    const refused = pipe(JSON.stringify([{ op: 'add', args: ['note', 0, 0] }]), 'apply', file)
+    holder.unref()
+    assert.equal(refused.status, 1, refused.raw)
+    assert.equal(refused.out.ok, false)
+    assert.match(refused.out.error, /changed since it was read/)
+    assert.match(refused.out.detail, /--force/)
+    assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).items[0].text, 'written by somebody else',
+      'and the other writer\'s board is the one on disk')
+
+    // --force is the same explicit overwrite the board itself offers, and it
+    // keeps what it replaced.
+    const forced = pipe(JSON.stringify([{ op: 'add', args: ['note', 0, 0] }]), 'apply', file, '--force')
+    assert.equal(forced.status, 0, forced.raw)
+    assert.equal(asThePluginWouldLoad(file).rows.length, 2)
+    assert.equal(JSON.parse(fs.readFileSync(file + '.bak', 'utf8')).items[0].text, 'written by somebody else')
   }
 
   console.log('ok — command line: boards built headlessly, loaded the way the plugin loads them')

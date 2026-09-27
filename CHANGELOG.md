@@ -7,6 +7,80 @@ since older boards are migrated on load rather than rejected.
 
 ### Added
 
+- Super+C and Super+V are the primary copy/paste shortcuts in the help and
+  command palette. The canvas accepts them directly; Ctrl+C and Ctrl+V remain
+  available. Omarchy’s universal clipboard bindings continue to work.
+
+- **What can be done with what is selected, on `.` or a right-click.** The same
+  panel the command palette uses, narrowed to the commands that act on a
+  selection — shape, colour, connect, duplicate, pin or unpin, layer order,
+  delete — and with every answer the `g` chord has offered by name, so aligning
+  two notes no longer needs the second key of a chord you have not learned. It
+  is the one command table, filtered: there is no second list to keep in step.
+
+- **Bring things forward, send them back.** `]` and `[` move the selected items
+  one step through the order overlapping things are drawn in; `}` and `{` take
+  them right to the front or the back. Several at once keep their order relative
+  to each other, so a group that overlaps itself moves as a group. Ids and
+  connectors are untouched — this moves rows in the board, which is what the
+  order has always been — so it survives saving, reopening, duplicating and
+  exporting, and undo puts it back. Pinning stays a separate thing: a background
+  is still a background afterwards, reordered among the other backgrounds.
+
+- **Every command by name, on `:`.** The keys are quick once they are in the
+  hands and useless before that: a board you have not opened in a month was a
+  list of letters to remember, and the header menu only ever held six of them.
+  `:` — or `ctrl+p`, or **Commands** in that menu — opens a list of all of them.
+  Type to narrow it, `enter` runs the highlighted one, `esc` closes it. It costs
+  no height until it is asked for, the same bargain the menu makes.
+
+  The list shows each command's key, so it teaches the keyboard while it is
+  used, and a command that cannot run at this moment is dimmed and says what it
+  is waiting for instead of appearing to do nothing. The commands are one table
+  in `BoardStore.js` that the palette dispatches through, and `tests/contract.js`
+  checks every entry against the key table in `Board.qml` and the controller
+  itself — so a key that moves, or a function that is renamed, cannot leave the
+  list teaching something that is no longer true.
+
+- **The command palette's query is a real text field too**, with the same caret
+  keys, selection, clipboard and input-method composition the other two have.
+  The keys the panel owns — enter, escape, the arrows, tab — go back to it
+  through one function, so a letter typed at the palette cannot reach the board
+  behind it. Unavailable commands now say what they are waiting for beside
+  their key, the row the keyboard is on carries a `›` as well as a tint, and the
+  controls this work touched carry accessible names, roles and actions.
+
+- **The find box and the name box are real text fields.** Both were a string
+  that grew at the end with a cursor drawn after it, so neither could be moved
+  through, selected in, pasted into, or typed in a language that needs an input
+  method — and a board can be written in one. They are `TextInput`s now, which
+  brings the caret keys, selection, the clipboard and composition with them.
+  Renaming opens with the current name selected, so one keystroke still replaces
+  it and an arrow key now edits it instead. The keys the board owns — `esc`,
+  `enter` — are handed back to it from one place, so a field that has somehow
+  not been given the keyboard cannot leave `esc` meaning "close the board".
+
+- **A copy saved to share carries its pictures.** A board in the library keeps
+  only the file name of a picture, so a screenshot is stored once however many
+  boards use it — and a copy sent to someone else arrived as a board of holes,
+  because a file name means nothing on a machine that has never seen your
+  `images/`. `ctrl+shift+s` now writes the bytes into the copy, base64 in an
+  `images` object beside the items, and `ctrl+o` writes them into your own
+  `images/` under names it picks before pointing the board at them.
+
+  Not a format bump: a key an older Omarchyform does not know is a key it
+  ignores, so such a copy still opens there with its pictures missing exactly as
+  they are missing today. A name that did not land is cleared rather than left
+  alone — a name from somebody else's board must never end up addressing a
+  picture in your library that happens to share it — and a picture that will not
+  decode is reported instead of leaving a hole. A board whose pictures come to
+  more than 16 MB is copied without them and says so, because half a board's
+  pictures is not something the person saving it could act on.
+
+  A pasted picture is held to the same 32 MB limit a dropped one always was. The
+  clipboard can hold a screenshot of a 4K desktop, and only one of the two ways
+  in was checking.
+
 - **A board you were sent opens by double-clicking it.** The installer now
   registers a file type and a small `omarchyform-open` command beside the
   launcher entry, and the board accepts a path from the shell — so a file
@@ -72,6 +146,100 @@ since older boards are migrated on load rather than rejected.
   `tests/run`; it is for the questions only eyes answer.
 
 ### Fixed
+
+- Pasted and dropped pictures now finish loading onto the canvas. The image
+  probe explicitly reads its own status instead of the status label in scope.
+  Added a live canvas regression for repeated pastes, undo/redo and saving.
+
+- Conflict resolution now reads the latest disk content and its revision under
+  the same lock as writes. Late replies cannot replace another board or newer
+  local edits. Failed replacements retain the disk snapshot and local edits,
+  and a save rejected during board switching cancels the pending switch so
+  resolution restores editing. Controller, filesystem and real QML regressions
+  cover these paths.
+
+- **A copy saved to share is a picture of one moment.** Collecting a board's
+  pictures takes long enough for the board to change underneath it: the export
+  read the live models *after* the pictures came back, so editing or switching
+  boards while it ran mixed two moments into one file. Everything the export
+  needs — the board as text, the pictures it names, which board it was and where
+  it is going — is taken when it starts and carried through every step, and an
+  answer belonging to an export that is no longer running is dropped rather than
+  published.
+
+- **A portable copy carries everything it names, or is not written.** A missing
+  picture, or pictures over the 16 MB a copy can carry, used to publish a copy
+  without them and mention it in a line that fades. Both now refuse before the
+  destination is touched, and **Save a copy without its pictures** is a separate
+  thing to ask for by name.
+
+  Coming the other way, a file over 32 MB is refused by its size before it is
+  read; a picture over 32 MB, or a set over 16 MB, is refused from the length of
+  its base64 rather than by decoding it; and a board carrying a picture that
+  cannot be read is refused whole rather than imported with items pointing at
+  nothing. The file you were given is never touched either way. Boards without
+  pictures — which is every board written before this — import as they always
+  did.
+
+- **Nothing resolves two versions of a board except choosing between them.**
+  Watching the file caught a board that changed underneath, but the flag that
+  said so was cleared by `flushSave()` — which closing, switching boards and
+  renaming all call. So walking away from a board wrote over the other version
+  without anyone deciding to. Flushing is routine again and resolves nothing;
+  switching boards waits for the choice; and the choice is three named
+  outcomes, on screen with what each one costs: keep the version from disk,
+  save your changes as a copy under a name of their own, or replace the version
+  on disk and keep what it replaced in backups. A resolution that fails puts
+  the question back with the edits still in hand.
+
+- **Every write to a board is coordinated.** Watching a file cannot be enough on
+  its own: a write can land before its notification arrives. Both the plugin and
+  `bin/omarchyform` now go through one helper that takes a lock, checks the file
+  is still the revision the writer read, keeps the version it is replacing, and
+  renames the new one into place. Two writers that read the same board cannot
+  both believe they are updating it — the second is refused and told, and the
+  CLI says so in its JSON and exits 1 rather than winning by arriving later.
+  `--force` is the explicit overwrite. This adds `flock` (util-linux) to the
+  `bash` and coreutils the plugin already needed.
+
+- **The command line and an open board no longer overwrite each other.** The
+  CLI writes a board straight to disk; the board kept its own copy in memory
+  and never looked at the file again, so `omarchyform apply` on the board you
+  had open was undone by your next keystroke, and the reverse lost whatever the
+  CLI had just written. The open board watches its file now. With nothing
+  unsaved on screen the newer version simply appears — run the CLI against the
+  open board and you watch it change. With changes on both sides the screen is
+  kept and autosave stops, the header says `Changed on disk` and the board says
+  what `ctrl+s` will do; an explicit save, or leaving the board, decides for the
+  screen and the version it replaces goes to backups like any other.
+
+  The CLI writes through a temporary and renames it into place, because
+  something watching the file must never be able to read half a board. A write
+  it cannot make is now an answer — `{"ok": false, …}` and exit 1 — instead of a
+  stack trace, and nothing is left beside the board.
+
+- Import and export had no way to report a failure. Three error paths called an
+  `exchange.fail()` that was never written, and a staging write that failed had
+  no handler at all — so a board that could not be read, a file that was not a
+  board, and a full disk each raised a `TypeError` or nothing, left the busy
+  flag set, and stranded importing and exporting for the rest of the session.
+  There is a `fail()` now: it clears the flag and says what happened.
+
+- The contract check reads what each file calls on itself. It had always
+  compared the names the views read off `ctl` against the controller, but a file
+  addressing itself by its own id was checked by nothing, which is how three
+  calls to a function that did not exist sat in `BoardExchange` until a review
+  found them. Only calls are checked: a property read off an id can come from
+  the base type, a method almost never does.
+
+- A picture dropped just before a board switch could land on the wrong board.
+  Each queued drop already remembered the board it was let go of, but the check
+  ran before the copy rather than after it, and the size the scene measures
+  comes back later still — so switching boards while a drop was in flight put
+  the picture on whatever was open when the measurement arrived, at a point that
+  was never on that board. The board is carried all the way through both
+  queues now, and anything answering for a board that has closed is dropped
+  with a line saying so.
 
 - CI installs `qml6-module-qtquick-shapes`, which the board now needs. It ships
   inside `qt6-declarative` on a real Omarchy machine, so there is no new

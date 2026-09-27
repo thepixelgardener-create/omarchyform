@@ -42,6 +42,9 @@ class RowModel {
   clear() { this.rows = [] }
   remove(i) { this.rows.splice(i, 1) }
   setProperty(i, role, value) { this.rows[i][role] = value }
+  // What a ListModel does: take n rows out at `from` and put them back at
+  // `to`, which is how the order items are painted in is changed.
+  move(from, to, n) { this.rows.splice(to, 0, ...this.rows.splice(from, n === undefined ? 1 : n)) }
 }
 
 

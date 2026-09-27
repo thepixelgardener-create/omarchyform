@@ -14,6 +14,7 @@ FocusScope {
   readonly property var rows: browser.ctl.browserRows
   readonly property bool searching: browser.ctl.browserSearching
   readonly property bool prompting: browser.ctl.browserPrompt !== ""
+  readonly property bool typing: browser.prompting || browser.searching
 
   // The path line, in the shape a shell would print it.
   readonly property string here: browser.ctl.browserTrash
@@ -60,20 +61,96 @@ FocusScope {
       anchors.margins: browser.ctl.sp(16)
       spacing: browser.ctl.sp(10)
 
-      Text {
+      // A name being typed, or a query, is a real text field: a drawn cursor
+      // after a string that only ever grew at the end could not be moved
+      // through, selected, pasted into, or composed in a language that needs an
+      // input method. The controller still owns the value — it is what commits
+      // the rename — and this is the thing the keyboard actually talks to.
+      Item {
         width: parent.width
-        elide: Text.ElideMiddle
-        color: browser.ctl.foreground
-        font.family: browser.ctl.fontFamily
-        font.pixelSize: browser.ctl.fontSubtitle
-        text: browser.ctl.trashIndexError !== "" ? browser.ctl.trashIndexError
-          : browser.ctl.browserMessage !== ""
-          ? browser.ctl.browserMessage
-          : browser.prompting
-            ? browser.ctl.browserPrompt + " " + browser.ctl.browserInput + "▏"
-            : browser.searching
-              ? "/" + browser.ctl.browserQuery + "▏"
-              : browser.here
+        height: Math.max(line.implicitHeight, typed.implicitHeight)
+
+        Text {
+          id: line
+          width: parent.width
+          visible: !browser.typing
+          elide: Text.ElideMiddle
+          color: browser.ctl.foreground
+          font.family: browser.ctl.fontFamily
+          font.pixelSize: browser.ctl.fontSubtitle
+          text: browser.ctl.trashIndexError !== "" ? browser.ctl.trashIndexError
+            : browser.ctl.browserMessage !== "" ? browser.ctl.browserMessage
+            : browser.here
+        }
+
+        Text {
+          id: label
+          visible: browser.typing
+          text: browser.prompting ? browser.ctl.browserPrompt + " " : "/"
+          color: browser.ctl.foreground
+          font.family: browser.ctl.fontFamily
+          font.pixelSize: browser.ctl.fontSubtitle
+        }
+
+        TextInput {
+          id: typed
+          visible: browser.typing
+          enabled: browser.typing
+          anchors.left: label.right
+          anchors.right: parent.right
+          clip: true
+          color: browser.ctl.foreground
+          selectionColor: browser.ctl.accent
+          selectedTextColor: browser.ctl.canvasBackground
+          selectByMouse: true
+          font.family: browser.ctl.fontFamily
+          font.pixelSize: browser.ctl.fontSubtitle
+          Accessible.role: Accessible.EditableText
+          Accessible.name: browser.prompting ? browser.ctl.browserPrompt : "Search the boards"
+
+          // Which field this is standing in for. Renaming opens it with the
+          // current name in it and everything selected, so one keystroke
+          // replaces it and an arrow key edits it instead.
+          readonly property string mode: browser.prompting ? "prompt " + browser.ctl.browserPrompt
+                                         : browser.searching ? "search" : ""
+          // Deferred: opening a prompt sets the label and then the name, and
+          // the second of those lands in this field on its own, cursor at the
+          // end and nothing selected. Selecting after both have arrived is what
+          // makes one keystroke replace the name rather than extend it.
+          onModeChanged: {
+            if (typed.mode === "") { browser.forceActiveFocus(); return }
+            Qt.callLater(function () {
+              if (!browser.typing) return
+              typed.text = browser.prompting ? browser.ctl.browserInput : browser.ctl.browserQuery
+              typed.forceActiveFocus()
+              typed.selectAll()
+            })
+          }
+
+          onTextChanged: {
+            if (browser.prompting) browser.ctl.browserInput = typed.text
+            else if (browser.searching && typed.text !== browser.ctl.browserQuery) {
+              browser.ctl.browserQuery = typed.text
+              browser.ctl.browserIndex = 0
+            }
+          }
+
+          // And it follows a value set from anywhere else, so the field and the
+          // controller cannot show different things. Both sides check before
+          // writing, so neither can chase the other.
+          readonly property string held: browser.prompting ? browser.ctl.browserInput
+                                         : browser.searching ? browser.ctl.browserQuery : typed.text
+          onHeldChanged: if (typed.held !== typed.text) typed.text = typed.held
+
+          // The browser decides what these mean; everything else is typing, and
+          // is left to the field — including the caret keys, the selection and
+          // whatever an input method is in the middle of composing.
+          Keys.onPressed: function (event) {
+            if (event.key === Qt.Key_Escape || event.key === Qt.Key_Return || event.key === Qt.Key_Enter
+                || event.key === Qt.Key_Up || event.key === Qt.Key_Down)
+              browser.ctl.browserKey(event)
+          }
+        }
       }
 
       Rectangle {
@@ -111,18 +188,35 @@ FocusScope {
 
             readonly property bool current: index === browser.ctl.browserIndex
 
+            Accessible.role: Accessible.ListItem
+            Accessible.name: label.text
+            Accessible.focused: current
+
             Rectangle {
               anchors.fill: parent
               visible: parent.current
               color: Qt.rgba(browser.ctl.accent.r, browser.ctl.accent.g, browser.ctl.accent.b, 0.18)
             }
 
+            // The cursor is a mark as well as a tint, so which row it is on
+            // does not depend on seeing the tint.
+            Text {
+              id: cursor
+              anchors.verticalCenter: parent.verticalCenter
+              anchors.left: parent.left
+              anchors.leftMargin: browser.ctl.sp(8)
+              text: parent.current ? "›" : " "
+              color: browser.ctl.accent
+              font.family: browser.ctl.fontFamily
+              font.pixelSize: browser.ctl.fontSubtitle
+            }
+
             Text {
               id: label
               anchors.verticalCenter: parent.verticalCenter
-              anchors.left: parent.left
+              anchors.left: cursor.right
               anchors.right: parent.right
-              anchors.leftMargin: browser.ctl.sp(8)
+              anchors.leftMargin: browser.ctl.sp(6)
               anchors.rightMargin: browser.ctl.sp(8)
               elide: Text.ElideMiddle
               color: browser.ctl.foreground

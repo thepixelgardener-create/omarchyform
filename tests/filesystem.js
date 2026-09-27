@@ -23,18 +23,28 @@ try {
   assert.notEqual(run('purge',trash,'../boards').status,0)
   fs.symlinkSync(boards,path.join(trash,'link'))
   assert.notEqual(run('purge',trash,'link').status,0)
-  assert.equal(run('backup',path.join(boards,'escape/a.json'),path.join(trash,'backup'),boards).status,3)
   assert.equal(fs.existsSync(path.join(boards,'a.json')),true)
   assert.equal(run('check',boards,'escape/a.json').status,3)
   assert.equal(run('check',boards,'a.json').status,0)
   assert.equal(run('check',boards,'not-yet/new.json').status,0)
+  const snapshot = run('snapshot', path.join(boards, 'a.json'), path.join(dir, 'snapshot.lock'), boards)
+  assert.equal(snapshot.status, 0)
+  const split = snapshot.stdout.indexOf('\n')
+  assert.equal(snapshot.stdout.slice(0, split), run('revision', path.join(boards, 'a.json')).stdout)
+  assert.equal(snapshot.stdout.slice(split + 1), 'new', 'snapshot carries exact bytes with their revision')
+  assert.notEqual(run('snapshot', path.join(boards, 'escape/a.json'), path.join(dir, 'snapshot.lock'), boards).status, 0)
   // A symlinked root is where the user keeps their data, not an escape.
   const linkedBoards=path.join(dir,'linked-boards'),linkedBackups=path.join(dir,'linked-backups')
   fs.mkdirSync(path.join(dir,'backups'))
   fs.symlinkSync(boards,linkedBoards)
   fs.symlinkSync(path.join(dir,'backups'),linkedBackups)
-  assert.equal(run('backup',path.join(linkedBoards,'a.json'),path.join(linkedBackups,'a.json.bak'),linkedBoards,linkedBackups).status,0)
-  assert.equal(fs.readFileSync(path.join(dir,'backups/a.json.bak'),'utf8'),'new')
+  assert.equal(spawnSync('bash',[path.join(__dirname,'../BoardFiles.sh'),'commit',
+    path.join(linkedBoards,'a.json'),path.join(linkedBackups,'a.json.bak'),
+    path.join(dir,'locks','linked.lock'),'-',linkedBoards,linkedBackups],
+    {encoding:'utf8',input:'through a linked root'}).status,0)
+  assert.equal(fs.readFileSync(path.join(dir,'backups/a.json.bak'),'utf8'),'new','the version it replaced')
+  assert.equal(fs.readFileSync(path.join(boards,'a.json'),'utf8'),'through a linked root')
+  fs.writeFileSync(path.join(boards,'a.json'),'new')
   assert.equal(run('purge',trash,'another').status,0)
   const staged=path.join(dir,'staged.json')
   fs.writeFileSync(staged,'{"version":4,"items":[]}')
@@ -57,11 +67,12 @@ try {
   const images=path.join(dir,'images'),stubs=path.join(dir,'stubs')
   for (const d of [images,stubs]) fs.mkdirSync(d)
   fs.writeFileSync(path.join(stubs,'wl-paste'),
-    '#!/usr/bin/env bash\nfor a in "$@"; do [[ $a == --list-types ]] && { printf \'%s\\n\' "$FAKE_TYPES"; exit 0; }; done\nprintf \'%s\' "$FAKE_BYTES"\n')
+    '#!/usr/bin/env bash\nfor a in "$@"; do [[ $a == --list-types ]] && { printf \'%s\\n\' "$FAKE_TYPES"; exit 0; }; done\nif [[ -n ${FAKE_FILE:-} ]]; then cat "$FAKE_FILE"; else printf \'%s\' "$FAKE_BYTES"; fi\n')
   fs.chmodSync(path.join(stubs,'wl-paste'),0o755)
-  const paste=(types,bytes,root,name)=>spawnSync('bash',
+  const paste=(types,bytes,root,name,file)=>spawnSync('bash',
     [path.join(__dirname,'../BoardFiles.sh'),'clipimage',root,name],
-    {encoding:'utf8',env:{...process.env,PATH:stubs+':'+process.env.PATH,FAKE_TYPES:types,FAKE_BYTES:bytes}})
+    {encoding:'utf8',env:{...process.env,PATH:stubs+':'+process.env.PATH,FAKE_TYPES:types,FAKE_BYTES:bytes,
+      FAKE_FILE:file===undefined?'':file}})
 
   assert.equal(paste('text/plain','hello',images,'paste-1').status,4,'no picture on the clipboard is not a failure')
   assert.deepEqual(fs.readdirSync(images),[],'and nothing is left behind')
@@ -144,10 +155,134 @@ try {
   assert.equal(drop('drop-5','huge.png').status,5,'a distinct code, so the message can differ')
   assert.equal(fs.existsSync(path.join(images,'drop-5.png')),false)
 
+  // A picture is a picture however it arrived, so the clipboard is held to the
+  // same limit. Checked here because the oversize fixture is written once.
+  assert.equal(paste('image/png','',images,'paste-4',path.join(source,'huge.png')).status,5)
+  assert.equal(fs.existsSync(path.join(images,'paste-4.png')),false)
+
   assert.equal(run('importimage',images,'drop-6',path.join(source,'absent.png')).status,4,'a path that is not there')
   assert.equal(run('importimage',images,'drop-7',source).status,4,'a directory is not a file')
   for (const bad of ['../escape','a/b','.hidden','-dash'])
     assert.notEqual(drop(bad,'shot.png').status,0,bad)
+
+  // The coordinated write: under a lock, and only onto the revision the writer
+  // last saw. Two writers that both read the same version is the whole point —
+  // the second one has to be told rather than win by arriving later.
+  const board=path.join(boards,'coordinated.json')
+  const lock=path.join(dir,'locks','coordinated.lock')
+  const backup=path.join(dir,'backups','coordinated.json.bak')
+  // The board itself goes in on stdin: one process does the whole write, so
+  // there is no half-written file of ours to leave behind.
+  const commit=(text,expected)=>spawnSync('bash',
+    [path.join(__dirname,'../BoardFiles.sh'),'commit',board,backup,lock,expected,boards,path.join(dir,'backups')],
+    {encoding:'utf8',input:text})
+
+  const wrote1=commit('one','')
+  assert.equal(wrote1.status,0,'nothing there yet is the empty revision')
+  assert.equal(fs.readFileSync(board,'utf8'),'one')
+  assert.ok(wrote1.stdout.length>0,'and it answers with the revision it wrote')
+  assert.equal(fs.existsSync(backup),false,'with nothing to keep the first time')
+
+  const wrote2=commit('two',wrote1.stdout)
+  assert.equal(wrote2.status,0)
+  assert.equal(fs.readFileSync(board,'utf8'),'two')
+  assert.equal(fs.readFileSync(backup,'utf8'),'one','the version it replaced is kept')
+  assert.notEqual(wrote2.stdout,wrote1.stdout,'and the revision moves')
+
+  // The stale write: the second writer read revision one and is still holding
+  // it while someone else has moved the file on.
+  const stale=commit('three',wrote1.stdout)
+  assert.equal(stale.status,7,'a distinct code, so the caller can ask a person')
+  assert.equal(fs.readFileSync(board,'utf8'),'two','and nothing was written')
+  assert.equal(stale.stdout,wrote2.stdout,'it says what is there now')
+  assert.deepEqual(fs.readdirSync(boards).filter(f=>f.startsWith('.omarchyform-')),[],
+    'the refused content is not left lying in the boards folder')
+
+  // `-` is the explicit overwrite: someone was asked and chose this version.
+  const forced=commit('four','-')
+  assert.equal(forced.status,0)
+  assert.equal(fs.readFileSync(board,'utf8'),'four')
+  assert.equal(fs.readFileSync(backup,'utf8'),'two','which still keeps what it replaced')
+
+  // The same revision the commit answered with is what `check` reports, so a
+  // board opened and a board written agree about what version they are on.
+  const seen=run('check',boards,'coordinated.json')
+  assert.equal(seen.status,0)
+  assert.equal(seen.stdout,forced.stdout,'check and commit speak the same revision')
+  assert.equal(run('revision',board).stdout,forced.stdout)
+  assert.equal(run('revision',path.join(boards,'not-here.json')).stdout,'','and nothing has no revision')
+  // Asked before a file is read into memory, so an absurd one can be refused
+  // without being loaded.
+  assert.equal(Number(run('filesize',board).stdout),fs.statSync(board).size)
+  assert.equal(run('filesize',path.join(boards,'not-here.json')).stdout,'0')
+
+  // And the same thing for real: two writers that both read the same revision,
+  // started together. The lock decides which goes first; the revision check
+  // decides that the other one is stale. Without the lock both could see the
+  // revision they expected before either had written.
+  const script=path.join(__dirname,'../BoardFiles.sh')
+  const backupsDir=path.join(dir,'backups')
+  const racer=(text,out)=>
+    `printf %s ${JSON.stringify(text)} | bash ${JSON.stringify(script)} commit ${JSON.stringify(board)} `
+    + `${JSON.stringify(backup)} ${JSON.stringify(lock)} ${JSON.stringify(run('revision',board).stdout)} `
+    + `${JSON.stringify(boards)} ${JSON.stringify(backupsDir)} >${JSON.stringify(out)} 2>&1; `
+    + `echo $? >${JSON.stringify(out + '.code')}`
+  const outA=path.join(dir,'race-a'),outB=path.join(dir,'race-b')
+  spawnSync('bash',['-c',`{ ${racer('racer A',outA)} ; } & { ${racer('racer B',outB)} ; } & wait`])
+  const codes=[outA,outB].map(f=>Number(fs.readFileSync(f+'.code','utf8').trim()))
+  assert.deepEqual(codes.slice().sort((x,y)=>x-y),[0,7],'exactly one of the two got through')
+  const winner=codes[0]===0?'racer A':'racer B'
+  assert.equal(fs.readFileSync(board,'utf8'),winner,'and the file holds that one, whole')
+  assert.equal(fs.readFileSync(backup,'utf8'),'four','with the version it replaced kept')
+
+  // The rules the old backup step had, kept: a path through a symlink is
+  // refused before anything is written.
+  const behindLink=spawnSync('bash',[path.join(__dirname,'../BoardFiles.sh'),'commit',
+    path.join(boards,'escape/a.json'),backup,lock,'-',boards,path.join(dir,'backups')],{encoding:'utf8',input:'x'})
+  assert.equal(behindLink.status,3)
+
+  // A copy saved to share carries its pictures inside it, so the bytes come out
+  // of the images folder here and go back into someone else's below.
+  const bundle=(budget,...names)=>run('bundleimages',images,String(budget),...names)
+  const carried=bundle(33554432,'drop-1.png','absent.png','copy-me.png')
+  assert.equal(carried.status,0)
+  const carriedLines=carried.stdout.replace(/\n$/,'').split('\n').map(l=>l.split('\t'))
+  assert.deepEqual(carriedLines.map(l=>l[0]),['drop-1.png','absent.png','copy-me.png'],
+    'one line each, in the order they were asked for')
+  assert.equal(carriedLines[1][1],'!missing','a picture the board names and the folder does not have')
+  assert.deepEqual(Buffer.from(carriedLines[0][1],'base64'),pngBytes,'and the bytes come back unchanged')
+  for (const bad of ['../escape.png','sub/dir.png','.hidden.png'])
+    assert.equal(bundle(33554432,bad).stdout.split('\t')[1].trim(),'!missing','no name a board would write: '+bad)
+
+  // The whole set or none of it: half a board's pictures is not something the
+  // person saving the copy could do anything about.
+  const overBudget=bundle(4,'drop-1.png','copy-me.png')
+  assert.equal(overBudget.status,0)
+  assert.match(overBudget.stdout,/^!toolarge\t\d+\n$/,'and it says how much there was')
+  assert.equal(overBudget.stdout.split('\t')[1].trim() > 4,true)
+
+  // Back in. The name is the caller's, the extension comes from the decoded
+  // bytes, and a picture that arrived inside a board is held to the same limit
+  // as one dropped onto it.
+  const staging=path.join(dir,'staged.b64')
+  const unbundle=(name,body)=>{fs.writeFileSync(staging,body); return run('unbundleimage',images,staging,name)}
+  const landed=unbundle('shared-1',pngBytes.toString('base64'))
+  assert.equal(landed.status,0)
+  assert.equal(landed.stdout,'shared-1.png','the caller is told the name it got')
+  assert.deepEqual(fs.readFileSync(path.join(images,'shared-1.png')),pngBytes)
+  assert.equal(fs.existsSync(staging),false,'and the staged bytes do not linger')
+
+  assert.equal(unbundle('shared-1',pngBytes.toString('base64')).status,6,'a name already taken')
+  assert.equal(unbundle('shared-2',Buffer.from('this is not a picture').toString('base64')).status,4,
+    'bytes that decode to something that is not a picture')
+  assert.equal(unbundle('shared-3','!! not base64 !!').status,4,'and bytes that do not decode at all')
+  assert.equal(unbundle('shared-4',
+    Buffer.concat([pngBytes,Buffer.alloc(33554433-pngBytes.length)]).toString('base64')).status,5,
+    'too large for a board, whichever way it arrived')
+  for (const bad of ['../escape','a/b','.hidden','-dash'])
+    assert.notEqual(unbundle(bad,pngBytes.toString('base64')).status,0,bad)
+  assert.deepEqual(fs.readdirSync(images).filter(f=>f.startsWith('shared-')),['shared-1.png'],
+    'nothing else landed')
 
   assert.deepEqual(fs.readdirSync(images).filter(f=>f.startsWith('.')),[],'no temporaries left behind')
 

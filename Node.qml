@@ -23,6 +23,12 @@ Item {
   required property bool ipinned
   required property string isrc
 
+  // Deliberately not carrying Accessible properties. Attaching them to the
+  // delegate broke grabToImage — the screenshot harness stopped producing a
+  // single picture, and the PNG export goes through the same call — so the
+  // names live on the chrome, where there are a handful of them rather than
+  // one per item on the board. What an item says is in its own text.
+
   // Whether this item is somewhere a person could actually be looking. An item
   // that is not takes no part in how the board looks: it reads as unmarked, as
   // no match, and at full strength, whatever the board says about it.

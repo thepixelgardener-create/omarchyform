@@ -107,10 +107,14 @@ FocusScope {
     property real lastY: 0
     property bool panning: false
     property bool additive: false
+    // A right button that never moved is a click, not a pan: the one gesture
+    // that asks what can be done with what is selected.
+    property bool dragged: false
 
     onPressed: function (mouse) {
       lastX = mouse.x
       lastY = mouse.y
+      dragged = false
       additive = (mouse.modifiers & Qt.ShiftModifier) !== 0
       // Backgrounds answer to the camera rather than the marquee: marks never
       // reach them, so a rectangle there would cost the pan and buy nothing.
@@ -125,8 +129,12 @@ FocusScope {
       }
       board.focusKeys()
     }
-    onReleased: {
+    onReleased: function (mouse) {
       panning = false
+      if (mouse.button === Qt.RightButton && !dragged) {
+        board.ctl.beginSelectionActions()
+        return
+      }
       if (!marquee.dragging) return
       var caught = marquee.wide
       marquee.dragging = false
@@ -143,6 +151,7 @@ FocusScope {
         return
       }
       if (!panning) return
+      if (Math.abs(mouse.x - lastX) + Math.abs(mouse.y - lastY) > 0) dragged = true
       board.ctl.panBy(mouse.x - lastX, mouse.y - lastY)
       lastX = mouse.x
       lastY = mouse.y
@@ -277,12 +286,12 @@ FocusScope {
     asynchronous: true
     property string pending: ""
     onStatusChanged: {
-      if (pending === "" || (status !== Image.Ready && status !== Image.Error)) return
+      if (pending === "" || (sizeProbe.status !== Image.Ready && sizeProbe.status !== Image.Error)) return
       var name = pending
       // Read off before the source is cleared: clearing it takes the natural
       // size with it.
-      var w = status === Image.Ready ? implicitWidth : 0
-      var h = status === Image.Ready ? implicitHeight : 0
+      var w = sizeProbe.status === Image.Ready ? sizeProbe.implicitWidth : 0
+      var h = sizeProbe.status === Image.Ready ? sizeProbe.implicitHeight : 0
       pending = ""
       source = ""
       board.ctl.pasteImage(name, w, h)
@@ -349,7 +358,13 @@ FocusScope {
       "+": function () { board.ctl.zoomCentre(1.2) },
       "=": function () { board.ctl.zoomCentre(1.2) },
       "-": function () { board.ctl.zoomCentre(1 / 1.2) },
-      "?": function () { board.ctl.helpVisible = !board.ctl.helpVisible }
+      "?": function () { board.ctl.toggleHelp() },
+      ":": function () { board.ctl.beginPalette() },
+      ".": function () { board.ctl.beginSelectionActions() },
+      "]": function () { board.ctl.layerTargets("forward") },
+      "[": function () { board.ctl.layerTargets("backward") },
+      "}": function () { board.ctl.layerTargets("front") },
+      "{": function () { board.ctl.layerTargets("back") }
     })
 
     // Matched on key codes as well as text: holding Ctrl turns the letter in
@@ -390,14 +405,39 @@ FocusScope {
         return
       }
 
-      // While finding, every printable key is the query. Enter steps to the
+      // Two versions of the board, and a question that does not go away. It
+      // takes the keyboard while it is up, but closing it decides nothing.
+      if (board.ctl.conflictVisible) {
+        var cd = keys.direction(event.key, event.text)
+        if (event.key === Qt.Key_Escape) board.ctl.endConflictChoice()
+        else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) board.ctl.runConflictChoice()
+        else if (event.text === "1") { board.ctl.conflictIndex = 0; board.ctl.runConflictChoice() }
+        else if (event.text === "2") { board.ctl.conflictIndex = 1; board.ctl.runConflictChoice() }
+        else if (event.text === "3") { board.ctl.conflictIndex = 2; board.ctl.runConflictChoice() }
+        else if (event.key === Qt.Key_Tab) board.ctl.moveConflict(shift ? -1 : 1)
+        else if (event.key === Qt.Key_Backtab) board.ctl.moveConflict(-1)
+        else if (cd) board.ctl.moveConflict(cd[1] !== 0 ? cd[1] : cd[0])
+        event.accepted = true
+        return
+      }
+
+      // The palette is open: the query is a text field with the keyboard in
+      // it, so what reaches here is what the field does not want. The list is
+      // walked with the arrows or tab rather than j and k — here those are
+      // letters, the same way they are while finding.
+      if (board.ctl.paletteVisible) {
+        board.paletteKey(event)
+        // Nothing else on the board runs while the palette is up, whether or
+        // not the field has the keyboard: a letter typed at it is a letter.
+        event.accepted = true
+        return
+      }
+
+      // The query is a text field with the keyboard in it, so what reaches
+      // here while finding is what the field does not want. Enter steps to the
       // next match rather than ending, because stepping is the common case.
       if (board.ctl.finding) {
-        if (event.key === Qt.Key_Escape) board.ctl.endFind()
-        else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) board.ctl.nextMatch()
-        else if (event.key === Qt.Key_Backspace) board.ctl.trimFind()
-        else if (event.text && event.text >= " " && !ctrl) board.ctl.extendFind(event.text)
-        event.accepted = true
+        board.findKey(event)
         return
       }
 
@@ -416,6 +456,16 @@ FocusScope {
         return
       }
 
+      // Omarchy normally forwards Super+C/V as Ctrl+C/V. Handle Meta
+      // directly too when the compositor leaves those chords to the app.
+      if ((event.modifiers & Qt.MetaModifier) !== 0) {
+        if (event.key === Qt.Key_C) board.ctl.copySelection()
+        else if (event.key === Qt.Key_V) board.ctl.pasteClipboard()
+        else return
+        event.accepted = true
+        return
+      }
+
       if (ctrl) {
         // Ctrl plus a movement key resizes, the same way Shift plus one moves.
         var rd = keys.direction(event.key, "")
@@ -430,6 +480,7 @@ FocusScope {
         else if (event.key === Qt.Key_V) board.ctl.pasteClipboard()
         else if (event.key === Qt.Key_O) board.ctl.importBoard()
         else if (event.key === Qt.Key_E) board.ctl.choosePng()
+        else if (event.key === Qt.Key_P) board.ctl.beginPalette()
         else return
         event.accepted = true
         return
@@ -446,7 +497,7 @@ FocusScope {
 
       if (event.key === Qt.Key_Escape) board.ctl.back()
       else if (event.key === Qt.Key_F2) board.ctl.renameBoard()
-      else if (event.key === Qt.Key_F1) board.ctl.helpVisible = !board.ctl.helpVisible
+      else if (event.key === Qt.Key_F1) board.ctl.toggleHelp()
       else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) board.ctl.editSelected()
       else if (event.key === Qt.Key_Tab) board.ctl.selectNext(1)
       else if (event.key === Qt.Key_Backtab) board.ctl.selectNext(-1)
@@ -517,6 +568,26 @@ FocusScope {
     }
   }
 
+  // Where the palette goes, for the same reason, and never both at once.
+  Conflict {
+    id: conflictPanel
+    objectName: "conflict-panel"
+    ctl: board.ctl
+    anchors.horizontalCenter: parent.horizontalCenter
+    y: toolbar.y + toolbar.height + board.ctl.sp(24)
+  }
+
+  // Under the header, where the eye already is when a command is wanted, and
+  // above the canvas because it is a mode rather than part of the board.
+  Commands {
+    id: commandPalette
+    objectName: "command-palette"
+    ctl: board.ctl
+    board: board
+    anchors.horizontalCenter: parent.horizontalCenter
+    y: toolbar.y + toolbar.height + board.ctl.sp(24)
+  }
+
   // The board browser sits above the canvas and takes the keyboard while open.
   Browser {
     anchors.fill: parent
@@ -533,6 +604,118 @@ FocusScope {
     id: help
     anchors.centerIn: parent
     ctl: board.ctl
+  }
+
+  // What the palette's query field does not own. Two callers: the field, which
+  // has the keyboard while the palette is up, and the board's handler behind
+  // it, so a field that has somehow not been given the keyboard cannot leave
+  // the board running commands under the panel.
+  function paletteKey(event) {
+    var ctrl = (event.modifiers & Qt.ControlModifier) !== 0
+    if (event.key === Qt.Key_Escape) board.ctl.endPalette()
+    else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) board.ctl.runPaletteChoice()
+    else if (event.key === Qt.Key_Down || event.key === Qt.Key_Tab) board.ctl.movePalette(1)
+    else if (event.key === Qt.Key_Up || event.key === Qt.Key_Backtab) board.ctl.movePalette(-1)
+    else if (ctrl && event.key === Qt.Key_N) board.ctl.movePalette(1)
+    else if (ctrl && event.key === Qt.Key_P) board.ctl.movePalette(-1)
+    else return
+    event.accepted = true
+  }
+
+  // What the query field does not own. The field has the keyboard while
+  // finding, so this is what it hands back; the board's own handler calls the
+  // same function, because a field that has somehow not been given the
+  // keyboard must not leave escape meaning "close the board".
+  function findKey(event) {
+    if (event.key === Qt.Key_Escape) board.ctl.endFind()
+    else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) board.ctl.nextMatch()
+    else return
+    event.accepted = true
+  }
+
+  // The find query, in the status line's place while it is being typed. A
+  // drawn cursor after a string that only ever grew at the end could not be
+  // moved through, selected, pasted into, or composed in a language that needs
+  // an input method — and the board it searches can be written in one.
+  Row {
+    id: findLine
+    visible: board.ctl.finding && !board.ctl.helpVisible && !board.ctl.browserVisible
+    anchors.horizontalCenter: parent.horizontalCenter
+    anchors.top: banner.visible ? banner.bottom : toolbar.bottom
+    anchors.topMargin: board.ctl.sp(8)
+    width: Math.min(parent.width - board.ctl.sp(32), implicitWidth)
+    height: implicitHeight
+
+    Text {
+      id: findLabel
+      text: "find: "
+      color: board.ctl.foreground
+      opacity: 0.85
+      font.family: board.ctl.fontFamily
+      font.pixelSize: board.ctl.fontBody
+    }
+
+    TextInput {
+      id: findField
+      // Wide enough to see the caret in an empty query, and it grows with what
+      // is typed rather than reserving a box the board has to look at.
+      width: Math.max(board.ctl.sp(24), Math.min(implicitWidth + board.ctl.sp(2), board.width / 3))
+      clip: true
+      color: board.ctl.foreground
+      selectionColor: board.ctl.accent
+      selectedTextColor: board.ctl.canvasBackground
+      selectByMouse: true
+      font.family: board.ctl.fontFamily
+      font.pixelSize: board.ctl.fontBody
+
+      // Typed into, it is the query. Set from anywhere else — a test, the
+      // screenshot harness, a find reopened on the query it had — it follows,
+      // so the two cannot show different things. Both sides check before
+      // writing, so neither can chase the other.
+      Accessible.role: Accessible.EditableText
+      Accessible.name: "Find on this board"
+      Accessible.description: board.ctl.findCount + " matches"
+
+      onTextChanged: board.ctl.setFindQuery(text)
+      readonly property string query: board.ctl.findQuery
+      onQueryChanged: if (findField.query !== findField.text) findField.text = findField.query
+
+      // Deferred for the same reason the browser's field defers: whatever
+      // else is being set as finding begins lands here on its own, and
+      // selecting has to be the last thing that happens.
+      readonly property bool wanted: board.ctl.finding
+      onWantedChanged: {
+        if (!wanted) { board.ctl.focusKeys(); return }
+        Qt.callLater(function () {
+          if (!board.ctl.finding) return
+          findField.text = board.ctl.findQuery
+          findField.forceActiveFocus()
+          findField.selectAll()
+        })
+      }
+
+      // The board decides what these two mean; everything else is typing.
+      Keys.onPressed: function (event) { board.findKey(event) }
+    }
+
+    Text {
+      textFormat: Text.StyledText
+      // As wide as it needs, and no wider: a Row is as wide as its children,
+      // and one child claiming the rest of the window pushes the line it is
+      // centred in over to the left. A theme with large text in a small window
+      // wraps it instead, the way the status line it stands in for wrapped.
+      width: Math.min(implicitWidth,
+                      Math.max(0, board.width - board.ctl.sp(32) - findLabel.width - findField.width))
+      wrapMode: Text.Wrap
+      color: board.ctl.foreground
+      opacity: 0.85
+      font.family: board.ctl.fontFamily
+      font.pixelSize: board.ctl.fontBody
+      text: (board.ctl.findQuery === "" ? ""
+             : " · " + (board.ctl.findCount === 0 ? "no match"
+                        : board.ctl.findCount === 1 ? "1 match" : board.ctl.findCount + " matches"))
+            + " · " + Store.hintLine(Store.FIND_HINTS, board.ctl.accentMarkup)
+    }
   }
 
   // Under the header rather than at the far edge: the name, the commands and
@@ -552,7 +735,7 @@ FocusScope {
     opacity: 0.85
     font.family: board.ctl.fontFamily
     font.pixelSize: board.ctl.fontBody
-    visible: !board.ctl.helpVisible && !board.ctl.browserVisible
+    visible: !board.ctl.helpVisible && !board.ctl.browserVisible && !board.ctl.finding
     // Markup, so a key can be a different colour from the word it sits in.
     // Everything reaching this line from a board file, a file name or the
     // keyboard is escaped on the way: this is the one place on the board that
@@ -560,17 +743,18 @@ FocusScope {
     textFormat: Text.StyledText
     text: board.ctl.saveError !== "" ? Store.escapeMarkup(board.ctl.saveError)
       : board.ctl.trashIndexError !== "" ? Store.escapeMarkup(board.ctl.trashIndexError)
-      : board.ctl.finding
-      ? "find: " + Store.escapeMarkup(board.ctl.findQuery) + "▏"
-        + (board.ctl.findQuery === "" ? ""
-           : " · " + (board.ctl.findCount === 0 ? "no match"
-                        : board.ctl.findCount === 1 ? "1 match" : board.ctl.findCount + " matches"))
-        + " · " + Store.hintLine(Store.FIND_HINTS, board.ctl.accentMarkup)
+      : board.ctl.paletteVisible
+      ? "commands · " + Store.hintLine(Store.PALETTE_HINTS, board.ctl.accentMarkup)
       : board.ctl.arranging
       ? "arrange · " + Store.hintLine(Store.ARRANGE_HINTS, board.ctl.accentMarkup)
       : board.ctl.showPinned
       ? "backgrounds · " + Store.hintLine(Store.PINNED_HINTS, board.ctl.accentMarkup)
       : board.ctl.statusText !== "" ? Store.escapeMarkup(board.ctl.statusText)
+      // The flash that said this fades; the choice does not, and autosave is
+      // waiting on it, so the line keeps saying so until one side wins.
+      : board.ctl.diskChanged
+      ? Store.escapeMarkup(board.ctl.boardTitle) + " changed on disk · "
+        + Store.hintMarkup("ctrl+s", "choose which version to keep", board.ctl.accentMarkup)
       : board.ctl.pendingBoard !== null ? "saving before switching boards…"
       : board.ctl.saving ? "saving…"
       : board.ctl.damaged && board.ctl.damageReason !== ""

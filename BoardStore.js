@@ -38,7 +38,9 @@ function normalizeTint(value) {
 
 // The header menu. One list, so the view draws what the controller dispatches
 // and a keyboard walk cannot drift out of step with what is on screen.
-var MENU_COMMANDS = ["New", "Boards", "Import", "Save copy", "Export PNG", "Help"]
+var MENU_COMMANDS = ["New", "Boards", "Import", "Save copy", "Export PNG", "Help", "Commands", "Fit", "Zoom"]
+
+var ZOOM_COMMANDS = ["Back", "25%", "50%", "75%", "100%", "125%", "150%", "200%", "300%", "400%"]
 
 // The outline of a painted shape, as SVG path data for a ShapePath.
 //
@@ -126,8 +128,12 @@ function hintLine(hints, color, separator) {
 
 // What each surface offers, as data: the view joins and colours them, and the
 // help panel below stays the one long list.
+// The palette answers to `:` as well, which is the sibling of `/` and the one
+// worth learning — but a key drawn in front of its own separator reads as
+// ":: commands", which looks like a typo on the one line that is meant to
+// teach. The chord is what this line says; the help list names both.
 var BOARD_HINTS = [["n", "note"], ["r", "rect"], ["e", "ellipse"], ["x", "connect"],
-                   ["/", "find"], ["?", "keys"], ["esc", "close"]]
+                   ["ctrl+p", "commands"], ["/", "find"], ["?", "keys"], ["esc", "close"]]
 var FIND_HINTS = [["enter", "next"], ["esc", "done"]]
 var ARRANGE_HINTS = [["hjkl", "edges"], ["c/m", "centres"], ["HJKL", "spread evenly"],
                      ["esc", "cancel"]]
@@ -140,13 +146,127 @@ var BROWSER_HINTS = [["jk", "move"], ["l/enter", "open"], ["h", "up"], ["/", "se
                      ["x", "trash"], ["t", "the trash"]]
 var TRASH_HINTS = [["jk", "move"], ["l/enter", "put it back"], ["x", "destroy it"],
                    ["t or esc", "back to the boards"]]
+var PALETTE_HINTS = [["tab", "next"], ["enter", "run"], ["esc", "close"]]
+// Leaving is a real answer here, so it says what leaving means rather than
+// calling itself "close": the two versions are both still there afterwards.
+var CONFLICT_HINTS = [["1 2 3 or tab", "choose"], ["enter", "do it"],
+                      ["esc", "decide later; nothing is lost either way"]]
 var PROMPT_HINTS = [["enter", "confirm"], ["esc", "cancel"]]
 var EMPTY_HINTS = [["a", "add a board"], ["A", "Add a folder"]]
 var START_HINTS = [["n", "New note"], ["Ctrl+V", "Paste text"]]
 
+// ---------------------------------------------------------------- commands
+// Every command the board has, as data. The keys were the only way in: a board
+// you have not used for a month is a list of letters you have to remember, and
+// a board you have never used is worse. This is what `:` searches, so a command
+// can be found by what it does rather than by the letter it answers to.
+//
+// `run` names a function on the controller and `arg` is what it takes, so the
+// palette dispatches exactly what a keystroke dispatches rather than a second
+// copy of it. `needs` is what has to be true for it to do anything: the
+// functions all guard themselves, but a palette that runs something and shows
+// nothing is worse than one that says why. `key` is the label shown beside the
+// name — tests/contract.js checks the single-character ones against the key
+// table in Board.qml, so the two cannot disagree about which letter does what.
+// An empty key means there is no keystroke for it: it is reached by name, or
+// from the panel that offers it.
+var COMMANDS = [
+  { name: "New note", key: "n", run: "addRelative", arg: "note", needs: "edit" },
+  { name: "New box", key: "r", run: "addRelative", arg: "rect", needs: "edit" },
+  { name: "New ellipse", key: "e", run: "addRelative", arg: "ellipse", needs: "edit" },
+  { name: "Type in it", key: "i", run: "editSelected", needs: "target" },
+  { name: "Change shape", key: "s", run: "cycleKind", needs: "target" },
+  { name: "Change colour", key: "c", run: "recolorItem", needs: "target" },
+  { name: "Connect to another", key: "x", run: "toggleLinking", needs: "target" },
+  { name: "Remove its connectors", key: "X", run: "unlinkSelected", needs: "target" },
+  { name: "Duplicate", key: "ctrl+d", run: "duplicateTargets", needs: "target" },
+  { name: "Delete", key: "del", run: "removeTargets", needs: "target" },
+  { name: "Align and spread", key: "g", run: "beginArrange", needs: "edit" },
+  // The chord's six answers, each with a name, so the second key is something
+  // to learn rather than something to know already.
+  { name: "Align left edges", key: "g h", run: "alignTargets", arg: "left", needs: "group" },
+  { name: "Align right edges", key: "g l", run: "alignTargets", arg: "right", needs: "group" },
+  { name: "Align top edges", key: "g k", run: "alignTargets", arg: "top", needs: "group" },
+  { name: "Align bottom edges", key: "g j", run: "alignTargets", arg: "bottom", needs: "group" },
+  { name: "Align centres across", key: "g c", run: "alignTargets", arg: "centreX", needs: "group" },
+  { name: "Align centres down", key: "g m", run: "alignTargets", arg: "centreY", needs: "group" },
+  { name: "Spread evenly across", key: "g H", run: "spreadTargets", arg: "x", needs: "group" },
+  { name: "Spread evenly down", key: "g J", run: "spreadTargets", arg: "y", needs: "group" },
+  { name: "Bring forward", key: "]", run: "layerTargets", arg: "forward", needs: "item" },
+  { name: "Send backward", key: "[", run: "layerTargets", arg: "backward", needs: "item" },
+  { name: "Bring to front", key: "}", run: "layerTargets", arg: "front", needs: "item" },
+  { name: "Send to back", key: "{", run: "layerTargets", arg: "back", needs: "item" },
+  { name: "Pin or unpin as background", key: "p", run: "togglePin", needs: "item" },
+  { name: "Select backgrounds", key: "P", run: "togglePinnedSelection", needs: "" },
+  { name: "Mark this one as well", key: "space", run: "toggleMark", needs: "" },
+  { name: "Mark everything", key: "a", run: "markAll", needs: "" },
+  { name: "Undo", key: "u", run: "undo", needs: "edit" },
+  { name: "Redo", key: "ctrl+r", run: "redo", needs: "edit" },
+  { name: "Copy out", key: "super+c", run: "copySelection", needs: "" },
+  { name: "Paste in", key: "super+v", run: "pasteClipboard", needs: "edit" },
+  { name: "Find in this board", key: "/", run: "beginFind", needs: "" },
+  { name: "Fit the board on screen", key: "f", run: "fitToItems", needs: "" },
+  { name: "Reset the view", key: "0", run: "resetView", needs: "" },
+  { name: "Zoom in", key: "+", run: "zoomCentre", arg: 1.2, needs: "" },
+  { name: "Zoom out", key: "-", run: "zoomCentre", arg: 1 / 1.2, needs: "" },
+  { name: "Fullscreen or windowed", key: "w", run: "toggleWindowMode", needs: "" },
+  { name: "Boards", key: "b", run: "openBrowser", needs: "" },
+  { name: "New board", key: "ctrl+n", run: "newBoard", needs: "" },
+  { name: "Name this board", key: "F2", run: "renameBoard", needs: "" },
+  { name: "Import a board", key: "ctrl+o", run: "importBoard", needs: "" },
+  { name: "Save a copy to share", key: "ctrl+shift+s", run: "exportBoard", needs: "" },
+  { name: "Save a copy without its pictures", key: "", run: "exportBoardPlain", needs: "" },
+  { name: "Export a PNG", key: "ctrl+e", run: "choosePng", needs: "" },
+  { name: "Save now", key: "ctrl+s", run: "flushSave", needs: "" },
+  // Only offered while two versions of the open board exist. They have no keys
+  // of their own: the panel that appears with the conflict numbers them, and
+  // this is how they are found by name.
+  { name: "Keep the version from disk", key: "", run: "conflictUseDisk", needs: "conflict" },
+  { name: "Save my changes as a copy", key: "", run: "conflictSaveCopy", needs: "conflict" },
+  { name: "Replace the version on disk", key: "", run: "conflictReplaceDisk", needs: "conflict" },
+  { name: "Menu in the header", key: "m", run: "toggleMenu", needs: "" },
+  { name: "Keys", key: "?", run: "toggleHelp", needs: "" },
+  // The two ways in do not list themselves.
+  { name: "Run a command", key: ":", run: "beginPalette", needs: "", listed: false },
+  { name: "Actions for the selection", key: ".", run: "beginSelectionActions", needs: "", listed: false }
+]
+
+// What to offer for what has been typed. A name that starts with the query is
+// what was meant more often than one that merely contains it, and the order is
+// otherwise the table's own, which groups by what the commands are for.
+// What a command needs before it can do anything, and which of those are
+// about the thing that is selected — the set a menu of actions for a selection
+// offers, as opposed to everything the board can do.
+var SELECTION_NEEDS = ["target", "item", "group"]
+
+function matchCommands(query, scope) {
+  var needle = String(query === undefined ? "" : query).toLowerCase().trim()
+  var leading = []
+  var rest = []
+  for (var i = 0; i < COMMANDS.length; i++) {
+    if (COMMANDS[i].listed === false) continue
+    if (scope === "selection" && SELECTION_NEEDS.indexOf(COMMANDS[i].needs) < 0) continue
+    if (needle === "") { rest.push(COMMANDS[i]); continue }
+    var name = COMMANDS[i].name.toLowerCase()
+    var at = name.indexOf(needle)
+    // The key is worth searching as well as the name: someone who half
+    // remembers the letter should be able to type it and see what it does.
+    // Tested before the substring, or a command whose name happens to contain
+    // that letter — align, chan(g)e — buries the one the letter belongs to.
+    if (at === 0 || COMMANDS[i].key.toLowerCase() === needle) leading.push(COMMANDS[i])
+    else if (at > 0) rest.push(COMMANDS[i])
+  }
+  return leading.concat(rest)
+}
+
+function commandByName(name) {
+  for (var i = 0; i < COMMANDS.length; i++) if (COMMANDS[i].name === name) return COMMANDS[i]
+  return null
+}
+
 var KEY_HELP = [
   ["ctrl+n / F2", "new board / name the current board"],
-  ["ctrl+v", "paste a picture, or clipboard text as a note"],
+  ["super+v", "paste a picture or text (also ctrl+v)"],
   ["ctrl+o", "import a native board"],
   ["ctrl+shift+s / ctrl+e", "export editable copy / PNG"],
   ["n", "new note beside the selected one"],
@@ -169,17 +289,21 @@ var KEY_HELP = [
   ["ctrl+d", "duplicate it, connectors between the copies included"],
   ["m", "show or hide the menu in the header"],
   ["m then h l / tab", "walk the menu; enter picks, esc closes"],
-  ["ctrl+c", "copy it out: a picture as a picture, anything else as its text"],
+  ["super+c", "copy a picture or text (also ctrl+c)"],
   ["/", "find: type to search the notes, enter steps through matches"],
   ["g then h j k l", "align the marked items on that edge"],
   ["g then c / m", "align their centres on one line"],
   ["g then H J K L", "spread them evenly, outermost two staying put"],
+  [". or right-click", "what can be done with what is selected"],
+  ["] / [", "bring forward / send backward, where they overlap"],
+  ["} / {", "bring right to the front / send right to the back"],
   ["c", "change its colour"],
   ["w", "fullscreen or windowed"],
   ["f", "fit the whole board on screen"],
   ["0", "reset the view"],
   ["+ / -", "zoom"],
   ["? / F1", "this list"],
+  [": / ctrl+p", "run any command by name, without knowing its key"],
   ["shift+click", "mark items together"],
   ["drag on canvas", "sweep a rectangle to mark everything it touches"],
   ["shift+drag", "sweep, keeping what was already marked"],
@@ -338,6 +462,181 @@ function writeFile(items, links, nextId) {
     items: itemRows(items),
     links: linkRows(links)
   }, null, 2) + "\n"
+}
+
+// --------------------------------------------------------------- layer order
+// Which item is drawn over which. The model's order is the paint order, so
+// moving an item within it is what "bring forward" means — nothing else about
+// the item changes, including whether it is pinned, which is a layer of its
+// own and stays one.
+//
+// Answers in moves rather than a new order, because a ListModel moves rows and
+// rebuilding it would tear down every delegate on the board. Applied in the
+// order they come back.
+//
+// Several items keep their order relative to each other: sending three items
+// to the back puts them at the back in the order they were already in, which
+// is what makes this usable on a group of things that overlap each other.
+function layerMoves(count, indices, where) {
+  var moves = []
+  if (!indices || indices.length === 0 || count <= 1) return moves
+  var picked = indices.slice().sort(function (a, b) { return a - b })
+  var i
+  // Already where it is being asked to go. Worth answering with nothing rather
+  // than a set of moves that cancel out: the board would be written again, and
+  // the person would be told something happened when it did not.
+  var settled = true
+  for (i = 0; i < picked.length; i++) {
+    var want = where === "front" ? count - picked.length + i : i
+    if ((where === "front" || where === "back") && picked[i] !== want) { settled = false; break }
+  }
+  if ((where === "front" || where === "back") && settled) return moves
+  if (where === "front") {
+    // Each one to the end, earliest first; every move shifts the ones after it
+    // down by one, which is what `moved` counts.
+    for (i = 0; i < picked.length; i++) {
+      var fromFront = picked[i] - i
+      if (fromFront !== count - 1) moves.push({ from: fromFront, to: count - 1 })
+    }
+  } else if (where === "back") {
+    // Each one to the start, latest first, so the earliest ends up first.
+    for (i = picked.length - 1; i >= 0; i--) {
+      var fromBack = picked[i] + (picked.length - 1 - i)
+      if (fromBack !== 0) moves.push({ from: fromBack, to: 0 })
+    }
+  } else if (where === "forward") {
+    // One step each, from the top down, and never past another of the picked
+    // ones: a group moving up keeps its shape.
+    var ceiling = count
+    for (i = picked.length - 1; i >= 0; i--) {
+      if (picked[i] + 1 >= ceiling) { ceiling = picked[i]; continue }
+      moves.push({ from: picked[i], to: picked[i] + 1 })
+      ceiling = picked[i] + 1
+    }
+  } else if (where === "backward") {
+    var floor = -1
+    for (i = 0; i < picked.length; i++) {
+      if (picked[i] - 1 <= floor) { floor = picked[i]; continue }
+      moves.push({ from: picked[i], to: picked[i] - 1 })
+      floor = picked[i] - 1
+    }
+  }
+  return moves
+}
+
+// ------------------------------------------------------------------- sharing
+// A board in the library keeps only the file name of a picture; the bytes live
+// once in images/, so the same screenshot on four boards is stored once. That is
+// the right shape for one machine with one library and the wrong shape for a
+// copy someone is sent, where the name means nothing — a shared board of
+// screenshots arrived as a board of holes.
+//
+// So a copy saved to share carries its pictures inside it, base64 in an `images`
+// object beside the items. One file, which is the whole point of being able to
+// send someone a board.
+//
+// Deliberately not a format bump, for the same reason the marker was not: a key
+// an older Omarchyform does not know is a key it ignores, so a copy saved here
+// still opens there, with its pictures missing exactly as they are missing
+// today.
+function imageNames(items) {
+  var seen = {}
+  var names = []
+  for (var i = 0; i < items.count; i++) {
+    var row = items.get(i)
+    if (row.kind !== "image" || !imageIsValid(row.isrc) || seen[row.isrc]) continue
+    seen[row.isrc] = true
+    names.push(row.isrc)
+  }
+  return names
+}
+
+// Takes the board as text rather than as models, because a copy being saved is
+// a picture of one moment and the models move on while its pictures are being
+// read out of the library.
+function withEmbeddedImages(raw, images) {
+  var parsed
+  try { parsed = JSON.parse(raw) } catch (e) { return raw }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return raw
+  if (images && Object.keys(images).length > 0) parsed.images = images
+  return JSON.stringify(parsed, null, 2) + "\n"
+}
+
+// What a shared copy brought with it. Every byte here was written by someone
+// else, and a name decides a path on disk, so anything that is not a name this
+// would write itself is dropped rather than repaired.
+var BASE64_BODY = /^[A-Za-z0-9+/\r\n]+={0,2}$/
+
+// What a board is allowed to carry. The same ceiling a dropped picture has for
+// one image, and a total that keeps the encoded copy something a process can
+// hand over in one piece. Checked from the length of the base64 rather than by
+// decoding it: four characters are three bytes, and a file that is too big to
+// accept should be refused before it is turned into bytes.
+var MAX_IMAGE_BYTES = 33554432
+var MAX_BUNDLE_BYTES = 16777216
+
+function decodedSize(base64) {
+  var padding = base64.length > 1 && base64.charAt(base64.length - 1) === "="
+    ? (base64.charAt(base64.length - 2) === "=" ? 2 : 1) : 0
+  return Math.floor(base64.length * 3 / 4) - padding
+}
+
+// How many pictures the file says it carries, whether or not they survive
+// being looked at. The difference between this and what sharedImages returns
+// is how much of the board did not arrive.
+function declaredImageCount(raw) {
+  var parsed
+  try { parsed = JSON.parse(raw) } catch (e) { return 0 }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return 0
+  var images = parsed.images
+  if (!images || typeof images !== "object" || Array.isArray(images)) return 0
+  return Object.keys(images).length
+}
+
+function sharedImages(raw) {
+  var parsed
+  try { parsed = JSON.parse(raw) } catch (e) { return {} }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {}
+  var images = parsed.images
+  if (!images || typeof images !== "object" || Array.isArray(images)) return {}
+  var out = {}
+  var total = 0
+  var names = Object.keys(images)
+  for (var i = 0; i < names.length; i++) {
+    var body = images[names[i]]
+    if (!imageIsValid(names[i]) || typeof body !== "string" || body === "") continue
+    if (!BASE64_BODY.test(body)) continue
+    var size = decodedSize(body)
+    if (size <= 0 || size > MAX_IMAGE_BYTES) continue
+    total += size
+    if (total > MAX_BUNDLE_BYTES) break
+    out[names[i]] = body
+  }
+  return out
+}
+
+// The pictures landed under names this machine chose, because the ones they
+// arrived with may already be taken here. Point the items at where the bytes
+// actually are and drop the bytes themselves: they are in images/ now.
+//
+// A name that did not land is cleared rather than left alone. A shared copy is
+// self-contained by construction, so a picture it did not carry is not one this
+// machine has — and a name from someone else's board must never end up
+// addressing a file in this one's library. Cleared, the item loads as an empty
+// note, because "image" is not one of KINDS without a picture to be.
+function withSharedImages(raw, landed) {
+  var parsed
+  try { parsed = JSON.parse(raw) } catch (e) { return raw }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return raw
+  delete parsed.images
+  var rows = Array.isArray(parsed.items) ? parsed.items
+    : (Array.isArray(parsed.notes) ? parsed.notes : [])
+  for (var i = 0; i < rows.length; i++) {
+    if (!rows[i] || typeof rows[i] !== "object" || Array.isArray(rows[i])) continue
+    if (rows[i].src === undefined || rows[i].src === "") continue
+    rows[i].src = landed[rows[i].src] === undefined ? "" : landed[rows[i].src]
+  }
+  return JSON.stringify(parsed, null, 2) + "\n"
 }
 
 // ------------------------------------------------------------------- library

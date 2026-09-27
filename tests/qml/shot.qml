@@ -93,8 +93,7 @@ ShellRoot {
         plugin.showPinned = false
         plugin.selectedIndex = 0
         plugin.beginFind()
-        plugin.extendFind("m")
-        plugin.extendFind("a")
+        plugin.setFindQuery("ma")
       }
     },
     {
@@ -107,9 +106,48 @@ ShellRoot {
       }
     },
     {
-      name: "09-help",
+      name: "08b-commands",
       setup: function () {
         plugin.cancelArrange()
+        plugin.markedIds = []
+        // Nothing selected, so the commands that need something to act on say
+        // what they are waiting for rather than looking available.
+        plugin.selectedIndex = -1
+        plugin.beginPalette()
+      }
+    },
+    {
+      name: "08c-commands-narrowed",
+      setup: function () {
+        plugin.setPaletteQuery("co")
+      }
+    },
+    {
+      // What can be done with what is selected: the same panel, opened on the
+      // commands that act on it, with the arrangement chord's answers named.
+      name: "08d-selection-actions",
+      setup: function () {
+        plugin.endPalette()
+        plugin.selectOnly(5)
+        plugin.markedIds = [plugin.items.get(5).iid, plugin.items.get(6).iid]
+        plugin.beginSelectionActions()
+        plugin.setPaletteQuery("a")
+      }
+    },
+    {
+      // Two versions of one board. The panel is what a person is asked, so it
+      // is worth looking at in every theme the board is drawn in.
+      name: "08e-two-versions",
+      setup: function () {
+        plugin.endPalette()
+        plugin.conflictVisible = true
+        plugin.conflictIndex = 1
+      }
+    },
+    {
+      name: "09-help",
+      setup: function () {
+        plugin.conflictVisible = false
         plugin.markedIds = []
         plugin.helpVisible = true
       }
@@ -127,8 +165,17 @@ ShellRoot {
       // the row under the cursor. The entries are planted rather than written
       // to disk — the isolated HOME has one board in it, and thirty files
       // would say nothing thirty rows do not.
+      // Naming a board: the one place the browser shows a text field, with the
+      // name it opened on selected so a keystroke replaces it.
+      name: "10a-naming",
+      setup: function () {
+        plugin.prompt("rename", "new name:", "quarterly plan")
+      }
+    },
+    {
       name: "10b-browser-scrolling",
       setup: function () {
+        plugin.cancelPrompt()
         var rows = []
         for (var i = 1; i <= 30; i++) rows.push({ path: "board-" + i + ".json", dir: false })
         plugin.browserEntries = rows
@@ -154,6 +201,48 @@ ShellRoot {
     {
       name: "12-failed-save",
       setup: function () { plugin.flash("Could not write the board — ctrl+s to retry") }
+    },
+    {
+      // The picture in the README. Composed rather than caught in use: it is
+      // the first thing a reader sees, so it says what the board is for in the
+      // items themselves. It lives here because the last one was arranged by
+      // hand and never written down, and so went on showing a header and a
+      // hint row that had both since moved.
+      name: "13-preview",
+      setup: function () {
+        plugin.statusText = ""
+        plugin.selectedIndex = -1
+        plugin.markedIds = []
+        plugin.items.clear()
+        plugin.links.clear()
+        plugin.addItem("note", 240, 200)
+        plugin.items.setProperty(0, "itext", "Freeform, but it\nbelongs to the desktop")
+        plugin.addItem("rect", 660, 180)
+        plugin.items.setProperty(1, "itext", "Keyboard first.\nMouse works too.")
+        plugin.addItem("diamond", 1080, 360)
+        plugin.items.setProperty(2, "itext", "Many boards,\none key away")
+        plugin.addItem("note", 240, 560)
+        plugin.items.setProperty(3, "itext", "Notes, boxes,\nellipses, diamonds")
+        plugin.addItem("ellipse", 660, 600)
+        plugin.items.setProperty(4, "itext", "Connect them")
+        plugin.addLink(plugin.items.get(0).iid, plugin.items.get(1).iid)
+        plugin.addLink(plugin.items.get(1).iid, plugin.items.get(2).iid)
+        plugin.addLink(plugin.items.get(3).iid, plugin.items.get(4).iid)
+        plugin.addLink(plugin.items.get(4).iid, plugin.items.get(2).iid)
+        plugin.stopEditing()
+        plugin.selectedIndex = -1
+        plugin.fitToItems()
+        // A fit centres the board in the window, which on a tall one leaves a
+        // band of nothing under the header. The picture is cropped to the top
+        // of the window, so the items are pulled up against the chrome first —
+        // measured, because the window is whatever size the compositor gave us.
+        var top = Infinity
+        for (var i = 0; i < plugin.items.count; i++)
+          top = Math.min(top, plugin.items.get(i).iy)
+        plugin.camY -= plugin.toScreenY(top) - (plugin.activeBoard.headerHeight + 56)
+        plugin.repaintGrid()
+        plugin.repaintLinks()
+      }
     }
   ]
 

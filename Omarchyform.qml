@@ -133,7 +133,8 @@ Item {
   property bool imageBusy: false
   readonly property bool exchangeBusy: exchange.busy
   readonly property bool dialogOpen: exchange.dialogOpen
-  readonly property string boardState: root.damaged ? "Read only" : root.saveError !== "" ? "Save failed" : root.saving ? "Saving…" : "Saved locally"
+  readonly property string boardState: root.damaged ? "Read only" : root.saveError !== "" ? "Save failed"
+    : root.diskChanged ? "Changed on disk" : root.saving ? "Saving…" : "Saved locally"
   onBoardLoadedChanged: if (root.boardLoaded && root.pendingFirstNote === root.currentBoard) {
     root.pendingFirstNote = ""
     Qt.callLater(function() {
@@ -173,12 +174,24 @@ Item {
 
   function enqueueImage(name, wx, wy, atPoint) {
     var q = root.imageQueue.slice()
-    q.push({ name: name, x: wx, y: wy, atPoint: atPoint })
+    q.push({ name: name, x: wx, y: wy, atPoint: atPoint, board: root.currentBoard })
     root.imageQueue = q
     if (q.length === 1) root.pumpImages()
   }
 
+  // Each waiting picture names the board it was meant for. Measuring is a round
+  // trip through the scene, so a board switch can happen between asking and
+  // being answered, and anything waiting for a board that is no longer open is
+  // dropped here instead of landing on the one that is.
   function pumpImages() {
+    var waiting = root.imageQueue
+    var stale = 0
+    while (waiting.length > stale && waiting[stale].board !== root.currentBoard) stale += 1
+    if (stale > 0) {
+      root.imageQueue = waiting.slice(stale)
+      root.flash(stale === 1 ? "Board changed; that picture was not added"
+                             : "Board changed; " + stale + " pictures were not added")
+    }
     if (root.imageQueue.length === 0) return
     if (root.activeBoard) root.activeBoard.probeImage(root.imageQueue[0].name)
     else root.pasteImage(root.imageQueue[0].name, 0, 0)
@@ -208,6 +221,13 @@ Item {
     var placing = root.imageQueue.length > 0 && root.imageQueue[0].name === name
       ? root.imageQueue[0] : null
     if (placing) root.imageQueue = root.imageQueue.slice(1)
+    // The size arrived after a board switch. The point this was meant for
+    // belongs to a board that is no longer open, so the picture is not placed.
+    if (placing && placing.board !== root.currentBoard) {
+      root.flash("Board changed; that picture was not added")
+      root.pumpImages()
+      return
+    }
     if (!root.canEdit || !Store.imageIsValid(name)) { root.pumpImages(); return }
     var w = naturalWidth > 0 ? naturalWidth : 320
     var h = naturalHeight > 0 ? naturalHeight : 240
@@ -242,6 +262,10 @@ Item {
   function pasteClipboard() { exchange.paste() }
   function importBoard() { exchange.choose("import") }
   function exportBoard() { exchange.choose("json") }
+  // The copy that deliberately leaves the pictures behind. Asking for it is a
+  // separate thing with a name of its own, because a copy that quietly arrives
+  // without them is what this used to do by accident.
+  function exportBoardPlain() { exchange.choose("plain") }
   function choosePng() { exchange.choose("png") }
   function exportPng(path) { if (root.activeBoard) root.activeBoard.exportPng(path) }
 
@@ -300,9 +324,13 @@ Item {
       if (editFirst) root.pendingFirstNote = path
       root.openBoard(path, false)
       root.rescan()
-      root.flash(editFirst ? "New board · F2 to name it" : "Board imported")
+      root.flash(editFirst ? "New board · F2 to name it" : "Board imported" + exchange.createdNote)
     }
     onFinished: function(message) { root.flash(message) }
+    onCopied: function(name) {
+      root.rescan()
+      session.keptAsCopy(name)
+    }
   }
 
   // A line that says what just happened and then goes away. Deleting is one
@@ -326,6 +354,59 @@ Item {
   readonly property bool damaged: session.damaged
   readonly property string damageReason: session.damageReason
   readonly property string saveError: session.saveError
+  // Someone else wrote this board while it was open and the screen has changes
+  // of its own. Autosave is waiting, and nothing but a choice clears it.
+  readonly property bool diskChanged: session.conflict
+  // The panel that offers the three ways out. The conflict itself is shown
+  // whether or not this is open, because it does not go away by being ignored.
+  property bool conflictVisible: false
+  property int conflictIndex: 0
+
+  function decideConflict() {
+    if (!root.diskChanged) return
+    root.stopEditing()
+    root.paletteVisible = false
+    root.menuVisible = false
+    root.conflictVisible = true
+    root.conflictIndex = 0
+    root.focusKeys()
+  }
+
+  function endConflictChoice() {
+    root.conflictVisible = false
+    root.focusKeys()
+  }
+
+  function moveConflict(step) {
+    var n = 3
+    root.conflictIndex = ((root.conflictIndex + step) % n + n) % n
+  }
+
+  function runConflictChoice() {
+    if (root.conflictIndex === 0) root.conflictUseDisk()
+    else if (root.conflictIndex === 1) root.conflictSaveCopy()
+    else root.conflictReplaceDisk()
+  }
+
+  function conflictUseDisk() {
+    root.conflictVisible = false
+    session.useDisk()
+  }
+
+  function conflictReplaceDisk() {
+    root.conflictVisible = false
+    session.replaceDisk()
+  }
+
+  // The copy is written through the same publisher a new board goes through,
+  // so it lands under a name nothing else has. Only once it is actually there
+  // does the board take the version from disk.
+  function conflictSaveCopy() {
+    if (!root.diskChanged || root.exchangeBusy) return
+    root.conflictVisible = false
+    var base = Store.baseName(root.currentBoard).replace(/\.json$/i, "")
+    exchange.saveCopy(Store.writeFile(itemModel, linkModel, root.nextId), base + "-mine")
+  }
   readonly property bool saving: session.busy
   readonly property var pendingBoard: session.pendingBoard
   readonly property bool canEdit: session.canEdit && !root.browserBusy && !root.imageBusy
@@ -631,24 +712,46 @@ Item {
   // The commands in the menu all have keys of their own, so the menu is a
   // reminder rather than the way in, and it costs no height until asked for.
   property bool menuVisible: false
+  property bool zoomMenuVisible: false
   // Which item the keyboard is on. Opening starts at the first, so the menu can
   // be walked without reaching for the mouse.
   property int menuIndex: 0
 
   function toggleMenu() {
     root.menuVisible = !root.menuVisible
+    root.zoomMenuVisible = false
     root.menuIndex = 0
     root.focusKeys()
   }
 
   function moveMenu(step) {
-    var n = Store.MENU_COMMANDS.length
+    var n = root.zoomMenuVisible ? Store.ZOOM_COMMANDS.length : Store.MENU_COMMANDS.length
     root.menuIndex = ((root.menuIndex + step) % n + n) % n
   }
 
   // The dispatch lives here rather than in the toolbar, so a click and a
   // keystroke take the same path and the list can be tested without a scene.
   function runMenu(index) {
+    if (root.zoomMenuVisible) {
+      if (index === 0) {
+        root.zoomMenuVisible = false
+        root.menuIndex = Store.MENU_COMMANDS.indexOf("Zoom")
+        return
+      }
+      if (index < 1 || index >= Store.ZOOM_COMMANDS.length) return
+      root.zoomCentre(parseInt(Store.ZOOM_COMMANDS[index]) / 100 / root.zoom)
+      root.zoomMenuVisible = false
+      root.menuVisible = false
+      root.menuIndex = 0
+      root.focusKeys()
+      return
+    }
+    if (index === Store.MENU_COMMANDS.indexOf("Zoom")) {
+      root.zoomMenuVisible = true
+      root.menuIndex = Math.max(1, Store.ZOOM_COMMANDS.indexOf(Math.round(root.zoom * 100) + "%"))
+      root.focusKeys()
+      return
+    }
     root.menuVisible = false
     root.menuIndex = 0
     if (index === 0) root.newBoard()
@@ -657,6 +760,115 @@ Item {
     else if (index === 3) root.exportBoard()
     else if (index === 4) root.choosePng()
     else if (index === 5) root.helpVisible = true
+    else if (index === 6) root.beginPalette()
+    else if (index === 7) root.fitToItems()
+  }
+
+  function toggleHelp() { root.helpVisible = !root.helpVisible }
+
+  // ------------------------------------------------------------- the palette
+  // Every command by name. The keys are fast once they are in your hands and
+  // useless before that: a board you have not opened in a month is a list of
+  // letters to remember, and one you have never opened is worse. `:` opens
+  // this, typing narrows it, enter runs it — and what it runs is the function
+  // the key runs, because both come out of the one table in BoardStore.
+  property bool paletteVisible: false
+  property string paletteQuery: ""
+  property int paletteIndex: 0
+  // "all" is every command; "selection" is the ones that act on what is
+  // selected, which is what a menu of actions for it offers.
+  property string paletteScope: "all"
+  readonly property var paletteMatches: root.paletteVisible
+    ? Store.matchCommands(root.paletteQuery, root.paletteScope) : []
+  // How many rows the panel draws. The rest are still there to be typed at.
+  readonly property int paletteRows: 9
+
+  // The same panel, opened on the commands that act on what is selected. A
+  // menu of actions rather than a second list to keep in step with the first:
+  // it is the one table, filtered, dispatched the same way.
+  function beginSelectionActions() {
+    if (!root.canEdit) return
+    if (root.targets().length === 0 && !(root.selected() && root.selected().ipinned)) {
+      root.flash("nothing selected · space marks the one under the cursor")
+      return
+    }
+    root.beginPalette("selection")
+  }
+
+  function beginPalette(scope) {
+    if (!root.boardLoaded && !root.damaged) return
+    root.paletteScope = scope === "selection" ? "selection" : "all"
+    root.stopEditing()
+    root.menuVisible = false
+    root.paletteVisible = true
+    root.paletteQuery = ""
+    root.paletteIndex = 0
+    root.focusKeys()
+  }
+
+  function endPalette() {
+    root.paletteVisible = false
+    root.paletteQuery = ""
+    root.paletteIndex = 0
+  }
+
+  // One way for the query to change, whether it came from the field in the
+  // panel, a test, or the screenshot harness. The cursor goes back to the top,
+  // because the row it was on now means something else.
+  function setPaletteQuery(text) {
+    if (text === root.paletteQuery) return
+    root.paletteQuery = text
+    root.paletteIndex = 0
+  }
+
+  function movePalette(step) {
+    var n = root.paletteMatches.length
+    if (n === 0) return
+    root.paletteIndex = ((root.paletteIndex + step) % n + n) % n
+  }
+
+  // Whether a command can do anything at this moment. Every one of these
+  // functions already refuses politely on its own, but a command run from a
+  // list that then appears to do nothing teaches the wrong thing about it.
+  function commandReady(needs) {
+    if (needs === "conflict") return root.diskChanged
+    if (needs === "edit") return root.canEdit
+    if (!root.canEdit) return needs === ""
+    if (needs === "target") return root.targets().length > 0
+    // A background under the cursor counts: which one is on top, and whether
+    // it stays a background at all, are questions about it.
+    if (needs === "item") return root.targets().length > 0 || (root.selected() !== null && root.selected().ipinned)
+    if (needs === "group") return root.targets().length >= 2
+    return true
+  }
+
+  function commandExcuse(needs) {
+    if (needs === "conflict") return "this board has not changed underneath you"
+    if (!root.canEdit) return root.damaged ? "this board is read-only" : "the board is not ready yet"
+    if (needs === "group") return "mark two or more"
+    if (needs === "target" || needs === "item") return "nothing is selected"
+    return "not now"
+  }
+
+  function runPaletteChoice() {
+    var choice = root.paletteMatches[root.paletteIndex]
+    if (!choice) { root.flash(root.paletteQuery === "" ? "no commands" : "no command goes by that"); return }
+    root.endPalette()
+    root.runCommand(choice.name)
+  }
+
+  // The one dispatch. A name that is not in the table runs nothing, and a
+  // function the table names but the controller does not have would be a
+  // mistake in the table — which tests/contract.js refuses to let ship.
+  function runCommand(name) {
+    var command = Store.commandByName(name)
+    if (!command || typeof root[command.run] !== "function") return
+    if (!root.commandReady(command.needs)) {
+      root.flash(command.name + " · " + root.commandExcuse(command.needs))
+      return
+    }
+    if (command.arg === undefined) root[command.run]()
+    else root[command.run](command.arg)
   }
 
   // Finding is navigation, not editing, so it works on a board that cannot be
@@ -686,13 +898,12 @@ Item {
     root.findCount = 0
   }
 
-  function extendFind(text) {
-    root.findQuery += text
-    root.refreshFind()
-  }
-
-  function trimFind() {
-    root.findQuery = root.findQuery.slice(0, -1)
+  // One way for the query to change, whether it came from the field on the
+  // board, a test, or the screenshot harness — so what is exercised without a
+  // scene is what typing into it does.
+  function setFindQuery(text) {
+    if (text === root.findQuery) return
+    root.findQuery = text
     root.refreshFind()
   }
 
@@ -829,6 +1040,34 @@ Item {
 
   // The cursor item decides the next value and the rest follow it, so a mixed
   // selection lands on one colour rather than each cycling from its own.
+  // Which item is drawn over which. The order of the model is the order they
+  // are painted in, so this moves rows and nothing else: an item keeps its id,
+  // its connectors and whether it is pinned — backgrounds are a layer of their
+  // own and stay one, so this changes the order within that layer rather than
+  // taking anything out of it.
+  function layerTargets(where) {
+    if (!root.canEdit) return
+    // A background under the cursor is its own target, the way unpinning
+    // treats it: targets() leaves backgrounds out of the commands that act on
+    // the working canvas, and which background is on top is still a question.
+    var here = root.selected()
+    var t = here && here.ipinned ? [root.selectedIndex] : root.targets()
+    if (t.length === 0) { root.flash("nothing selected to move"); return }
+    var moves = Store.layerMoves(itemModel.count, t, where)
+    if (moves.length === 0) {
+      root.flash(where === "front" || where === "forward" ? "already at the front" : "already at the back")
+      return
+    }
+    root.pushUndo()
+    // The cursor follows its item rather than its position, which is about to
+    // be somebody else's.
+    var cursor = root.selectedIndex >= 0 ? itemModel.get(root.selectedIndex).iid : -1
+    for (var i = 0; i < moves.length; i++) itemModel.move(moves[i].from, moves[i].to, 1)
+    if (cursor >= 0) root.selectedIndex = Store.indexOfId(itemModel, cursor)
+    root.save()
+    root.repaintLinks()
+  }
+
   function recolorItem() {
     if (!root.canEdit) return
     var n = root.selected()
@@ -1180,6 +1419,12 @@ Item {
     root.browserInput = initial || ""
   }
 
+  function cancelPrompt() {
+    root.browserAction = ""
+    root.browserPrompt = ""
+    root.browserInput = ""
+  }
+
   function commitPrompt() {
     if (!root.filesystemReady()) return
     var name = root.browserInput.trim()
@@ -1197,6 +1442,10 @@ Item {
       mkdirProc.command = root.fileCommand("mkdir", [root.boardsDir, dir])
       mkdirProc.running = true
     } else if (action === "rename" || action === "rename-current") {
+      if (root.diskChanged) {
+        root.browserMessage = "two versions of this board exist — esc, then ctrl+s to choose"
+        return
+      }
       root.flushSave()
       if (session.busy || root.saveError !== "") {
         root.browserMessage = "finish saving before renaming; try again"
@@ -1311,7 +1560,7 @@ Item {
 
     // While typing a name, every printable key is input.
     if (root.browserPrompt !== "") {
-      if (event.key === Qt.Key_Escape) { root.browserPrompt = ""; root.browserInput = ""; root.browserAction = "" }
+      if (event.key === Qt.Key_Escape) root.cancelPrompt()
       else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) root.commitPrompt()
       else if (event.key === Qt.Key_Backspace) root.browserInput = root.browserInput.slice(0, -1)
       else if (text && text >= " ") root.browserInput += text
@@ -1374,7 +1623,13 @@ Item {
     if (root.trashIndexNeedsRead) root.refreshTrashIndex()
     else root.saveTrashIndex(root.trashEntries)
   }
-  function flushSave() { root.retryTrashIndex(); session.flushSave() }
+  // ctrl+s with a conflict outstanding is not a save: it is the moment someone
+  // is asking about it, which is when the choices are worth putting on screen.
+  function flushSave() {
+    root.retryTrashIndex()
+    if (root.diskChanged) { root.decideConflict(); return }
+    session.flushSave()
+  }
   function save(allowEmpty) { session.save(allowEmpty) }
   function openBoard(path, fresh) { session.openBoard(path, fresh) }
 
@@ -1458,7 +1713,10 @@ Item {
   // the same cleanup before notifying the scoped shell facade.
   function close() {
     if (root.imageBusy) { root.flash("Finishing image export…"); return }
-    root.flushSave()
+    // Closing is not a decision either. A board with two versions keeps both —
+    // the edits stay in the session, and the question is still there when it
+    // comes back — rather than being asked on the way out of the window.
+    if (!root.diskChanged) root.flushSave()
     root.opened = false
     root.markedIds = []
     root.showPinned = false
@@ -1502,6 +1760,12 @@ Item {
   // board in the trash still points at its images, and so does a copy someone
   // exported last month. An orphan costs disk; a missing one costs the board.
   readonly property string imagesDir: root.dataDir + "/images"
+  // One lock per board, outside the boards tree: the folder people are invited
+  // to browse, hand-edit and commit stays free of files that are not boards.
+  readonly property string locksDir: root.dataDir + "/locks"
+  function lockPathFor(relative) {
+    return root.locksDir + "/" + String(relative).replace(/\//g, "__") + ".lock"
+  }
 
   // The only way a file name out of a board file becomes a URL to load.
   function imagePath(name) {
@@ -1533,7 +1797,7 @@ Item {
   Process {
     id: initProc
     running: true
-    command: ["mkdir", "-p", root.boardsDir, root.backupsDir, root.trashDir, root.imagesDir]
+    command: ["mkdir", "-p", root.boardsDir, root.backupsDir, root.trashDir, root.imagesDir, root.locksDir]
     onExited: migrateProc.running = true
   }
 

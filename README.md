@@ -149,6 +149,25 @@ Press `?` or `F1` on the board for this list. The board's name, the menu and
 whatever it is currently telling you all sit together at the top; the rest of
 the canvas is yours.
 
+You do not have to know any of them. `:` — or `ctrl+p`, or **Commands** in the
+header menu — opens a list of every command by name: type a few letters, press
+`enter`. It shows the key beside each one, so the list teaches the keyboard
+while you use it, and a command that cannot run just now is dimmed and says
+what it is waiting for rather than doing nothing when you pick it.
+
+`.` — or a right-click on the canvas — opens the same list narrowed to what can
+be done with whatever is selected: change its shape or colour, connect it,
+duplicate it, pin or unpin it, bring it forward, delete it, and every answer the
+`g` chord has, by name. So aligning two notes does not need the second key of a
+chord you have not learned yet.
+
+The boxes you type in — the query above, find on the board, the board name, the
+search in the browser — are real text fields: caret keys, selection, the
+clipboard and input-method composition all work, and renaming opens with the
+current name selected so one keystroke replaces it. Where the keyboard is is
+marked with a `›` as well as a tint, so it does not depend on telling two
+colours apart, and the controls carry names and roles for a screen reader.
+
 | Key | Does |
 |-----|------|
 | `n` | New note beside the selected one, ready to type |
@@ -160,7 +179,7 @@ the canvas is yours.
 | `u` / `ctrl+r` | Undo / redo |
 | `ctrl+n` | New board, already waiting for the first note |
 | `F2` | Rename the board you are on |
-| `ctrl+v` | Paste a picture from the clipboard, or text as a note |
+| `super+v` / `ctrl+v` | Paste a picture from the clipboard, or text as a note |
 | `ctrl+o` | Open a board file from anywhere |
 | `ctrl+shift+s` | Save a copy of this board somewhere else |
 | `ctrl+e` | Export the board as a PNG |
@@ -176,7 +195,7 @@ the canvas is yours.
 | `ctrl+d` | Duplicate it, and the connectors between the copies |
 | `m` | Show or hide the menu in the header |
 | `m` then `h` `l` / `tab` | Walk the menu; `enter` picks, `esc` closes |
-| `ctrl+c` | Copy it out: a picture as a picture, anything else as its text |
+| `super+c` / `ctrl+c` | Copy it out: a picture as a picture, anything else as its text |
 | `/` | Find: type to search the notes, `enter` steps through the matches |
 | `g` then `h` `j` `k` `l` | Align the marked items on that edge |
 | `g` then `c` / `m` | Align their centres on one vertical / horizontal line |
@@ -187,7 +206,16 @@ the canvas is yours.
 | `f` | Fit the whole board on screen |
 | `0` | Reset the view |
 | `+` / `-` | Zoom |
+| `]` / `[` | Bring forward / send backward, where things overlap |
+| `}` / `{` | Bring right to the front / send right to the back |
 | `?` / `F1` | Keybinding list |
+| `:` / `ctrl+p` | Run any command by name, without knowing its key |
+
+Overlapping items are drawn in the order the board file lists them, and `]` `[`
+`}` `{` move the selected ones through that order. Several at once keep their
+order relative to each other, ids and connectors are untouched, and undo puts it
+back. Pinning is separate: a background stays a background, and reordering it
+moves it among the other backgrounds.
 
 `space` marks the item under the cursor. Moving, resizing, recolouring,
 changing shape and deleting then apply to everything marked, and the cursor
@@ -202,6 +230,11 @@ Shift-click marks items one at a time, dragging a marked item moves the whole
 set, and the bottom-right corner resizes them. Middle-drag or right-drag pans,
 the wheel zooms at the pointer, double-clicking empty canvas leaves a new note,
 double-clicking a note types in it, and middle-clicking an item deletes it.
+
+The header menu includes **Zoom**, showing the current percentage. Open it with
+`m`, use `Tab` / `Shift+Tab` to reach Zoom, then press `Enter`. Choose 25%, 50%,
+75%, 100%, 125%, 150%, 200%, 300%, or 400% with Tab and Enter. **Back** returns
+to the main menu; `Esc` closes it. Zoom presets keep the canvas centre fixed.
 
 ## Backgrounds
 
@@ -250,8 +283,30 @@ something, and it asks twice.
 ## Getting things in and out
 
 A board is a file, so it can leave and come back. `ctrl+shift+s` writes a copy
-wherever you choose; `ctrl+o` reads one back in as a new board rather than
-overwriting the one you are on. `ctrl+e` renders the board to a PNG for
+wherever you choose, with its pictures inside it — the board in your library
+keeps only their file names, which mean nothing on the machine you send it to, so
+a shared board of screenshots used to arrive as a board of holes. `ctrl+o` reads
+one back in as a new board rather than overwriting the one you are on, writing
+the pictures it carried into your own `images/` under names it picks, so a copy
+you were sent can never end up addressing a picture of yours that happens to
+share a name.
+
+A copy either carries everything it names or is not written at all. If a picture
+is missing from your library, or the pictures come to more than 16 MB, the copy
+is refused with the reason and the file you were saving over is untouched.
+**Save a copy without its pictures** is the other thing you can ask for, by that
+name, and says so when it is done. An export is a picture of one moment: what it
+writes is the board as it was when you asked, however much you edit or switch
+boards while its pictures are being read.
+
+Coming in, a file over 32 MB is refused by its size before it is read, a picture
+over 32 MB or a set of them over 16 MB is refused from the length of the text
+rather than by decoding it, and a board that carries a picture this cannot read
+is refused whole: nothing is imported, the file you were given is untouched, and
+you are told which. Pictures that had already landed from that attempt stay in
+`images/` unreferenced, in the same way a picture whose item you deleted does.
+A board with no `images` key at all — every board written before this, and every
+board in your own library — imports exactly as it always did. `ctrl+e` renders the board to a PNG for
 sharing. `ctrl+v` asks the clipboard for a picture first and drops it on the board at its
 own proportions; failing that, it turns the text into a note, however many lines
 it is.
@@ -296,6 +351,12 @@ and shows an error; use `ctrl+s` to retry. A slow save stays in progress until
 the disk operation completes; retrying cannot replace its destination. Closing the surface keeps an in-flight
 save running in the shell; it does not wait for disk completion.
 
+When a conflict is resolved with **Use disk version**, the latest content and
+its revision are read together under the write lock. A failed read or replacement
+keeps your local edits and the conflict available for retry. If a save detects a
+conflict while switching boards, that switch is cancelled; resolving the conflict
+leaves the current board editable so you can switch again.
+
 Which board you had open is remembered in `state.json` and reopened next time.
 
 ## Where your board lives
@@ -324,15 +385,29 @@ and committed without `.bak` files in the way. Older flattened backups are
 left untouched; new saves use the mirrored paths to avoid naming collisions. The backup completes before replacement, and saves
 with unchanged contents do not rotate it. Malformed or unsupported board files
 open read-only; no edits or saves are allowed over them. Back it up, sync it,
-edit it by hand, put it in git — it is your file. Older boards are migrated on load: v1 had no ids or
+edit it by hand, put it in git — it is your file, and a board that changes while
+it is open is noticed rather than overwritten.
+
+Every write to a board goes through one coordinated step: the file is replaced
+under a lock, and only if it is still the version the writer last read. The
+version it replaces is kept first. So two writers that both read the same board
+cannot both believe they are updating it — the second one is told. That applies
+to the plugin and to `bin/omarchyform` alike, because both go through the same
+helper. Locks live in `~/.local/share/omarchyform/locks/` and never beside your
+boards. This needs `flock` (util-linux) on the path, alongside the `bash` and
+coreutils the plugin already uses. Older boards are migrated on load: v1 had no ids or
 shapes, v2 stored fixed pastel hexes which are mapped onto theme roles. Version 4 adds
 background pinning, version 5 pasted pictures; older plugin versions open these
 files read-only instead of silently losing that state.
 
 A pasted picture is written to `images/` and the item keeps only its file name,
-so a screenshot is not re-encoded into every autosave. Nothing deletes those
-files: a board in the trash still points at its pictures, and so does a copy
-exported last month. An item whose picture has gone says so on the board rather
+so a screenshot is not re-encoded into every autosave — and the same picture on
+four boards is stored once. A copy saved to share is the exception: it carries
+the bytes in an `images` object beside the items, because a file name is not
+something another machine can resolve. That key is ignored by anything that does
+not know it, so such a copy still opens in an older Omarchyform. Nothing deletes
+the files in `images/`: a board in the trash still points at its pictures, and so
+does a copy exported last month. An item whose picture has gone says so on the board rather
 than drawing an empty frame.
 
 ```json
@@ -409,7 +484,30 @@ bin/omarchyform ops          # what apply accepts, the kinds, the theme roles
 ```
 
 Boards written into `~/.local/share/omarchyform/boards/` appear in the browser
-on `b`. It cannot draw: a picture of a board needs the running shell, so `ctrl+e`
+on `b`. Writing the board that is open is fine too: the board watches its file,
+so a board the CLI changes appears in front of you.
+
+If you have unsaved changes on screen as well, both versions are kept and
+neither is guessed at. Autosaving stops, the header says `Changed on disk`, and
+`ctrl+s` puts the three choices on screen:
+
+| | |
+|-|-|
+| Keep the version from disk | what is on screen is lost |
+| Save my changes as a copy | both versions survive, the copy under a name of its own |
+| Replace the version on disk | the one it replaces goes to backups |
+
+Nothing else resolves it. Leaving the board, closing it, renaming it and the
+autosave timer all leave both versions where they are, and switching boards
+waits until you have chosen. Until then your edits live only on screen, so the
+choice is worth making rather than leaving.
+
+The CLI is told the same way. An `apply` whose board changed between being read
+and being written answers `{"ok": false, "error": "… changed since it was read"}`
+and exits 1, leaving the other writer's board alone; `--force` is the explicit
+overwrite, and keeps what it replaced.
+
+It cannot draw: a picture of a board needs the running shell, so `ctrl+e`
 on an open board exports a PNG and nothing here does.
 
 `skills/omarchyform/SKILL.md` ships alongside it, so a coding agent asked to
@@ -427,9 +525,11 @@ npm run mutate  # mutation testing
 npm run bench   # board marshalling cost at size
 npm run bench:scene # what a board costs to draw, at size; needs a compositor
 npm run test:qml # headless persistence tests; requires installed Quickshell
+npm run test:paste # live canvas image paste test; uses an isolated clipboard stub and board library
 npm run test:ui  # Qt Quick pointer, theme, and layout tests
 npm run test:omarchy -- --keep # live desktop smoke test, isolated board data
 npm run shots   # photograph every state, for judging by eye
+npm run preview # remake the picture at the top of this README
 ```
 
 `npm run bench:scene` measures the other half of what a board costs. `npm run
@@ -456,10 +556,12 @@ vsync-bound at 60Hz and dropping frames at 144. `--record` writes that and the
 table to [docs/performance.md](docs/performance.md), which is where the figures
 quoted in the changelog come from.
 
-`npm run shots` puts the real plugin through fourteen states — empty, a cursor
-beside a mark, typing, backgrounds, finding, arranging, help, the browser, a
-browser with more boards than fit, a failed save, and a close-up at working
-zoom — and saves a picture of each into
+`npm run shots` puts the real plugin through twenty states — empty, a cursor
+beside a mark, typing, backgrounds, finding, arranging, the command list open
+and narrowed, what can be done with a selection, the question asked when two
+versions of a board exist, help, the browser, naming a board, a browser with
+more boards than fit, a failed save, a close-up at working zoom, and the board
+at the top of this README — and saves a picture of each into
 `~/.cache/omarchyform/shots/`. It asserts nothing: it exists because whether a
 tinted item reads as selected, or a hint still fits on one line, is not
 something a test can answer, and reading the source instead has been wrong
@@ -472,6 +574,13 @@ npm run shots -- --light --dark
 
 It runs against the live compositor in an isolated `HOME`, so the installed
 copy of the plugin and the running shell are both left alone.
+
+The last of those states is the picture at the top of this file, and
+`npm run preview` is how it gets there: it takes the shots, crops the top of
+the window to 16:9 and writes `preview.png`. The board in it is composed in
+`tests/qml/shot.qml` rather than arranged by hand, so the next one can be taken
+the same way — the one before this was arranged by hand and went on showing a
+header and a hint row that had both since moved.
 
 `npm run mutate` breaks `BoardStore.js` on purpose, one edit at a time, and
 checks the suite notices. The command reports its current score and survivors;
@@ -530,10 +639,15 @@ Assigning `screen` to a window that already exists leaves it unmapped.
 
 ## Dependencies
 
-One external program: **wl-clipboard**, for `wl-paste`. `ctrl+v` needs it and
-says so if it is missing; nothing else does, so a board without it still opens,
-edits, saves, imports, exports and renders a PNG. Omarchy ships it, so on a
-stock install there is nothing to do.
+One external program of its own: **wl-clipboard**, for `wl-paste`. `ctrl+v`
+needs it and says so if it is missing; nothing else does, so a board without it
+still opens, edits, saves, imports, exports and renders a PNG. Omarchy ships it,
+so on a stock install there is nothing to do.
+
+Saving also uses **flock** (util-linux) — the lock that stops two writers from
+both believing they are updating the same board — alongside the `bash` and
+coreutils the filesystem helper has always used. All three are part of a base
+Arch install; `flock` is the only one added since 0.3.0.
 
 Everything else is already in the shell: Qt 6 Quick, and the Quickshell process
 and file primitives. No network access, no external services, and no elevated
