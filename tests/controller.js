@@ -19,7 +19,7 @@ function controller() {
     // The conflict state the QML declares, mirrored here: an undeclared
     // property reads as undefined, which is not what a string property does.
     conflict: false, conflictText: '', conflictBoard: '', resolving: '',
-    revision: '', forceNextSave: false }
+    revision: '', forceNextSave: false, diskReading: false }
   Object.defineProperty(session, 'canEdit', {
     get: () => session.boardLoaded && !session.damaged && session.pendingBoard === null
   })
@@ -70,7 +70,8 @@ function controller() {
   // they fetch is what matters here, so they fetch it from the test instead.
   session.diskText = ''
   session.readDisk = () => session.diskText
-  session.refreshRevision = () => { session.revision = 'rev-fresh' }
+  session.requestDisk = resolve => session.acceptDisk(root.currentBoard,
+    loadStore().writeFile(items, links, root.nextId), resolve, 'rev-fresh\n' + session.diskText)
   let revisions = 0
   return { root, session, items, links, writes, persistence, exchange, complete() {
     const write = writes[writes.length - 1]
@@ -958,6 +959,61 @@ console.log('ok — controller: the command palette and one dispatch for every c
     assert.equal(c.session.conflict, false, 'the disk already says what we sent')
     assert.equal(c.session.lastSavedText, sent)
   }
+}
+{
+  const disk = text => JSON.stringify({version: 5, nextId: 2, items: [
+    {id: 1, kind: 'note', x: 0, y: 0, w: 180, h: 140, text}], links: []})
+  function dirty() {
+    const c = controller()
+    c.session.loadBoard(disk('baseline'), false)
+    c.items.setProperty(0, 'itext', 'local')
+    c.session.diskText = disk('external')
+    return c
+  }
+  {
+    const c = dirty()
+    c.session.raiseConflict(c.session.diskText)
+    c.session.replaceDisk()
+    c.persistence.busy = false
+    c.session.failedSave('disk full')
+    assert.equal(c.session.conflictText, c.session.diskText, 'failed replacement retains the disk snapshot')
+    c.session.useDisk()
+    assert.equal(c.items.get(0).itext, 'external', 'use disk works after failed replacement')
+    assert.equal(c.session.damaged, false)
+  }
+  {
+    const c = dirty()
+    c.root.openBoard('b.json')
+    c.refuse(c.session.diskText)
+    c.session.useDisk()
+    assert.equal(c.session.pendingBoard, null, 'a rejected switch is cancelled')
+    assert.equal(c.session.canEdit, true, 'resolution restores editing')
+    assert.equal(c.root.currentBoard, 'a.json')
+  }
+  {
+    const c = dirty()
+    c.session.raiseConflict(c.session.diskText)
+    c.session.diskText = disk('external updated again')
+    c.session.useDisk()
+    assert.equal(c.items.get(0).itext, 'external updated again', 'resolution reads the latest disk content')
+  }
+}
+{
+  const c = controller()
+  const S = loadStore()
+  c.session.loadBoard(JSON.stringify({version:5, items:[], links:[]}), false)
+  const baseline = S.writeFile(c.items, c.links, c.root.nextId)
+  c.session.revision = 'original'
+  c.session.acceptDisk('other.json', baseline, true, 'wrong\n' + baseline)
+  assert.equal(c.session.revision, 'original', 'late reply cannot change another board revision')
+  c.session.raiseConflict(baseline)
+  c.session.acceptDisk('a.json', baseline, true, 'bad\n{broken')
+  assert.equal(c.session.conflict, true, 'invalid read keeps the conflict unresolved')
+  assert.equal(c.session.damaged, false, 'invalid read does not replace local content')
+  c.items.append({iid:1, kind:'note', ix:0, iy:0, iw:180, ih:140, itext:'new local edit', itint:'accent', ipinned:false, isrc:''})
+  c.session.acceptDisk('a.json', baseline, true, 'new\n' + baseline)
+  assert.equal(c.items.count, 1, 'edits made after read began are retained')
+  assert.equal(c.session.conflict, true)
 }
 console.log('ok — controller: two versions of a board, and the three ways out')
 {

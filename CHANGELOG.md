@@ -143,6 +143,13 @@ since older boards are migrated on load rather than rejected.
 
 ### Fixed
 
+- Conflict resolution now reads the latest disk content and its revision under
+  the same lock as writes. Late replies cannot replace another board or newer
+  local edits. Failed replacements retain the disk snapshot and local edits,
+  and a save rejected during board switching cancels the pending switch so
+  resolution restores editing. Controller, filesystem and real QML regressions
+  cover these paths.
+
 - **A copy saved to share is a picture of one moment.** Collecting a board's
   pictures takes long enough for the board to change underneath it: the export
   read the live models *after* the pictures came back, so editing or switching

@@ -27,6 +27,12 @@ try {
   assert.equal(run('check',boards,'escape/a.json').status,3)
   assert.equal(run('check',boards,'a.json').status,0)
   assert.equal(run('check',boards,'not-yet/new.json').status,0)
+  const snapshot = run('snapshot', path.join(boards, 'a.json'), path.join(dir, 'snapshot.lock'), boards)
+  assert.equal(snapshot.status, 0)
+  const split = snapshot.stdout.indexOf('\n')
+  assert.equal(snapshot.stdout.slice(0, split), run('revision', path.join(boards, 'a.json')).stdout)
+  assert.equal(snapshot.stdout.slice(split + 1), 'new', 'snapshot carries exact bytes with their revision')
+  assert.notEqual(run('snapshot', path.join(boards, 'escape/a.json'), path.join(dir, 'snapshot.lock'), boards).status, 0)
   // A symlinked root is where the user keeps their data, not an escape.
   const linkedBoards=path.join(dir,'linked-boards'),linkedBackups=path.join(dir,'linked-backups')
   fs.mkdirSync(path.join(dir,'backups'))

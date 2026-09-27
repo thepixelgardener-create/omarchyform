@@ -346,6 +346,12 @@ and shows an error; use `ctrl+s` to retry. A slow save stays in progress until
 the disk operation completes; retrying cannot replace its destination. Closing the surface keeps an in-flight
 save running in the shell; it does not wait for disk completion.
 
+When a conflict is resolved with **Use disk version**, the latest content and
+its revision are read together under the write lock. A failed read or replacement
+keeps your local edits and the conflict available for retry. If a save detects a
+conflict while switching boards, that switch is cancelled; resolving the conflict
+leaves the current board editable so you can switch again.
+
 Which board you had open is remembered in `state.json` and reopened next time.
 
 ## Where your board lives

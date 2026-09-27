@@ -43,7 +43,8 @@ ShellRoot {
     property int autosaveMs: 700
     // Somewhere other than beside the board, which is the point, but without
     // needing a directory the app would have created at startup.
-    function backupPathFor(relative) { return test.dir + "/bak__" + String(relative).replace(/\//g, "__") + ".bak" }
+    property bool failBackup: false
+    function backupPathFor(relative) { if (ctl.failBackup) return test.dir + "/linked/refused.bak"; return test.dir + "/bak__" + String(relative).replace(/\//g, "__") + ".bak" }
     function lockPathFor(relative) { return test.dir + "/lock__" + String(relative).replace(/\//g, "__") + ".lock" }
     property var undoStack: []
     property var redoStack: []
@@ -113,7 +114,7 @@ ShellRoot {
         test.writeOutside(test.dir + "/a.json", test.boardOf(["from outside"]))
       } else if (test.stage === 6 && ctl.items.count === 1) {
         test.check(ctl.items.get(0).itext === "from outside", "an external write is adopted when nothing is unsaved")
-        test.check(session.canEdit && !session.externalChange, "and the board stays editable")
+        test.check(session.canEdit && !session.conflict, "and the board stays editable")
         // Now both ends change: an edit on screen that has not been saved yet,
         // and three items written underneath it.
         ctl.items.append({iid: 9, kind: "note", ix: 0, iy: 0, iw: 180, ih: 140, itint: "accent", itext: "mine"})
@@ -157,10 +158,14 @@ ShellRoot {
         test.stage = 10
         test.writeOutside(test.dir + "/a.json", test.boardOf(["theirs alone"]))
       } else if (test.stage === 10 && session.conflict) {
+        // Change the disk a second time while the first conflict is open.
+        test.writeOutside(test.dir + "/a.json", test.boardOf(["latest disk version"]))
+        test.stage = 101
+      } else if (test.stage === 101 && test.read(test.dir + "/a.json") === test.boardOf(["latest disk version"])) {
         session.useDisk()
         test.stage = 11
       } else if (test.stage === 11 && !session.conflict && ctl.items.count === 1) {
-        test.check(ctl.items.get(0).itext === "theirs alone", "keeping the disk version takes it whole")
+        test.check(ctl.items.get(0).itext === "latest disk version", "resolution reads the latest bytes with their revision")
         test.check(session.canEdit, "and the board is editable again")
         // Which leaves the revision fresh enough to write against without a
         // second conflict: this is the write that used to be refused for ever.
@@ -170,6 +175,34 @@ ShellRoot {
       } else if (test.stage === 12 && !session.busy && !session.conflict) {
         test.check(JSON.parse(test.read(test.dir + "/a.json")).items.length === 2,
                    "a board that took the disk version can be written to again")
+        ctl.items.setProperty(0, "itext", "local after failed replacement")
+        session.raiseConflict(test.read(test.dir + "/a.json"))
+        ctl.failBackup = true
+        session.replaceDisk()
+        test.stage = 13
+      } else if (test.stage === 13 && session.conflict && !session.busy) {
+        test.check(session.conflictText !== "", "failed replacement retains its disk snapshot")
+        test.check(ctl.items.get(0).itext === "local after failed replacement", "failed replacement keeps local edits")
+        ctl.failBackup = false
+        session.useDisk()
+        test.stage = 14
+      } else if (test.stage === 14 && !session.conflict && !session.busy) {
+        test.check(ctl.items.get(0).itext === "latest disk version", "use disk recovers after real write failure")
+        ctl.items.setProperty(0, "itext", "local before stale switch")
+        // Suppress watcher handling to exercise rejection at the write boundary.
+        session.pendingBoard = {path: "b.json", fresh: false}
+        test.writeOutside(test.dir + "/a.json", test.boardOf(["changed before switch"]))
+        test.stage = 141
+      } else if (test.stage === 141 && test.read(test.dir + "/a.json") === test.boardOf(["changed before switch"])) {
+        session.pendingBoard = null
+        session.openBoard("b.json")
+        test.stage = 15
+      } else if (test.stage === 15 && session.conflict && !session.busy) {
+        test.check(session.pendingBoard === null, "stale write cancels its queued switch")
+        session.useDisk()
+        test.stage = 16
+      } else if (test.stage === 16 && !session.conflict && !session.busy) {
+        test.check(ctl.currentBoard === "a.json" && session.canEdit, "resolved board remains editable")
         console.log("SESSION_TESTS_PASSED")
         Qt.quit()
       }

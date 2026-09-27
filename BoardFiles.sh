@@ -220,6 +220,23 @@ case "$operation" in
     confined "$1" "$2" || exit 3
     revision_of "$1/$2"
     ;;
+  snapshot)
+    board=$1 lock=$2 root=$3
+    [[ $board == "$root/"* ]] || exit 3
+    confined "$root" "${board#"$root/"}" || exit 3
+    mkdir -p -- "$(dirname -- "$lock")"
+    exec 9>"$lock"
+    flock 9
+    [[ -f $board && ! -L $board ]] || exit 3
+    before=$(revision_of "$board")
+    snapshot=$(mktemp)
+    trap 'rm -f -- "$snapshot"' EXIT
+    cp -T -- "$board" "$snapshot"
+    # Also detect a non-cooperating editor changing the file during the copy.
+    [[ $before == "$(revision_of "$board")" ]] || exit 7
+    printf '%s\n' "$before"
+    cat -- "$snapshot"
+    ;;
   revision)
     revision_of "$1"
     ;;

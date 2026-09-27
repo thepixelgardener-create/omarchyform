@@ -23,8 +23,8 @@ Item {
   // decision: leaving the board, closing, renaming and the save timer all have
   // to leave both versions intact, because none of them is someone choosing.
   property bool conflict: false
-  // What is on disk, kept so the choice can be acted on without reading again
-  // and finding a third version.
+  // The disk snapshot that raised the conflict. Keep it through failed writes;
+  // choosing the disk version reads fresh bytes with their matching revision.
   property string conflictText: ""
   property string conflictBoard: ""
   // Which resolution is in flight, so a failed one can put the conflict back
@@ -35,8 +35,9 @@ Item {
   // that does not still find this refuses rather than replacing it.
   property string revision: ""
   property bool forceNextSave: false
-  readonly property bool canEdit: boardLoaded && !damaged && pendingBoard === null
-  readonly property bool busy: persistence.busy
+  readonly property bool diskReading: diskRead.running
+  readonly property bool canEdit: boardLoaded && !damaged && pendingBoard === null && !diskReading
+  readonly property bool busy: persistence.busy || diskReading
 
   // Typing is debounced; structural edits call save() directly.
   function scheduleSave() {
@@ -54,7 +55,7 @@ Item {
   }
 
   function openBoard(path, fresh) {
-    if (!Store.safeRelative(path)) return
+    if (!Store.safeRelative(path) || session.diskReading) return
     if (path === session.ctl.currentBoard && !fresh) return
     // Leaving is not a decision. Both versions of this board still exist, and
     // walking away from it would drop the one that is only on screen — so the
@@ -93,7 +94,7 @@ Item {
   }
 
   function save(allowEmpty) {
-    if (!session.boardLoaded) return
+    if (!session.boardLoaded || session.diskReading) return
     // Something else wrote this board and the screen disagrees with it. Waiting
     // is the only safe answer: a debounced keystroke must not be what decides
     // whose version survives.
@@ -102,7 +103,7 @@ Item {
     if (persistence.busy) return // Completion serializes the latest model again.
     var text = Store.writeFile(session.ctl.items, session.ctl.links, session.ctl.nextId)
     session.saveError = ""
-    if (text === session.lastSavedText) return
+    if (text === session.lastSavedText && !session.forceNextSave) return
     // Remember what this write contains, so completing it does not have to
     // parse the whole board back again just to count the items.
     session.savingCount = session.ctl.items.count
@@ -116,6 +117,7 @@ Item {
 
   function savedBoard(path, text, revision) {
     session.revision = revision
+    if (session.resolving === "replace") session.clearConflict()
     session.resolving = ""
     // A completion belongs to the board it names. Adopting it as the baseline
     // for a different board suppresses that board's first write whenever the
@@ -172,6 +174,8 @@ Item {
   }
 
   function raiseConflict(diskText) {
+    // A refused switch is cancelled; resolving stays on the current board.
+    session.pendingBoard = null
     session.conflict = true
     session.conflictText = diskText
     session.conflictBoard = session.ctl.currentBoard
@@ -188,26 +192,15 @@ Item {
   // chose has actually happened.
   function useDisk() {
     if (!session.conflict) return
-    var text = session.conflictText
-    session.clearConflict()
-    session.loadBoard(text, false)
-    session.refreshRevision()
-    session.ctl.flash("Kept the version from disk")
+    session.requestDisk(true)
   }
 
   function replaceDisk() {
-    if (!session.conflict) return
+    if (!session.conflict || !session.boardLoaded || persistence.busy || session.diskReading) return
     session.resolving = "replace"
     session.conflict = false
     session.forceNextSave = true
     session.save(true)
-    // Nothing to write means the two agree after all, which is a resolution.
-    if (!persistence.busy && session.resolving === "replace") {
-      session.resolving = ""
-      session.forceNextSave = false
-    }
-    session.conflictText = ""
-    session.conflictBoard = ""
   }
 
   // Called once a copy of the local edits has actually been written. The board
@@ -218,16 +211,56 @@ Item {
     session.ctl.flash("Your version was saved as " + name)
   }
 
-  function refreshRevision() {
-    revisionProc.command = ["bash", decodeURIComponent(Qt.resolvedUrl("BoardFiles.sh").toString().replace(/^file:\/\//, "")),
-      "revision", session.ctl.boardPath]
-    revisionProc.running = true
+  // The helper reads bytes and their revision under the same lock as commits.
+  // Keep the originating board and local text with the request; a late answer
+  // must never replace a different board or edits made after the read began.
+  function requestDisk(resolve) {
+    if (session.diskReading || persistence.busy) return
+    diskRead.board = session.ctl.currentBoard
+    diskRead.localText = Store.writeFile(session.ctl.items, session.ctl.links, session.ctl.nextId)
+    diskRead.resolve = resolve
+    diskRead.command = ["bash", decodeURIComponent(Qt.resolvedUrl("BoardFiles.sh").toString().replace(/^file:\/\//, "")),
+      "snapshot", session.ctl.boardPath, session.ctl.lockPathFor(session.ctl.currentBoard), session.ctl.boardsDir]
+    diskRead.running = true
+  }
+
+  function acceptDisk(board, localText, resolve, result) {
+    if (board !== session.ctl.currentBoard) return
+    var split = result.indexOf("\n")
+    var raw = split >= 0 ? result.slice(split + 1) : ""
+    if (split < 1 || !Store.readFile(raw)) {
+      session.diskReadFailed(board)
+      return
+    }
+    var mine = Store.writeFile(session.ctl.items, session.ctl.links, session.ctl.nextId)
+    if (mine !== localText || (!resolve && (session.conflict || mine !== session.lastSavedText))) {
+      session.raiseConflict(raw)
+      return
+    }
+    session.pendingBoard = null
+    session.revision = result.slice(0, split)
+    session.clearConflict()
+    session.loadBoard(raw, false)
+    session.ctl.flash(resolve ? "Kept the version from disk" : "Board changed on disk; reloaded")
+  }
+
+  function diskReadFailed(board) {
+    if (board !== session.ctl.currentBoard) return
+    session.pendingBoard = null
+    session.saveError = "Could not read the disk version; local edits kept — ctrl+s to retry"
+    session.ctl.flash(session.saveError)
   }
 
   Process {
-    id: revisionProc
-    stdout: StdioCollector { id: revisionOut; waitForEnd: true }
-    onExited: function (code) { if (code === 0) session.revision = revisionOut.text }
+    id: diskRead
+    property string board: ""
+    property string localText: ""
+    property bool resolve: false
+    stdout: StdioCollector { id: diskContents; waitForEnd: true }
+    onExited: function (code) {
+      if (code !== 0) session.diskReadFailed(diskRead.board)
+      else session.acceptDisk(diskRead.board, diskRead.localText, diskRead.resolve, diskContents.text)
+    }
   }
 
   // Only a confirmed missing file may become a new, writable empty board.
@@ -290,9 +323,7 @@ Item {
     if (mine === session.lastSavedText) {
       // Nothing unsaved on screen, so the newer version simply wins: a board
       // built by the command line appears instead of being overwritten.
-      session.loadBoard(raw, false)
-      session.refreshRevision()
-      session.ctl.flash("Board changed on disk; reloaded")
+      session.requestDisk(false)
       return
     }
     session.raiseConflict(raw)
