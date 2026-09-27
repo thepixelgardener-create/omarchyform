@@ -7,6 +7,13 @@ since older boards are migrated on load rather than rejected.
 
 ### Added
 
+- **What can be done with what is selected, on `.` or a right-click.** The same
+  panel the command palette uses, narrowed to the commands that act on a
+  selection — shape, colour, connect, duplicate, pin or unpin, layer order,
+  delete — and with every answer the `g` chord has offered by name, so aligning
+  two notes no longer needs the second key of a chord you have not learned. It
+  is the one command table, filtered: there is no second list to keep in step.
+
 - **Bring things forward, send them back.** `]` and `[` move the selected items
   one step through the order overlapping things are drawn in; `}` and `{` take
   them right to the front or the back. Several at once keep their order relative
@@ -30,6 +37,14 @@ since older boards are migrated on load rather than rejected.
   checks every entry against the key table in `Board.qml` and the controller
   itself — so a key that moves, or a function that is renamed, cannot leave the
   list teaching something that is no longer true.
+
+- **The command palette's query is a real text field too**, with the same caret
+  keys, selection, clipboard and input-method composition the other two have.
+  The keys the panel owns — enter, escape, the arrows, tab — go back to it
+  through one function, so a letter typed at the palette cannot reach the board
+  behind it. Unavailable commands now say what they are waiting for beside
+  their key, the row the keyboard is on carries a `›` as well as a tint, and the
+  controls this work touched carry accessible names, roles and actions.
 
 - **The find box and the name box are real text fields.** Both were a string
   that grew at the end with a cursor drawn after it, so neither could be moved

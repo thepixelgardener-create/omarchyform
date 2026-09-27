@@ -114,6 +114,10 @@ Rectangle {
           // Where the keyboard is, and where the pointer is, read the same.
           readonly property bool onIt: toolbar.ctl.menuIndex === index || mouse.containsMouse
           color: onIt ? Qt.rgba(toolbar.ctl.accent.r, toolbar.ctl.accent.g, toolbar.ctl.accent.b, 0.15) : "transparent"
+          Accessible.role: Accessible.Button
+          Accessible.name: modelData
+          Accessible.focused: toolbar.ctl.menuIndex === index
+          Accessible.onPressAction: toolbar.ctl.runMenu(index)
           radius: toolbar.ctl.cornerRadius
           border.width: onIt ? toolbar.ctl.borderWidth * 2 : 1
           border.color: onIt ? toolbar.ctl.accent

@@ -155,6 +155,19 @@ header menu — opens a list of every command by name: type a few letters, press
 while you use it, and a command that cannot run just now is dimmed and says
 what it is waiting for rather than doing nothing when you pick it.
 
+`.` — or a right-click on the canvas — opens the same list narrowed to what can
+be done with whatever is selected: change its shape or colour, connect it,
+duplicate it, pin or unpin it, bring it forward, delete it, and every answer the
+`g` chord has, by name. So aligning two notes does not need the second key of a
+chord you have not learned yet.
+
+The boxes you type in — the query above, find on the board, the board name, the
+search in the browser — are real text fields: caret keys, selection, the
+clipboard and input-method composition all work, and renaming opens with the
+current name selected so one keystroke replaces it. Where the keyboard is is
+marked with a `›` as well as a tint, so it does not depend on telling two
+colours apart, and the controls carry names and roles for a screen reader.
+
 | Key | Does |
 |-----|------|
 | `n` | New note beside the selected one, ready to type |

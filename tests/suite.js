@@ -552,10 +552,21 @@ function tests(S) {
   })
 
   test("the command list offers what was typed, best first", () => {
-    // Nothing typed is the whole table, minus the one that opened it.
+    // Nothing typed is the whole table, minus the ways into the list itself.
     const all = S.matchCommands("")
-    eq(all.length, S.COMMANDS.length - 1)
-    ok(all.every(c => c.listed !== false), "the way in does not list itself")
+    eq(all.length, S.COMMANDS.filter(c => c.listed !== false).length)
+    ok(all.every(c => c.listed !== false), "the ways in do not list themselves")
+
+    // Asked for a selection, it is the commands that act on one — which is
+    // what a menu of actions for the selection offers, from the same table.
+    const mine = S.matchCommands("", "selection")
+    ok(mine.length > 0 && mine.length < all.length)
+    ok(mine.every(c => ["target", "item", "group"].indexOf(c.needs) >= 0),
+       "only the ones that need something selected")
+    ok(mine.some(c => c.name === "Align left edges"), "including the arrangement chord's answers")
+    ok(mine.some(c => c.name === "Pin or unpin as background"), "and the one that takes it out of the background")
+    ok(!mine.some(c => c.name === "New board"), "and nothing that is about the board itself")
+    eq(S.matchCommands("align", "selection").length, 6, "narrowing still works inside it")
 
     // A name that starts with the query was meant more often than one that
     // merely contains it, whatever order the table puts them in.
@@ -578,7 +589,8 @@ function tests(S) {
     for (const command of S.COMMANDS) {
       ok(typeof command.name === "string" && command.name !== "", "a name")
       ok(typeof command.run === "string" && command.run !== "", command.name + " runs something")
-      ok(["", "edit", "target", "conflict"].indexOf(command.needs) >= 0, command.name + " needs something known")
+      ok(["", "edit", "target", "item", "group", "conflict"].indexOf(command.needs) >= 0,
+         command.name + " needs something known")
       eq(names[command.name], undefined, "one entry called " + command.name)
       if (command.key !== "") eq(keys[command.key], undefined, "one command on " + command.key)
       names[command.name] = true

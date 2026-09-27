@@ -14,6 +14,9 @@ import "BoardStore.js" as Store
 Rectangle {
   id: palette
   required property var ctl
+  // The board behind it, which owns what a key means: the field hands back
+  // the ones the panel uses rather than deciding them a second time.
+  required property var board
 
   visible: palette.ctl.paletteVisible
   width: Math.min(parent.width - palette.ctl.sp(64), palette.ctl.sp(560))
@@ -59,14 +62,57 @@ Rectangle {
     width: parent.width - palette.ctl.sp(32)
     spacing: palette.ctl.sp(10)
 
-    Text {
-      id: query
+    Row {
       width: parent.width
-      elide: Text.ElideLeft
-      color: palette.ctl.foreground
-      font.family: palette.ctl.fontFamily
-      font.pixelSize: palette.ctl.fontSubtitle
-      text: "run: " + palette.ctl.paletteQuery + "▏"
+      spacing: 0
+
+      Text {
+        id: query
+        text: "run: "
+        color: palette.ctl.foreground
+        font.family: palette.ctl.fontFamily
+        font.pixelSize: palette.ctl.fontSubtitle
+      }
+
+      // A real field: a query that only grew at the end could not be moved
+      // through, selected in, pasted into, or composed in a language that
+      // needs an input method — and the commands are found by typing.
+      TextInput {
+        id: typed
+        width: parent.width - query.width
+        clip: true
+        color: palette.ctl.foreground
+        selectionColor: palette.ctl.accent
+        selectedTextColor: palette.ctl.canvasBackground
+        selectByMouse: true
+        font.family: palette.ctl.fontFamily
+        font.pixelSize: palette.ctl.fontSubtitle
+
+        Accessible.role: Accessible.EditableText
+        Accessible.name: "Command to run"
+        Accessible.description: palette.ctl.paletteMatches.length + " commands match"
+
+        onTextChanged: palette.ctl.setPaletteQuery(typed.text)
+        readonly property string held: palette.ctl.paletteQuery
+        onHeldChanged: if (typed.held !== typed.text) typed.text = typed.held
+
+        // Deferred for the same reason the board's find field defers: whatever
+        // else is set as the palette opens lands here on its own, and taking
+        // the keyboard has to be the last thing that happens.
+        readonly property bool wanted: palette.ctl.paletteVisible
+        onWantedChanged: {
+          if (!wanted) { palette.ctl.focusKeys(); return }
+          Qt.callLater(function () {
+            if (!palette.ctl.paletteVisible) return
+            typed.text = palette.ctl.paletteQuery
+            typed.forceActiveFocus()
+            typed.selectAll()
+          })
+        }
+
+        // The panel decides what these mean; everything else is typing.
+        Keys.onPressed: function (event) { palette.board.paletteKey(event) }
+      }
     }
 
     Rectangle {
@@ -101,6 +147,18 @@ Rectangle {
           height: palette.rowHeight
 
           readonly property bool current: row.index === palette.ctl.paletteIndex
+
+          // Named for anything reading the screen rather than looking at it:
+          // what the command is, what it answers to, and why it cannot run.
+          Accessible.role: Accessible.Button
+          Accessible.name: row.modelData.name
+                           + (row.modelData.key === "" ? "" : ", " + row.modelData.key)
+          Accessible.description: row.ready ? "" : palette.ctl.commandExcuse(row.modelData.needs)
+          Accessible.focused: row.current
+          Accessible.onPressAction: {
+            palette.ctl.paletteIndex = row.index
+            palette.ctl.runPaletteChoice()
+          }
           // Dimmed rather than hidden. A command that cannot run now is still
           // one this board has, and hiding it would teach that it does not
           // exist; the line below says what it is waiting for.
@@ -112,12 +170,25 @@ Rectangle {
             color: Qt.rgba(palette.ctl.accent.r, palette.ctl.accent.g, palette.ctl.accent.b, 0.18)
           }
 
+          // The cursor is a mark as well as a colour, so which row is current
+          // does not depend on seeing the tint behind it.
           Text {
-            id: name
+            id: marker
             anchors.verticalCenter: parent.verticalCenter
             anchors.left: parent.left
             anchors.leftMargin: palette.ctl.sp(8)
-            anchors.right: shortcut.left
+            text: row.current ? "›" : " "
+            color: palette.ctl.accent
+            font.family: palette.ctl.fontFamily
+            font.pixelSize: palette.ctl.fontSubtitle
+          }
+
+          Text {
+            id: name
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.left: marker.right
+            anchors.leftMargin: palette.ctl.sp(6)
+            anchors.right: excuse.left
             anchors.rightMargin: palette.ctl.sp(12)
             elide: Text.ElideRight
             text: row.modelData.name
@@ -125,6 +196,22 @@ Rectangle {
             opacity: !row.ready ? 0.4 : row.current ? 1.0 : 0.75
             font.family: palette.ctl.fontFamily
             font.pixelSize: palette.ctl.fontSubtitle
+          }
+
+          // Why it cannot run, where the eye is already going to look for how
+          // to run it. A command that does nothing and says nothing teaches
+          // the wrong thing about the command.
+          Text {
+            id: excuse
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.right: shortcut.left
+            anchors.rightMargin: palette.ctl.sp(10)
+            visible: !row.ready
+            text: palette.ctl.commandExcuse(row.modelData.needs)
+            color: palette.ctl.foreground
+            opacity: 0.45
+            font.family: palette.ctl.fontFamily
+            font.pixelSize: palette.ctl.fontBody
           }
 
           Text {

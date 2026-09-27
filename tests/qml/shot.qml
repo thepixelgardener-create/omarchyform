@@ -110,14 +110,28 @@ ShellRoot {
       setup: function () {
         plugin.cancelArrange()
         plugin.markedIds = []
+        // Nothing selected, so the commands that need something to act on say
+        // what they are waiting for rather than looking available.
+        plugin.selectedIndex = -1
         plugin.beginPalette()
       }
     },
     {
       name: "08c-commands-narrowed",
       setup: function () {
-        plugin.extendPalette("c")
-        plugin.extendPalette("o")
+        plugin.setPaletteQuery("co")
+      }
+    },
+    {
+      // What can be done with what is selected: the same panel, opened on the
+      // commands that act on it, with the arrangement chord's answers named.
+      name: "08d-selection-actions",
+      setup: function () {
+        plugin.endPalette()
+        plugin.selectOnly(5)
+        plugin.markedIds = [plugin.items.get(5).iid, plugin.items.get(6).iid]
+        plugin.beginSelectionActions()
+        plugin.setPaletteQuery("a")
       }
     },
     {

@@ -752,12 +752,29 @@ Item {
   property bool paletteVisible: false
   property string paletteQuery: ""
   property int paletteIndex: 0
-  readonly property var paletteMatches: root.paletteVisible ? Store.matchCommands(root.paletteQuery) : []
+  // "all" is every command; "selection" is the ones that act on what is
+  // selected, which is what a menu of actions for it offers.
+  property string paletteScope: "all"
+  readonly property var paletteMatches: root.paletteVisible
+    ? Store.matchCommands(root.paletteQuery, root.paletteScope) : []
   // How many rows the panel draws. The rest are still there to be typed at.
   readonly property int paletteRows: 9
 
-  function beginPalette() {
+  // The same panel, opened on the commands that act on what is selected. A
+  // menu of actions rather than a second list to keep in step with the first:
+  // it is the one table, filtered, dispatched the same way.
+  function beginSelectionActions() {
+    if (!root.canEdit) return
+    if (root.targets().length === 0 && !(root.selected() && root.selected().ipinned)) {
+      root.flash("nothing selected · space marks the one under the cursor")
+      return
+    }
+    root.beginPalette("selection")
+  }
+
+  function beginPalette(scope) {
     if (!root.boardLoaded && !root.damaged) return
+    root.paletteScope = scope === "selection" ? "selection" : "all"
     root.stopEditing()
     root.menuVisible = false
     root.paletteVisible = true
@@ -772,13 +789,12 @@ Item {
     root.paletteIndex = 0
   }
 
-  function extendPalette(text) {
-    root.paletteQuery += text
-    root.paletteIndex = 0
-  }
-
-  function trimPalette() {
-    root.paletteQuery = root.paletteQuery.slice(0, -1)
+  // One way for the query to change, whether it came from the field in the
+  // panel, a test, or the screenshot harness. The cursor goes back to the top,
+  // because the row it was on now means something else.
+  function setPaletteQuery(text) {
+    if (text === root.paletteQuery) return
+    root.paletteQuery = text
     root.paletteIndex = 0
   }
 
@@ -792,16 +808,23 @@ Item {
   // functions already refuses politely on its own, but a command run from a
   // list that then appears to do nothing teaches the wrong thing about it.
   function commandReady(needs) {
-    if (needs === "edit") return root.canEdit
-    if (needs === "target") return root.canEdit && root.targets().length > 0
     if (needs === "conflict") return root.diskChanged
+    if (needs === "edit") return root.canEdit
+    if (!root.canEdit) return needs === ""
+    if (needs === "target") return root.targets().length > 0
+    // A background under the cursor counts: which one is on top, and whether
+    // it stays a background at all, are questions about it.
+    if (needs === "item") return root.targets().length > 0 || (root.selected() !== null && root.selected().ipinned)
+    if (needs === "group") return root.targets().length >= 2
     return true
   }
 
   function commandExcuse(needs) {
     if (needs === "conflict") return "this board has not changed underneath you"
     if (!root.canEdit) return root.damaged ? "this board is read-only" : "the board is not ready yet"
-    return needs === "target" ? "nothing is selected" : "not now"
+    if (needs === "group") return "mark two or more"
+    if (needs === "target" || needs === "item") return "nothing is selected"
+    return "not now"
   }
 
   function runPaletteChoice() {

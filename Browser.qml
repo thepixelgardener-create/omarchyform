@@ -105,6 +105,8 @@ FocusScope {
           selectByMouse: true
           font.family: browser.ctl.fontFamily
           font.pixelSize: browser.ctl.fontSubtitle
+          Accessible.role: Accessible.EditableText
+          Accessible.name: browser.prompting ? browser.ctl.browserPrompt : "Search the boards"
 
           // Which field this is standing in for. Renaming opens it with the
           // current name in it and everything selected, so one keystroke
@@ -186,18 +188,35 @@ FocusScope {
 
             readonly property bool current: index === browser.ctl.browserIndex
 
+            Accessible.role: Accessible.ListItem
+            Accessible.name: label.text
+            Accessible.focused: current
+
             Rectangle {
               anchors.fill: parent
               visible: parent.current
               color: Qt.rgba(browser.ctl.accent.r, browser.ctl.accent.g, browser.ctl.accent.b, 0.18)
             }
 
+            // The cursor is a mark as well as a tint, so which row it is on
+            // does not depend on seeing the tint.
+            Text {
+              id: cursor
+              anchors.verticalCenter: parent.verticalCenter
+              anchors.left: parent.left
+              anchors.leftMargin: browser.ctl.sp(8)
+              text: parent.current ? "›" : " "
+              color: browser.ctl.accent
+              font.family: browser.ctl.fontFamily
+              font.pixelSize: browser.ctl.fontSubtitle
+            }
+
             Text {
               id: label
               anchors.verticalCenter: parent.verticalCenter
-              anchors.left: parent.left
+              anchors.left: cursor.right
               anchors.right: parent.right
-              anchors.leftMargin: browser.ctl.sp(8)
+              anchors.leftMargin: browser.ctl.sp(6)
               anchors.rightMargin: browser.ctl.sp(8)
               elide: Text.ElideMiddle
               color: browser.ctl.foreground

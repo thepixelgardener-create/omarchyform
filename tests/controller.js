@@ -12,7 +12,7 @@ function controller() {
     finding: false, findQuery: '', findCount: 0, imageQueue: [],
     menuVisible: false, menuIndex: 0, helpVisible: false,
     paletteVisible: false, paletteQuery: '', paletteIndex: 0, paletteRows: 9,
-    conflictVisible: false, conflictIndex: 0,
+    conflictVisible: false, conflictIndex: 0, paletteScope: 'all',
     boardsDir: '/boards', backupsDir: '/backups', worldStep: 40, minItemSize: 60, viewW: 1000, viewH: 700 }
   const session = { ctl: root, boardLoaded: true, damaged: false, pendingBoard: null,
     lastSavedCount: 0, lastSavedText: '', saveError: '',
@@ -32,7 +32,7 @@ function controller() {
   Object.defineProperty(root, 'findDimming', { get: () => root.finding && root.findQuery !== '' })
   Object.defineProperty(root, 'findNeedle', { get: () => root.findQuery.toLowerCase() })
   Object.defineProperty(root, 'paletteMatches', { get: () =>
-    root.paletteVisible ? loadStore().matchCommands(root.paletteQuery) : [] })
+    root.paletteVisible ? loadStore().matchCommands(root.paletteQuery, root.paletteScope) : [] })
   Object.defineProperty(root, 'markedLookup', { get: () => {
     const lookup = {}
     for (const id of root.markedIds) lookup[id] = true
@@ -755,19 +755,17 @@ console.log('ok — controller: walking the header menu and running its commands
   assert.equal(c.root.paletteVisible, true)
   assert.equal(c.root.paletteQuery, '')
   assert.equal(c.root.paletteIndex, 0, 'opens on the first, ready to run')
-  assert.equal(c.root.paletteMatches.length, S.COMMANDS.length - 1,
-    'every command but the one that opened this')
+  assert.equal(c.root.paletteMatches.length, S.COMMANDS.filter(x => x.listed !== false).length,
+    'every command but the ways into this list')
 
   // Typing narrows it, and the cursor goes back to the top rather than staying
   // on a row that now means something else.
   c.root.movePalette(2)
   assert.equal(c.root.paletteIndex, 2)
-  c.root.extendPalette('col')
+  c.root.setPaletteQuery('col')
   assert.equal(c.root.paletteIndex, 0)
   assert.deepEqual(c.root.paletteMatches.map(m => m.name), ['Change colour'])
-  c.root.trimPalette()
-  c.root.trimPalette()
-  c.root.trimPalette()
+  c.root.setPaletteQuery('')
   assert.equal(c.root.paletteQuery, '')
 
   // Wrapping both ways, so neither end of the list is a dead stop.
@@ -806,6 +804,32 @@ console.log('ok — controller: walking the header menu and running its commands
   assert.match(ro.root.statusText, /read-only/)
   ro.root.runCommand('Fit the board on screen')
   assert.equal(ro.root.statusText.indexOf('Fit') , -1, 'looking is not refused')
+
+  // The actions for what is selected: the same panel, opened on the commands
+  // that act on a selection, and closed again by running one.
+  c.root.endPalette()
+  c.root.selectedIndex = -1
+  c.root.markedIds = []
+  c.root.statusText = ''
+  c.root.beginSelectionActions()
+  assert.equal(c.root.paletteVisible, false, 'with nothing selected there is nothing to offer')
+  assert.match(c.root.statusText, /nothing selected/)
+
+  c.root.addItem('note', 0, 0)
+  c.root.beginSelectionActions()
+  assert.equal(c.root.paletteVisible, true)
+  assert.equal(c.root.paletteScope, 'selection')
+  assert.ok(c.root.paletteMatches.length > 0)
+  assert.ok(c.root.paletteMatches.every(m => ['target', 'item', 'group'].includes(m.needs)),
+    'only what acts on the selection')
+  // Alignment is offered by name, so the second key of the chord is something
+  // to learn rather than something to know already.
+  assert.ok(c.root.paletteMatches.some(m => m.name === 'Align left edges'))
+  c.root.endPalette()
+  assert.equal(c.root.paletteScope, 'selection', 'the scope belongs to the opening, not the closing')
+  c.root.beginPalette()
+  assert.equal(c.root.paletteScope, 'all', 'and opening it plainly is everything again')
+  c.root.endPalette()
 
   // A name the table does not have runs nothing at all.
   c.root.statusText = ''

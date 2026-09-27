@@ -107,10 +107,14 @@ FocusScope {
     property real lastY: 0
     property bool panning: false
     property bool additive: false
+    // A right button that never moved is a click, not a pan: the one gesture
+    // that asks what can be done with what is selected.
+    property bool dragged: false
 
     onPressed: function (mouse) {
       lastX = mouse.x
       lastY = mouse.y
+      dragged = false
       additive = (mouse.modifiers & Qt.ShiftModifier) !== 0
       // Backgrounds answer to the camera rather than the marquee: marks never
       // reach them, so a rectangle there would cost the pan and buy nothing.
@@ -125,8 +129,12 @@ FocusScope {
       }
       board.focusKeys()
     }
-    onReleased: {
+    onReleased: function (mouse) {
       panning = false
+      if (mouse.button === Qt.RightButton && !dragged) {
+        board.ctl.beginSelectionActions()
+        return
+      }
       if (!marquee.dragging) return
       var caught = marquee.wide
       marquee.dragging = false
@@ -143,6 +151,7 @@ FocusScope {
         return
       }
       if (!panning) return
+      if (Math.abs(mouse.x - lastX) + Math.abs(mouse.y - lastY) > 0) dragged = true
       board.ctl.panBy(mouse.x - lastX, mouse.y - lastY)
       lastX = mouse.x
       lastY = mouse.y
@@ -351,6 +360,7 @@ FocusScope {
       "-": function () { board.ctl.zoomCentre(1 / 1.2) },
       "?": function () { board.ctl.toggleHelp() },
       ":": function () { board.ctl.beginPalette() },
+      ".": function () { board.ctl.beginSelectionActions() },
       "]": function () { board.ctl.layerTargets("forward") },
       "[": function () { board.ctl.layerTargets("backward") },
       "}": function () { board.ctl.layerTargets("front") },
@@ -411,18 +421,14 @@ FocusScope {
         return
       }
 
-      // The palette is open: every printable key is the query, so the list is
+      // The palette is open: the query is a text field with the keyboard in
+      // it, so what reaches here is what the field does not want. The list is
       // walked with the arrows or tab rather than j and k — here those are
       // letters, the same way they are while finding.
       if (board.ctl.paletteVisible) {
-        if (event.key === Qt.Key_Escape) board.ctl.endPalette()
-        else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) board.ctl.runPaletteChoice()
-        else if (event.key === Qt.Key_Down || event.key === Qt.Key_Tab) board.ctl.movePalette(1)
-        else if (event.key === Qt.Key_Up || event.key === Qt.Key_Backtab) board.ctl.movePalette(-1)
-        else if (ctrl && event.key === Qt.Key_N) board.ctl.movePalette(1)
-        else if (ctrl && event.key === Qt.Key_P) board.ctl.movePalette(-1)
-        else if (event.key === Qt.Key_Backspace) board.ctl.trimPalette()
-        else if (event.text && event.text >= " " && !ctrl) board.ctl.extendPalette(event.text)
+        board.paletteKey(event)
+        // Nothing else on the board runs while the palette is up, whether or
+        // not the field has the keyboard: a letter typed at it is a letter.
         event.accepted = true
         return
       }
@@ -567,6 +573,7 @@ FocusScope {
     id: commandPalette
     objectName: "command-palette"
     ctl: board.ctl
+    board: board
     anchors.horizontalCenter: parent.horizontalCenter
     y: toolbar.y + toolbar.height + board.ctl.sp(24)
   }
@@ -587,6 +594,22 @@ FocusScope {
     id: help
     anchors.centerIn: parent
     ctl: board.ctl
+  }
+
+  // What the palette's query field does not own. Two callers: the field, which
+  // has the keyboard while the palette is up, and the board's handler behind
+  // it, so a field that has somehow not been given the keyboard cannot leave
+  // the board running commands under the panel.
+  function paletteKey(event) {
+    var ctrl = (event.modifiers & Qt.ControlModifier) !== 0
+    if (event.key === Qt.Key_Escape) board.ctl.endPalette()
+    else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) board.ctl.runPaletteChoice()
+    else if (event.key === Qt.Key_Down || event.key === Qt.Key_Tab) board.ctl.movePalette(1)
+    else if (event.key === Qt.Key_Up || event.key === Qt.Key_Backtab) board.ctl.movePalette(-1)
+    else if (ctrl && event.key === Qt.Key_N) board.ctl.movePalette(1)
+    else if (ctrl && event.key === Qt.Key_P) board.ctl.movePalette(-1)
+    else return
+    event.accepted = true
   }
 
   // What the query field does not own. The field has the keyboard while
@@ -639,6 +662,10 @@ FocusScope {
       // screenshot harness, a find reopened on the query it had — it follows,
       // so the two cannot show different things. Both sides check before
       // writing, so neither can chase the other.
+      Accessible.role: Accessible.EditableText
+      Accessible.name: "Find on this board"
+      Accessible.description: board.ctl.findCount + " matches"
+
       onTextChanged: board.ctl.setFindQuery(text)
       readonly property string query: board.ctl.findQuery
       onQueryChanged: if (findField.query !== findField.text) findField.text = findField.query

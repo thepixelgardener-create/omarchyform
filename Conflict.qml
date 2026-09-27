@@ -56,6 +56,8 @@ Rectangle {
 
     Text {
       id: heading
+      Accessible.role: Accessible.AlertMessage
+      Accessible.name: heading.text
       width: parent.width
       wrapMode: Text.Wrap
       color: decision.ctl.foreground
@@ -82,6 +84,15 @@ Rectangle {
         height: decision.rowHeight
 
         readonly property bool current: row.index === decision.ctl.conflictIndex
+
+        Accessible.role: Accessible.Button
+        Accessible.name: row.modelData.name
+        Accessible.description: row.modelData.cost
+        Accessible.focused: row.current
+        Accessible.onPressAction: {
+          decision.ctl.conflictIndex = row.index
+          decision.ctl.runConflictChoice()
+        }
 
         Rectangle {
           anchors.fill: parent

@@ -180,11 +180,21 @@ var COMMANDS = [
   { name: "Duplicate", key: "ctrl+d", run: "duplicateTargets", needs: "target" },
   { name: "Delete", key: "del", run: "removeTargets", needs: "target" },
   { name: "Align and spread", key: "g", run: "beginArrange", needs: "edit" },
-  { name: "Bring forward", key: "]", run: "layerTargets", arg: "forward", needs: "target" },
-  { name: "Send backward", key: "[", run: "layerTargets", arg: "backward", needs: "target" },
-  { name: "Bring to front", key: "}", run: "layerTargets", arg: "front", needs: "target" },
-  { name: "Send to back", key: "{", run: "layerTargets", arg: "back", needs: "target" },
-  { name: "Pin as background", key: "p", run: "togglePin", needs: "target" },
+  // The chord's six answers, each with a name, so the second key is something
+  // to learn rather than something to know already.
+  { name: "Align left edges", key: "g h", run: "alignTargets", arg: "left", needs: "group" },
+  { name: "Align right edges", key: "g l", run: "alignTargets", arg: "right", needs: "group" },
+  { name: "Align top edges", key: "g k", run: "alignTargets", arg: "top", needs: "group" },
+  { name: "Align bottom edges", key: "g j", run: "alignTargets", arg: "bottom", needs: "group" },
+  { name: "Align centres across", key: "g c", run: "alignTargets", arg: "centreX", needs: "group" },
+  { name: "Align centres down", key: "g m", run: "alignTargets", arg: "centreY", needs: "group" },
+  { name: "Spread evenly across", key: "g H", run: "spreadTargets", arg: "x", needs: "group" },
+  { name: "Spread evenly down", key: "g J", run: "spreadTargets", arg: "y", needs: "group" },
+  { name: "Bring forward", key: "]", run: "layerTargets", arg: "forward", needs: "item" },
+  { name: "Send backward", key: "[", run: "layerTargets", arg: "backward", needs: "item" },
+  { name: "Bring to front", key: "}", run: "layerTargets", arg: "front", needs: "item" },
+  { name: "Send to back", key: "{", run: "layerTargets", arg: "back", needs: "item" },
+  { name: "Pin or unpin as background", key: "p", run: "togglePin", needs: "item" },
   { name: "Select backgrounds", key: "P", run: "togglePinnedSelection", needs: "" },
   { name: "Mark this one as well", key: "space", run: "toggleMark", needs: "" },
   { name: "Mark everything", key: "a", run: "markAll", needs: "" },
@@ -214,19 +224,26 @@ var COMMANDS = [
   { name: "Replace the version on disk", key: "", run: "conflictReplaceDisk", needs: "conflict" },
   { name: "Menu in the header", key: "m", run: "toggleMenu", needs: "" },
   { name: "Keys", key: "?", run: "toggleHelp", needs: "" },
-  // The way in does not list itself.
-  { name: "Run a command", key: ":", run: "beginPalette", needs: "", listed: false }
+  // The two ways in do not list themselves.
+  { name: "Run a command", key: ":", run: "beginPalette", needs: "", listed: false },
+  { name: "Actions for the selection", key: ".", run: "beginSelectionActions", needs: "", listed: false }
 ]
 
 // What to offer for what has been typed. A name that starts with the query is
 // what was meant more often than one that merely contains it, and the order is
 // otherwise the table's own, which groups by what the commands are for.
-function matchCommands(query) {
+// What a command needs before it can do anything, and which of those are
+// about the thing that is selected — the set a menu of actions for a selection
+// offers, as opposed to everything the board can do.
+var SELECTION_NEEDS = ["target", "item", "group"]
+
+function matchCommands(query, scope) {
   var needle = String(query === undefined ? "" : query).toLowerCase().trim()
   var leading = []
   var rest = []
   for (var i = 0; i < COMMANDS.length; i++) {
     if (COMMANDS[i].listed === false) continue
+    if (scope === "selection" && SELECTION_NEEDS.indexOf(COMMANDS[i].needs) < 0) continue
     if (needle === "") { rest.push(COMMANDS[i]); continue }
     var name = COMMANDS[i].name.toLowerCase()
     var at = name.indexOf(needle)
@@ -275,6 +292,7 @@ var KEY_HELP = [
   ["g then h j k l", "align the marked items on that edge"],
   ["g then c / m", "align their centres on one line"],
   ["g then H J K L", "spread them evenly, outermost two staying put"],
+  [". or right-click", "what can be done with what is selected"],
   ["] / [", "bring forward / send backward, where they overlap"],
   ["} / {", "bring right to the front / send right to the back"],
   ["c", "change its colour"],

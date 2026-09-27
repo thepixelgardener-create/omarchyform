@@ -69,7 +69,10 @@ TestCase {
     property int paletteRows: 9
     readonly property var paletteMatches: Store.matchCommands(ctl.paletteQuery)
     function commandReady(needs) { return needs !== "target" }
+    function commandExcuse(needs) { return "nothing is selected" }
+    function setPaletteQuery(text) { ctl.paletteQuery = text }
     function runPaletteChoice() {}
+    function focusKeys() {}
     property bool conflictVisible: true
     property int conflictIndex: 0
     function runConflictChoice() {}
@@ -81,7 +84,10 @@ TestCase {
   BoardToolbar { id: toolbar; ctl: ctl; width: test.width - 32; height: implicitHeight; visible: false }
   // Where the board puts it: under the header, with the rest of the window
   // below it to fit into.
-  Commands { id: palette; ctl: ctl; y: 40; anchors.horizontalCenter: parent.horizontalCenter }
+  // The panel hands the keys it does not use back to the board; here there is
+  // no board, so it hands them to something that answers the same way.
+  QtObject { id: keyboardless; function paletteKey(event) {} }
+  Commands { id: palette; ctl: ctl; board: keyboardless; y: 40; anchors.horizontalCenter: parent.horizontalCenter }
   Conflict { id: decision; ctl: ctl; y: 40; anchors.horizontalCenter: parent.horizontalCenter }
   // The header is a bar, so it is painted in the theme's bar colours rather
   // than the canvas ones.
