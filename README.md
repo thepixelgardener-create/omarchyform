@@ -617,12 +617,20 @@ resolve its two ends — so a 3000-item board took about 19ms to load and a
 1000-item one about 3.6ms. Resolving the ends through a single index instead
 makes it linear: roughly 6ms and 2ms.
 
-Saving still forks `bash`, `cp` and `mv` to stage the backup before the board is
-replaced, which costs about 9ms per save regardless of board size — far more
-than serialising and writing one. Doing that copy in-process would remove it,
-but the backup is what guarantees the previous version is safely on disk before
-the board is overwritten, and the obvious rewrites broke that guarantee. It is
-left alone deliberately, behind the autosave delay, rather than traded for
+Saving costs about 50ms, and costs it whatever the board's size: a 15KB board
+and a 480KB one land within a millisecond of each other, because almost none of
+it is the writing. One `bash` does the whole commit — it stages the board it was
+handed on standard input, takes the lock, checks the file is still the revision
+it last read, keeps the version it is about to replace, and renames the new one
+into place. Starting that process accounts for about 12ms of the total; the rest
+is the copy and the renames reaching disk. Measured on btrfs under `$HOME`,
+twenty saves at each size after five warm-up runs.
+
+Doing the copy in-process would remove part of that, but the backup is what
+guarantees the previous version is safely on disk before the board is
+overwritten, the lock is what stops two writers from both believing they are
+updating the same board, and the obvious rewrites broke the first of those. Both
+are left alone deliberately, behind the autosave delay, rather than traded for
 speed.
 
 ## Notes on the platform
@@ -734,7 +742,8 @@ Freehand drawing is outside the current scope.
 |---|---|
 | Omarchy | `4.0.0.r2158.gd174d4a-1`, Quattro shell |
 | Qt | 6.11.2 |
-| Display | single 1x monitor, Wayland under Hyprland |
+| Compositor | Hyprland `0.56.2`, Wayland |
+| Display | single output, 1920×1080 at scale 1.6 |
 | Clipboard | `wl-clipboard` 1:2.3.0 |
 
 That is the one configuration the automated and live checks have actually run
@@ -742,9 +751,11 @@ on. Omarchy 4's plugin contract is still moving, so this claims nothing about
 other versions in either direction — it may well work on yours, but nobody has
 checked.
 
-Not tested: multiple monitors, fractional or mixed scaling, and any compositor
-other than Hyprland. Portrait and small-window layout is covered by the Qt
-layout suite rather than by hand on hardware. If you run one of those, the thing
+Not tested: multiple monitors, mixed scaling across outputs, an unscaled
+display, and any compositor other than Hyprland. Everything here has run on one
+fractionally scaled screen, which makes 1x the configuration nobody has
+checked — the opposite of the usual gap. Portrait and small-window layout is
+covered by the Qt layout suite rather than by hand on hardware. If you run one of those, the thing
 most likely to be wrong is where the overlay places itself.
 
 ## Support
