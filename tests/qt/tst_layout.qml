@@ -31,6 +31,7 @@ TestCase {
     property int cornerRadius: 0
     property bool browserVisible: false
     property bool menuVisible: false
+    property bool zoomMenuVisible: false
     property int menuIndex: 0
     function toggleMenu() { menuVisible = !menuVisible }
     function runMenu(index) { menuVisible = false }

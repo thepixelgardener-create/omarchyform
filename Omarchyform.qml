@@ -712,24 +712,46 @@ Item {
   // The commands in the menu all have keys of their own, so the menu is a
   // reminder rather than the way in, and it costs no height until asked for.
   property bool menuVisible: false
+  property bool zoomMenuVisible: false
   // Which item the keyboard is on. Opening starts at the first, so the menu can
   // be walked without reaching for the mouse.
   property int menuIndex: 0
 
   function toggleMenu() {
     root.menuVisible = !root.menuVisible
+    root.zoomMenuVisible = false
     root.menuIndex = 0
     root.focusKeys()
   }
 
   function moveMenu(step) {
-    var n = Store.MENU_COMMANDS.length
+    var n = root.zoomMenuVisible ? Store.ZOOM_COMMANDS.length : Store.MENU_COMMANDS.length
     root.menuIndex = ((root.menuIndex + step) % n + n) % n
   }
 
   // The dispatch lives here rather than in the toolbar, so a click and a
   // keystroke take the same path and the list can be tested without a scene.
   function runMenu(index) {
+    if (root.zoomMenuVisible) {
+      if (index === 0) {
+        root.zoomMenuVisible = false
+        root.menuIndex = Store.MENU_COMMANDS.indexOf("Zoom")
+        return
+      }
+      if (index < 1 || index >= Store.ZOOM_COMMANDS.length) return
+      root.zoomCentre(parseInt(Store.ZOOM_COMMANDS[index]) / 100 / root.zoom)
+      root.zoomMenuVisible = false
+      root.menuVisible = false
+      root.menuIndex = 0
+      root.focusKeys()
+      return
+    }
+    if (index === Store.MENU_COMMANDS.indexOf("Zoom")) {
+      root.zoomMenuVisible = true
+      root.menuIndex = Math.max(1, Store.ZOOM_COMMANDS.indexOf(Math.round(root.zoom * 100) + "%"))
+      root.focusKeys()
+      return
+    }
     root.menuVisible = false
     root.menuIndex = 0
     if (index === 0) root.newBoard()

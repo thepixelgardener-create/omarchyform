@@ -10,7 +10,7 @@ function controller() {
     undoStack: [], redoStack: [], selectedIndex: -1, editIndex: -1,
     camX: 0, camY: 0, zoom: 1, activeBoard: null, markedIds: [], showPinned: false, arranging: false,
     finding: false, findQuery: '', findCount: 0, imageQueue: [],
-    menuVisible: false, menuIndex: 0, helpVisible: false,
+    menuVisible: false, zoomMenuVisible: false, menuIndex: 0, helpVisible: false,
     paletteVisible: false, paletteQuery: '', paletteIndex: 0, paletteRows: 9,
     conflictVisible: false, conflictIndex: 0, paletteScope: 'all',
     boardsDir: '/boards', backupsDir: '/backups', worldStep: 40, minItemSize: 60, viewW: 1000, viewH: 700 }
@@ -699,7 +699,7 @@ console.log('ok — controller: copying the selection out')
   const c = controller()
   c.session.loadBoard('{"version":5,"items":[]}', false)
   const menu = require('./harness').loadStore().MENU_COMMANDS
-  assert.equal(menu.length, 8, 'eight commands, as the header draws')
+  assert.equal(menu.length, 9, 'nine commands, as the header draws')
 
   c.root.toggleMenu()
   assert.equal(c.root.menuVisible, true)
@@ -729,6 +729,22 @@ console.log('ok — controller: copying the selection out')
   c.root.runMenu(6)
   assert.equal(c.root.paletteVisible, true, 'Commands opens the palette')
   c.root.endPalette()
+
+  c.root.toggleMenu()
+  c.root.runMenu(menu.indexOf('Zoom'))
+  assert.equal(c.root.zoomMenuVisible, true)
+  const zoomMenu = require('./harness').loadStore().ZOOM_COMMANDS
+  assert.equal(zoomMenu[c.root.menuIndex], '100%')
+  c.root.moveMenu(1)
+  c.root.runMenu(c.root.menuIndex)
+  assert.equal(c.root.zoom, 1.25)
+  assert.equal(c.root.menuVisible, false)
+  assert.equal(c.root.toWorldX(c.root.viewW / 2), 500, 'preset keeps the canvas centre fixed')
+  c.root.toggleMenu()
+  c.root.runMenu(menu.indexOf('Zoom'))
+  c.root.runMenu(0)
+  assert.equal(c.root.zoomMenuVisible, false)
+  assert.equal(c.root.menuIndex, menu.indexOf('Zoom'))
 
   // Boards is the browser, and it is the same call a click makes.
   c.root.helpVisible = false

@@ -231,6 +231,11 @@ set, and the bottom-right corner resizes them. Middle-drag or right-drag pans,
 the wheel zooms at the pointer, double-clicking empty canvas leaves a new note,
 double-clicking a note types in it, and middle-clicking an item deletes it.
 
+The header menu includes **Zoom**, showing the current percentage. Open it with
+`m`, use `Tab` / `Shift+Tab` to reach Zoom, then press `Enter`. Choose 25%, 50%,
+75%, 100%, 125%, 150%, 200%, 300%, or 400% with Tab and Enter. **Back** returns
+to the main menu; `Esc` closes it. Zoom presets keep the canvas centre fixed.
+
 ## Backgrounds
 
 Place and resize a shape, then press `p` to pin it. It stays behind notes and
