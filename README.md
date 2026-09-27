@@ -374,6 +374,31 @@ luminance.
 | `BoardSession.qml` | Loading, autosave state, and board-switch coordination |
 | `BoardPersistence.qml` | Serialized backup and atomic write, with completion/failure signals |
 | `BoardFiles.sh` | Confined filesystem operations and exact-path moves |
+| `bin/omarchyform` | The board, headless: build, read and change one with no display |
+| `bin/store.js` | Loading `BoardStore.js` outside QML, shared by the CLI and the tests |
+
+## From the command line
+
+`bin/omarchyform` builds and changes boards with no window and no display. The
+board's logic is plain JavaScript that already runs outside QML — it is what
+the test suite exercises — so the same code that draws a board can build one
+headlessly. Every verb answers with JSON on stdout and exits 0 or 1.
+
+```bash
+bin/omarchyform new ideas.json --note "First thought" --note "Second"
+bin/omarchyform inspect ideas.json
+echo '[{"op":"add","args":["ellipse",520,0,200,140,"the question","accent"]},
+       {"op":"link","args":[1,3]}]' | bin/omarchyform apply ideas.json -
+bin/omarchyform validate ideas.json
+bin/omarchyform ops          # what apply accepts, the kinds, the theme roles
+```
+
+Boards written into `~/.local/share/omarchyform/boards/` appear in the browser
+on `b`. It cannot draw: a picture of a board needs the running shell, so `ctrl+e`
+on an open board exports a PNG and nothing here does.
+
+`skills/omarchyform/SKILL.md` ships alongside it, so a coding agent asked to
+sketch something out as a board can do it without being told any of this.
 
 ## Tests
 

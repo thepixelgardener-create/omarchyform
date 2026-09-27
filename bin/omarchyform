@@ -1,0 +1,335 @@
+#!/usr/bin/env node
+// Boards from the command line, with no window and no display.
+//
+// The board's logic is already plain JavaScript that runs outside QML — it is
+// what the test suite exercises — so making it usable without the shell costs
+// a front end and nothing else. Every verb answers with JSON on stdout and
+// exits 0 or 1, so something that is not a person can drive it.
+//
+//   omarchyform new <file> [--note TEXT]... [--force]
+//   omarchyform inspect <file> [--full]
+//   omarchyform apply <file> [ops.json|-] [--out FILE] [--dry-run]
+//   omarchyform validate <file>
+//   omarchyform ops
+//
+// What it deliberately cannot do is draw: a picture of a board needs the
+// scene, and the scene needs the shell. `ctrl+e` on an open board exports a
+// PNG; nothing here does.
+const fs = require("fs")
+const path = require("path")
+const { loadStore, RowModel } = require("./store")
+
+const S = loadStore()
+
+function die(message, detail) {
+  answer({ ok: false, error: message, detail: detail === undefined ? null : detail })
+  process.exit(1)
+}
+
+function answer(value) {
+  process.stdout.write(JSON.stringify(value, null, 2) + "\n")
+}
+
+// ------------------------------------------------------------------ the board
+// A board in memory is the two models BoardStore reads and writes, plus the
+// next free id: exactly what the plugin holds, minus the camera and what is
+// selected.
+
+// The declared format version, straight from the file. readFile does not hand
+// it back — it refuses anything it does not know outright — so a board from a
+// newer Omarchyform looks the same to it as a corrupt one. They are not the
+// same thing and this has to be able to say which.
+function declaredVersion(text) {
+  try {
+    const parsed = JSON.parse(text)
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed))
+      return typeof parsed.version === "number" ? parsed.version : 1
+  } catch { /* not JSON at all; the caller reports that */ }
+  return null
+}
+
+function readBoard(file) {
+  let text
+  try { text = fs.readFileSync(file, "utf8") }
+  catch (error) { die("cannot read " + file, error.code || String(error)) }
+  const version = declaredVersion(text)
+  const data = S.readFile(text)
+  if (!data) {
+    if (version !== null && version > 5)
+      die(file + ` is format ${version}, newer than this understands`, "the board itself would open it read-only")
+    die(file + " is not a board this understands")
+  }
+  const items = new RowModel()
+  const links = new RowModel()
+  S.fillItems(items, data.items)
+  S.fillLinks(links, items, data.links)
+  return { items, links, nextId: S.nextFreeId(items, data.nextId), version }
+}
+
+function writeBoard(board, file) {
+  const text = S.writeFile(board.items, board.links, board.nextId)
+  fs.mkdirSync(path.dirname(path.resolve(file)), { recursive: true })
+  fs.writeFileSync(file, text)
+  return text.length
+}
+
+function rowOf(board, id) {
+  for (let i = 0; i < board.items.count; i++)
+    if (board.items.get(i).iid === Number(id)) return i
+  return -1
+}
+
+function mustRow(board, id, what) {
+  const at = rowOf(board, id)
+  if (at < 0) die(`${what}: no item with id ${id}`)
+  return at
+}
+
+// ------------------------------------------------------------------ the ops
+// One table, so `ops` prints what `apply` accepts and the two cannot drift.
+// Each entry says what it needs and does it; none of them reaches outside the
+// board it was handed.
+const OPS = {
+  add: {
+    args: "kind, x, y, [w], [h], [text], [tint]",
+    does: "put a new item on the board; answers with its id",
+    run(board, a) {
+      const kind = String(a[0] || "note")
+      if (S.KINDS.indexOf(kind) < 0) die(`add: ${kind} is not one of ${S.KINDS.join(", ")}`)
+      const id = board.nextId++
+      board.items.append({
+        iid: id, kind: kind,
+        ix: num(a[1], 0), iy: num(a[2], 0),
+        iw: Math.max(S.MIN_SIZE, num(a[3], 220)), ih: Math.max(S.MIN_SIZE, num(a[4], 160)),
+        itint: S.normalizeTint(a[6]), itext: a[5] === undefined ? "" : String(a[5]),
+        ipinned: false, isrc: ""
+      })
+      return { added: id }
+    }
+  },
+  setText: {
+    args: "id, text",
+    does: "replace what an item says",
+    run(board, a) {
+      board.items.setProperty(mustRow(board, a[0], "setText"), "itext", String(a[1] === undefined ? "" : a[1]))
+      return { changed: Number(a[0]) }
+    }
+  },
+  setTint: {
+    args: "id, " + S.TINTS.join("|"),
+    does: "change which theme role an item is drawn in",
+    run(board, a) {
+      board.items.setProperty(mustRow(board, a[0], "setTint"), "itint", S.normalizeTint(a[1]))
+      return { changed: Number(a[0]) }
+    }
+  },
+  setKind: {
+    args: "id, " + S.KINDS.join("|"),
+    does: "turn an item into a note, box, ellipse or diamond",
+    run(board, a) {
+      const kind = String(a[1])
+      if (S.KINDS.indexOf(kind) < 0) die(`setKind: ${kind} is not one of ${S.KINDS.join(", ")}`)
+      board.items.setProperty(mustRow(board, a[0], "setKind"), "kind", kind)
+      return { changed: Number(a[0]) }
+    }
+  },
+  move: {
+    args: "id, x, y",
+    does: "put an item somewhere else",
+    run(board, a) {
+      const at = mustRow(board, a[0], "move")
+      board.items.setProperty(at, "ix", num(a[1], 0))
+      board.items.setProperty(at, "iy", num(a[2], 0))
+      return { changed: Number(a[0]) }
+    }
+  },
+  resize: {
+    args: "id, w, h",
+    does: "change an item's size, never below the minimum",
+    run(board, a) {
+      const at = mustRow(board, a[0], "resize")
+      board.items.setProperty(at, "iw", Math.max(S.MIN_SIZE, num(a[1], S.MIN_SIZE)))
+      board.items.setProperty(at, "ih", Math.max(S.MIN_SIZE, num(a[2], S.MIN_SIZE)))
+      return { changed: Number(a[0]) }
+    }
+  },
+  pin: {
+    args: "id, true|false",
+    does: "pin an item behind the working canvas, or bring it back",
+    run(board, a) {
+      board.items.setProperty(mustRow(board, a[0], "pin"), "ipinned", a[1] !== false)
+      return { changed: Number(a[0]) }
+    }
+  },
+  remove: {
+    args: "id",
+    does: "take an item off the board, and every connector touching it",
+    run(board, a) {
+      const id = Number(a[0])
+      const at = mustRow(board, id, "remove")
+      board.items.remove(at)
+      for (let i = board.links.count - 1; i >= 0; i--) {
+        const link = board.links.get(i)
+        if (link.lfrom === id || link.lto === id) board.links.remove(i)
+      }
+      return { removed: id }
+    }
+  },
+  link: {
+    args: "from, to",
+    does: "join two items, pointing at the second",
+    run(board, a) {
+      const from = Number(a[0]), to = Number(a[1])
+      mustRow(board, from, "link"); mustRow(board, to, "link")
+      if (from === to) die("link: an item cannot point at itself")
+      for (let i = 0; i < board.links.count; i++) {
+        const link = board.links.get(i)
+        if (link.lfrom === from && link.lto === to) return { linked: [from, to], already: true }
+        // Drawing the same pair the other way round turns it, which is what
+        // the board does when you press x on a pair already joined.
+        if (link.lfrom === to && link.lto === from) {
+          board.links.setProperty(i, "lfrom", from)
+          board.links.setProperty(i, "lto", to)
+          return { linked: [from, to], turned: true }
+        }
+      }
+      board.links.append({ lfrom: from, lto: to })
+      return { linked: [from, to] }
+    }
+  },
+  unlink: {
+    args: "from, to",
+    does: "remove the connector between two items, whichever way it runs",
+    run(board, a) {
+      const from = Number(a[0]), to = Number(a[1])
+      for (let i = board.links.count - 1; i >= 0; i--) {
+        const link = board.links.get(i)
+        if ((link.lfrom === from && link.lto === to) || (link.lfrom === to && link.lto === from)) {
+          board.links.remove(i)
+          return { unlinked: [from, to] }
+        }
+      }
+      return { unlinked: [from, to], already: true }
+    }
+  }
+}
+
+function num(value, fallback) {
+  const n = typeof value === "number" ? value : parseFloat(value)
+  return isFinite(n) ? n : fallback
+}
+
+// ------------------------------------------------------------------ the verbs
+function verbNew(args) {
+  const file = args.shift()
+  if (!file) die("new: needs a file to write")
+  if (fs.existsSync(file) && !args.includes("--force"))
+    die(file + " already exists; pass --force to write over it")
+  const board = { items: new RowModel(), links: new RowModel(), nextId: 1 }
+  const notes = []
+  for (let i = 0; i < args.length; i++) if (args[i] === "--note") notes.push(args[++i])
+  // Laid out along a row, far enough apart to read as separate thoughts.
+  notes.forEach((text, i) => OPS.add.run(board, ["note", i * 260, 0, 220, 160, text]))
+  const bytes = writeBoard(board, file)
+  answer({ ok: true, file, items: board.items.count, bytes })
+}
+
+function verbInspect(args) {
+  const file = args.shift()
+  if (!file) die("inspect: needs a board to read")
+  const board = readBoard(file)
+  const full = args.includes("--full")
+  const items = S.itemRows(board.items)
+  const out = {
+    ok: true, file, version: board.version, nextId: board.nextId,
+    items: board.items.count, links: board.links.count,
+    bounds: S.bounds(board.items),
+    kinds: items.reduce((all, it) => (all[it.kind] = (all[it.kind] || 0) + 1, all), {})
+  }
+  // The text is the point of a board, so it is always in the answer; the
+  // geometry only when asked for, because it is most of the bytes and rarely
+  // what the question was.
+  out.contents = items.map(it => full ? it : { id: it.id, kind: it.kind, text: it.text })
+  if (full) out.connectors = S.linkRows(board.links)
+  answer(out)
+}
+
+function verbValidate(args) {
+  const file = args.shift()
+  if (!file) die("validate: needs a board to read")
+  let text
+  try { text = fs.readFileSync(file, "utf8") }
+  catch (error) { die("cannot read " + file, error.code || String(error)) }
+  const version = declaredVersion(text)
+  const data = S.readFile(text)
+  if (!data) {
+    // A board from a newer Omarchyform is not a broken one. The board itself
+    // opens it read-only rather than saving over what it cannot represent, and
+    // saying "not a board" here would invite someone to throw it away.
+    if (version !== null && version > 5)
+      die(file + ` is format ${version}, newer than this understands`,
+          "the board itself would open it read-only rather than losing anything")
+    die(file + " is not a board this understands")
+  }
+  const items = new RowModel()
+  const links = new RowModel()
+  S.fillItems(items, data.items)
+  S.fillLinks(links, items, data.links)
+  // What loading had to repair. A board is hand-editable and shareable, so
+  // this is the difference between what is on disk and what would be drawn.
+  const repairs = []
+  const rawItems = Array.isArray(data.items) ? data.items.length : 0
+  if (rawItems !== items.count) repairs.push(`${rawItems - items.count} item(s) could not be used`)
+  const rawLinks = Array.isArray(data.links) ? data.links.length : 0
+  if (rawLinks !== links.count) repairs.push(`${rawLinks - links.count} connector(s) pointed at nothing`)
+  answer({ ok: true, file, version, items: items.count, links: links.count, repairs })
+}
+
+function verbApply(args) {
+  const file = args.shift()
+  if (!file) die("apply: needs a board to change")
+  const source = args[0] && !args[0].startsWith("--") ? args.shift() : "-"
+  let raw
+  try { raw = source === "-" ? fs.readFileSync(0, "utf8") : fs.readFileSync(source, "utf8") }
+  catch (error) { die("cannot read operations from " + source, error.code || String(error)) }
+  let ops
+  try { ops = JSON.parse(raw) }
+  catch (error) { die("the operations are not JSON", String(error.message)) }
+  if (!Array.isArray(ops)) die("the operations must be a list")
+
+  const board = readBoard(file)
+  const results = []
+  ops.forEach((entry, i) => {
+    if (!entry || typeof entry.op !== "string") die(`operation ${i} has no op`)
+    const op = OPS[entry.op]
+    if (!op) die(`operation ${i}: there is no ${entry.op}`, Object.keys(OPS))
+    results.push(Object.assign({ op: entry.op }, op.run(board, entry.args || [])))
+  })
+
+  const out = args.includes("--out") ? args[args.indexOf("--out") + 1] : file
+  if (args.includes("--dry-run")) {
+    answer({ ok: true, file, dryRun: true, applied: results, items: board.items.count, links: board.links.count })
+    return
+  }
+  const bytes = writeBoard(board, out)
+  answer({ ok: true, file: out, applied: results, items: board.items.count, links: board.links.count, bytes })
+}
+
+function verbOps() {
+  answer({
+    ok: true,
+    ops: Object.keys(OPS).map(name => ({ op: name, args: OPS[name].args, does: OPS[name].does })),
+    kinds: S.KINDS, tints: S.TINTS, minimumSize: S.MIN_SIZE
+  })
+}
+
+const VERBS = { new: verbNew, inspect: verbInspect, apply: verbApply, validate: verbValidate, ops: verbOps }
+
+const argv = process.argv.slice(2)
+const verb = argv.shift()
+if (!verb || verb === "-h" || verb === "--help") {
+  answer({ ok: true, usage: Object.keys(VERBS), hint: "omarchyform ops lists what apply accepts" })
+  process.exit(verb ? 0 : 1)
+}
+if (!VERBS[verb]) die(`there is no ${verb}`, Object.keys(VERBS))
+VERBS[verb](argv)

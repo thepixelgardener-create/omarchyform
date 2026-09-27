@@ -324,6 +324,15 @@ ShellRoot {
         test.stage = 27
       } else if (test.stage === 27 && !plugin.imageBusy) {
         test.check(plugin.statusText.indexOf("PNG saved") === 0, "PNG export succeeds")
+        // The round trip that matters: a board bin/omarchyform wrote before
+        // the shell started, opened by the shell itself. Reading it back with
+        // the same loader proves the format; only this proves the board opens.
+        plugin.openBoard("from-cli.json", false)
+        test.stage = 28
+      } else if (test.stage === 28 && plugin.currentBoard === "from-cli.json" && plugin.boardLoaded) {
+        test.check(plugin.items.count === 2, "a board built from the command line opens")
+        test.check(plugin.items.get(0).itext === "built headlessly", "with what was written into it")
+        test.check(!plugin.damaged, "and is not treated as damaged")
         console.log("OMARCHY_TESTS_PASSED")
         Qt.quit()
       }

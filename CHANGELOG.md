@@ -7,6 +7,22 @@ since older boards are migrated on load rather than rejected.
 
 ### Added
 
+- **Boards from the command line.** `bin/omarchyform new | inspect | apply |
+  validate | ops` builds and changes boards with no window and no display,
+  answering with JSON on stdout and exiting 0 or 1. The board's logic was
+  already plain JavaScript running outside QML — it is what the test suite has
+  always exercised — so this is a front end over code that was already there
+  and already tested. It cannot draw: a picture of a board needs the running
+  shell.
+
+  `skills/omarchyform/SKILL.md` ships with it, so an agent asked to sketch
+  something out as a board can, which is the idea borrowed from omashow.
+
+  Every board the CLI writes is checked against `readFile`, `fillItems` and
+  `fillLinks` — the three calls the plugin makes on the way to drawing — and
+  the live suite now builds a board with the CLI before the shell starts and
+  has the running shell open it.
+
 - `npm run bench:scene` prints what it measured on before what it measured —
   Qt, Quickshell, the compositor, the refresh rate, the GPU, the CPU — and
   `--record` writes that and the table to `docs/performance.md`. Every frame
