@@ -529,6 +529,7 @@ npm run test:paste # live canvas image paste test; uses an isolated clipboard st
 npm run test:ui  # Qt Quick pointer, theme, and layout tests
 npm run test:omarchy -- --keep # live desktop smoke test, isolated board data
 npm run shots   # photograph every state, for judging by eye
+npm run preview # remake the picture at the top of this README
 ```
 
 `npm run bench:scene` measures the other half of what a board costs. `npm run
@@ -555,12 +556,12 @@ vsync-bound at 60Hz and dropping frames at 144. `--record` writes that and the
 table to [docs/performance.md](docs/performance.md), which is where the figures
 quoted in the changelog come from.
 
-`npm run shots` puts the real plugin through nineteen states — empty, a cursor
+`npm run shots` puts the real plugin through twenty states — empty, a cursor
 beside a mark, typing, backgrounds, finding, arranging, the command list open
 and narrowed, what can be done with a selection, the question asked when two
 versions of a board exist, help, the browser, naming a board, a browser with
-more boards than fit, a failed save, and a close-up at working zoom — and saves
-a picture of each into
+more boards than fit, a failed save, a close-up at working zoom, and the board
+at the top of this README — and saves a picture of each into
 `~/.cache/omarchyform/shots/`. It asserts nothing: it exists because whether a
 tinted item reads as selected, or a hint still fits on one line, is not
 something a test can answer, and reading the source instead has been wrong
@@ -573,6 +574,13 @@ npm run shots -- --light --dark
 
 It runs against the live compositor in an isolated `HOME`, so the installed
 copy of the plugin and the running shell are both left alone.
+
+The last of those states is the picture at the top of this file, and
+`npm run preview` is how it gets there: it takes the shots, crops the top of
+the window to 16:9 and writes `preview.png`. The board in it is composed in
+`tests/qml/shot.qml` rather than arranged by hand, so the next one can be taken
+the same way — the one before this was arranged by hand and went on showing a
+header and a hint row that had both since moved.
 
 `npm run mutate` breaks `BoardStore.js` on purpose, one edit at a time, and
 checks the suite notices. The command reports its current score and survivors;

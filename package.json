@@ -12,6 +12,7 @@
     "test:omarchy": "node tests/omarchy.js --live",
     "bench": "node tests/bench.js",
     "bench:scene": "node tests/scene.js",
-    "shots": "node tests/shots.js"
+    "shots": "node tests/shots.js",
+    "preview": "node tests/preview.js"
   }
 }
