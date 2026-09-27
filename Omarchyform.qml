@@ -272,6 +272,27 @@ Item {
     }
   }
 
+  // A board handed in from outside — a file manager opening one, or a summon
+  // carrying a path. It waits for the same three things a new board waits for,
+  // because a summon arrives before the state has been read and importing into
+  // a board that is still loading is how you lose one.
+  //
+  // It goes through the exchange rather than straight to openBoard: a path
+  // from outside is not a board in the library, and the exchange is what knows
+  // how to bring one in, refuse what is not a board, and leave the original
+  // alone.
+  property string launchOpenPath: ""
+  Timer {
+    interval: 20
+    repeat: true
+    running: root.launchOpenPath !== ""
+    onTriggered: if (root.stateReady && !root.browserBusy && !root.exchangeBusy) {
+      var path = root.launchOpenPath
+      root.launchOpenPath = ""
+      exchange.importPath(path)
+    }
+  }
+
   BoardExchange {
     id: exchange
     ctl: root
@@ -1421,6 +1442,8 @@ Item {
     var request = null
     try { request = JSON.parse(payloadJson || "{}") } catch (e) {}
     if (request && request.action === "new") root.launchNewBoard = true
+    if (request && request.action === "open" && typeof request.path === "string" && request.path !== "")
+      root.launchOpenPath = request.path
     if (root.applyPayload(payloadJson)) root.writeState()
     root.boardScreen = root.focusedScreen()
     root.opened = true

@@ -102,6 +102,21 @@ If you installed the desktop entry, re-run `./desktop/install.sh` after an
 update to pick up any change to it. It replaces only an entry it installed
 itself and leaves your edits alone; see below.
 
+## Opening a board someone sent you
+
+`./desktop/install.sh` also registers the board file type and a small
+`omarchyform-open` command, so a board can be opened from a file manager.
+
+A board in your library is an ordinary `.json` and opens from the browser on
+`b`. A board saved to share — `ctrl+shift+s` — is named `*.omarchyform.json`,
+and that is what a file manager recognises. The double extension is the honest
+way to claim it: a board *is* JSON, and claiming `*.json` outright would hand
+every JSON file on the machine to a note-taking program. Import still accepts
+any `.json`, so a board from before this is still a board.
+
+Opening one brings it into your library rather than editing it where it sits,
+which is what `ctrl+o` has always done: the file you were sent is left alone.
+
 ## Removing it
 
 ```bash
@@ -119,9 +134,9 @@ and remove the desktop entry if you installed it:
 ./desktop/install.sh --uninstall
 ```
 
-That removes the launcher entry only if this installer is the thing that wrote
-it and you have not edited it since; otherwise it says what it found and leaves
-the file alone.
+That removes the launcher entry, the file type and the `omarchyform-open`
+command, and only the ones this installer wrote and you have not edited since;
+otherwise it says what it found and leaves the file alone.
 
 Your boards are left alone. They live in
 `~/.local/share/omarchyform/`, and removing the plugin does not touch them, so

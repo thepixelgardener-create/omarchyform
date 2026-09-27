@@ -2,16 +2,20 @@
 Type=Application
 Name=Omarchyform
 Comment=Capture a thought, arrange it spatially, get back to work
-Exec=omarchy-shell shell summon thepixelgardener.omarchyform {}
+# The path goes to a command of our own rather than into the payload here: the
+# specification forbids a field code inside a quoted argument, and the payload
+# has to be quoted.
+Exec=omarchyform-open %f
 Icon=accessories-text-editor
 Terminal=false
 Categories=Utility;
 Keywords=board;notes;ideas;canvas;
+MimeType=application/x-omarchyform-board;
 Actions=NewBoard;
 # This installer only ever replaces or removes an entry carrying these two
 # keys, so a file someone else put at this path is left alone.
 X-Omarchyform-Managed=true
-X-Omarchyform-Entry-Version=1
+X-Omarchyform-Entry-Version=2
 
 [Desktop Action NewBoard]
 Name=New board

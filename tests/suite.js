@@ -899,6 +899,41 @@ function tests(S) {
     eq(S.cycle(S.KINDS, "hexagon"), S.KINDS[0], "unknown falls to the first")
   })
 
+  // ------------------------------------------------------------------- format
+  test("a board says what it is, near enough to the front to be recognised", () => {
+    const items = new FakeModel([item({ iid: 1 })])
+    const text = S.writeFile(items, new FakeModel(), 2)
+    const at = text.indexOf(S.FORMAT_MARKER)
+    ok(at >= 0, "the marker is in the file")
+    ok(at < 80, `the marker is at ${at}, near enough the front for a magic match`)
+    eq(JSON.parse(text).kind, S.FORMAT_MARKER, "and it is the kind field")
+  })
+
+  test("a board written before the marker still loads", () => {
+    // The marker is not a format bump, so an older board has no kind at all
+    // and a newer Omarchyform must not treat that as a stranger.
+    const text = JSON.stringify({
+      version: 5, nextId: 3,
+      items: [{ id: 1, kind: "note", x: 0, y: 0, w: 100, h: 100, text: "old" }],
+      links: []
+    })
+    const data = S.readFile(text)
+    ok(data, "it loads")
+    const items = new FakeModel()
+    S.fillItems(items, data.items)
+    eq(items.count, 1, "with its item")
+    eq(items.get(0).itext, "old", "and its text")
+  })
+
+  test("the marker survives a round trip and does not become an item", () => {
+    const items = new FakeModel([item({ iid: 1, itext: "one" })])
+    const reread = S.readFile(S.writeFile(items, new FakeModel(), 2))
+    const back = new FakeModel()
+    S.fillItems(back, reread.items)
+    eq(back.count, 1, "one item in, one item out")
+    eq(back.get(0).itext, "one")
+  })
+
   // ------------------------------------------------------------------- shapes
   test("a diamond touches the middle of each of its four edges", () => {
     const path = S.shapePath("diamond", 180, 140)

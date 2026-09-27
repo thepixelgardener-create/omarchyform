@@ -9,24 +9,46 @@ const path = require('path')
 const { spawnSync } = require('child_process')
 
 const script = path.join(__dirname, '../desktop/install.sh')
-const shipped = fs.readFileSync(path.join(__dirname, '../desktop/omarchyform.desktop'), 'utf8')
+const source = name => fs.readFileSync(path.join(__dirname, '../desktop', name), 'utf8')
+const shipped = source('omarchyform.desktop')
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'omarchyform-desktop-'))
+const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'omarchyform-bin-'))
 const target = path.join(dir, 'applications/omarchyform.desktop')
 
-// XDG_DATA_HOME is the only thing pointing the installer anywhere, so a test
-// run cannot reach the real launcher directory.
+// Three files, in three shared directories. Every one of them is a place
+// another program's file could already be.
+const installed = [
+  ['omarchyform.desktop', target],
+  ['omarchyform.xml', path.join(dir, 'mime/packages/omarchyform.xml')],
+  ['omarchyform-open', path.join(bin, 'omarchyform-open')]
+]
+
+// Both variables are set, always. XDG_DATA_HOME alone would leave the command
+// going to the real ~/.local/bin, and a test suite that installs into the
+// machine it is checking is not a test suite.
 const run = (...args) => spawnSync('bash', [script, ...args],
-  { encoding: 'utf8', env: { ...process.env, XDG_DATA_HOME: dir } })
+  { encoding: 'utf8', env: { ...process.env, XDG_DATA_HOME: dir, XDG_BIN_HOME: bin } })
 
 try {
   // The README tells people to run `./desktop/install.sh`, which only works if
   // the bit survives a clone. It did not, and every user hit permission denied.
   assert.ok(fs.statSync(script).mode & 0o111, 'the installer ships executable')
 
-  // Fresh install.
+  // Every shipped file carries the two keys the installer decides ownership by;
+  // one missing them could never be replaced or removed again.
+  for (const [name] of installed) {
+    assert.match(source(name), /X-Omarchyform-Managed=true/, `${name} says it is ours`)
+    assert.match(source(name), /X-Omarchyform-Entry-Version=/, `${name} says which version`)
+  }
+  assert.ok(fs.statSync(path.join(__dirname, '../desktop/omarchyform-open')).mode & 0o111,
+    'the opener ships executable')
+
+  // Fresh install: all three land verbatim, the command executable.
   assert.equal(run().status, 0)
-  assert.equal(fs.readFileSync(target, 'utf8'), shipped, 'the shipped entry lands verbatim')
+  for (const [name, where] of installed)
+    assert.equal(fs.readFileSync(where, 'utf8'), source(name), `${name} lands verbatim`)
   assert.equal(fs.statSync(target).mode & 0o777, 0o644)
+  assert.equal(fs.statSync(path.join(bin, 'omarchyform-open')).mode & 0o777, 0o755)
 
   // Repeat install: idempotent, not a conflict with itself.
   assert.equal(run().status, 0, 'installing twice is not an error')
@@ -47,18 +69,29 @@ try {
   fs.writeFileSync(target, foreign)
   const conflict = run()
   assert.equal(conflict.status, 3)
-  assert.match(conflict.stderr, /another launcher entry/)
+  assert.match(conflict.stderr, /already there/)
   assert.equal(fs.readFileSync(target, 'utf8'), foreign, 'their file is untouched')
+
+  // A conflict on any one file stops the whole install: half a feature is
+  // worse than none, and a command with no file type to answer for is half.
+  const opener = path.join(bin, 'omarchyform-open')
+  fs.rmSync(target)
+  fs.writeFileSync(opener, '#!/bin/sh\necho someone else\n')
+  assert.equal(run().status, 3, 'a conflict anywhere refuses everywhere')
+  assert.equal(fs.existsSync(target), false, 'and nothing was written first')
+  fs.rmSync(opener)
+  fs.writeFileSync(target, foreign)
 
   // Removal leaves a file we do not own exactly where it is.
   const foreignRemoval = run('--uninstall')
   assert.equal(foreignRemoval.status, 3)
   assert.equal(fs.readFileSync(target, 'utf8'), foreign)
 
-  // Removal of our own entry.
+  // Removal of our own files.
   assert.equal(run('--force').status, 0)
   assert.equal(run('--uninstall').status, 0)
-  assert.equal(fs.existsSync(target), false, 'and the file is gone')
+  for (const [name, where] of installed)
+    assert.equal(fs.existsSync(where), false, `${name} is gone`)
 
   // Removing what is not there is a success, so an uninstall can be repeated.
   const again = run('--uninstall')
@@ -76,5 +109,40 @@ try {
 
   // An unknown argument is a mistake, not an install.
   assert.equal(run('--wipe').status, 2)
-} finally { fs.rmSync(dir, { recursive: true, force: true }) }
+
+  // What the file type is actually for: a file manager telling a board from
+  // any other JSON. Skipped where the tools are not installed — a container
+  // has neither — because this is about the desktop, not about the code.
+  const haveMime = spawnSync('sh', ['-c', 'command -v update-mime-database && command -v gio'],
+    { encoding: 'utf8' }).status === 0
+  if (!haveMime) {
+    console.log('skipped: the file type check needs update-mime-database and gio')
+  } else {
+    fs.rmSync(target, { force: true })
+    assert.equal(run().status, 0)
+    // The field, not the output: gio prints the path too, and a temporary
+    // directory named after this project matches anything looked for in it.
+    const contentType = file => {
+      const out = spawnSync('gio', ['info', '-a', 'standard::content-type', file],
+        { encoding: 'utf8', env: { ...process.env, XDG_DATA_HOME: dir } }).stdout
+      const line = out.split('\n').find(l => l.includes('standard::content-type:'))
+      return line ? line.split(':').pop().trim() : ''
+    }
+
+    const board = path.join(dir, 'shared.omarchyform.json')
+    fs.writeFileSync(board, JSON.stringify({ kind: 'omarchyform.board', version: 5, nextId: 1, items: [], links: [] }))
+    assert.equal(contentType(board), 'application/x-omarchyform-board',
+      'a shared board is recognised as a board')
+
+    // And a board still named .json is not claimed, because claiming *.json
+    // would hand every JSON file on the machine to a note-taking program.
+    const plain = path.join(dir, 'ordinary.json')
+    fs.writeFileSync(plain, '{"not":"a board"}')
+    assert.equal(contentType(plain), 'application/json', 'other JSON is left alone')
+    run('--uninstall')
+  }
+} finally {
+  fs.rmSync(dir, { recursive: true, force: true })
+  fs.rmSync(bin, { recursive: true, force: true })
+}
 console.log('ok — desktop entry: ownership, conflicts, local edits and removal')

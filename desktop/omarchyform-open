@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Open Omarchyform, on a particular board if given one.
+#
+# The launcher entry runs this with no argument, and a file manager runs it
+# with the board that was double-clicked, so it has to do both: a bare summon
+# and a summon carrying a path.
+#
+# It exists at all because the desktop entry specification forbids a field code
+# like %f inside a quoted argument, and the JSON payload a summon takes has to
+# be quoted. Doing it here also means a path containing a quote or a backslash
+# can be escaped properly rather than ending the payload early.
+# This installer only ever replaces or removes a file carrying these two keys,
+# so a command another program put at this path is left alone.
+# X-Omarchyform-Managed=true
+# X-Omarchyform-Entry-Version=1
+set -euo pipefail
+
+plugin=thepixelgardener.omarchyform
+
+case "${1:-}" in
+  -h | --help)
+    printf 'usage: %s [board.json]\n' "${0##*/}" >&2
+    exit 0
+    ;;
+esac
+
+if [[ $# -eq 0 || -z ${1:-} ]]; then
+  exec omarchy-shell shell summon "$plugin" '{}'
+fi
+
+board=$1
+[[ -f $board ]] || { printf 'No such board: %s\n' "$board" >&2; exit 1; }
+# Absolute, because the shell process has a working directory of its own.
+board=$(realpath -- "$board")
+
+# JSON string escaping, which for a path is exactly backslash and quote: a
+# newline cannot reach here as an argument and the rest are literal.
+escaped=${board//\\/\\\\}
+escaped=${escaped//\"/\\\"}
+
+exec omarchy-shell shell summon "$plugin" "{\"action\":\"open\",\"path\":\"$escaped\"}"

@@ -7,6 +7,19 @@ since older boards are migrated on load rather than rejected.
 
 ### Added
 
+- **A board you were sent opens by double-clicking it.** The installer now
+  registers a file type and a small `omarchyform-open` command beside the
+  launcher entry, and the board accepts a path from the shell — so a file
+  manager can hand one over. Opening brings it into your library rather than
+  editing it where it sits, which is what `ctrl+o` has always done.
+
+  A board in the library stays an ordinary `.json`; a copy saved to share is
+  `*.omarchyform.json`, and that is what is recognised. Claiming `*.json`
+  outright would hand every JSON file on the machine to a note-taking program.
+  Boards also carry a `kind` marker now, written first so a file can be
+  identified by its contents — not a format bump, so an older Omarchyform
+  still opens them, and older boards pick it up on their next save.
+
 - **Boards from the command line.** `bin/omarchyform new | inspect | apply |
   validate | ops` builds and changes boards with no window and no display,
   answering with JSON on stdout and exiting 0 or 1. The board's logic was

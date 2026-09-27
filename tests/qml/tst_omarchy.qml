@@ -333,6 +333,14 @@ ShellRoot {
         test.check(plugin.items.count === 2, "a board built from the command line opens")
         test.check(plugin.items.get(0).itext === "built headlessly", "with what was written into it")
         test.check(!plugin.damaged, "and is not treated as damaged")
+        // A board from outside the library, opened by the path a file manager
+        // would hand over. This is the whole of what the file type buys.
+        plugin.open('{"action":"open","path":"'
+          + Quickshell.env("OMARCHYFORM_TEST_DIR") + '/sent-to-me.omarchyform.json"}')
+        test.stage = 29
+      } else if (test.stage === 29 && plugin.currentBoard === "sent-to-me.json" && plugin.boardLoaded) {
+        test.check(plugin.items.count === 1, "a board handed over by path opens")
+        test.check(plugin.items.get(0).itext === "from somebody else", "with what was in it")
         console.log("OMARCHY_TESTS_PASSED")
         Qt.quit()
       }

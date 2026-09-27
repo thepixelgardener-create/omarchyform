@@ -36,6 +36,17 @@ try {
     process.exitCode = 1
   }
 
+  // And one outside the library entirely, the way a board arrives when someone
+  // sends you one: the file manager hands its path to the shell.
+  const outside = spawnSync(process.execPath,
+    [path.join(__dirname, '..', 'bin', 'omarchyform'), 'new', path.join(dir, 'sent-to-me.omarchyform.json'),
+     '--note', 'from somebody else'],
+    { encoding: 'utf8' })
+  if (outside.status !== 0) {
+    console.error('could not build the board to open by path:', outside.stdout, outside.stderr)
+    process.exitCode = 1
+  }
+
   const theme = path.join(home, '.local/state/omarchy/current')
   fs.mkdirSync(theme, {recursive:true})
   fs.symlinkSync(path.join(os.homedir(), '.local/state/omarchy/current/theme'), path.join(theme, 'theme'))

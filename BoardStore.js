@@ -319,8 +319,20 @@ function readFile(raw) {
 // windowMode deliberately absent: which surface the board opens on is a
 // property of this machine, not of the board, and lives in state.json. A board
 // written before that split still carries the key; it is ignored on the way in.
+// The marker goes first so a file manager can tell a board from any other
+// JSON without opening it: shared-mime-info matches a string near the front of
+// the file, and `{"version": 5` describes half the configuration on the disk.
+//
+// Deliberately not a format bump. A key an older Omarchyform does not know is
+// a key it ignores, so a board written here still opens there; bumping the
+// version would make it refuse to save over one, which is the opposite of what
+// adding a name to the format should cost. Boards written before this pick the
+// marker up the next time they are saved.
+var FORMAT_MARKER = "omarchyform.board"
+
 function writeFile(items, links, nextId) {
   return JSON.stringify({
+    kind: FORMAT_MARKER,
     version: 5,
     nextId: nextId,
     items: itemRows(items),
