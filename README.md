@@ -543,10 +543,12 @@ vsync-bound at 60Hz and dropping frames at 144. `--record` writes that and the
 table to [docs/performance.md](docs/performance.md), which is where the figures
 quoted in the changelog come from.
 
-`npm run shots` puts the real plugin through fourteen states — empty, a cursor
-beside a mark, typing, backgrounds, finding, arranging, help, the browser, a
-browser with more boards than fit, a failed save, and a close-up at working
-zoom — and saves a picture of each into
+`npm run shots` puts the real plugin through nineteen states — empty, a cursor
+beside a mark, typing, backgrounds, finding, arranging, the command list open
+and narrowed, what can be done with a selection, the question asked when two
+versions of a board exist, help, the browser, naming a board, a browser with
+more boards than fit, a failed save, and a close-up at working zoom — and saves
+a picture of each into
 `~/.cache/omarchyform/shots/`. It asserts nothing: it exists because whether a
 tinted item reads as selected, or a hint still fits on one line, is not
 something a test can answer, and reading the source instead has been wrong
@@ -617,10 +619,15 @@ Assigning `screen` to a window that already exists leaves it unmapped.
 
 ## Dependencies
 
-One external program: **wl-clipboard**, for `wl-paste`. `ctrl+v` needs it and
-says so if it is missing; nothing else does, so a board without it still opens,
-edits, saves, imports, exports and renders a PNG. Omarchy ships it, so on a
-stock install there is nothing to do.
+One external program of its own: **wl-clipboard**, for `wl-paste`. `ctrl+v`
+needs it and says so if it is missing; nothing else does, so a board without it
+still opens, edits, saves, imports, exports and renders a PNG. Omarchy ships it,
+so on a stock install there is nothing to do.
+
+Saving also uses **flock** (util-linux) — the lock that stops two writers from
+both believing they are updating the same board — alongside the `bash` and
+coreutils the filesystem helper has always used. All three are part of a base
+Arch install; `flock` is the only one added since 0.3.0.
 
 Everything else is already in the shell: Qt 6 Quick, and the Quickshell process
 and file primitives. No network access, no external services, and no elevated
