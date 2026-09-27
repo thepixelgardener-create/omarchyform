@@ -1,7 +1,9 @@
 # Submission readiness review and fixes
 
-Initial review: 2026-09-24 at `9dbedd9`. The findings below are retained as the
-record of that review; remediation is now implemented in the working tree.
+**This is the record of a review, not a status page.** Initial review:
+2026-09-24 at `9dbedd9`. The findings below are retained as the record of that
+review; remediation was implemented and has since been merged. Every count and
+line number here is as it stood then. What has changed is at the end.
 
 ## Current status
 
@@ -45,6 +47,10 @@ on Omarchy.** The original decision was to fix reliability before submission,
 without expanding the product into a larger drawing platform.
 
 ## Original findings (addressed above)
+
+Line numbers are as they were at `9dbedd9`. The files have all moved since —
+`BoardPersistence.qml` is now shorter than the range cited against it — so read
+these as a record of where the defect was, not as a way to find code today.
 
 ### 1. Restore can claim success without restoring the board — high
 
@@ -136,8 +142,9 @@ green result as evidence for this checkout.
 - README says multi-selection is missing even though it documents marks.
   It also implies moving/resizing marked items applies universally, while
   pointer dragging clears marks and resizing changes one item. Describe the
-  keyboard behavior precisely or make pointer behavior consistent.
-- README omits Ctrl+HJKL from its main key table. The existing compatibility
+  keyboard behavior precisely or make pointer behavior consistent. *(Done: the
+  README no longer says multi-selection is missing.)*
+- README omits Ctrl+HJKL from its main key table. *(Done: it is in the table.)* The existing compatibility
   report's counts predate this review. Keep detailed testing history in docs;
   shorten the main README to purpose, install, essential controls and storage.
 - The undo comment promises 100 steps on small boards, but the formula allows
@@ -215,3 +222,25 @@ plugin, user board, theme or desktop configuration was modified.
 
 The initial review made no application changes. The subsequent implementation
 addresses the findings as recorded in Current status. Nothing has been submitted.
+
+## Since this review
+
+Recorded 2026-09-27 at `1a3935f`, so this section dates too.
+
+The six findings above stayed fixed, and the checks that verified them grew:
+116 pure tests where this review counted 75, 27 Qt results where it counted 12,
+and 409/469 mutants killed where the follow-up counted 174/190 — a score of
+87.2%, down from 91.6%, because the code has been growing faster than the suite
+chasing it. The live failure log named above was temporary and is gone.
+
+Finding 5 — two boards sharing one backup because `/` was flattened to `__` —
+was fixed by mirroring the board tree under `backups/v2/`. The same flattening
+was later written again for lock paths, where `work/a.json` and `work__a.json`
+share one lock. That one is conservative rather than destructive: two unrelated
+boards wait for each other instead of one overwriting the other. It is worth
+knowing that a fix at one call site did not reach the code written on top of it.
+
+Route to submission: steps 1 through 3 are done. Step 4 — reconciling README,
+help and manifest claims against the final revision — is what this pass and its
+siblings are. The destination is still unconfirmed, and a fresh registry install
+and upgrade smoke test is still a release step. Nothing has been submitted.

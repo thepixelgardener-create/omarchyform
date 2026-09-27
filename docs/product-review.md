@@ -1,5 +1,10 @@
 # Product review: an excellent keyboard-first board
 
+**This is the record of a review, not a roadmap.** Reviewed 2026-09-24, when
+almost none of it existed. Most of what is proposed below has since shipped, and
+one of its rules was deliberately broken — with consequences worth reading. What
+happened to each proposal is at the end.
+
 Reviewed 2026-09-24. These are proposed product changes, not implemented features.
 Evidence: current QML/manifest/README, the live test captures, and the verified
 board creation and editing flows. No user study or interaction-latency benchmark
@@ -135,3 +140,48 @@ import/export. It should have an explicit interface and preserve the current
 asynchronous tests; splitting it merely to reduce line count is not worthwhile.
 Keep the working session/persistence split. Do not rewrite everything before
 shipping the small improvements above.
+
+## What happened to this review
+
+Recorded 2026-09-27 at `1a3935f`, so this section dates too.
+
+**Grievance 1, starting is harder than editing — addressed.** There is a
+launcher entry now, installed by `desktop/install.sh`, which refuses to replace
+a file it did not write. An empty board offers `n: New note` and `Ctrl+V: Paste
+text`, so the first thing on screen is a way to start rather than a blank.
+
+**Grievance 2, the board is disconnected — addressed, in the order proposed.**
+Canvas paste makes a note. A PNG export is fitted to content without grips or
+chrome. A board can be imported and an exact editable copy saved. Images can be
+pasted and dropped, they are owned locally rather than referenced by path, and a
+copy that travels carries its pictures inside it or is refused — which was the
+condition this review put on the feature.
+
+**Grievance 3, the canvas looks sparse — addressed.** Board name and save state
+live in a header; zoom sits in its menu beside Fit; the keyboard cursor reads
+differently from secondary marks; grips appear on what is selected; overflow is
+handled deliberately rather than by clipping.
+
+**"Does it need a CLI?" — answered against this review, and the bill arrived.**
+`bin/omarchyform` is the full command suite this section argued against, and it
+is exactly the second writer the section said never to introduce. What followed
+is the clearest evidence in this repository for why the rule existed: running
+the CLI against an open board silently lost one side's work, in both directions,
+because each end believed it was the only writer. The fix was not to withdraw
+the CLI but to make every write coordinated — a lock, a revision check, and a
+question with three named answers when two versions exist. The rule was right
+about the danger and wrong about the remedy: a second writer is affordable, but
+only once nothing can be written over in silence.
+
+**Speed — half done.** Frame pacing at board size is measured now, at four
+sizes across pan, zoom, drag, mark and find, and recorded in
+[performance.md](performance.md) with the machine under it. Warm-open latency
+and key-to-feedback time are still not measured, and "instant" should not be
+claimed until they are.
+
+**Code cleanup — still open, and the same sentence still applies.** The
+controller owns browser navigation, filesystem operations, editing and window
+lifecycle in one file: 1,994 lines and 258 members that the contract test counts
+on every run. Session, persistence, exchange and image handling have been
+extracted since this review; the board library has not. Freehand drawing is
+still outside the scope, as this review recommended.
