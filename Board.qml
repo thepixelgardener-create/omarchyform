@@ -349,7 +349,8 @@ FocusScope {
       "+": function () { board.ctl.zoomCentre(1.2) },
       "=": function () { board.ctl.zoomCentre(1.2) },
       "-": function () { board.ctl.zoomCentre(1 / 1.2) },
-      "?": function () { board.ctl.helpVisible = !board.ctl.helpVisible }
+      "?": function () { board.ctl.toggleHelp() },
+      ":": function () { board.ctl.beginPalette() }
     })
 
     // Matched on key codes as well as text: holding Ctrl turns the letter in
@@ -386,6 +387,22 @@ FocusScope {
         else if (event.key === Qt.Key_Backtab) board.ctl.moveMenu(-1)
         else if (md) board.ctl.moveMenu(md[0] !== 0 ? md[0] : md[1])
         else board.ctl.menuVisible = false
+        event.accepted = true
+        return
+      }
+
+      // The palette is open: every printable key is the query, so the list is
+      // walked with the arrows or tab rather than j and k — here those are
+      // letters, the same way they are while finding.
+      if (board.ctl.paletteVisible) {
+        if (event.key === Qt.Key_Escape) board.ctl.endPalette()
+        else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) board.ctl.runPaletteChoice()
+        else if (event.key === Qt.Key_Down || event.key === Qt.Key_Tab) board.ctl.movePalette(1)
+        else if (event.key === Qt.Key_Up || event.key === Qt.Key_Backtab) board.ctl.movePalette(-1)
+        else if (ctrl && event.key === Qt.Key_N) board.ctl.movePalette(1)
+        else if (ctrl && event.key === Qt.Key_P) board.ctl.movePalette(-1)
+        else if (event.key === Qt.Key_Backspace) board.ctl.trimPalette()
+        else if (event.text && event.text >= " " && !ctrl) board.ctl.extendPalette(event.text)
         event.accepted = true
         return
       }
@@ -430,6 +447,7 @@ FocusScope {
         else if (event.key === Qt.Key_V) board.ctl.pasteClipboard()
         else if (event.key === Qt.Key_O) board.ctl.importBoard()
         else if (event.key === Qt.Key_E) board.ctl.choosePng()
+        else if (event.key === Qt.Key_P) board.ctl.beginPalette()
         else return
         event.accepted = true
         return
@@ -446,7 +464,7 @@ FocusScope {
 
       if (event.key === Qt.Key_Escape) board.ctl.back()
       else if (event.key === Qt.Key_F2) board.ctl.renameBoard()
-      else if (event.key === Qt.Key_F1) board.ctl.helpVisible = !board.ctl.helpVisible
+      else if (event.key === Qt.Key_F1) board.ctl.toggleHelp()
       else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) board.ctl.editSelected()
       else if (event.key === Qt.Key_Tab) board.ctl.selectNext(1)
       else if (event.key === Qt.Key_Backtab) board.ctl.selectNext(-1)
@@ -517,6 +535,16 @@ FocusScope {
     }
   }
 
+  // Under the header, where the eye already is when a command is wanted, and
+  // above the canvas because it is a mode rather than part of the board.
+  Commands {
+    id: commandPalette
+    objectName: "command-palette"
+    ctl: board.ctl
+    anchors.horizontalCenter: parent.horizontalCenter
+    y: toolbar.y + toolbar.height + board.ctl.sp(24)
+  }
+
   // The board browser sits above the canvas and takes the keyboard while open.
   Browser {
     anchors.fill: parent
@@ -560,6 +588,8 @@ FocusScope {
     textFormat: Text.StyledText
     text: board.ctl.saveError !== "" ? Store.escapeMarkup(board.ctl.saveError)
       : board.ctl.trashIndexError !== "" ? Store.escapeMarkup(board.ctl.trashIndexError)
+      : board.ctl.paletteVisible
+      ? "commands · " + Store.hintLine(Store.PALETTE_HINTS, board.ctl.accentMarkup)
       : board.ctl.finding
       ? "find: " + Store.escapeMarkup(board.ctl.findQuery) + "▏"
         + (board.ctl.findQuery === "" ? ""

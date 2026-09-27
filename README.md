@@ -149,6 +149,12 @@ Press `?` or `F1` on the board for this list. The board's name, the menu and
 whatever it is currently telling you all sit together at the top; the rest of
 the canvas is yours.
 
+You do not have to know any of them. `:` — or `ctrl+p`, or **Commands** in the
+header menu — opens a list of every command by name: type a few letters, press
+`enter`. It shows the key beside each one, so the list teaches the keyboard
+while you use it, and a command that cannot run just now is dimmed and says
+what it is waiting for rather than doing nothing when you pick it.
+
 | Key | Does |
 |-----|------|
 | `n` | New note beside the selected one, ready to type |
@@ -188,6 +194,7 @@ the canvas is yours.
 | `0` | Reset the view |
 | `+` / `-` | Zoom |
 | `?` / `F1` | Keybinding list |
+| `:` / `ctrl+p` | Run any command by name, without knowing its key |
 
 `space` marks the item under the cursor. Moving, resizing, recolouring,
 changing shape and deleting then apply to everything marked, and the cursor

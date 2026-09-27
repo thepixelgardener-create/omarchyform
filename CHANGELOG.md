@@ -7,6 +7,21 @@ since older boards are migrated on load rather than rejected.
 
 ### Added
 
+- **Every command by name, on `:`.** The keys are quick once they are in the
+  hands and useless before that: a board you have not opened in a month was a
+  list of letters to remember, and the header menu only ever held six of them.
+  `:` — or `ctrl+p`, or **Commands** in that menu — opens a list of all of them.
+  Type to narrow it, `enter` runs the highlighted one, `esc` closes it. It costs
+  no height until it is asked for, the same bargain the menu makes.
+
+  The list shows each command's key, so it teaches the keyboard while it is
+  used, and a command that cannot run at this moment is dimmed and says what it
+  is waiting for instead of appearing to do nothing. The commands are one table
+  in `BoardStore.js` that the palette dispatches through, and `tests/contract.js`
+  checks every entry against the key table in `Board.qml` and the controller
+  itself — so a key that moves, or a function that is renamed, cannot leave the
+  list teaching something that is no longer true.
+
 - **A copy saved to share carries its pictures.** A board in the library keeps
   only the file name of a picture, so a screenshot is stored once however many
   boards use it — and a copy sent to someone else arrived as a board of holes,

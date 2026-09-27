@@ -680,6 +680,89 @@ Item {
     else if (index === 3) root.exportBoard()
     else if (index === 4) root.choosePng()
     else if (index === 5) root.helpVisible = true
+    else if (index === 6) root.beginPalette()
+  }
+
+  function toggleHelp() { root.helpVisible = !root.helpVisible }
+
+  // ------------------------------------------------------------- the palette
+  // Every command by name. The keys are fast once they are in your hands and
+  // useless before that: a board you have not opened in a month is a list of
+  // letters to remember, and one you have never opened is worse. `:` opens
+  // this, typing narrows it, enter runs it — and what it runs is the function
+  // the key runs, because both come out of the one table in BoardStore.
+  property bool paletteVisible: false
+  property string paletteQuery: ""
+  property int paletteIndex: 0
+  readonly property var paletteMatches: root.paletteVisible ? Store.matchCommands(root.paletteQuery) : []
+  // How many rows the panel draws. The rest are still there to be typed at.
+  readonly property int paletteRows: 9
+
+  function beginPalette() {
+    if (!root.boardLoaded && !root.damaged) return
+    root.stopEditing()
+    root.menuVisible = false
+    root.paletteVisible = true
+    root.paletteQuery = ""
+    root.paletteIndex = 0
+    root.focusKeys()
+  }
+
+  function endPalette() {
+    root.paletteVisible = false
+    root.paletteQuery = ""
+    root.paletteIndex = 0
+  }
+
+  function extendPalette(text) {
+    root.paletteQuery += text
+    root.paletteIndex = 0
+  }
+
+  function trimPalette() {
+    root.paletteQuery = root.paletteQuery.slice(0, -1)
+    root.paletteIndex = 0
+  }
+
+  function movePalette(step) {
+    var n = root.paletteMatches.length
+    if (n === 0) return
+    root.paletteIndex = ((root.paletteIndex + step) % n + n) % n
+  }
+
+  // Whether a command can do anything at this moment. Every one of these
+  // functions already refuses politely on its own, but a command run from a
+  // list that then appears to do nothing teaches the wrong thing about it.
+  function commandReady(needs) {
+    if (needs === "edit") return root.canEdit
+    if (needs === "target") return root.canEdit && root.targets().length > 0
+    return true
+  }
+
+  function commandExcuse(needs) {
+    if (!root.canEdit) return root.damaged ? "this board is read-only" : "the board is not ready yet"
+    return needs === "target" ? "nothing is selected" : "not now"
+  }
+
+  function runPaletteChoice() {
+    var choice = root.paletteMatches[root.paletteIndex]
+    if (!choice) { root.flash(root.paletteQuery === "" ? "no commands" : "no command goes by that"); return }
+    root.endPalette()
+    root.runCommand(choice.name)
+  }
+
+  // The one dispatch. A name that is not in the table runs nothing, and a
+  // function the table names but the controller does not have would be a
+  // mistake in the table — which tests/contract.js refuses to let ship.
+  function runCommand(name) {
+    var command = Store.commandByName(name)
+    if (!command || typeof root[command.run] !== "function") return
+    if (!root.commandReady(command.needs)) {
+      root.flash(command.name + " · " + root.commandExcuse(command.needs))
+      return
+    }
+    if (command.arg === undefined) root[command.run]()
+    else root[command.run](command.arg)
   }
 
   // Finding is navigation, not editing, so it works on a board that cannot be

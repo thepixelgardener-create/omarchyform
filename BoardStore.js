@@ -38,7 +38,7 @@ function normalizeTint(value) {
 
 // The header menu. One list, so the view draws what the controller dispatches
 // and a keyboard walk cannot drift out of step with what is on screen.
-var MENU_COMMANDS = ["New", "Boards", "Import", "Save copy", "Export PNG", "Help"]
+var MENU_COMMANDS = ["New", "Boards", "Import", "Save copy", "Export PNG", "Help", "Commands"]
 
 // The outline of a painted shape, as SVG path data for a ShapePath.
 //
@@ -126,8 +126,12 @@ function hintLine(hints, color, separator) {
 
 // What each surface offers, as data: the view joins and colours them, and the
 // help panel below stays the one long list.
+// The palette answers to `:` as well, which is the sibling of `/` and the one
+// worth learning — but a key drawn in front of its own separator reads as
+// ":: commands", which looks like a typo on the one line that is meant to
+// teach. The chord is what this line says; the help list names both.
 var BOARD_HINTS = [["n", "note"], ["r", "rect"], ["e", "ellipse"], ["x", "connect"],
-                   ["/", "find"], ["?", "keys"], ["esc", "close"]]
+                   ["ctrl+p", "commands"], ["/", "find"], ["?", "keys"], ["esc", "close"]]
 var FIND_HINTS = [["enter", "next"], ["esc", "done"]]
 var ARRANGE_HINTS = [["hjkl", "edges"], ["c/m", "centres"], ["HJKL", "spread evenly"],
                      ["esc", "cancel"]]
@@ -140,9 +144,89 @@ var BROWSER_HINTS = [["jk", "move"], ["l/enter", "open"], ["h", "up"], ["/", "se
                      ["x", "trash"], ["t", "the trash"]]
 var TRASH_HINTS = [["jk", "move"], ["l/enter", "put it back"], ["x", "destroy it"],
                    ["t or esc", "back to the boards"]]
+var PALETTE_HINTS = [["tab", "next"], ["enter", "run"], ["esc", "close"]]
 var PROMPT_HINTS = [["enter", "confirm"], ["esc", "cancel"]]
 var EMPTY_HINTS = [["a", "add a board"], ["A", "Add a folder"]]
 var START_HINTS = [["n", "New note"], ["Ctrl+V", "Paste text"]]
+
+// ---------------------------------------------------------------- commands
+// Every command the board has, as data. The keys were the only way in: a board
+// you have not used for a month is a list of letters you have to remember, and
+// a board you have never used is worse. This is what `:` searches, so a command
+// can be found by what it does rather than by the letter it answers to.
+//
+// `run` names a function on the controller and `arg` is what it takes, so the
+// palette dispatches exactly what a keystroke dispatches rather than a second
+// copy of it. `needs` is what has to be true for it to do anything: the
+// functions all guard themselves, but a palette that runs something and shows
+// nothing is worse than one that says why. `key` is the label shown beside the
+// name — tests/contract.js checks the single-character ones against the key
+// table in Board.qml, so the two cannot disagree about which letter does what.
+var COMMANDS = [
+  { name: "New note", key: "n", run: "addRelative", arg: "note", needs: "edit" },
+  { name: "New box", key: "r", run: "addRelative", arg: "rect", needs: "edit" },
+  { name: "New ellipse", key: "e", run: "addRelative", arg: "ellipse", needs: "edit" },
+  { name: "Type in it", key: "i", run: "editSelected", needs: "target" },
+  { name: "Change shape", key: "s", run: "cycleKind", needs: "target" },
+  { name: "Change colour", key: "c", run: "recolorItem", needs: "target" },
+  { name: "Connect to another", key: "x", run: "toggleLinking", needs: "target" },
+  { name: "Remove its connectors", key: "X", run: "unlinkSelected", needs: "target" },
+  { name: "Duplicate", key: "ctrl+d", run: "duplicateTargets", needs: "target" },
+  { name: "Delete", key: "del", run: "removeTargets", needs: "target" },
+  { name: "Align and spread", key: "g", run: "beginArrange", needs: "edit" },
+  { name: "Pin as background", key: "p", run: "togglePin", needs: "target" },
+  { name: "Select backgrounds", key: "P", run: "togglePinnedSelection", needs: "" },
+  { name: "Mark this one as well", key: "space", run: "toggleMark", needs: "" },
+  { name: "Mark everything", key: "a", run: "markAll", needs: "" },
+  { name: "Undo", key: "u", run: "undo", needs: "edit" },
+  { name: "Redo", key: "ctrl+r", run: "redo", needs: "edit" },
+  { name: "Copy out", key: "ctrl+c", run: "copySelection", needs: "" },
+  { name: "Paste in", key: "ctrl+v", run: "pasteClipboard", needs: "edit" },
+  { name: "Find in this board", key: "/", run: "beginFind", needs: "" },
+  { name: "Fit the board on screen", key: "f", run: "fitToItems", needs: "" },
+  { name: "Reset the view", key: "0", run: "resetView", needs: "" },
+  { name: "Zoom in", key: "+", run: "zoomCentre", arg: 1.2, needs: "" },
+  { name: "Zoom out", key: "-", run: "zoomCentre", arg: 1 / 1.2, needs: "" },
+  { name: "Fullscreen or windowed", key: "w", run: "toggleWindowMode", needs: "" },
+  { name: "Boards", key: "b", run: "openBrowser", needs: "" },
+  { name: "New board", key: "ctrl+n", run: "newBoard", needs: "" },
+  { name: "Name this board", key: "F2", run: "renameBoard", needs: "" },
+  { name: "Import a board", key: "ctrl+o", run: "importBoard", needs: "" },
+  { name: "Save a copy to share", key: "ctrl+shift+s", run: "exportBoard", needs: "" },
+  { name: "Export a PNG", key: "ctrl+e", run: "choosePng", needs: "" },
+  { name: "Save now", key: "ctrl+s", run: "flushSave", needs: "" },
+  { name: "Menu in the header", key: "m", run: "toggleMenu", needs: "" },
+  { name: "Keys", key: "?", run: "toggleHelp", needs: "" },
+  // The way in does not list itself.
+  { name: "Run a command", key: ":", run: "beginPalette", needs: "", listed: false }
+]
+
+// What to offer for what has been typed. A name that starts with the query is
+// what was meant more often than one that merely contains it, and the order is
+// otherwise the table's own, which groups by what the commands are for.
+function matchCommands(query) {
+  var needle = String(query === undefined ? "" : query).toLowerCase().trim()
+  var leading = []
+  var rest = []
+  for (var i = 0; i < COMMANDS.length; i++) {
+    if (COMMANDS[i].listed === false) continue
+    if (needle === "") { rest.push(COMMANDS[i]); continue }
+    var name = COMMANDS[i].name.toLowerCase()
+    var at = name.indexOf(needle)
+    // The key is worth searching as well as the name: someone who half
+    // remembers the letter should be able to type it and see what it does.
+    // Tested before the substring, or a command whose name happens to contain
+    // that letter — align, chan(g)e — buries the one the letter belongs to.
+    if (at === 0 || COMMANDS[i].key.toLowerCase() === needle) leading.push(COMMANDS[i])
+    else if (at > 0) rest.push(COMMANDS[i])
+  }
+  return leading.concat(rest)
+}
+
+function commandByName(name) {
+  for (var i = 0; i < COMMANDS.length; i++) if (COMMANDS[i].name === name) return COMMANDS[i]
+  return null
+}
 
 var KEY_HELP = [
   ["ctrl+n / F2", "new board / name the current board"],
@@ -180,6 +264,7 @@ var KEY_HELP = [
   ["0", "reset the view"],
   ["+ / -", "zoom"],
   ["? / F1", "this list"],
+  [": / ctrl+p", "run any command by name, without knowing its key"],
   ["shift+click", "mark items together"],
   ["drag on canvas", "sweep a rectangle to mark everything it touches"],
   ["shift+drag", "sweep, keeping what was already marked"],

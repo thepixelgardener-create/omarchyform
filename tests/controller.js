@@ -11,6 +11,7 @@ function controller() {
     camX: 0, camY: 0, zoom: 1, activeBoard: null, markedIds: [], showPinned: false, arranging: false,
     finding: false, findQuery: '', findCount: 0, imageQueue: [],
     menuVisible: false, menuIndex: 0, helpVisible: false,
+    paletteVisible: false, paletteQuery: '', paletteIndex: 0, paletteRows: 9,
     boardsDir: '/boards', backupsDir: '/backups', worldStep: 40, minItemSize: 60, viewW: 1000, viewH: 700 }
   const session = { ctl: root, boardLoaded: true, damaged: false, pendingBoard: null,
     lastSavedCount: 0, lastSavedText: '', saveError: '' }
@@ -24,6 +25,8 @@ function controller() {
   // bindings, so a derived property has to be declared here.
   Object.defineProperty(root, 'findDimming', { get: () => root.finding && root.findQuery !== '' })
   Object.defineProperty(root, 'findNeedle', { get: () => root.findQuery.toLowerCase() })
+  Object.defineProperty(root, 'paletteMatches', { get: () =>
+    root.paletteVisible ? loadStore().matchCommands(root.paletteQuery) : [] })
   Object.defineProperty(root, 'markedLookup', { get: () => {
     const lookup = {}
     for (const id of root.markedIds) lookup[id] = true
@@ -668,7 +671,7 @@ console.log('ok — controller: copying the selection out')
   const c = controller()
   c.session.loadBoard('{"version":5,"items":[]}', false)
   const menu = require('./harness').loadStore().MENU_COMMANDS
-  assert.equal(menu.length, 6, 'six commands, as the header draws')
+  assert.equal(menu.length, 7, 'seven commands, as the header draws')
 
   c.root.toggleMenu()
   assert.equal(c.root.menuVisible, true)
@@ -687,9 +690,17 @@ console.log('ok — controller: copying the selection out')
   // Running the highlighted item closes the menu and resets the walk.
   c.root.menuIndex = 5
   c.root.runMenu(c.root.menuIndex)
-  assert.equal(c.root.helpVisible, true, 'the last item is Help')
+  assert.equal(c.root.helpVisible, true, 'the sixth item is Help')
   assert.equal(c.root.menuVisible, false)
   assert.equal(c.root.menuIndex, 0)
+
+  // The last is the palette, so a pointer can reach the commands the keys
+  // reach without knowing that `:` opens it.
+  c.root.helpVisible = false
+  c.root.toggleMenu()
+  c.root.runMenu(6)
+  assert.equal(c.root.paletteVisible, true, 'the last item opens the palette')
+  c.root.endPalette()
 
   // Boards is the browser, and it is the same call a click makes.
   c.root.helpVisible = false
@@ -707,3 +718,76 @@ console.log('ok — controller: copying the selection out')
   assert.equal(c.root.menuIndex, 0)
 }
 console.log('ok — controller: walking the header menu and running its commands')
+{
+  // The palette: every command by name, and one dispatch for it and the keys.
+  const S = loadStore()
+  const c = controller()
+  c.session.loadBoard('{"version":5,"items":[]}', false)
+
+  c.root.beginPalette()
+  assert.equal(c.root.paletteVisible, true)
+  assert.equal(c.root.paletteQuery, '')
+  assert.equal(c.root.paletteIndex, 0, 'opens on the first, ready to run')
+  assert.equal(c.root.paletteMatches.length, S.COMMANDS.length - 1,
+    'every command but the one that opened this')
+
+  // Typing narrows it, and the cursor goes back to the top rather than staying
+  // on a row that now means something else.
+  c.root.movePalette(2)
+  assert.equal(c.root.paletteIndex, 2)
+  c.root.extendPalette('col')
+  assert.equal(c.root.paletteIndex, 0)
+  assert.deepEqual(c.root.paletteMatches.map(m => m.name), ['Change colour'])
+  c.root.trimPalette()
+  c.root.trimPalette()
+  c.root.trimPalette()
+  assert.equal(c.root.paletteQuery, '')
+
+  // Wrapping both ways, so neither end of the list is a dead stop.
+  c.root.movePalette(-1)
+  assert.equal(c.root.paletteIndex, c.root.paletteMatches.length - 1)
+  c.root.movePalette(1)
+  assert.equal(c.root.paletteIndex, 0)
+
+  // Running one closes the palette and does the thing.
+  c.root.paletteQuery = 'new note'
+  c.root.runPaletteChoice()
+  assert.equal(c.root.paletteVisible, false, 'running closes it')
+  assert.equal(c.root.paletteQuery, '', 'and forgets what was typed')
+  assert.equal(c.items.count, 1, 'and the note is on the board')
+
+  // A command with an argument carries it: two names, one function.
+  const before = c.root.zoom
+  c.root.runCommand('Zoom in')
+  assert.ok(c.root.zoom > before)
+  c.root.runCommand('Zoom out')
+  assert.equal(Math.round(c.root.zoom * 1000), Math.round(before * 1000))
+
+  // A command that cannot do anything now says so rather than appearing to run.
+  c.root.selectedIndex = -1
+  c.root.markedIds = []
+  c.root.statusText = ''
+  c.root.runCommand('Change colour')
+  assert.match(c.root.statusText, /nothing is selected/)
+
+  // A read-only board refuses the ones that would write to it, by the same
+  // rule, and still allows the ones that only look.
+  const ro = controller()
+  ro.session.loadBoard('{broken', false)
+  ro.root.runCommand('New note')
+  assert.equal(ro.items.count, 0)
+  assert.match(ro.root.statusText, /read-only/)
+  ro.root.runCommand('Fit the board on screen')
+  assert.equal(ro.root.statusText.indexOf('Fit') , -1, 'looking is not refused')
+
+  // A name the table does not have runs nothing at all.
+  c.root.statusText = ''
+  c.root.runCommand('Delete everything forever')
+  assert.equal(c.root.statusText, '')
+
+  // Every command names a function the controller actually has, and every
+  // single-key one agrees with the key table the board dispatches through.
+  for (const command of S.COMMANDS)
+    assert.equal(typeof c.root[command.run], 'function', `${command.name} runs ${command.run}`)
+}
+console.log('ok — controller: the command palette and one dispatch for every command')

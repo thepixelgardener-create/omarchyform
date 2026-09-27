@@ -1,6 +1,7 @@
 import QtQuick
 import QtTest
 import "../.."
+import "../../BoardStore.js" as Store
 
 TestCase {
   id: test
@@ -60,12 +61,24 @@ TestCase {
     property bool browserTrash: false
     function browserEnter() {}
     function sp(n) { return n }
+    // The palette draws the real command table, so what this renders is what a
+    // board renders — including how many of them there are.
+    property bool paletteVisible: true
+    property string paletteQuery: ""
+    property int paletteIndex: 0
+    property int paletteRows: 9
+    readonly property var paletteMatches: Store.matchCommands(ctl.paletteQuery)
+    function commandReady(needs) { return needs !== "target" }
+    function runPaletteChoice() {}
     function closeBrowser() { browserVisible = false }
     function browserKey(event) {}
   }
   Help { id: help; ctl: ctl; anchors.centerIn: parent }
   Browser { id: browser; ctl: ctl; anchors.fill: parent }
   BoardToolbar { id: toolbar; ctl: ctl; width: test.width - 32; height: implicitHeight; visible: false }
+  // Where the board puts it: under the header, with the rest of the window
+  // below it to fit into.
+  Commands { id: palette; ctl: ctl; y: 40; anchors.horizontalCenter: parent.horizontalCenter }
   // The header is a bar, so it is painted in the theme's bar colours rather
   // than the canvas ones.
   //
@@ -104,6 +117,29 @@ TestCase {
     compare(toolbar.implicitHeight, closed)
     toolbar.visible = false
   }
+  // Every command at a theme's large font is taller than a small window, and a
+  // panel that runs off the bottom hides the commands it exists to show.
+  function test_paletteFitsASmallWindow() {
+    verify(palette.visible)
+    verify(ctl.paletteMatches.length > ctl.paletteRows, "there are more commands than rows")
+    verify(palette.width <= test.width - 32, "it fits across")
+    verify(palette.y + palette.height <= test.height, "and does not run off the bottom")
+    verify(palette.visibleRows >= 1, "while still showing something")
+    verify(palette.visibleRows <= ctl.paletteRows, "and never more rows than it offers")
+  }
+
+  // Narrowing the query shrinks the panel rather than leaving empty rows.
+  function test_paletteShrinksToWhatMatches() {
+    const many = palette.height
+    ctl.paletteQuery = "colour"
+    verify(waitForRendering(palette))
+    compare(ctl.paletteMatches.length, 1)
+    verify(palette.height < many, "one match is a shorter panel than thirty")
+    ctl.paletteQuery = ""
+    verify(waitForRendering(palette))
+    compare(palette.height, many)
+  }
+
   function test_helpFitsAndScrolls() {
     verify(help.width <= test.width - 32)
     verify(help.height <= test.height - 32)

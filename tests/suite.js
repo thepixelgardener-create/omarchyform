@@ -551,6 +551,43 @@ function tests(S) {
       eq(S.imageIsValid(good), true, good)
   })
 
+  test("the command list offers what was typed, best first", () => {
+    // Nothing typed is the whole table, minus the one that opened it.
+    const all = S.matchCommands("")
+    eq(all.length, S.COMMANDS.length - 1)
+    ok(all.every(c => c.listed !== false), "the way in does not list itself")
+
+    // A name that starts with the query was meant more often than one that
+    // merely contains it, whatever order the table puts them in.
+    const names = S.matchCommands("new").map(c => c.name)
+    eq(names[0], "New note")
+    ok(names.indexOf("New board") > 0, "and the rest still follow")
+    ok(names.indexOf("Rename") < 0)
+
+    eq(S.matchCommands("  COLOUR ").map(c => c.name).join(","), "Change colour",
+       "case and stray spaces are not the point")
+
+    // Half-remembering the letter should work too: type it and see what it does.
+    eq(S.matchCommands("g")[0].name, "Align and spread")
+    eq(S.matchCommands("zzz").length, 0)
+  })
+
+  test("every command names a function and a key, once", () => {
+    const names = {}
+    const keys = {}
+    for (const command of S.COMMANDS) {
+      ok(typeof command.name === "string" && command.name !== "", "a name")
+      ok(typeof command.run === "string" && command.run !== "", command.name + " runs something")
+      ok(["", "edit", "target"].indexOf(command.needs) >= 0, command.name + " needs something known")
+      eq(names[command.name], undefined, "one entry called " + command.name)
+      eq(keys[command.key], undefined, "one command on " + command.key)
+      names[command.name] = true
+      keys[command.key] = true
+      eq(S.commandByName(command.name), command, "and it can be found by name")
+    }
+    eq(S.commandByName("no such thing"), null)
+  })
+
   test("a copy saved to share lists every picture on the board once", () => {
     const items = new FakeModel()
     S.fillItems(items, [

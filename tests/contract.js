@@ -53,7 +53,7 @@ function expect(names, available, what, where) {
 }
 
 // The views address the controller as ctl.
-for (const file of ["Board.qml", "Node.qml", "Browser.qml", "Help.qml", "BoardToolbar.qml", "BoardExchange.qml", "BoardImage.qml", "ScrollHint.qml"]) {
+for (const file of ["Board.qml", "Node.qml", "Browser.qml", "Help.qml", "BoardToolbar.qml", "BoardExchange.qml", "BoardImage.qml", "ScrollHint.qml", "Commands.qml"]) {
   const source = read(file)
   expect(referenced(source, "ctl."), controller, "the controller", file)
 }
@@ -82,7 +82,7 @@ expect(referenced(read("BoardExchange.qml"), "ctl."),
 //
 // It found four more that had been missing all along.
 const layoutStub = nestedMembers(read("tests/qt/tst_layout.qml"), "ctl")
-for (const file of ["BoardToolbar.qml", "Help.qml", "Browser.qml", "ScrollHint.qml"])
+for (const file of ["BoardToolbar.qml", "Help.qml", "Browser.qml", "ScrollHint.qml", "Commands.qml"])
   expect(referenced(read(file), "ctl."), layoutStub, "the tst_layout stub", file)
 
 const nodeReads = referenced(read("Node.qml"), "ctl.")
@@ -116,7 +116,7 @@ function declaredSignals(source) {
 // bar come from a type that is not in this repository.
 for (const file of ["Omarchyform.qml", "BoardSession.qml", "BoardPersistence.qml", "BoardExchange.qml",
                     "Board.qml", "Node.qml", "Browser.qml", "Help.qml", "BoardToolbar.qml",
-                    "BoardImage.qml", "ScrollHint.qml"]) {
+                    "BoardImage.qml", "ScrollHint.qml", "Commands.qml"]) {
   const source = read(file)
   const rootId = (source.match(/^\s*id:\s*(\w+)\s*$/m) || [])[1]
   if (!rootId) { failures.push(`${file}: no id on the root object to check against`); continue }
@@ -126,6 +126,56 @@ for (const file of ["Omarchyform.qml", "BoardSession.qml", "BoardPersistence.qml
   for (const name of [...called].sort())
     if (!own.has(name) && !inheritedMethods.has(name)) failures.push(`${file}: ${rootId} has no ${name}()`)
 }
+
+// The palette and the keyboard have to agree about which letter does what.
+// BoardStore's table carries the label the palette shows and the function it
+// dispatches; Board.qml carries what the key actually runs. A key that moved in
+// one and not the other would put a lie in the list whose whole job is to teach
+// the keys — and nothing else compares the two, because QML resolves both at
+// runtime, in a scene CI cannot open.
+const Store = require("../bin/store").loadStore()
+
+const keyTable = new Map()
+for (const m of read("Board.qml").matchAll(/^\s*"(.+?)": function \(\) \{ board\.ctl\.(\w+)\(/gm))
+  keyTable.set(m[1], m[2])
+
+// Two keys are spelt differently in a list than they arrive in an event, and
+// one is an alias: `=` is `+` without the shift on the keyboards that put it
+// there, so both reach the same command.
+const spelt = new Map([[" ", "space"], ["=", "+"]])
+
+const byKey = new Map()
+for (const command of Store.COMMANDS)
+  if (command.key.length === 1 || command.key === "space") byKey.set(command.key, command)
+
+for (const [key, run] of keyTable) {
+  const named = spelt.get(key) || key
+  const command = byKey.get(named)
+  if (!command) failures.push(`Board.qml: the key "${key}" runs ${run}(), which no command names`)
+  else if (command.run !== run)
+    failures.push(`Board.qml: "${key}" runs ${run}(), but "${command.name}" says ${command.run}()`)
+}
+const reachable = new Set([...keyTable.keys()].map(k => spelt.get(k) || k))
+for (const command of byKey.values())
+  if (!reachable.has(command.key))
+    failures.push(`BoardStore.js: "${command.name}" shows the key "${command.key}", which the board does not bind`)
+
+// The chorded ones live in their own branch rather than the table, so this only
+// checks that the branch for that letter reaches the same function. The rest —
+// del, F2, enter — are named in KEY_HELP and checked by eye.
+const board = read("Board.qml")
+for (const command of Store.COMMANDS) {
+  const chord = /^ctrl\+([a-z])$/.exec(command.key)
+  if (!chord) continue
+  const branch = new RegExp("Key_" + chord[1].toUpperCase() + "\\b[^\\n]*board\\.ctl\\." + command.run + "\\(")
+  if (!branch.test(board))
+    failures.push(`Board.qml: nothing under ctrl+${chord[1]} runs ${command.run}() for "${command.name}"`)
+}
+
+// And every command names a function the controller has.
+for (const command of Store.COMMANDS)
+  if (!controller.has(command.run))
+    failures.push(`BoardStore.js: "${command.name}" runs ${command.run}(), which the controller does not have`)
 
 if (failures.length) {
   for (const line of failures) console.error("  " + line)

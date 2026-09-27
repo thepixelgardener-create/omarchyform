@@ -107,9 +107,24 @@ ShellRoot {
       }
     },
     {
-      name: "09-help",
+      name: "08b-commands",
       setup: function () {
         plugin.cancelArrange()
+        plugin.markedIds = []
+        plugin.beginPalette()
+      }
+    },
+    {
+      name: "08c-commands-narrowed",
+      setup: function () {
+        plugin.extendPalette("c")
+        plugin.extendPalette("o")
+      }
+    },
+    {
+      name: "09-help",
+      setup: function () {
+        plugin.endPalette()
         plugin.markedIds = []
         plugin.helpVisible = true
       }
