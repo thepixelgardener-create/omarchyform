@@ -7,6 +7,44 @@ since older boards are migrated on load rather than rejected.
 
 ### Added
 
+- **A board you were sent opens by double-clicking it.** The installer now
+  registers a file type and a small `omarchyform-open` command beside the
+  launcher entry, and the board accepts a path from the shell — so a file
+  manager can hand one over. Opening brings it into your library rather than
+  editing it where it sits, which is what `ctrl+o` has always done.
+
+  A board in the library stays an ordinary `.json`; a copy saved to share is
+  `*.omarchyform.json`, and that is what is recognised. Claiming `*.json`
+  outright would hand every JSON file on the machine to a note-taking program.
+  Boards also carry a `kind` marker now, written first so a file can be
+  identified by its contents — not a format bump, so an older Omarchyform
+  still opens them, and older boards pick it up on their next save.
+
+- **Boards from the command line.** `bin/omarchyform new | inspect | apply |
+  validate | ops` builds and changes boards with no window and no display,
+  answering with JSON on stdout and exiting 0 or 1. The board's logic was
+  already plain JavaScript running outside QML — it is what the test suite has
+  always exercised — so this is a front end over code that was already there
+  and already tested. It cannot draw: a picture of a board needs the running
+  shell.
+
+  `skills/omarchyform/SKILL.md` ships with it, so an agent asked to sketch
+  something out as a board can, which is the idea borrowed from omashow.
+
+  Every board the CLI writes is checked against `readFile`, `fillItems` and
+  `fillLinks` — the three calls the plugin makes on the way to drawing — and
+  the live suite now builds a board with the CLI before the shell starts and
+  has the running shell open it.
+
+- `npm run bench:scene` prints what it measured on before what it measured —
+  Qt, Quickshell, the compositor, the refresh rate, the GPU, the CPU — and
+  `--record` writes that and the table to `docs/performance.md`. Every frame
+  time this changelog quotes was measured on one machine at one refresh rate,
+  and none of it said so: the same board is vsync-bound at 60Hz and dropping
+  frames at 144, so a figure without the machine under it is not a number
+  anyone can check. Borrowed from omashow's `bin/sbom`, which records the
+  versions its published numbers were measured against.
+
 - **A scroll mark on the panels that scroll.** The shortcut list and the board
   browser both run past their panel, and neither said so: the list ended
   mid-row, and a directory of thirty boards looked like a directory of twenty.

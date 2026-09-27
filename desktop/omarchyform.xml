@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- What a board is, so a file manager can tell one from any other JSON.
+     Matched on the marker near the front of the file rather than on the name:
+     boards are ordinary .json and claiming that extension would hand every
+     JSON file on the machine to a note-taking program. -->
+<!-- This installer only ever replaces or removes a file carrying these two
+     keys, so something another program put at this path is left alone.
+     X-Omarchyform-Managed=true
+     X-Omarchyform-Entry-Version=1 -->
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-omarchyform-board">
+    <comment>Omarchyform board</comment>
+    <sub-class-of type="application/json"/>
+    <glob pattern="*.omarchyform.json" weight="60"/>
+    <magic priority="60">
+      <match type="string" value="&quot;omarchyform.board&quot;" offset="0:80"/>
+    </magic>
+  </mime-type>
+</mime-info>

@@ -102,6 +102,21 @@ If you installed the desktop entry, re-run `./desktop/install.sh` after an
 update to pick up any change to it. It replaces only an entry it installed
 itself and leaves your edits alone; see below.
 
+## Opening a board someone sent you
+
+`./desktop/install.sh` also registers the board file type and a small
+`omarchyform-open` command, so a board can be opened from a file manager.
+
+A board in your library is an ordinary `.json` and opens from the browser on
+`b`. A board saved to share — `ctrl+shift+s` — is named `*.omarchyform.json`,
+and that is what a file manager recognises. The double extension is the honest
+way to claim it: a board *is* JSON, and claiming `*.json` outright would hand
+every JSON file on the machine to a note-taking program. Import still accepts
+any `.json`, so a board from before this is still a board.
+
+Opening one brings it into your library rather than editing it where it sits,
+which is what `ctrl+o` has always done: the file you were sent is left alone.
+
 ## Removing it
 
 ```bash
@@ -119,9 +134,9 @@ and remove the desktop entry if you installed it:
 ./desktop/install.sh --uninstall
 ```
 
-That removes the launcher entry only if this installer is the thing that wrote
-it and you have not edited it since; otherwise it says what it found and leaves
-the file alone.
+That removes the launcher entry, the file type and the `omarchyform-open`
+command, and only the ones this installer wrote and you have not edited since;
+otherwise it says what it found and leaves the file alone.
 
 Your boards are left alone. They live in
 `~/.local/share/omarchyform/`, and removing the plugin does not touch them, so
@@ -374,6 +389,31 @@ luminance.
 | `BoardSession.qml` | Loading, autosave state, and board-switch coordination |
 | `BoardPersistence.qml` | Serialized backup and atomic write, with completion/failure signals |
 | `BoardFiles.sh` | Confined filesystem operations and exact-path moves |
+| `bin/omarchyform` | The board, headless: build, read and change one with no display |
+| `bin/store.js` | Loading `BoardStore.js` outside QML, shared by the CLI and the tests |
+
+## From the command line
+
+`bin/omarchyform` builds and changes boards with no window and no display. The
+board's logic is plain JavaScript that already runs outside QML — it is what
+the test suite exercises — so the same code that draws a board can build one
+headlessly. Every verb answers with JSON on stdout and exits 0 or 1.
+
+```bash
+bin/omarchyform new ideas.json --note "First thought" --note "Second"
+bin/omarchyform inspect ideas.json
+echo '[{"op":"add","args":["ellipse",520,0,200,140,"the question","accent"]},
+       {"op":"link","args":[1,3]}]' | bin/omarchyform apply ideas.json -
+bin/omarchyform validate ideas.json
+bin/omarchyform ops          # what apply accepts, the kinds, the theme roles
+```
+
+Boards written into `~/.local/share/omarchyform/boards/` appear in the browser
+on `b`. It cannot draw: a picture of a board needs the running shell, so `ctrl+e`
+on an open board exports a PNG and nothing here does.
+
+`skills/omarchyform/SKILL.md` ships alongside it, so a coding agent asked to
+sketch something out as a board can do it without being told any of this.
 
 ## Tests
 
@@ -406,7 +446,15 @@ columns.
 ```bash
 npm run bench:scene            # 100, 500, 1000 and 3000 items
 npm run bench:scene -- 3000    # one size
+npm run bench:scene -- --record  # and write docs/performance.md
 ```
+
+It prints what it measured on before what it measured — Qt, Quickshell, the
+compositor, the refresh rate, the GPU — because a frame time without the
+machine under it is not a number anyone can check, and the same board is
+vsync-bound at 60Hz and dropping frames at 144. `--record` writes that and the
+table to [docs/performance.md](docs/performance.md), which is where the figures
+quoted in the changelog come from.
 
 `npm run shots` puts the real plugin through fourteen states — empty, a cursor
 beside a mark, typing, backgrounds, finding, arranging, help, the browser, a

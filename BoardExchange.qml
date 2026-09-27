@@ -57,7 +57,7 @@ Item {
     var raw = input.text()
     if (!raw) { exchange.fail("Could not read that board"); return }
     if (!Store.readFile(raw)) { exchange.fail("That file is not a supported board"); return }
-    exchange.stage(raw, Store.baseName(path).replace(/\.json$/i, ""), false)
+    exchange.stage(raw, Store.baseName(path).replace(/(\.omarchyform)?\.json$/i, ""), false)
   }
 
   function exportJson(path) {
@@ -77,8 +77,15 @@ Item {
     operation = action
     picker.title = action === "import" ? "Import a board" : action === "png" ? "Export board as PNG" : "Save an editable copy"
     picker.fileMode = action === "import" ? FileDialog.OpenFile : FileDialog.SaveFile
-    picker.nameFilters = action === "png" ? ["PNG image (*.png)"] : ["Omarchyform board (*.json)"]
-    picker.defaultSuffix = action === "png" ? "png" : "json"
+    // A copy saved to share is named .omarchyform.json, which is what makes a
+    // file manager recognise it: a board is JSON, and a glob on .json alone
+    // would hand every JSON file on the machine to a note-taking program, so
+    // the double extension is the only honest way to claim one. Import still
+    // accepts any .json, because a board from before this is still a board.
+    picker.nameFilters = action === "png" ? ["PNG image (*.png)"]
+      : action === "import" ? ["Omarchyform board (*.omarchyform.json *.json)"]
+      : ["Omarchyform board (*.omarchyform.json)"]
+    picker.defaultSuffix = action === "png" ? "png" : action === "import" ? "json" : "omarchyform.json"
     picker.open()
   }
 
