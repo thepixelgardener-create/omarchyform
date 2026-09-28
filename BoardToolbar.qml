@@ -102,9 +102,9 @@ Rectangle {
       anchors.verticalCenter: parent.verticalCenter
       spacing: toolbar.theme.sp(6)
       Repeater {
-        model: toolbar.ctl.zoomMenuVisible ? Store.ZOOM_COMMANDS : Store.MENU_COMMANDS
+        model: Store.menuEntries(toolbar.ctl.zoomMenuVisible)
         delegate: Rectangle {
-          required property string modelData
+          required property var modelData
           required property int index
           width: label.implicitWidth + toolbar.theme.sp(14)
           height: label.implicitHeight + toolbar.theme.sp(8)
@@ -122,7 +122,7 @@ Rectangle {
           Text {
             id: label
             anchors.centerIn: parent
-            text: modelData === "Zoom" ? "Zoom " + Math.round(toolbar.ctl.zoom * 100) + "%" : modelData
+            text: modelData.id === "zoom" ? modelData.label + " " + Math.round(toolbar.ctl.zoom * 100) + "%" : modelData.label
             color: toolbar.theme.barForeground
             font.family: toolbar.theme.fontFamily
             font.pixelSize: toolbar.theme.fontBody

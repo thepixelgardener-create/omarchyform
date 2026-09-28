@@ -36,11 +36,32 @@ function normalizeTint(value) {
   return TINTS[0]
 }
 
-// The header menu. One list, so the view draws what the controller dispatches
-// and a keyboard walk cannot drift out of step with what is on screen.
-var MENU_COMMANDS = ["New", "Boards", "Import", "Save copy", "Export PNG", "Help", "Commands", "Fit", "Zoom"]
+// Each entry owns its label and action, so reordering the menu cannot change
+// what a click or keyboard choice runs. Navigation entries keep the menu open.
+var MENU_COMMANDS = [
+  { id: "new", label: "New", run: "newBoard" },
+  { id: "boards", label: "Boards", run: "openBrowser" },
+  { id: "import", label: "Import", run: "importBoard" },
+  { id: "save-copy", label: "Save copy", run: "exportBoard" },
+  { id: "export-png", label: "Export PNG", run: "choosePng" },
+  { id: "help", label: "Help", run: "showHelp" },
+  { id: "commands", label: "Commands", run: "beginPalette" },
+  { id: "fit", label: "Fit", run: "fitToItems" },
+  { id: "zoom", label: "Zoom", run: "openZoomMenu", keepOpen: true }
+]
 
-var ZOOM_COMMANDS = ["Back", "25%", "50%", "75%", "100%", "125%", "150%", "200%", "300%", "400%"]
+var ZOOM_LEVELS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4]
+var ZOOM_COMMANDS = [{ id: "back", label: "Back", run: "backToMenu", keepOpen: true }]
+  .concat(ZOOM_LEVELS.map(function(level) {
+    return { id: "zoom-" + level, label: Math.round(level * 100) + "%", run: "setZoom", arg: level }
+  }))
+
+function menuEntries(zoomMenu) { return zoomMenu ? ZOOM_COMMANDS : MENU_COMMANDS }
+function menuIndex(id) {
+  for (var i = 0; i < MENU_COMMANDS.length; i++)
+    if (MENU_COMMANDS[i].id === id) return i
+  return -1
+}
 
 // The outline of a painted shape, as SVG path data for a ShapePath.
 //

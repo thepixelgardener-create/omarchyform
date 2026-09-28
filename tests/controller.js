@@ -73,7 +73,7 @@ function controller() {
   session.requestDisk = resolve => session.acceptDisk(root.currentBoard,
     loadStore().writeFile(items, links, root.nextId), resolve, 'rev-fresh\n' + session.diskText)
   let revisions = 0
-  return { root, session, items, links, writes, persistence, exchange, complete() {
+  return { root, session, items, links, writes, persistence, exchange, store: context.Store, complete() {
     const write = writes[writes.length - 1]
     persistence.busy = false
     session.savedBoard(write.path, write.text, 'rev-' + (++revisions))
@@ -731,20 +731,33 @@ console.log('ok — controller: copying the selection out')
   c.root.endPalette()
 
   c.root.toggleMenu()
-  c.root.runMenu(menu.indexOf('Zoom'))
+  c.root.runMenu(menu.findIndex(entry => entry.id === 'zoom'))
   assert.equal(c.root.zoomMenuVisible, true)
   const zoomMenu = require('./harness').loadStore().ZOOM_COMMANDS
-  assert.equal(zoomMenu[c.root.menuIndex], '100%')
+  assert.equal(zoomMenu[c.root.menuIndex].arg, 1)
   c.root.moveMenu(1)
   c.root.runMenu(c.root.menuIndex)
   assert.equal(c.root.zoom, 1.25)
   assert.equal(c.root.menuVisible, false)
   assert.equal(c.root.toWorldX(c.root.viewW / 2), 500, 'preset keeps the canvas centre fixed')
   c.root.toggleMenu()
-  c.root.runMenu(menu.indexOf('Zoom'))
+  c.root.runMenu(menu.findIndex(entry => entry.id === 'zoom'))
   c.root.runMenu(0)
   assert.equal(c.root.zoomMenuVisible, false)
-  assert.equal(c.root.menuIndex, menu.indexOf('Zoom'))
+  assert.equal(c.root.menuIndex, menu.findIndex(entry => entry.id === 'zoom'))
+
+  // Dispatch follows the entry, even when the list is reordered or renamed.
+  const reordered = controller()
+  const entries = reordered.store.MENU_COMMANDS
+  const helpIndex = entries.findIndex(entry => entry.id === 'help')
+  ;[entries[0], entries[helpIndex]] = [entries[helpIndex], entries[0]]
+  entries[0].label = 'Keyboard help'
+  reordered.root.toggleMenu()
+  reordered.root.runMenu(0)
+  assert.equal(reordered.root.helpVisible, true)
+  reordered.root.toggleMenu()
+  reordered.root.runMenu(-1)
+  assert.equal(reordered.root.menuVisible, true, 'invalid entry leaves navigation intact')
 
   // Boards is the browser, and it is the same call a click makes.
   c.root.helpVisible = false

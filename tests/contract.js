@@ -266,6 +266,11 @@ for (const file of [...fs.readdirSync(root).filter(f => f.endsWith(".qml")),
       failures.push(`${file}: "${m[1]}" is a property every Item has, so it is not a safe id`)
 }
 
+// Menu entries dispatch by function name just like palette commands.
+for (const entry of [...Store.MENU_COMMANDS, ...Store.ZOOM_COMMANDS]) {
+  if (!controller.has(entry.run)) failures.push(`Menu action ${entry.run} is missing`)
+}
+
 if (failures.length) {
   for (const line of failures) console.error("  " + line)
   console.error(`FAILED — ${failures.length} missing member(s)`)

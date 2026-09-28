@@ -660,44 +660,48 @@ Item {
   }
 
   function moveMenu(step) {
-    var n = root.zoomMenuVisible ? Store.ZOOM_COMMANDS.length : Store.MENU_COMMANDS.length
+    var n = Store.menuEntries(root.zoomMenuVisible).length
     root.menuIndex = ((root.menuIndex + step) % n + n) % n
   }
 
   // The dispatch lives here rather than in the toolbar, so a click and a
   // keystroke take the same path and the list can be tested without a scene.
   function runMenu(index) {
-    if (root.zoomMenuVisible) {
-      if (index === 0) {
-        root.zoomMenuVisible = false
-        root.menuIndex = Store.MENU_COMMANDS.indexOf("Zoom")
-        return
-      }
-      if (index < 1 || index >= Store.ZOOM_COMMANDS.length) return
-      root.zoomCentre(parseInt(Store.ZOOM_COMMANDS[index]) / 100 / root.zoom)
-      root.zoomMenuVisible = false
-      root.menuVisible = false
-      root.menuIndex = 0
-      root.focusKeys()
-      return
-    }
-    if (index === Store.MENU_COMMANDS.indexOf("Zoom")) {
-      root.zoomMenuVisible = true
-      root.menuIndex = Math.max(1, Store.ZOOM_COMMANDS.indexOf(Math.round(root.zoom * 100) + "%"))
-      root.focusKeys()
-      return
-    }
-    root.menuVisible = false
-    root.menuIndex = 0
-    if (index === 0) root.newBoard()
-    else if (index === 1) root.openBrowser()
-    else if (index === 2) root.importBoard()
-    else if (index === 3) root.exportBoard()
-    else if (index === 4) root.choosePng()
-    else if (index === 5) root.helpVisible = true
-    else if (index === 6) root.beginPalette()
-    else if (index === 7) root.fitToItems()
+    var entry = Store.menuEntries(root.zoomMenuVisible)[index]
+    if (!entry || typeof root[entry.run] !== "function") return
+    var fromZoom = root.zoomMenuVisible
+    if (!entry.keepOpen) root.closeMenu()
+    if (entry.arg === undefined) root[entry.run]()
+    else root[entry.run](entry.arg)
+    if (fromZoom && !entry.keepOpen) root.focusKeys()
   }
+
+  function closeMenu() {
+    root.menuVisible = false
+    root.zoomMenuVisible = false
+    root.menuIndex = 0
+  }
+
+  function openZoomMenu() {
+    root.zoomMenuVisible = true
+    var percent = Math.round(root.zoom * 100)
+    root.menuIndex = 1
+    for (var i = 0; i < Store.ZOOM_LEVELS.length; i++) {
+      if (Math.round(Store.ZOOM_LEVELS[i] * 100) === percent) {
+        root.menuIndex = i + 1
+        break
+      }
+    }
+    root.focusKeys()
+  }
+
+  function backToMenu() {
+    root.zoomMenuVisible = false
+    root.menuIndex = Store.menuIndex("zoom")
+  }
+
+  function setZoom(level) { root.zoomCentre(level / root.zoom) }
+  function showHelp() { root.helpVisible = true }
 
   function toggleHelp() { root.helpVisible = !root.helpVisible }
 
