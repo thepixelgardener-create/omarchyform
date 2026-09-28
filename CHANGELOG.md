@@ -148,6 +148,28 @@ since older boards are migrated on load rather than rejected.
 
 ### Fixed
 
+- **The line under the header stopped promising the wrong thing.** A flash sits
+  on the line for two and a half seconds, and it outranked the connector
+  outcome: press `x`, connect two notes, press `x` again on a pair that already
+  has one, and "connector removed · u to undo" was still on screen while the
+  next gesture was being aimed — the one line that says what the next keystroke
+  will do, saying what the last one did instead.
+
+  The order was the cause, and it was inconsistent: three of the modes were
+  ranked above a flash and the rest below it, which also put a message that
+  fades in front of two things that do not. It reads in four tiers now — the
+  board is not being saved and here is why, then what the keyboard is about to
+  do, then what it just did, then what it is busy with. So a failed write, a
+  conflict with the version on disk and a board that could not be read are no
+  longer covered by a flash or by a mode that stays open, which matters because
+  each of those stops the session saving at all; and typing outranks a held
+  connector, because while there is a caret in a note, `x` is the letter x.
+
+  Starting a connector also drops whatever the line was holding, so a message
+  from the previous gesture cannot come back out from underneath this one when
+  it finishes. Its own timer is still what expires it: nothing held back
+  reappears later than it would have.
+
 - **A middle-drag over an item no longer deletes it.** Middle-drag was the pan
   gesture on the canvas, and a middle-click on an item removed it, so the same
   motion moved the view or destroyed what it happened to begin on — and the

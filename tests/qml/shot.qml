@@ -237,8 +237,16 @@ ShellRoot {
       }
     },
     {
+      // The gesture the scenes above left running has to end first: the line
+      // ranks a connector being aimed above a message about something that
+      // already happened, so a scene that forgets to cancel photographs the
+      // hint rather than the message it is named after.
       name: "12-failed-save",
-      setup: function () { plugin.flash("Could not write the board — ctrl+s to retry") }
+      setup: function () {
+        plugin.linkingFrom = -1
+        plugin.repaintLinks()
+        plugin.flash("Could not write the board — ctrl+s to retry")
+      }
     },
     {
       // The picture in the README. Composed rather than caught in use: it is

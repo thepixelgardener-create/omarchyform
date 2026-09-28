@@ -1054,7 +1054,16 @@ Item {
     if (root.selected() && root.selected().ipinned) return
     var n = root.selected()
     if (!n) return
-    if (root.linkingFrom < 0) { root.linkingFrom = n.iid; root.repaintLinks(); return }
+    if (root.linkingFrom < 0) {
+      root.linkingFrom = n.iid
+      // Whatever the line was saying is about the last thing that finished,
+      // not about the one starting now. The order below the header already
+      // keeps it from covering the outcome while this runs; dropping it here
+      // is so it cannot come back out from under it afterwards either.
+      root.statusText = ""
+      root.repaintLinks()
+      return
+    }
     if (n.iid !== root.linkingFrom) root.addLink(root.linkingFrom, n.iid)
     root.linkingFrom = -1
     root.repaintLinks()

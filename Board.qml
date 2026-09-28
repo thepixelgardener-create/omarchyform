@@ -790,26 +790,44 @@ FocusScope {
     // keyboard is escaped on the way: this is the one place on the board that
     // renders tags, and a board is a file other people can send you.
     textFormat: Text.StyledText
-    text: board.ctl.saveError !== "" ? Store.escapeMarkup(board.ctl.saveError)
+    // One line, four kinds of thing wanting it, in this order:
+    //
+    //   1. the board is not being saved, and here is why
+    //   2. what the keyboard is about to do
+    //   3. what it just did
+    //   4. what it is busy with, or nothing in particular
+    //
+    // The order used to run 1, 2, 3 for three of the modes and 3, 1, 2 for the
+    // rest, which put a message that fades in front of two things that do not.
+    // A connector gesture is the case that made it matter: the line is the
+    // only place the impending outcome is said, so a flash still on screen
+    // from the last one — "connector removed", well inside its two and a half
+    // seconds — left the line promising the wrong thing about the next.
+    text:
+      // 1. Nothing here fades, and each one names something to be done before
+      // edits reach the disk: a conflict stops the session saving at all, and
+      // so does a board that could not be read. A message about what just
+      // happened must not sit on top of the reason it did not persist.
+      board.ctl.saveError !== "" ? Store.escapeMarkup(board.ctl.saveError)
       : board.ctl.trashIndexError !== "" ? Store.escapeMarkup(board.ctl.trashIndexError)
+      : board.ctl.diskChanged
+      ? Store.escapeMarkup(board.ctl.boardTitle) + " changed on disk · "
+        + Store.hintMarkup("ctrl+s", "choose which version to keep", board.ctl.accentMarkup)
+      : board.ctl.damaged && board.ctl.damageReason !== ""
+      ? Store.escapeMarkup(board.ctl.boardTitle + " " + board.ctl.damageReason + " — not opening it")
+      : board.ctl.damaged
+      ? Store.escapeMarkup(board.ctl.boardTitle + " could not be read — not saving over it")
+
+      // 2. What the next keystroke means, narrowest claim on the keyboard
+      // first. Typing comes before connecting because both can be true at
+      // once — x holds a source, i starts a caret — and while there is a
+      // caret in a note, x is the letter x.
       : board.ctl.paletteVisible
       ? "commands · " + Store.hintLine(Store.PALETTE_HINTS, board.ctl.accentMarkup)
       : board.ctl.arranging
       ? "arrange · " + Store.hintLine(Store.ARRANGE_HINTS, board.ctl.accentMarkup)
       : board.ctl.showPinned
       ? "backgrounds · " + Store.hintLine(Store.PINNED_HINTS, board.ctl.accentMarkup)
-      : board.ctl.statusText !== "" ? Store.escapeMarkup(board.ctl.statusText)
-      // The flash that said this fades; the choice does not, and autosave is
-      // waiting on it, so the line keeps saying so until one side wins.
-      : board.ctl.diskChanged
-      ? Store.escapeMarkup(board.ctl.boardTitle) + " changed on disk · "
-        + Store.hintMarkup("ctrl+s", "choose which version to keep", board.ctl.accentMarkup)
-      : board.ctl.pendingBoard !== null ? "saving before switching boards…"
-      : board.ctl.saving ? "saving…"
-      : board.ctl.damaged && board.ctl.damageReason !== ""
-      ? Store.escapeMarkup(board.ctl.boardTitle + " " + board.ctl.damageReason + " — not opening it")
-      : board.ctl.damaged
-      ? Store.escapeMarkup(board.ctl.boardTitle + " could not be read — not saving over it")
       : board.ctl.editIndex >= 0
       ? Store.hintMarkup("esc", "done typing", board.ctl.accentMarkup)
       // While the far end is being chosen, the line says what x will do to
@@ -818,7 +836,16 @@ FocusScope {
       // out from the same table addLink changes, so the line cannot promise
       // one thing and the board do another.
       : board.ctl.linkingFrom >= 0
-        ? Store.linkHint(board.ctl.linkOutcome, board.ctl.accentMarkup)
-        : Store.hintLine(Store.BOARD_HINTS, board.ctl.accentMarkup)
+      ? Store.linkHint(board.ctl.linkOutcome, board.ctl.accentMarkup)
+
+      // 3. What just happened. It gets the line back the moment the gesture
+      // above it ends, and its own timer is still what clears it, so nothing
+      // held back here comes out of hiding later than it would have.
+      : board.ctl.statusText !== "" ? Store.escapeMarkup(board.ctl.statusText)
+
+      // 4. Work in progress, then the keys.
+      : board.ctl.pendingBoard !== null ? "saving before switching boards…"
+      : board.ctl.saving ? "saving…"
+      : Store.hintLine(Store.BOARD_HINTS, board.ctl.accentMarkup)
   }
 }

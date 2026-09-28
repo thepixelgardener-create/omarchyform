@@ -1324,5 +1324,25 @@ console.log('ok — controller: a first board built only from names in the list'
   assert.equal(c.links.count, 0, 'X takes them all')
   c.root.undo()
   assert.equal(c.links.count, 2, 'in one step')
+
+  // A message about the last thing that finished does not survive the start of
+  // the next gesture. The line under the header already ranks the outcome above
+  // it while the gesture runs; this is so it cannot reappear underneath once the
+  // gesture ends, still inside the two and a half seconds it was given.
+  c.root.selectOnly(0)
+  c.root.flash('Duplicated')
+  assert.equal(c.root.statusText, 'Duplicated')
+  c.root.toggleLinking()
+  assert.equal(c.root.statusText, '', 'starting a connector drops it')
+  assert.equal(c.root.linkingFrom, a, 'and the gesture is under way')
+  c.root.selectedIndex = 1
+  const outcome = c.root.linkOutcome
+  c.root.toggleLinking()
+  assert.equal(c.root.linkingFrom, -1, 'which finishes')
+  // Removing one has something to say; the other two outcomes do not, and
+  // either way what the line holds afterwards is about this gesture.
+  if (outcome === 'remove') assert.match(c.root.statusText, /connector removed/,
+    'the completion still speaks')
+  else assert.equal(c.root.statusText, '', 'and nothing stale is left behind')
 }
 console.log('ok — controller: what a connector gesture promises, and what it then does')

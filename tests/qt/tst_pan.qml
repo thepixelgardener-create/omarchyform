@@ -265,6 +265,11 @@ TestCase {
     ctl.statusText = ""
     ctl.linkingFrom = -1
     ctl.linkOutcome = "none"
+    ctl.saveError = ""
+    ctl.trashIndexError = ""
+    ctl.diskChanged = false
+    ctl.damaged = false
+    ctl.arranging = false
     ctl.theme.fontBody = 12
     surface.width = test.width
     surface.height = test.height
@@ -497,6 +502,115 @@ TestCase {
     var plain = line.text.replace(/<[^>]*>/g, "")
     verify(plain.indexOf(row.says) >= 0, "it says '" + row.says + "', not: " + plain)
     verify(plain.indexOf("esc") >= 0, "and how to get out of it")
+  }
+
+  // A flash says what just happened; the connector line says what is about to.
+  // They shared one line and the flash won, so removing a connector and then
+  // starting another gesture inside the two and a half seconds the message
+  // lasts left "connector removed" on screen where the next outcome belonged —
+  // the line promising the wrong thing, which is the one failure the outcome
+  // line exists to prevent.
+  function test_anActiveConnectorOutranksAStaleMessage_data() {
+    return [
+      { tag: "after a duplicate", said: "Duplicated", outcome: "create", says: "connects these two" },
+      { tag: "after a removal", said: "connector removed · u to undo", outcome: "reverse",
+        says: "turns this connector round" },
+      { tag: "after a delete", said: "deleted · u to undo", outcome: "remove",
+        says: "removes this connector" },
+      { tag: "with no far end yet", said: "3 marked", outcome: "none", says: "pick the other end" }
+    ]
+  }
+
+  function test_anActiveConnectorOutranksAStaleMessage(row) {
+    ctl.statusText = row.said
+    ctl.linkingFrom = 1
+    ctl.linkOutcome = row.outcome
+    wait(0)
+
+    var plain = findChild(surface, "board-status").text.replace(/<[^>]*>/g, "")
+    verify(plain.indexOf(row.says) >= 0, "says '" + row.says + "', not: " + plain)
+    verify(plain.indexOf(row.said) < 0, "and not the message that had just faded in: " + plain)
+  }
+
+  // And the message is still there to read once the gesture is over, rather
+  // than being thrown away to make room — until its own timer clears it.
+  function test_finishingTheGestureGivesTheMessageTheLineBack() {
+    ctl.statusText = "connector removed · u to undo"
+    ctl.linkingFrom = 1
+    ctl.linkOutcome = "remove"
+    wait(0)
+    var line = findChild(surface, "board-status")
+    verify(line.text.indexOf("removes this connector") >= 0, "the outcome while it is being chosen")
+
+    ctl.linkingFrom = -1
+    wait(0)
+    verify(line.text.indexOf("connector removed") >= 0, "and what happened once it is done")
+
+    // What the flash timer does. Nothing the line has been holding back comes
+    // out of hiding when it fires.
+    ctl.statusText = ""
+    wait(0)
+    verify(line.text.indexOf("connector removed") < 0, "an expired message stays expired")
+    verify(line.text.indexOf("removes this connector") < 0, "and nothing takes its place")
+  }
+
+  // A board that is not being saved says so, over anything else on the line.
+  // These are not messages that fade: each one names something the person has
+  // to do before their edits reach the disk, and a connector gesture is a few
+  // seconds of edits that would go nowhere.
+  function test_aBoardThatCannotSaveSaysSoAboveEverything_data() {
+    return [
+      { tag: "a failed write", set: "saveError", says: "could not be written" },
+      { tag: "a trash index that will not save", set: "trashIndexError", says: "trash index" },
+      { tag: "two versions of the board", set: "diskChanged", says: "changed on disk" },
+      { tag: "a board that could not be read", set: "damaged", says: "not saving over it" }
+    ]
+  }
+
+  function test_aBoardThatCannotSaveSaysSoAboveEverything(row) {
+    // Everything that competes for the line, all at once, with the connector
+    // gesture running: the one that must win is the one that blocks a save.
+    ctl.statusText = "Duplicated"
+    ctl.linkingFrom = 1
+    ctl.linkOutcome = "create"
+    ctl.editIndex = 0
+    ctl.arranging = true
+    ctl.showPinned = true
+    if (row.set === "saveError") ctl.saveError = "notes.json could not be written"
+    else if (row.set === "trashIndexError") ctl.trashIndexError = "the trash index could not be saved"
+    else if (row.set === "diskChanged") ctl.diskChanged = true
+    else ctl.damaged = true
+    wait(0)
+
+    var line = findChild(surface, "board-status")
+    var plain = line.text.replace(/<[^>]*>/g, "")
+    verify(plain.toLowerCase().indexOf(row.says) >= 0, "says '" + row.says + "', not: " + plain)
+    verify(plain.indexOf("connects these two") < 0, "not the connector outcome: " + plain)
+    verify(plain.indexOf("Duplicated") < 0, "and not a message that is about to fade")
+    verify(line.visible, "and it is on screen to be acted on")
+
+    ctl.saveError = ""
+    ctl.trashIndexError = ""
+    ctl.diskChanged = false
+    ctl.damaged = false
+    ctl.arranging = false
+    ctl.showPinned = false
+    ctl.editIndex = -1
+  }
+
+  // Typing is the narrower claim on the keyboard: while a caret is in a note,
+  // x is the letter x, so the line must not offer to connect anything.
+  function test_typingStillOwnsTheLineOverAHeldConnector() {
+    ctl.statusText = "Text pasted · enter to edit"
+    ctl.linkingFrom = 1
+    ctl.linkOutcome = "create"
+    ctl.editIndex = 0
+    wait(0)
+
+    var plain = findChild(surface, "board-status").text.replace(/<[^>]*>/g, "")
+    verify(plain.indexOf("done typing") >= 0, "says how to stop typing, not: " + plain)
+    verify(plain.indexOf("connects these two") < 0, "and does not promise x will connect anything")
+    ctl.editIndex = -1
   }
 
   // A theme with large text in a small window is where a hint stops fitting.
