@@ -287,10 +287,18 @@ Item {
 
   // Drag anywhere. Steps aside the moment this item is being edited, so the
   // caret still works.
+  //
+  // The left button only. The middle one used to press here too — it selected
+  // the item and then deleted it on release — which made a pan that happened
+  // to start on a note destroy it, and put the one irreversible thing on the
+  // board behind the same gesture used to move around it. Deleting is del,
+  // backspace, or the command that says so. Leaving the button off the list
+  // rather than ignoring it in the handler matters: an accepted button is a
+  // consumed one, and the board's pan surface is above this anyway.
   MouseArea {
     anchors.fill: parent
     enabled: node.ctl.editIndex !== node.index && (node.ipinned ? node.ctl.showPinned : !node.ctl.showPinned)
-    acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+    acceptedButtons: Qt.LeftButton
     cursorShape: node.ipinned ? Qt.PointingHandCursor : dragging ? Qt.ClosedHandCursor : Qt.OpenHandCursor
 
     property real pressX: 0
@@ -316,9 +324,6 @@ Item {
     onReleased: {
       if (dragging) node.ctl.save()
       dragging = false
-    }
-    onClicked: function (mouse) {
-      if (mouse.button === Qt.MiddleButton) node.ctl.removeItem(node.index)
     }
     onDoubleClicked: {
       if (node.ipinned || !node.ctl.canEdit) return

@@ -24,7 +24,7 @@ Rectangle {
   // Flickable rather than over it, so the panel keeps its drag to scroll and
   // this catches only the margin ring, where a click used to fall through the
   // panel and close it.
-  MouseArea { anchors.fill: parent }
+  MouseArea { anchors.fill: parent; acceptedButtons: Qt.AllButtons }
 
   // In the margin ring rather than beside the text: the list is already
   // measured to the panel, and taking a gutter out of it for a rule three

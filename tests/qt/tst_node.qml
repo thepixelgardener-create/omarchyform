@@ -79,9 +79,18 @@ TestCase {
     }
   }
   property int backgroundDoubleClicks: 0
+  property int backgroundMiddlePresses: 0
+  // Stands in for whatever is under an item on the real board — where the
+  // middle button is the camera's. It accepts that button so this suite can
+  // say the item let it through rather than only that the item did nothing
+  // with it: an item that swallows the press is an item a pan dies on.
   MouseArea {
     anchors.fill: parent
+    acceptedButtons: Qt.LeftButton | Qt.MiddleButton
     onDoubleClicked: test.backgroundDoubleClicks++
+    onPressed: function (mouse) {
+      if (mouse.button === Qt.MiddleButton) test.backgroundMiddlePresses++
+    }
   }
   Node {
     id: subject
@@ -117,6 +126,7 @@ TestCase {
     ctl.undoCount = 0
     ctl.saveCount = 0
     ctl.flushCount = 0
+    backgroundMiddlePresses = 0
     model.set(0, {ix:100, iy:100, iw:180, ih:140, itext:""})
   }
   function test_drag() {
@@ -268,6 +278,39 @@ TestCase {
     ctl.itemFill = "#ff00ff"
     tryVerify(function() { return grabImage(subject).pixel(70, 50) === Qt.rgba(1, 0, 1, 1) })
   }
+  // The middle button used to press here: it selected the item and deleted it
+  // on release, so a drag meant to move the view destroyed whatever it began
+  // on. The item takes no part in it now — it does not consume it either, or
+  // the board's pan would stop at the edge of every note.
+  function test_middleButtonPassesThroughToWhatIsBehind() {
+    mousePress(test, 140, 140, Qt.MiddleButton)
+    mouseMove(test, 200, 160, -1, Qt.MiddleButton)
+    mouseRelease(test, 200, 160, Qt.MiddleButton)
+
+    compare(backgroundMiddlePresses, 1, "the layer behind the item got the press")
+    compare(model.count, 1, "the item is still there")
+    compare(model.get(0).ix, 100, "and did not move")
+    compare(model.get(0).iy, 100)
+    compare(model.get(0).iw, 180, "or resize")
+    compare(model.get(0).ih, 140)
+    compare(ctl.selectedIndex, -1, "nothing was selected")
+    compare(ctl.editIndex, -1, "nothing was typed into")
+    compare(ctl.undoCount, 0, "and there is nothing to undo")
+    compare(ctl.saveCount, 0)
+  }
+
+  // Selected first, because that is the gesture that used to destroy what it
+  // landed on: press, release, gone.
+  function test_middleClickOnASelectedItemDoesNotDeleteIt() {
+    mouseClick(test, 140, 140, Qt.LeftButton)
+    compare(ctl.selectedIndex, 0, "selected the ordinary way")
+
+    mouseClick(test, 140, 140, Qt.MiddleButton)
+    compare(model.count, 1, "still one item")
+    compare(ctl.selectedIndex, 0, "still selected")
+    compare(backgroundMiddlePresses, 1, "and the button went past it")
+  }
+
   function test_edit() {
     mouseDoubleClickSequence(test, 140, 140, Qt.LeftButton)
     compare(ctl.editIndex, 0)

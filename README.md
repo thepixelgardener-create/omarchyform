@@ -174,8 +174,9 @@ colours apart, and the controls carry names and roles for a screen reader.
 | `r` / `e` | New box / ellipse |
 | `p` / `Shift+P` | Pin as background / select backgrounds to unpin |
 | `s` | Cycle the shape: note, box, ellipse, diamond |
-| `x` | Connect: press on one, then on another; again to turn it round |
-| `X` | Remove every connector on this item |
+| `x` | Connect: `x` on one, `tab` or `hjkl` to the other, `x` again |
+| `x` on a connected pair | Turn that connector round, or remove it — the line under the header says which |
+| `X` | Remove every connector on this item at once |
 | `u` / `ctrl+r` | Undo / redo |
 | `ctrl+n` | New board, already waiting for the first note |
 | `F2` | Rename the board you are on |
@@ -229,12 +230,46 @@ touches gets marked, and holding Shift keeps whatever was marked already.
 Shift-click marks items one at a time, dragging a marked item moves the whole
 set, and the bottom-right corner resizes them. Middle-drag or right-drag pans,
 the wheel zooms at the pointer, double-clicking empty canvas leaves a new note,
-double-clicking a note types in it, and middle-clicking an item deletes it.
+and double-clicking a note types in it.
+
+A middle-drag pans wherever it starts — over bare canvas, a note, a shape, a
+picture or a pinned background — and a middle-click that does not move does
+nothing at all: it will not select, move, resize, type into or delete what it
+lands on. Deleting is `del`, `backspace`, or **Delete** in the command list,
+and it can be undone with `u`.
 
 The header menu includes **Zoom**, showing the current percentage. Open it with
 `m`, use `Tab` / `Shift+Tab` to reach Zoom, then press `Enter`. Choose 25%, 50%,
 75%, 100%, 125%, 150%, 200%, 300%, or 400% with Tab and Enter. **Back** returns
 to the main menu; `Esc` closes it. Zoom presets keep the canvas centre fixed.
+
+## Connectors
+
+Select one item, press `x`, move the selection to the other with `tab` or
+`h` `j` `k` `l`, and press `x` again. A dashed line follows the selection while
+you choose, and the line under the header says what the second `x` will do
+before you press it.
+
+The far end is chosen with the keyboard: clicking an item starts a fresh
+selection, which ends the half-made connector without drawing anything.
+
+Only one connector runs between any two items, so drawing one over a pair that
+already has one changes the one that is there rather than adding a second:
+
+- **connects these two** — there is nothing between them yet, so a new arrow is
+  drawn from the first to the second.
+- **turns this connector round** — an arrow already runs the other way, so it
+  is reversed to point the way you just drew it.
+- **removes this connector** — an arrow already runs exactly this way, so
+  drawing it again takes it away.
+
+`Esc` cancels while you are choosing: nothing on the board changes, and the
+board is not saved. Every one of the three outcomes can be undone with `u`.
+
+That is how a single connector is removed: select the item it starts at, press
+`x`, select the item it ends at, press `x`. `X` is the bulk answer — it removes
+every connector on the selected item at once, in both directions, in one undo
+step. There is no way to click a connector itself; they are drawn, not selected.
 
 ## Backgrounds
 

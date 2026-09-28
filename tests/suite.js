@@ -601,6 +601,95 @@ function tests(S) {
     eq(S.matchCommands("zzz").length, 0)
   })
 
+  // The names say what a command does in the board's own words, which is not
+  // the word most people reach for first. The aliases are the way in from the
+  // word every other program uses; nothing dispatches by one.
+  test("the command list answers to the ordinary word as well as its own", () => {
+    const first = q => (S.matchCommands(q)[0] || {}).name
+    const found = q => S.matchCommands(q).map(c => c.name)
+
+    eq(found("edit"), ["Type in it"], "edit")
+    eq(found("edit text"), ["Type in it"], "edit text")
+    eq(found("select all"), ["Mark everything"], "select all")
+    eq(found("add to selection"), ["Mark this one as well"], "add to selection")
+    eq(found("rectangle"), ["New box"], "rectangle")
+    eq(found("unlink"), ["Remove its connectors"], "unlink")
+    eq(found("disconnect"), ["Remove its connectors"], "disconnect")
+    eq(found("link"), ["Connect to another"], "link")
+
+    // A name that already answers does not get an alias saying the same thing
+    // twice — and still answers.
+    eq(first("copy"), "Copy out", "copy")
+    eq(first("paste"), "Paste in", "paste")
+    eq(first("connect"), "Connect to another", "connect")
+    eq(first("rename"), "Name this board", "rename")
+
+    // An alias is a way in, not a name: matched from its start, so it cannot
+    // drag a command into the list for a letter in the middle of it.
+    ok(found("a").indexOf("New box") < 0, "rectangle does not answer 'a'")
+    ok(found("ct").indexOf("New box") < 0, "nor the middle of it")
+    // The start of one does — behind the commands whose own names answer it.
+    const partial = found("sel")
+    eq(partial[0], "Select backgrounds", "a name still leads")
+    eq(partial[partial.length - 1], "Mark everything", "and the alias brings up the rear")
+    eq(found("select a"), ["Mark everything"], "once no name is left to answer")
+
+    // Names and keys still come first, and a command that matches both a name
+    // and an alias is offered once.
+    // Both of these are named "Mark …", so both answer by name and the table's
+    // own order decides between them — the alias on each changes nothing.
+    const ways = found("mark")
+    eq(ways.filter(n => n === "Mark everything").length, 1, "once, however many fields match")
+    eq(ways.slice(0, 2), ["Mark this one as well", "Mark everything"],
+       "the names keep the order the table gives them")
+    eq(S.matchCommands("i")[0].name, "Type in it", "the key still wins over an alias")
+
+    // Nothing typed is still the whole table in table order.
+    eq(S.matchCommands("").map(c => c.name).join(","),
+       S.COMMANDS.filter(c => c.listed !== false).map(c => c.name).join(","),
+       "an empty query is the table, unchanged")
+
+    // Scope is still the first question asked: an alias cannot smuggle a
+    // command that is not about the selection into the selection's own menu.
+    eq(S.matchCommands("rename", "selection").length, 0, "rename is not a selection action")
+    eq(S.matchCommands("select all", "selection").length, 0, "nor is marking everything")
+    eq(S.matchCommands("unlink", "selection").map(c => c.name), ["Remove its connectors"],
+       "and one that is, still is")
+
+    for (const command of S.COMMANDS) {
+      if (!command.also) continue
+      for (const alias of command.also) {
+        eq(alias, alias.toLowerCase().trim(), command.name + ": aliases are already folded")
+        ok(command.name.toLowerCase().indexOf(alias) < 0,
+           command.name + ": '" + alias + "' is redundant, the name already finds it")
+      }
+    }
+  })
+
+  // Drawing a connector is three operations wearing one keystroke. The line
+  // that promises which one and the change that carries it out ask this.
+  test("what drawing a connector will do is one question", () => {
+    const links = new FakeModel([{ lfrom: 1, lto: 2 }, { lfrom: 5, lto: 6 }])
+
+    eq(S.linkAt(links, 3, 4), { at: -1, outcome: "create" }, "nothing between them yet")
+    eq(S.linkAt(links, 1, 2), { at: 0, outcome: "remove" }, "the same way again takes it away")
+    eq(S.linkAt(links, 2, 1), { at: 0, outcome: "reverse" }, "the other way turns it round")
+    eq(S.linkAt(links, 6, 5), { at: 1, outcome: "reverse" }, "and it finds the right row")
+
+    // An end that cannot take a connector promises nothing.
+    for (const [a, b] of [[1, 1], [-1, 2], [2, -1], [undefined, 2], [2, null]])
+      eq(S.linkAt(links, a, b).outcome, "none", String(a) + " to " + String(b))
+
+    // The words follow the outcome rather than sitting beside it.
+    const said = o => S.linkHint(o, "#00ffff").replace(/<[^>]*>/g, "")
+    eq(said("create"), "x connects these two \u00b7 esc: cancel")
+    eq(said("reverse"), "x turns this connector round \u00b7 esc: cancel")
+    eq(said("remove"), "x removes this connector \u00b7 esc: cancel")
+    eq(said("none"), "pick the other end, then x \u00b7 esc: cancel")
+    for (const outcome of ["create", "reverse", "remove", "none"])
+      ok(S.linkHint(outcome, "#00ffff").indexOf("esc") > 0, outcome + " can still be got out of")
+  })
+
   test("every command names a function and a key, once", () => {
     const names = {}
     const keys = {}

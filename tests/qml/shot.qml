@@ -199,6 +199,44 @@ ShellRoot {
       }
     },
     {
+      // The three things the second x can do, in the one line that promises
+      // them. Photographed because the wording is the whole feature: it is
+      // read in a hurry, in whatever theme and font size the desktop is set
+      // to, and it has to fit on the line without pushing the hints off it.
+      //
+      // Nothing here is connected yet, so this is the plain case.
+      name: "11b-connecting-create",
+      setup: function () {
+        plugin.markedIds = []
+        plugin.fitToItems()
+        plugin.selectOnly(4)
+        plugin.toggleLinking()
+        plugin.selectedIndex = 5
+      }
+    },
+    {
+      // A connector already runs the other way between these two, so drawing
+      // one now turns that one round rather than adding a second.
+      name: "11c-connecting-reverse",
+      setup: function () {
+        plugin.linkingFrom = -1
+        plugin.selectOnly(6)
+        plugin.toggleLinking()
+        plugin.selectedIndex = 5
+      }
+    },
+    {
+      // And one already runs exactly this way, so drawing it again takes it
+      // away. The line has to say so before the key is pressed, not after.
+      name: "11d-connecting-remove",
+      setup: function () {
+        plugin.linkingFrom = -1
+        plugin.selectOnly(5)
+        plugin.toggleLinking()
+        plugin.selectedIndex = 6
+      }
+    },
+    {
       name: "12-failed-save",
       setup: function () { plugin.flash("Could not write the board — ctrl+s to retry") }
     },

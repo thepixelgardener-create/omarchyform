@@ -141,11 +141,41 @@ since older boards are migrated on load rather than rejected.
   have noticed. `tests/png.js` reads the picture back with nothing installed,
   Node's own zlib being enough.
 
-- `npm run shots` photographs the plugin in fourteen states, in any theme, into
+- `npm run shots` photographs the plugin in every state worth judging by eye, in
+  any theme, into
   `~/.cache/omarchyform/shots/`. It asserts nothing and is not part of
   `tests/run`; it is for the questions only eyes answer.
 
 ### Fixed
+
+- **A middle-drag over an item no longer deletes it.** Middle-drag was the pan
+  gesture on the canvas, and a middle-click on an item removed it, so the same
+  motion moved the view or destroyed what it happened to begin on — and the
+  destructive reading was the one that needed no movement at all. Middle-click
+  deletion is gone. The board now takes the middle button once, on a surface
+  above the canvas and below the header and the panels, and hands the pointer's
+  screen displacement straight to the camera. So a middle-drag pans wherever it
+  starts — bare canvas, a note, a shape, a picture, a pinned background, a
+  resize grip, a note being typed in — and a middle-press that never moves does
+  nothing at all: it does not select, move, resize, type into, paste into or
+  delete what it lands on.
+
+  Taking the button in one place rather than declining it in each is the point.
+  An item that merely ignored the press would still have swallowed it, and the
+  editor inside a note being typed in would still have pasted the primary
+  selection into it, which is what the middle button means to a text field on
+  this platform. Nothing under the pan surface is ever offered the button.
+
+  Deleting is `del`, `backspace`, **Delete** in the command list, or the
+  actions panel on `.` — all of them undone with `u`, as before. Left-drag
+  selection and movement, the marquee, the resize grip, right-drag panning,
+  right-click and the wheel are unchanged, and the header, the command list,
+  the conflict panel, the browser and the help panel each take every button
+  pressed on them rather than letting the canvas slide about behind them.
+  `tests/qt/tst_pan.qml` drives the whole board with a pointer — four zoom
+  levels, every kind of thing a gesture can start on, and the chrome — and
+  `tests/qt/tst_node.qml` checks that an item lets the button through instead
+  of only that it does nothing with it.
 
 - Pasted and dropped pictures now finish loading onto the canvas. The image
   probe explicitly reads its own status instead of the status label in scope.
@@ -272,6 +302,33 @@ since older boards are migrated on load rather than rejected.
   every clone. The bit is committed now, and a test asserts it survives.
 
 ### Changed
+
+- **The command list answers to the ordinary word as well as its own.** The
+  names say what a command does in the board's words — "Type in it", "Mark
+  everything", "Name this board" — and searching for the word every other
+  program uses found nothing: `edit` matched no command at all. Commands now
+  carry optional search aliases, and the list matches them from their start
+  after it has matched names and keys, so `edit`, `select all`, `add to
+  selection`, `rectangle`, `rename`, `link`, `unlink` and `disconnect` each
+  find what they mean. Nothing dispatches by an alias and no visible label
+  changed: it is a way in, not a second name. Names and keys keep the order
+  they had, a command appears once however many of its fields match, and the
+  scope a selection's action panel is narrowed to is still checked first, so an
+  alias cannot smuggle an unrelated command into it.
+
+- **The board says what a connector gesture is about to do.** Only one
+  connector runs between any pair of items, so drawing one is three different
+  operations depending on what is already there: it creates, it reverses, or it
+  removes. While the far end is being chosen the line under the header now says
+  which — "x connects these two", "x turns this connector round", "x removes
+  this connector" — and says "pick the other end" when there is no valid one
+  yet, including on a background or on the item the gesture started from. The
+  line and the change ask one shared question of one table, so the promise
+  cannot drift from what happens; `esc` still cancels without touching the
+  board. The help list and the README now distinguish removing one connector
+  this way from `X`, which removes every connector on an item at once, and say
+  that the far end is walked to with `tab` or `hjkl` — a click starts a fresh
+  selection, which has always ended the gesture without drawing anything.
 
 - **Ellipses and diamonds are drawn as geometry rather than as a picture of
   geometry.** They were painted into a `Canvas`, which rasterises at the

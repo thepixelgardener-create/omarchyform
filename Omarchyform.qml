@@ -61,6 +61,22 @@ Item {
   }
   property int editIndex: -1      // -1 means normal mode: every key is a command
   property int linkingFrom: -1    // id of the first end while connecting
+  // What pressing x again would do to the two ends chosen so far, so the line
+  // under the header can say it before it happens. addLink asks the same
+  // question of the same table when it carries it out, so the promise and the
+  // change cannot come apart.
+  //
+  // It follows the two things that move during the gesture — which end is
+  // first, and where the cursor is now. The connectors themselves do not
+  // change while one is being drawn: completing it is what ends the gesture.
+  readonly property string linkOutcome: {
+    if (root.linkingFrom < 0 || !root.canEdit) return "none"
+    if (root.selectedIndex < 0 || root.selectedIndex >= itemModel.count) return "none"
+    var n = itemModel.get(root.selectedIndex)
+    // A background takes no connectors, so it is not a far end to promise one.
+    if (!n || n.ipinned) return "none"
+    return Store.linkAt(linkModel, root.linkingFrom, n.iid).outcome
+  }
   property bool helpVisible: false
   property bool showPinned: false
   property string pendingFirstNote: ""
@@ -1049,23 +1065,24 @@ Item {
   // either turns it round or takes it away.
   function addLink(a, b) {
     if (!root.canEdit) return
+    // The same question the hint asked while the far end was being chosen, so
+    // what happens here is what the board said was about to happen.
+    var found = Store.linkAt(linkModel, a, b)
+    if (found.outcome === "none") return
     root.pushUndo()
-    for (var i = 0; i < linkModel.count; i++) {
-      var l = linkModel.get(i)
-      if (l.lfrom === a && l.lto === b) {
-        linkModel.remove(i)
-        root.save(true)
-        root.repaintLinks()
-        root.flash("connector removed · u to undo")
-        return
-      }
-      if (l.lfrom === b && l.lto === a) {
-        linkModel.setProperty(i, "lfrom", a)
-        linkModel.setProperty(i, "lto", b)
-        root.save()
-        root.repaintLinks()
-        return
-      }
+    if (found.outcome === "remove") {
+      linkModel.remove(found.at)
+      root.save(true)
+      root.repaintLinks()
+      root.flash("connector removed · u to undo")
+      return
+    }
+    if (found.outcome === "reverse") {
+      linkModel.setProperty(found.at, "lfrom", a)
+      linkModel.setProperty(found.at, "lto", b)
+      root.save()
+      root.repaintLinks()
+      return
     }
     linkModel.append({ lfrom: a, lto: b })
     root.save()
