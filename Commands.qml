@@ -47,8 +47,9 @@ Rectangle {
                         panel.theme.foreground.b, 0.35)
   radius: panel.theme.cornerRadius
 
-  // Swallow clicks so they do not reach the board underneath.
-  MouseArea { anchors.fill: parent }
+  // Swallow clicks so they do not reach the board underneath — every button,
+  // so a middle drag on the panel does not pan the canvas behind it.
+  MouseArea { anchors.fill: parent; acceptedButtons: Qt.AllButtons }
 
   // A row is as tall as the text in it, measured rather than guessed: the theme
   // chooses the font, and a list sized from a number picked here would crop its

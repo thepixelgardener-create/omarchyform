@@ -139,6 +139,19 @@ expect(referenced(helpReads, "ctl."), membersAt(rigCtl, 8),
 expect(referenced(helpReads, "theme."), membersAt(blockBody(roomy, "property QtObject theme:"), 10),
   "the roomyHelp rig's theme", "tests/qt/tst_layout.qml")
 
+// The canvas suite mounts the whole board — the surface, the items on it, the
+// header and every panel it hosts — against one stub, so that stub stands in
+// for the controller in front of more of the tree than any other. Same reason
+// as above: an undefined read there is silent on one Qt and fatal on another.
+const panSource = read("tests/qt/tst_pan.qml")
+const panStub = nestedMembers(panSource, "ctl")
+const panTheme = membersAt(blockBody(panSource, "property QtObject theme:"), 6)
+for (const file of ["Board.qml", "Node.qml", "BoardToolbar.qml", "Help.qml", "Browser.qml",
+                    "ScrollHint.qml", "Commands.qml", "Conflict.qml", "BoardImage.qml"]) {
+  expect(referenced(read(file), "ctl."), panStub, "the tst_pan stub", file)
+  expect(referenced(read(file), "theme."), panTheme, "the tst_pan stub's theme", file)
+}
+
 const nodeReads = referenced(read("Node.qml"), "ctl.")
 expect(nodeReads, nestedMembers(read("tests/qt/tst_node.qml"), "ctl"),
   "the tst_node stub", "tests/qt/tst_node.qml")

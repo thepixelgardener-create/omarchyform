@@ -36,9 +36,13 @@ FocusScope {
                    browser.theme.canvasBackground.b, 0.86)
   }
 
+  // The dismiss layer, and it takes every button: the board's pan surface is
+  // below this, and the canvas is not something to be dragged around behind
+  // the browser covering it. Only a left click means "close".
   MouseArea {
     anchors.fill: parent
-    onClicked: browser.ctl.closeBrowser()
+    acceptedButtons: Qt.AllButtons
+    onClicked: function (mouse) { if (mouse.button === Qt.LeftButton) browser.ctl.closeBrowser() }
   }
 
   Rectangle {
@@ -54,8 +58,9 @@ FocusScope {
                           browser.theme.foreground.b, 0.35)
     radius: browser.theme.cornerRadius
 
-    // Swallow clicks so they do not reach the dismiss layer behind.
-    MouseArea { anchors.fill: parent }
+    // Swallow clicks so they do not reach the dismiss layer behind, whichever
+    // button they are.
+    MouseArea { anchors.fill: parent; acceptedButtons: Qt.AllButtons }
 
     Column {
       anchors.fill: parent

@@ -176,6 +176,39 @@ var PROMPT_HINTS = [["enter", "confirm"], ["esc", "cancel"]]
 var EMPTY_HINTS = [["a", "add a board"], ["A", "Add a folder"]]
 var START_HINTS = [["n", "New note"], ["Ctrl+V", "Paste text"]]
 
+// ------------------------------------------------------------ connectors
+// Only one connector runs between any pair, so drawing one is three different
+// operations depending on what is already there. Which one it will be is
+// asked here — once, by the line that promises it while the second end is
+// being chosen, and again by the mutation that carries it out. Two decision
+// trees is how a hint starts lying.
+//
+// `at` is the row it lands on, or -1 when there is nothing to land on. An end
+// that cannot take a connector at all — nothing chosen, the same item twice —
+// is "none", so the hint has something honest to say about it.
+function linkAt(links, a, b) {
+  if (a === undefined || b === undefined || a === null || b === null
+      || a < 0 || b < 0 || a === b) return { at: -1, outcome: "none" }
+  for (var i = 0; i < links.count; i++) {
+    var l = links.get(i)
+    // The same way round again takes it away; the other way round turns it.
+    if (l.lfrom === a && l.lto === b) return { at: i, outcome: "remove" }
+    if (l.lfrom === b && l.lto === a) return { at: i, outcome: "reverse" }
+  }
+  return { at: -1, outcome: "create" }
+}
+
+// What the board says while the far end is being chosen. Written from the
+// outcome rather than beside it, so the words and the mutation move together.
+// Every string in it is ours, so there is nothing here to escape.
+function linkHint(outcome, color) {
+  var line = outcome === "remove" ? keyMarkup("x", color) + " removes this connector"
+    : outcome === "reverse" ? keyMarkup("x", color) + " turns this connector round"
+    : outcome === "create" ? keyMarkup("x", color) + " connects these two"
+    : "pick the other end, then " + keyMarkup("x", color)
+  return line + " \u00b7 " + hintMarkup("esc", "cancel", color)
+}
+
 // ---------------------------------------------------------------- commands
 // Every command the board has, as data. The keys were the only way in: a board
 // you have not used for a month is a list of letters you have to remember, and
@@ -191,15 +224,23 @@ var START_HINTS = [["n", "New note"], ["Ctrl+V", "Paste text"]]
 // table in Board.qml, so the two cannot disagree about which letter does what.
 // An empty key means there is no keystroke for it: it is reached by name, or
 // from the panel that offers it.
+//
+// `also` is what else someone might type looking for it. The names here say
+// what a command does in the board's own words — "Type in it", "Mark
+// everything" — and the word most people reach for first is the one every
+// other program uses: edit, select all, rename, rectangle. Those go here
+// rather than into the name, because the name is what the palette shows and
+// what the help teaches, and a list that says "Type in it (edit)" is teaching
+// two things at once. Nothing dispatches by an alias: it is only a way in.
 var COMMANDS = [
   { name: "New note", key: "n", run: "addRelative", arg: "note", needs: "edit" },
-  { name: "New box", key: "r", run: "addRelative", arg: "rect", needs: "edit" },
+  { name: "New box", key: "r", run: "addRelative", arg: "rect", needs: "edit", also: ["rectangle"] },
   { name: "New ellipse", key: "e", run: "addRelative", arg: "ellipse", needs: "edit" },
-  { name: "Type in it", key: "i", run: "editSelected", needs: "target" },
+  { name: "Type in it", key: "i", run: "editSelected", needs: "target", also: ["edit", "edit text"] },
   { name: "Change shape", key: "s", run: "cycleKind", needs: "target" },
   { name: "Change colour", key: "c", run: "recolorItem", needs: "target" },
-  { name: "Connect to another", key: "x", run: "toggleLinking", needs: "target" },
-  { name: "Remove its connectors", key: "X", run: "unlinkSelected", needs: "target" },
+  { name: "Connect to another", key: "x", run: "toggleLinking", needs: "target", also: ["link"] },
+  { name: "Remove its connectors", key: "X", run: "unlinkSelected", needs: "target", also: ["disconnect", "unlink"] },
   { name: "Duplicate", key: "ctrl+d", run: "duplicateTargets", needs: "target" },
   { name: "Delete", key: "del", run: "removeTargets", needs: "target" },
   { name: "Align and spread", key: "g", run: "beginArrange", needs: "edit" },
@@ -219,8 +260,8 @@ var COMMANDS = [
   { name: "Send to back", key: "{", run: "layerTargets", arg: "back", needs: "item" },
   { name: "Pin or unpin as background", key: "p", run: "togglePin", needs: "item" },
   { name: "Select backgrounds", key: "P", run: "togglePinnedSelection", needs: "" },
-  { name: "Mark this one as well", key: "space", run: "toggleMark", needs: "" },
-  { name: "Mark everything", key: "a", run: "markAll", needs: "" },
+  { name: "Mark this one as well", key: "space", run: "toggleMark", needs: "", also: ["add to selection"] },
+  { name: "Mark everything", key: "a", run: "markAll", needs: "", also: ["select all"] },
   { name: "Undo", key: "u", run: "undo", needs: "edit" },
   { name: "Redo", key: "ctrl+r", run: "redo", needs: "edit" },
   { name: "Copy out", key: "super+c", run: "copySelection", needs: "" },
@@ -233,7 +274,7 @@ var COMMANDS = [
   { name: "Fullscreen or windowed", key: "w", run: "toggleWindowMode", needs: "" },
   { name: "Boards", key: "b", run: "openBrowser", needs: "" },
   { name: "New board", key: "ctrl+n", run: "newBoard", needs: "" },
-  { name: "Name this board", key: "F2", run: "renameBoard", needs: "" },
+  { name: "Name this board", key: "F2", run: "renameBoard", needs: "", also: ["rename"] },
   { name: "Import a board", key: "ctrl+o", run: "importBoard", needs: "" },
   { name: "Save a copy to share", key: "ctrl+shift+s", run: "exportBoard", needs: "" },
   { name: "Save a copy without its pictures", key: "", run: "exportBoardPlain", needs: "" },
@@ -260,10 +301,24 @@ var COMMANDS = [
 // offers, as opposed to everything the board can do.
 var SELECTION_NEEDS = ["target", "item", "group"]
 
+// An alias is a way in, not a name: it is matched from its start, the way a
+// name is, so `select all` answers "sel" and `rectangle` does not answer "a".
+// A substring rule here would put New box in the list for half the alphabet.
+function aliasLeads(command, needle) {
+  var also = command.also
+  if (!also) return false
+  for (var i = 0; i < also.length; i++) if (also[i].indexOf(needle) === 0) return true
+  return false
+}
+
 function matchCommands(query, scope) {
   var needle = String(query === undefined ? "" : query).toLowerCase().trim()
   var leading = []
   var rest = []
+  // What only an alias found. Behind the names, because a command whose own
+  // name answers the query is the better guess — and in table order, so the
+  // tail of the list is as stable as the rest of it.
+  var aliased = []
   for (var i = 0; i < COMMANDS.length; i++) {
     if (COMMANDS[i].listed === false) continue
     if (scope === "selection" && SELECTION_NEEDS.indexOf(COMMANDS[i].needs) < 0) continue
@@ -274,10 +329,14 @@ function matchCommands(query, scope) {
     // remembers the letter should be able to type it and see what it does.
     // Tested before the substring, or a command whose name happens to contain
     // that letter — align, chan(g)e — buries the one the letter belongs to.
+    //
+    // One bucket each, so a command that matches by name and by alias both is
+    // still offered once.
     if (at === 0 || COMMANDS[i].key.toLowerCase() === needle) leading.push(COMMANDS[i])
     else if (at > 0) rest.push(COMMANDS[i])
+    else if (aliasLeads(COMMANDS[i], needle)) aliased.push(COMMANDS[i])
   }
-  return leading.concat(rest)
+  return leading.concat(rest, aliased)
 }
 
 function commandByName(name) {
@@ -294,8 +353,14 @@ var KEY_HELP = [
   ["r / e", "new box / ellipse"],
   ["p / shift+p", "pin as background / select backgrounds"],
   ["s", "cycle shape: note, box, ellipse, diamond"],
-  ["x", "connect: press on one, then on another; again to turn it round"],
-  ["X", "remove every connector on this item"],
+  // Walked to, not clicked at: a pointer selection starts afresh and ends the
+  // half-made connector, so the keys are what the line has room to teach.
+  ["x", "connect: x on one, tab or hjkl to the other, x again"],
+  // Which of the two it will be is said on the line under the header while the
+  // far end is being chosen, so this row says that there is a choice rather
+  // than asking anyone to work out which side of it they are on.
+  ["x on a connected pair", "turn that connector round, or remove it — the line says which"],
+  ["X", "remove every connector on this item at once"],
   ["u / ctrl+r", "undo / redo"],
   ["b", "boards: browse, open, create"],
   ["enter / i", "type in the selected item"],

@@ -14,7 +14,10 @@ Rectangle {
   border.color: Qt.rgba(theme.barForeground.r, theme.barForeground.g, theme.barForeground.b, 0.18)
   radius: theme.cornerRadius
   implicitHeight: content.height + theme.sp(20)
-  MouseArea { anchors.fill: parent }
+  // The header owns everything pressed on it, every button. The pan surface
+  // on the canvas is below the chrome, and the board should not slide about
+  // under a bar that is being clicked.
+  MouseArea { anchors.fill: parent; acceptedButtons: Qt.AllButtons }
 
   Item {
     id: content

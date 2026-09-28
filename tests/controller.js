@@ -33,6 +33,17 @@ function controller() {
   Object.defineProperty(root, 'findNeedle', { get: () => root.findQuery.toLowerCase() })
   Object.defineProperty(root, 'paletteMatches', { get: () =>
     root.paletteVisible ? loadStore().matchCommands(root.paletteQuery, root.paletteScope) : [] })
+  // The binding the status line reads while a connector is being drawn, which
+  // the QML declares and this harness would otherwise not have. Kept as close
+  // to the original as a getter can be, so a change to one is visible as a
+  // difference from the other.
+  Object.defineProperty(root, 'linkOutcome', { get: () => {
+    if (root.linkingFrom < 0 || !root.canEdit) return 'none'
+    if (root.selectedIndex < 0 || root.selectedIndex >= items.count) return 'none'
+    const n = items.get(root.selectedIndex)
+    if (!n || n.ipinned) return 'none'
+    return loadStore().linkAt(links, root.linkingFrom, n.iid).outcome
+  } })
   Object.defineProperty(root, 'markedLookup', { get: () => {
     const lookup = {}
     for (const id of root.markedIds) lookup[id] = true
@@ -866,6 +877,30 @@ console.log('ok — controller: walking the header menu and running its commands
   c.root.runCommand('Delete everything forever')
   assert.equal(c.root.statusText, '')
 
+  // An alias is a way into the list, never a way to dispatch: the one lookup
+  // is by name, so the word someone typed cannot become the thing that runs.
+  for (const alias of ['edit', 'select all', 'rename', 'rectangle', 'unlink']) {
+    assert.equal(S.commandByName(alias), null, alias + ' is not a command name')
+    c.root.statusText = ''
+    c.root.runCommand(alias)
+    assert.equal(c.root.statusText, '', 'running ' + alias + ' by that word does nothing')
+  }
+
+  // Found by an alias, run by its name, and still refused when the board is
+  // not in a state for it: the availability check is where it always was.
+  c.root.selectedIndex = -1
+  c.root.markedIds = []
+  c.root.beginPalette()
+  c.root.setPaletteQuery('edit')
+  assert.deepEqual(c.root.paletteMatches.map(m => m.name), ['Type in it'],
+    'the ordinary word finds it')
+  c.root.paletteIndex = 0
+  c.root.statusText = ''
+  c.root.runPaletteChoice()
+  assert.equal(c.root.editIndex, -1, 'with nothing selected it does not start typing')
+  assert.match(c.root.statusText, /Type in it · nothing is selected/,
+    'and says so under its own name, not the word that found it')
+
   // Every command names a function the controller actually has, and every
   // single-key one agrees with the key table the board dispatches through.
   for (const command of S.COMMANDS)
@@ -1180,3 +1215,114 @@ console.log('ok — controller: bringing things forward and sending them back')
     assert.ok(actions.includes(name), name + ' is in the actions for a selection')
 }
 console.log('ok — controller: a first board built only from names in the list')
+{
+  // What the board says the second x will do, against what it then does. The
+  // hint and the change ask the same question of the same table, so this is
+  // as much about them not drifting apart as about either one being right.
+  const S = loadStore()
+  const c = controller()
+  c.session.loadBoard('{"version":5,"items":[]}', false)
+  c.root.addItem('note', 0, 0)
+  c.root.addItem('note', 200, 0)
+  c.root.addItem('note', 400, 0)
+  const [a, b, third] = [0, 1, 2].map(i => c.items.get(i).iid)
+  const hint = () => S.linkHint(c.root.linkOutcome, '#00ffff').replace(/<[^>]*>/g, '')
+
+  // Nothing chosen: nothing promised.
+  assert.equal(c.root.linkOutcome, 'none', 'not linking')
+
+  c.root.selectOnly(0)
+  c.root.toggleLinking()
+  assert.equal(c.root.linkingFrom, a, 'one end is held')
+  assert.equal(c.root.linkOutcome, 'none', 'and the cursor is still on it, which is not a far end')
+  assert.match(hint(), /pick the other end/, 'so the line asks for one')
+
+  c.root.selectedIndex = 1
+  assert.equal(c.root.linkOutcome, 'create', 'a fresh pair')
+  assert.match(hint(), /connects these two/)
+  c.root.toggleLinking()
+  assert.equal(c.links.count, 1, 'and that is what it did')
+  assert.deepEqual([c.links.get(0).lfrom, c.links.get(0).lto], [a, b], 'pointing the way it was drawn')
+
+  // Drawn the other way round, the same connector turns rather than doubling.
+  c.root.selectOnly(1)
+  c.root.toggleLinking()
+  c.root.selectedIndex = 0
+  assert.equal(c.root.linkOutcome, 'reverse', 'an arrow already runs the other way')
+  assert.match(hint(), /turns this connector round/)
+  c.root.toggleLinking()
+  assert.equal(c.links.count, 1, 'still one connector')
+  assert.deepEqual([c.links.get(0).lfrom, c.links.get(0).lto], [b, a], 'turned round')
+
+  // Drawn the same way again, it goes.
+  c.root.selectOnly(1)
+  c.root.toggleLinking()
+  c.root.selectedIndex = 0
+  assert.equal(c.root.linkOutcome, 'remove', 'an arrow already runs exactly this way')
+  assert.match(hint(), /removes this connector/)
+  c.root.toggleLinking()
+  assert.equal(c.links.count, 0, 'and it is gone')
+  assert.match(c.root.statusText, /u to undo/, 'and says how to get it back')
+  c.root.undo()
+  assert.equal(c.links.count, 1, 'which works')
+
+  // The far end is walked to, not clicked at: a pointer selection starts
+  // afresh, which ends the gesture rather than answering it. Documented here
+  // because the README says so and nothing else would notice it changing.
+  c.root.selectOnly(0)
+  c.root.toggleLinking()
+  assert.equal(c.root.linkingFrom, a, 'one end is held')
+  c.root.selectNext(1)
+  assert.equal(c.root.linkingFrom, a, 'tab keeps hold of it')
+  c.root.move(1, 0, false)
+  assert.equal(c.root.linkingFrom, a, 'and so does moving the cursor')
+  c.root.pointerSelect(1, false)
+  assert.equal(c.root.linkingFrom, -1, 'a click lets go of it')
+  assert.equal(c.root.linkOutcome, 'none', 'and the line stops promising anything')
+
+  // Escape while choosing changes nothing and leaves nothing half-made.
+  const before = JSON.stringify(S.linkRows(c.links))
+  const undos = c.root.undoStack.length
+  c.root.selectOnly(2)
+  c.root.toggleLinking()
+  c.root.selectedIndex = 0
+  assert.equal(c.root.linkOutcome, 'create', 'it was going to connect them')
+  c.root.back()
+  assert.equal(c.root.linkingFrom, -1, 'escape ends the gesture')
+  assert.equal(c.root.linkOutcome, 'none', 'and promises nothing')
+  assert.equal(JSON.stringify(S.linkRows(c.links)), before, 'the board is untouched')
+  assert.equal(c.root.undoStack.length, undos, 'and nothing was pushed to undo')
+
+  // An end that cannot take one promises nothing, and pressing x there is not
+  // taken as an answer to a question that was never asked.
+  c.root.selectOnly(0)
+  c.root.toggleLinking()
+  c.items.setProperty(2, 'ipinned', true)
+  c.root.selectedIndex = 2
+  assert.equal(c.root.linkOutcome, 'none', 'a background is not a far end')
+  assert.match(hint(), /pick the other end/)
+  c.items.setProperty(2, 'ipinned', false)
+  c.root.back()
+
+  // And a read-only board offers nothing at all.
+  c.root.selectOnly(0)
+  c.root.toggleLinking()
+  c.root.selectedIndex = 1
+  // The connector undone above runs the other way, so this pair would turn.
+  assert.equal(c.root.linkOutcome, 'reverse', 'while it can be edited')
+  c.session.damaged = true
+  assert.equal(c.root.linkOutcome, 'none', 'and nothing once it cannot')
+  c.session.damaged = false
+  c.root.back()
+
+  // X is the bulk answer, and it is a different one: every connector on the
+  // item, in one undo step, without choosing a far end at all.
+  c.root.addLink(a, third)
+  assert.equal(c.links.count, 2, 'two connectors on this one')
+  c.root.selectOnly(0)
+  c.root.unlinkSelected()
+  assert.equal(c.links.count, 0, 'X takes them all')
+  c.root.undo()
+  assert.equal(c.links.count, 2, 'in one step')
+}
+console.log('ok — controller: what a connector gesture promises, and what it then does')

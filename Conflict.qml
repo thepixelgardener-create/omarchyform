@@ -46,7 +46,9 @@ Rectangle {
   border.color: decision.theme.urgent
   radius: decision.theme.cornerRadius
 
-  MouseArea { anchors.fill: parent }
+  // Every button: the pan surface on the canvas is below the panels, and a
+  // question being answered should not also be moving the board behind it.
+  MouseArea { anchors.fill: parent; acceptedButtons: Qt.AllButtons }
 
   Column {
     id: body

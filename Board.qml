@@ -101,11 +101,14 @@ FocusScope {
     onHeightChanged: requestPaint()
   }
 
-  // Background: left drag draws a marquee, middle or right drag pans, wheel
-  // zooms, double-click leaves a note.
+  // Background: left drag draws a marquee, right drag pans, wheel zooms,
+  // double-click leaves a note. The middle button is not listed because it
+  // never reaches here: the pan surface further down owns it for the whole
+  // canvas, so a middle drag pans the same way whether it starts on bare
+  // canvas or on top of something.
   MouseArea {
     anchors.fill: parent
-    acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
+    acceptedButtons: Qt.LeftButton | Qt.RightButton
     property real lastX: 0
     property real lastY: 0
     property bool panning: false
@@ -518,6 +521,45 @@ FocusScope {
     }
   }
 
+  // Middle drag pans, wherever it starts. It sits above the canvas and
+  // everything drawn on it, and below the header, the panels and the browser,
+  // which own their own input.
+  //
+  // Above the items on purpose. A middle press used to land on whatever was
+  // under it: on an item it selected and then deleted it, and on a note being
+  // typed in it reached the editor underneath, where the middle button pastes
+  // the primary selection. Taking the button away from each of those in turn
+  // leaves the next one to find. Taking it here means none of them are ever
+  // offered it, so a pan cannot select, move, resize, type into, paste over or
+  // delete what it crosses — and a middle press that never moves does nothing
+  // at all.
+  //
+  // The displacement is read in screen pixels and handed to the camera
+  // unchanged, so the board keeps up with the pointer at any zoom. Measuring
+  // it inside an item would give world units instead, which is a pan that
+  // runs four times too fast at 400%.
+  //
+  // Only the middle button is accepted, so a left press, a right press, a
+  // hover and the wheel all fall straight through to what is underneath. It
+  // sets no cursor shape for the same reason: an item's own cursor still wins.
+  MouseArea {
+    id: panSurface
+    objectName: "pan-surface"
+    anchors.fill: parent
+    acceptedButtons: Qt.MiddleButton
+    property real lastX: 0
+    property real lastY: 0
+    onPressed: function (mouse) {
+      panSurface.lastX = mouse.x
+      panSurface.lastY = mouse.y
+    }
+    onPositionChanged: function (mouse) {
+      board.ctl.panBy(mouse.x - panSurface.lastX, mouse.y - panSurface.lastY)
+      panSurface.lastX = mouse.x
+      panSurface.lastY = mouse.y
+    }
+  }
+
   BoardToolbar {
     id: toolbar
     objectName: "board-toolbar"
@@ -597,11 +639,14 @@ FocusScope {
     ctl: board.ctl
   }
 
-  // Help consumes input so browsing shortcuts cannot edit the board behind it.
+  // Help consumes input so browsing shortcuts cannot edit the board behind it,
+  // and every button of it: the pan surface is underneath, and the canvas is
+  // not something to be moved around behind a panel covering it.
   MouseArea {
     anchors.fill: parent
     visible: board.ctl.helpVisible
-    onClicked: board.ctl.helpVisible = false
+    acceptedButtons: Qt.AllButtons
+    onClicked: function (mouse) { if (mouse.button === Qt.LeftButton) board.ctl.helpVisible = false }
   }
   Help {
     id: help
@@ -726,6 +771,7 @@ FocusScope {
   // the canvas is left to the board.
   Text {
     id: status
+    objectName: "board-status"
     anchors.left: parent.left
     anchors.right: parent.right
     anchors.leftMargin: board.theme.sp(16)
@@ -766,9 +812,13 @@ FocusScope {
       ? Store.escapeMarkup(board.ctl.boardTitle + " could not be read — not saving over it")
       : board.ctl.editIndex >= 0
       ? Store.hintMarkup("esc", "done typing", board.ctl.accentMarkup)
+      // While the far end is being chosen, the line says what x will do to
+      // this pair rather than what x is for: connect them, turn the one that
+      // is already there round, or take it away. The controller works that
+      // out from the same table addLink changes, so the line cannot promise
+      // one thing and the board do another.
       : board.ctl.linkingFrom >= 0
-        ? "pick the other end, then " + Store.keyMarkup("x", board.ctl.accentMarkup)
-          + " to connect · " + Store.hintMarkup("esc", "cancel", board.ctl.accentMarkup)
+        ? Store.linkHint(board.ctl.linkOutcome, board.ctl.accentMarkup)
         : Store.hintLine(Store.BOARD_HINTS, board.ctl.accentMarkup)
   }
 }
