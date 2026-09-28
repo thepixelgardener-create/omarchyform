@@ -562,6 +562,7 @@ npm run bench:scene # what a board costs to draw, at size; needs a compositor
 npm run test:qml # headless persistence tests; requires installed Quickshell
 npm run test:paste # live canvas image paste test; uses an isolated clipboard stub and board library
 npm run test:ui  # Qt Quick pointer, theme, and layout tests
+npm run shots -- --hold # leave an isolated board up for docs/pointer-checks.md
 npm run test:omarchy -- --keep # live desktop smoke test, isolated board data
 npm run shots   # photograph every state, for judging by eye
 npm run preview # remake the picture at the top of this README
@@ -591,11 +592,12 @@ vsync-bound at 60Hz and dropping frames at 144. `--record` writes that and the
 table to [docs/performance.md](docs/performance.md), which is where the figures
 quoted in the changelog come from.
 
-`npm run shots` puts the real plugin through twenty states — empty, a cursor
-beside a mark, typing, backgrounds, finding, arranging, the command list open
-and narrowed, what can be done with a selection, the question asked when two
-versions of a board exist, help, the browser, naming a board, a browser with
-more boards than fit, a failed save, a close-up at working zoom, and the board
+`npm run shots` puts the real plugin through every state worth judging by eye —
+empty, a cursor beside a mark, typing, backgrounds, finding, arranging, the
+command list open and narrowed, what can be done with a selection, the question
+asked when two versions of a board exist, help, the browser, naming a board, a
+browser with more boards than fit, each of the three things a connector gesture
+can be about to do, a failed save, a close-up at working zoom, and the board
 at the top of this README — and saves a picture of each into
 `~/.cache/omarchyform/shots/`. It asserts nothing: it exists because whether a
 tinted item reads as selected, or a hint still fits on one line, is not
@@ -609,6 +611,19 @@ npm run shots -- --light --dark
 
 It runs against the live compositor in an isolated `HOME`, so the installed
 copy of the plugin and the running shell are both left alone.
+
+`--hold` takes the pictures and then leaves the board on screen instead of
+quitting, on the isolated boards that run built, carrying one of everything a
+pointer can be pressed on — a background, notes, a shape, a picture and a
+connector. It is there for `docs/pointer-checks.md`: a pointer cannot be
+synthesised into a running compositor from here, so whether the middle button
+reaches the fullscreen overlay and the windowed toplevel is checked by hand, and
+it must not be checked on the installed plugin or on real boards. Close it with
+`esc` `esc`.
+
+```bash
+npm run shots -- --hold
+```
 
 The last of those states is the picture at the top of this file, and
 `npm run preview` is how it gets there: it takes the shots, crops the top of

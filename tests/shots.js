@@ -5,6 +5,13 @@
 //   node tests/shots.js                  the theme you are using
 //   node tests/shots.js tokyo-night catppuccin-latte
 //   node tests/shots.js --light --dark   one of each, whichever is installed
+//   node tests/shots.js --hold           and leave the board up to drive by hand
+//
+// `--hold` takes the pictures and then stays open on the isolated boards this
+// run built, which is what docs/pointer-checks.md is done against: a pointer
+// cannot be synthesised into a real compositor from here, so those checks are
+// made by hand, and they must not be made on the installed plugin or on real
+// boards. One theme at a time, because there is one pointer.
 //
 // Pictures land in ~/.cache/omarchyform/shots/<theme>/ — outside the plugin
 // tree, so they are never part of what a user installs.
@@ -48,7 +55,8 @@ function firstThemeOfMode(mode) {
   throw new Error('no ' + mode + ' theme installed to photograph')
 }
 
-const args = process.argv.slice(2)
+const args = process.argv.slice(2).filter(a => a !== '--hold')
+const hold = process.argv.includes('--hold')
 let requested
 try {
   requested = args.length === 0
@@ -88,16 +96,39 @@ function capture(theme) {
     fs.mkdirSync(state, { recursive: true })
     fs.symlinkSync(theme.dir, path.join(state, 'theme'))
 
+    // A picture for the held board to carry, so the pointer checks have a real
+    // one to press on rather than an empty frame standing in for it. Two red
+    // pixels, written into this run's own images directory — the isolated HOME
+    // is created by the plugin on start, so the directory is made here too.
+    if (hold) {
+      const images = path.join(home, '.local/share/omarchyform/images')
+      fs.mkdirSync(images, { recursive: true })
+      fs.writeFileSync(path.join(images, 'held.png'), Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP4z8AARAwQCgAf7gP9i18U1AAAAABJRU5ErkJggg==',
+        'base64'))
+    }
+
     const display = process.env.WAYLAND_DISPLAY || ''
     const result = spawnSync('qs', ['--no-color', '-p', path.join(dir, 'shell.qml')], {
-      encoding: 'utf8', timeout: 120000,
+      // No deadline while it is being driven by hand; the run ends when the
+      // board is closed.
+      encoding: 'utf8', timeout: hold ? undefined : 120000,
+      stdio: hold ? 'inherit' : 'pipe',
       env: { ...process.env, HOME: home, QT_QPA_PLATFORM: 'wayland',
         QT_QPA_PLATFORMTHEME: '', QT_QUICK_CONTROLS_STYLE: 'Basic',
         XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR,
         WAYLAND_DISPLAY: path.isAbsolute(display) ? display
           : path.join(process.env.XDG_RUNTIME_DIR || '', display),
-        OMARCHYFORM_SHOT_DIR: out, OMARCHYFORM_TEST_DIR: dir }
+        OMARCHYFORM_SHOT_DIR: out, OMARCHYFORM_TEST_DIR: dir,
+        OMARCHYFORM_SHOT_HOLD: hold ? '1' : '' }
     })
+    // Held open, the output went to the terminal rather than into a buffer:
+    // whoever is driving the board wants to see it as it happens.
+    if (hold) {
+      const taken = fs.readdirSync(out).filter(f => f.endsWith('.png'))
+      console.log(`${theme.label} (${modeOf(theme.dir)}) — ${taken.length} pictures in ${out}`)
+      return result.status === 0
+    }
     const output = (result.stdout || '') + (result.stderr || '')
     if (!output.includes('SHOTS_DONE')) {
       console.error(output.split('\n').slice(-25).join('\n'))
@@ -111,6 +142,10 @@ function capture(theme) {
 
 if (!process.env.WAYLAND_DISPLAY) {
   console.error('This needs a running Wayland session: it photographs the real components.')
+  process.exit(2)
+}
+if (hold && requested.length > 1) {
+  console.error('--hold drives one board at a time: name one theme, or none.')
   process.exit(2)
 }
 let ok = true

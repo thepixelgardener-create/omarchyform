@@ -650,6 +650,7 @@ FocusScope {
   }
   Help {
     id: help
+    objectName: "help-panel"
     anchors.centerIn: parent
     ctl: board.ctl
   }

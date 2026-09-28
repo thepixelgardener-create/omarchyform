@@ -146,6 +146,14 @@ since older boards are migrated on load rather than rejected.
   `~/.cache/omarchyform/shots/`. It asserts nothing and is not part of
   `tests/run`; it is for the questions only eyes answer.
 
+  `--hold` takes the pictures and then leaves the board on screen, on the
+  isolated boards that run built, carrying one of everything a pointer can be
+  pressed on. It is there for `docs/pointer-checks.md`: a pointer cannot be
+  synthesised into a running compositor from this repository, so whether the
+  middle button reaches the fullscreen overlay and the windowed toplevel is
+  checked by hand — and must not be checked on the installed plugin or on real
+  boards.
+
 ### Fixed
 
 - **The line under the header stopped promising the wrong thing.** A flash sits

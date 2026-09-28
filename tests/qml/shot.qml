@@ -292,12 +292,69 @@ ShellRoot {
     }
   ]
 
+  // One of each thing docs/pointer-checks.md presses on, because the last scene
+  // is composed for the README picture and has no picture and no background in
+  // it. Built rather than photographed: nothing here is judged by eye.
+  function buildHeldBoard() {
+    plugin.endPalette()
+    plugin.conflictVisible = false
+    plugin.helpVisible = false
+    plugin.closeBrowser()
+    plugin.cancelArrange()
+    plugin.statusText = ""
+    plugin.markedIds = []
+    plugin.selectedIndex = -1
+    plugin.items.clear()
+    plugin.links.clear()
+
+    plugin.addItem("rect", 120, 140)
+    plugin.items.setProperty(0, "iw", 900)
+    plugin.items.setProperty(0, "ih", 620)
+    plugin.items.setProperty(0, "itext", "a background")
+    plugin.selectOnly(0)
+    plugin.togglePin()
+
+    plugin.addItem("note", 240, 260)
+    plugin.items.setProperty(1, "itext", "a note to type in")
+    plugin.addItem("ellipse", 600, 260)
+    plugin.items.setProperty(2, "itext", "a shape")
+    plugin.addItem("note", 240, 520)
+    plugin.items.setProperty(3, "itext", "another note")
+    plugin.addLink(plugin.items.get(1).iid, plugin.items.get(3).iid)
+
+    // The picture the harness wrote into this run's own images directory.
+    plugin.addItem("note", 620, 520)
+    plugin.items.setProperty(4, "kind", "image")
+    plugin.items.setProperty(4, "isrc", "held.png")
+    plugin.items.setProperty(4, "itext", "")
+    plugin.items.setProperty(4, "iw", 220)
+    plugin.items.setProperty(4, "ih", 160)
+
+    plugin.stopEditing()
+    plugin.selectedIndex = -1
+    plugin.resetView()
+    plugin.save(true)
+  }
+
   function settle(frames) { shots.waitUntil = shots.ticks + frames }
+
+  // Set by the harness when it was asked to leave the board up rather than
+  // close it. The pictures are still taken; what changes is what happens after
+  // the last one — the board stays on screen, on the isolated boards directory
+  // this run built, for the pointer checks in docs/pointer-checks.md. There is
+  // no way to synthesise a pointer into a real compositor from here, so those
+  // are done by hand, and this is what they are done to.
+  readonly property bool hold: Quickshell.env("OMARCHYFORM_SHOT_HOLD") === "1"
 
   function advance() {
     shots.scene += 1
     if (shots.scene >= shots.scenes.length) {
       console.log("SHOTS_DONE")
+      if (shots.hold) {
+        shots.buildHeldBoard()
+        console.log("SHOTS_HOLDING — the board is yours; close it with esc esc")
+        return
+      }
       Qt.quit()
       return
     }
@@ -332,6 +389,8 @@ ShellRoot {
     running: true
     onTriggered: {
       shots.ticks++
+      // The clock does not run out on a board being driven by hand.
+      if (shots.hold && shots.scene >= shots.scenes.length) return
       if (shots.ticks > 900) {
         console.error("SHOTS_TIMEOUT at scene " + shots.scene)
         Qt.quit()

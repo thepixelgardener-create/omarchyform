@@ -61,7 +61,11 @@ TestCase {
     property bool culling: false
     function isMarked(id) { return false }
     function matchesFind(text) { return false }
-    function imagePath(name) { return "" }
+    // A two-pixel red PNG, inline: a real decode with no file to create, so an
+    // image on this board is an image rather than an empty frame standing in
+    // for one. The same picture tst_node uses.
+    readonly property string redPixels: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP4z8AARAwQCgAf7gP9i18U1AAAAABJRU5ErkJggg=="
+    function imagePath(name) { return name === "" ? "" : ctl.redPixels }
     function pointerSelect(index, additive) { ctl.selectedIndex = index; ctl.editIndex = -1 }
     function selectOnly(index) { ctl.selectedIndex = index }
     function markInRect(x0, y0, x1, y1, additive) { ctl.markedRect = [x0, y0, x1, y1] }
@@ -238,8 +242,9 @@ TestCase {
     height: test.height
   }
 
-  // Two things on the board and a camera at rest. The item sits well below the
-  // header so a press on it is a press on the canvas, not on the chrome.
+  // A note, a shape pinned as a background and a picture, and a camera at rest.
+  // They sit well below the header, so a press on one is a press on the canvas
+  // rather than on the chrome.
   function init() {
     itemModel.clear()
     linkModel.clear()
@@ -247,6 +252,8 @@ TestCase {
                        itint: "foreground", itext: "hello", ipinned: false, isrc: "" })
     itemModel.append({ iid: 2, kind: "rect", ix: 420, iy: 200, iw: 200, ih: 150,
                        itint: "foreground", itext: "", ipinned: true, isrc: "" })
+    itemModel.append({ iid: 3, kind: "image", ix: 100, iy: 400, iw: 160, ih: 120,
+                       itint: "foreground", itext: "", ipinned: false, isrc: "red.png" })
     ctl.camX = 0
     ctl.camY = 0
     ctl.zoom = 1
@@ -265,6 +272,7 @@ TestCase {
     ctl.statusText = ""
     ctl.linkingFrom = -1
     ctl.linkOutcome = "none"
+    ctl.conflictVisible = false
     ctl.saveError = ""
     ctl.trashIndexError = ""
     ctl.diskChanged = false
@@ -306,6 +314,7 @@ TestCase {
     return [
       { tag: "bare canvas", where: "canvas" },
       { tag: "a note", where: "item" },
+      { tag: "a picture", where: "image" },
       { tag: "a pinned background", where: "pinned" },
       // And the same background while backgrounds are the thing being worked
       // on, where its own pointer handling is live rather than stepped aside.
@@ -322,6 +331,7 @@ TestCase {
     var was = ctl.selectedIndex
     var at = row.where === "canvas" ? [700, 520]
       : row.where === "item" ? onTheNote()
+      : row.where === "image" ? [ctl.toScreenX(180), ctl.toScreenY(460)]
       : row.where === "pinned" || row.where === "pinnedMode"
         ? [ctl.toScreenX(480), ctl.toScreenY(260)]
       : [ctl.toScreenX(itemModel.get(0).ix + itemModel.get(0).iw - 8),
@@ -379,7 +389,7 @@ TestCase {
 
     mouseClick(surface, at[0], at[1], Qt.MiddleButton)
 
-    compare(itemModel.count, 2, "the item is still there")
+    compare(itemModel.count, 3, "the item is still there")
     compare(geometry(), before, "unchanged")
     compare(ctl.camX, 0, "the camera did not move either")
     compare(ctl.camY, 0)
@@ -462,7 +472,47 @@ TestCase {
 
   function test_doubleClickOnCanvasStillLeavesANote() {
     mouseDoubleClickSequence(surface, 700, 520, Qt.LeftButton)
-    compare(itemModel.count, 3, "a new note")
+    compare(itemModel.count, 4, "a new note")
+  }
+
+  // The gesture leaves the caret where it was: panning past a note being typed
+  // in must not end the editing it crossed, or take the keyboard with it.
+  function test_typingStillWorksAfterPanningOverTheEditor() {
+    ctl.selectOnly(0)
+    ctl.editSelected()
+    wait(0)
+    var at = onTheNote()
+    drag(Qt.MiddleButton, at[0], at[1], 40, 30)
+    compare(ctl.camX, 40, "the board moved")
+    compare(ctl.editIndex, 0, "and the note is still being typed in")
+
+    keyClick(Qt.Key_Z)
+    compare(itemModel.get(0).itext, "helloz", "and the keyboard still reaches it")
+  }
+
+  // The windowed mode is a smaller surface, not a different one. This is the
+  // size, not the window: what the compositor does with a real toplevel is
+  // checked by hand, and docs/usability-checklist.md says how.
+  function test_theSameGesturesAtAWindowedSize() {
+    surface.width = 520
+    surface.height = 380
+    wait(0)
+    var at = onTheNote()
+    verify(at[1] > surface.headerHeight && at[1] < surface.height, "the note is on screen")
+
+    drag(Qt.MiddleButton, at[0], at[1], 40, 25)
+    compare(ctl.camX, 40, "a middle drag still pans")
+    compare(ctl.camY, 25)
+    compare(ctl.selectedIndex, -1, "without touching the selection")
+
+    var was = itemModel.get(0).ix
+    at = onTheNote()
+    drag(Qt.LeftButton, at[0], at[1], 30, 0)
+    compare(itemModel.get(0).ix, was + 30, "and a left drag still moves an item")
+
+    at = onTheNote()
+    mouseWheel(surface, at[0], at[1], 0, 120)
+    verify(ctl.zoom > 1, "and the wheel still zooms")
   }
 
   // ------------------------------------------------- the chrome owns itself
@@ -473,6 +523,7 @@ TestCase {
     return [
       { tag: "the header", open: "", x: 400, y: 30 },
       { tag: "the command panel", open: "palette", x: 400, y: 120 },
+      { tag: "the conflict panel", open: "conflict", x: 400, y: 120 },
       { tag: "the browser", open: "browser", x: 400, y: 300 },
       { tag: "the help panel", open: "help", x: 400, y: 300 }
     ]
@@ -638,9 +689,21 @@ TestCase {
 
   function test_chromeDoesNotPanTheBoard(row) {
     if (row.open === "palette") ctl.paletteVisible = true
+    else if (row.open === "conflict") ctl.conflictVisible = true
     else if (row.open === "browser") ctl.browserVisible = true
     else if (row.open === "help") ctl.helpVisible = true
     wait(0)
+    // The panel has to actually be under the point the drag starts at, or this
+    // passes by pressing on bare canvas that happens not to pan either.
+    if (row.open !== "") {
+      var panel = findChild(surface, row.open === "palette" ? "command-palette"
+        : row.open === "conflict" ? "conflict-panel"
+        : row.open === "browser" ? "browser-panel" : "help-panel")
+      verify(panel !== null && panel.visible, row.tag + " is on screen")
+      var at = panel.mapFromItem(surface, row.x, row.y)
+      verify(at.x >= 0 && at.y >= 0 && at.x <= panel.width && at.y <= panel.height,
+             row.tag + " is under the press at " + row.x + "," + row.y)
+    }
 
     drag(Qt.MiddleButton, row.x, row.y, 70, 50)
 
