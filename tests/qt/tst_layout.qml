@@ -13,22 +13,38 @@ TestCase {
   Item {
     id: ctl
     property bool helpVisible: true
-    property color canvasBackground: "#101315"
-    property color foreground: "#cccccc"
-    // The header is a bar and takes the theme's bar colours. Distinct from the
-    // canvas here on purpose: these stand for tokens a theme may set to
-    // something of their own.
-    property color barBackground: "#161b22"
-    property color barForeground: "#e6e6e6"
     // The accent the hint lines name their keys in, as markup wants it.
     property string accentMarkup: "#00ffff"
-    property color accent: "cyan"
-    property string fontFamily: "monospace"
-    property int fontBody: 24
-    property int fontSubtitle: 24
-    property int fontHeading: 28
-    property int borderWidth: 1
-    property int cornerRadius: 0
+    // What Theme.qml is, at the sizes this suite exists to push against: a
+    // theme with large text in a small window. It is written out rather than
+    // instantiated because Theme.qml reads Omarchy's own singletons, and this
+    // suite runs on a machine that has Qt and nothing else. tests/contract.js
+    // holds the two together — every token a panel reads has to be declared in
+    // Theme.qml and here, or the suite fails before a desktop finds out.
+    property QtObject theme: QtObject {
+      property color canvasBackground: "#101315"
+      property color foreground: "#cccccc"
+      // The header is a bar and takes the theme's bar colours. Distinct from
+      // the canvas here on purpose: these stand for tokens a theme may set to
+      // something of their own.
+      property color barBackground: "#161b22"
+      property color barForeground: "#e6e6e6"
+      property color accent: "cyan"
+      property color urgent: "red"
+      property color muted: "gray"
+      property string fontFamily: "monospace"
+      property int fontBody: 24
+      property int fontSubtitle: 24
+      property int fontHeading: 28
+      property int borderWidth: 1
+      property int cornerRadius: 0
+      property bool isLight: false
+      property color dotColor: "#202020"
+      function sp(n) { return n }
+      function tintColor(tint) { return "#cccccc" }
+      function tintFill(tint, strong) { return "#181818" }
+      function tintBorder(tint, strong) { return "#cccccc" }
+    }
     property bool browserVisible: false
     property bool menuVisible: false
     property bool zoomMenuVisible: false
@@ -45,8 +61,6 @@ TestCase {
     property string boardTitle: "A long board name that should truncate gracefully"
     property string boardState: "Saved locally"
     property string saveError: ""
-    property color urgent: "red"
-    property color muted: "gray"
     property real zoom: 1
     function renameBoard() {}
     function resetView() {}
@@ -61,7 +75,6 @@ TestCase {
     property int browserIndex: 0
     property bool browserTrash: false
     function browserEnter() {}
-    function sp(n) { return n }
     // The palette draws the real command table, so what this renders is what a
     // board renders — including how many of them there are.
     property bool paletteVisible: true
@@ -99,10 +112,10 @@ TestCase {
   // that from happening is the name check in tests/contract.js, which does not
   // depend on which Qt is doing the reading.
   function test_toolbarTakesTheBarColours() {
-    compare(toolbar.color, Qt.rgba(ctl.barBackground.r, ctl.barBackground.g, ctl.barBackground.b, 0.92),
+    compare(toolbar.color, Qt.rgba(ctl.theme.barBackground.r, ctl.theme.barBackground.g, ctl.theme.barBackground.b, 0.92),
             "the header takes the bar colour with slight transparency")
-    verify(toolbar.color !== ctl.canvasBackground, "which is its own colour, not the canvas")
-    verify(toolbar.border.color !== ctl.canvasBackground, "and its edge is drawn against it")
+    verify(toolbar.color !== ctl.theme.canvasBackground, "which is its own colour, not the canvas")
+    verify(toolbar.border.color !== ctl.theme.canvasBackground, "and its edge is drawn against it")
   }
 
   function test_toolbarFitsLargeFonts() {
@@ -116,7 +129,7 @@ TestCase {
     verify(waitForRendering(toolbar))
     const closed = toolbar.implicitHeight
     // One line of chrome at a body font this large, long board name and all.
-    verify(closed < ctl.fontSubtitle * 3)
+    verify(closed < ctl.theme.fontSubtitle * 3)
 
     ctl.menuVisible = true
     verify(waitForRendering(toolbar))
@@ -226,6 +239,7 @@ TestCase {
   Component {
     id: roomyHelp
     Item {
+      id: rig
       width: 2000
       height: 1200
       property int fs: 24
@@ -233,17 +247,22 @@ TestCase {
       Item {
         id: c
         property bool helpVisible: true
-        property color canvasBackground: "#101315"
-        property color foreground: "#cccccc"
-        property color accent: "cyan"
-        property string fontFamily: "monospace"
-        property int fontBody: parent.fs
-        property int fontSubtitle: parent.fs
-        property int fontHeading: parent.fs + 4
-        property int borderWidth: 1
-        property int cornerRadius: 0
-        // Spacing scales with the text, the way a theme's Style.space does.
-        function sp(n) { return Math.round(n * parent.fs / 12) }
+        // The suite's own palette at this rig's text size. Only the sizes are
+        // this test's business, so the colours come from the theme above
+        // rather than being invented a second time.
+        property QtObject theme: QtObject {
+          property color canvasBackground: ctl.theme.canvasBackground
+          property color foreground: ctl.theme.foreground
+          property color accent: ctl.theme.accent
+          property int borderWidth: ctl.theme.borderWidth
+          property int cornerRadius: ctl.theme.cornerRadius
+          property string fontFamily: ctl.theme.fontFamily
+          property int fontBody: rig.fs
+          property int fontSubtitle: rig.fs
+          property int fontHeading: rig.fs + 4
+          // Spacing scales with the text, the way a theme's Style.space does.
+          function sp(n) { return Math.round(n * rig.fs / 12) }
+        }
       }
       Help { id: inner; ctl: c; anchors.centerIn: parent }
     }
@@ -319,7 +338,7 @@ TestCase {
     const panel = findChild(browser, "browser-panel")
     verify(footer !== undefined)
     verify(footer.width <= test.width - 32)
-    verify(footer.implicitHeight > ctl.fontBody)
+    verify(footer.implicitHeight > ctl.theme.fontBody)
     verify(panel.y + panel.height < footer.y)
   }
 }

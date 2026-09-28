@@ -17,17 +17,25 @@ TestCase {
     property int selectedIndex: -1
     property int editIndex: -1
     property int linkingFrom: -1
-    property int cornerRadius: 0
-    property int borderWidth: 1
     property int minItemSize: 60
-    property color foreground: "white"
-    property color accent: "cyan"
     property color itemFill: "#222222"
-    property string fontFamily: "monospace"
-    property int fontSubtitle: 13
-    property int fontBody: 11
-    property color muted: "#999999"
-    property color canvasBackground: "#111111"
+    // Shaped like Theme.qml, because a node cannot tell the difference between
+    // this and the real one. tests/contract.js checks that every token a node
+    // reads is declared in both.
+    property QtObject theme: QtObject {
+      property int cornerRadius: 0
+      property int borderWidth: 1
+      property color foreground: "white"
+      property color accent: "cyan"
+      property string fontFamily: "monospace"
+      property int fontSubtitle: 13
+      property int fontBody: 11
+      property color muted: "#999999"
+      property color canvasBackground: "#111111"
+      function sp(n) { return n }
+      function tintFill(tint, strong) { return ctl.itemFill }
+      function tintBorder(tint, strong) { return "#999999" }
+    }
     property int undoCount: 0
     property int saveCount: 0
     property int flushCount: 0
@@ -55,9 +63,6 @@ TestCase {
       return name === "gone.png" ? "file:///nonexistent/gone.png" : redPixels
     }
     function newBoard() {}
-    function sp(n) { return n }
-    function tintFill(tint, strong) { return itemFill }
-    function tintBorder(tint, strong) { return "#999999" }
     function repaintLinks() {}
     function pointerSelect(index, additive) { selectedIndex = index; editIndex = -1 }
     function moveTargets(dx, dy) { model.setProperty(0, "ix", model.get(0).ix + dx); model.setProperty(0, "iy", model.get(0).iy + dy) }

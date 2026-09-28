@@ -7,44 +7,45 @@ import "BoardStore.js" as Store
 Rectangle {
   id: toolbar
   required property var ctl
+  readonly property var theme: toolbar.ctl.theme
   // Keep labels crisp while letting a little of the canvas show through.
-  color: Qt.rgba(ctl.barBackground.r, ctl.barBackground.g, ctl.barBackground.b, 0.92)
-  border.width: ctl.borderWidth
-  border.color: Qt.rgba(ctl.barForeground.r, ctl.barForeground.g, ctl.barForeground.b, 0.18)
-  radius: ctl.cornerRadius
-  implicitHeight: content.height + ctl.sp(20)
+  color: Qt.rgba(theme.barBackground.r, theme.barBackground.g, theme.barBackground.b, 0.92)
+  border.width: theme.borderWidth
+  border.color: Qt.rgba(theme.barForeground.r, theme.barForeground.g, theme.barForeground.b, 0.18)
+  radius: theme.cornerRadius
+  implicitHeight: content.height + theme.sp(20)
   MouseArea { anchors.fill: parent }
 
   Item {
     id: content
-    anchors { left: parent.left; right: parent.right; top: parent.top; margins: toolbar.ctl.sp(10) }
+    anchors { left: parent.left; right: parent.right; top: parent.top; margins: toolbar.theme.sp(10) }
     height: Math.max(identity.height, menu.visible ? menu.height : 0)
 
-    readonly property int gap: toolbar.ctl.sp(14)
+    readonly property int gap: toolbar.theme.sp(14)
     // The most the name may take, leaving room for the menu. Deliberately not derived from the menu's own width: the
     // menu is anchored to the name, so measuring one from the other would be a
     // binding loop. The opener's width is only its text, so it is safe to read.
-    readonly property real identityMax: Math.max(toolbar.ctl.sp(90),
+    readonly property real identityMax: Math.max(toolbar.theme.sp(90),
       content.width - content.gap * 2
-      - (menu.visible ? toolbar.ctl.sp(120) : opener.implicitWidth))
+      - (menu.visible ? toolbar.theme.sp(120) : opener.implicitWidth))
 
     Row {
       id: identity
       anchors.left: parent.left
       anchors.verticalCenter: parent.verticalCenter
-      spacing: toolbar.ctl.sp(8)
+      spacing: toolbar.theme.sp(8)
       Text {
         id: title
         // Only as wide as the name actually is, so everything after it sits
         // beside the name rather than against the far edge. A long name elides
         // at the cap instead of pushing the rest off.
-        width: Math.min(implicitWidth, Math.max(toolbar.ctl.sp(40),
+        width: Math.min(implicitWidth, Math.max(toolbar.theme.sp(40),
           content.identityMax - separator.implicitWidth - saveState.implicitWidth - identity.spacing * 2))
         text: toolbar.ctl.boardTitle
         elide: Text.ElideRight
-        color: toolbar.ctl.barForeground
-        font.family: toolbar.ctl.fontFamily
-        font.pixelSize: toolbar.ctl.fontSubtitle
+        color: toolbar.theme.barForeground
+        font.family: toolbar.theme.fontFamily
+        font.pixelSize: toolbar.theme.fontSubtitle
         MouseArea { anchors.fill: parent; onClicked: toolbar.ctl.renameBoard() }
       }
       // Secondary text is the bar's own text held back, not the theme's muted
@@ -55,18 +56,18 @@ Rectangle {
         id: separator
         text: "·"
         opacity: 0.85
-        color: toolbar.ctl.barForeground
-        font.family: toolbar.ctl.fontFamily
-        font.pixelSize: toolbar.ctl.fontBody
+        color: toolbar.theme.barForeground
+        font.family: toolbar.theme.fontFamily
+        font.pixelSize: toolbar.theme.fontBody
         anchors.verticalCenter: title.verticalCenter
       }
       Text {
         id: saveState
         text: toolbar.ctl.boardState
         opacity: toolbar.ctl.saveError !== "" ? 1 : 0.85
-        color: toolbar.ctl.saveError !== "" ? toolbar.ctl.urgent : toolbar.ctl.barForeground
-        font.family: toolbar.ctl.fontFamily
-        font.pixelSize: toolbar.ctl.fontBody
+        color: toolbar.ctl.saveError !== "" ? toolbar.theme.urgent : toolbar.theme.barForeground
+        font.family: toolbar.theme.fontFamily
+        font.pixelSize: toolbar.theme.fontBody
         anchors.verticalCenter: title.verticalCenter
       }
     }
@@ -85,9 +86,9 @@ Rectangle {
       // the accent, rather than the word and then the letter again.
       text: Store.hintMarkup("m", "menu", toolbar.ctl.accentMarkup)
       opacity: 0.85
-      color: toolbar.ctl.barForeground
-      font.family: toolbar.ctl.fontFamily
-      font.pixelSize: toolbar.ctl.fontBody
+      color: toolbar.theme.barForeground
+      font.family: toolbar.theme.fontFamily
+      font.pixelSize: toolbar.theme.fontBody
       MouseArea { anchors.fill: parent; onClicked: toolbar.ctl.toggleMenu() }
     }
 
@@ -99,32 +100,32 @@ Rectangle {
       anchors.right: parent.right
       anchors.rightMargin: content.gap
       anchors.verticalCenter: parent.verticalCenter
-      spacing: toolbar.ctl.sp(6)
+      spacing: toolbar.theme.sp(6)
       Repeater {
         model: toolbar.ctl.zoomMenuVisible ? Store.ZOOM_COMMANDS : Store.MENU_COMMANDS
         delegate: Rectangle {
           required property string modelData
           required property int index
-          width: label.implicitWidth + toolbar.ctl.sp(14)
-          height: label.implicitHeight + toolbar.ctl.sp(8)
+          width: label.implicitWidth + toolbar.theme.sp(14)
+          height: label.implicitHeight + toolbar.theme.sp(8)
           // Where the keyboard is, and where the pointer is, read the same.
           readonly property bool onIt: toolbar.ctl.menuIndex === index || mouse.containsMouse
-          color: onIt ? Qt.rgba(toolbar.ctl.accent.r, toolbar.ctl.accent.g, toolbar.ctl.accent.b, 0.15) : "transparent"
+          color: onIt ? Qt.rgba(toolbar.theme.accent.r, toolbar.theme.accent.g, toolbar.theme.accent.b, 0.15) : "transparent"
           Accessible.role: Accessible.Button
           Accessible.name: label.text
           Accessible.focused: toolbar.ctl.menuIndex === index
           Accessible.onPressAction: toolbar.ctl.runMenu(index)
-          radius: toolbar.ctl.cornerRadius
-          border.width: onIt ? toolbar.ctl.borderWidth * 2 : 1
-          border.color: onIt ? toolbar.ctl.accent
-            : Qt.rgba(toolbar.ctl.barForeground.r, toolbar.ctl.barForeground.g, toolbar.ctl.barForeground.b, 0.20)
+          radius: toolbar.theme.cornerRadius
+          border.width: onIt ? toolbar.theme.borderWidth * 2 : 1
+          border.color: onIt ? toolbar.theme.accent
+            : Qt.rgba(toolbar.theme.barForeground.r, toolbar.theme.barForeground.g, toolbar.theme.barForeground.b, 0.20)
           Text {
             id: label
             anchors.centerIn: parent
             text: modelData === "Zoom" ? "Zoom " + Math.round(toolbar.ctl.zoom * 100) + "%" : modelData
-            color: toolbar.ctl.barForeground
-            font.family: toolbar.ctl.fontFamily
-            font.pixelSize: toolbar.ctl.fontBody
+            color: toolbar.theme.barForeground
+            font.family: toolbar.theme.fontFamily
+            font.pixelSize: toolbar.theme.fontBody
           }
           MouseArea {
             id: mouse

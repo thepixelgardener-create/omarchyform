@@ -5,6 +5,7 @@ import "BoardStore.js" as Store
 Item {
   id: picture
   required property var ctl
+  readonly property var theme: picture.ctl.theme
   property var area: null
   property real ratio: 1
   property string destination: ""
@@ -33,20 +34,26 @@ Item {
     property int linkingFrom: -1
     property bool canEdit: false
     property bool showPinned: false
-    property color foreground: picture.ctl.foreground
-    property color accent: picture.ctl.accent
-    property color muted: picture.ctl.muted
-    property color canvasBackground: picture.ctl.canvasBackground
-    property string fontFamily: picture.ctl.fontFamily
-    property int fontSubtitle: picture.ctl.fontSubtitle
-    property int fontBody: picture.ctl.fontBody
-    property int borderWidth: picture.ctl.borderWidth
-    property int cornerRadius: picture.ctl.cornerRadius
+    // The board's palette, with its emphasis taken out: nothing is selected in
+    // a picture, so a tint that would be drawn strongly on screen is drawn
+    // plainly here. Shaped like the real theme because a Node cannot tell the
+    // difference — tests/contract.js is what holds the two shapes together.
+    property QtObject theme: QtObject {
+      property color foreground: picture.theme.foreground
+      property color accent: picture.theme.accent
+      property color muted: picture.theme.muted
+      property color canvasBackground: picture.theme.canvasBackground
+      property string fontFamily: picture.theme.fontFamily
+      property int fontSubtitle: picture.theme.fontSubtitle
+      property int fontBody: picture.theme.fontBody
+      property int borderWidth: picture.theme.borderWidth
+      property int cornerRadius: picture.theme.cornerRadius
+      function sp(n) { return picture.theme.sp(n) }
+      function tintFill(tint, strong) { return picture.theme.tintFill(tint, false) }
+      function tintBorder(tint, strong) { return picture.theme.tintBorder(tint, false) }
+    }
     property int minItemSize: picture.ctl.minItemSize
-    function sp(n) { return picture.ctl.sp(n) }
     function imagePath(name) { return picture.ctl.imagePath(name) }
-    function tintFill(tint, strong) { return picture.ctl.tintFill(tint, false) }
-    function tintBorder(tint, strong) { return picture.ctl.tintBorder(tint, false) }
     function isMarked(id) { return false }
     // An export has no viewport to fall outside of, so nothing is culled and
     // the camera it would be culled against is never read.
@@ -76,7 +83,7 @@ Item {
     function moveTargets(dx, dy) {}
     function resizeTargets(dx, dy) {}
   }
-  Rectangle { anchors.fill: parent; color: picture.ctl.canvasBackground }
+  Rectangle { anchors.fill: parent; color: picture.theme.canvasBackground }
   Item {
     id: world
     z: 2
@@ -102,8 +109,8 @@ Item {
         c.reset()
         c.scale(picture.ratio, picture.ratio)
         c.translate(picture.area ? 32-picture.area.minX : 0, picture.area ? 32-picture.area.minY : 0)
-        c.strokeStyle = picture.ctl.foreground
-        c.fillStyle = picture.ctl.foreground
+        c.strokeStyle = picture.theme.foreground
+        c.fillStyle = picture.theme.foreground
         c.globalAlpha = 0.65
         c.lineWidth = 1.5
         var byId = Store.idIndex(nodes)

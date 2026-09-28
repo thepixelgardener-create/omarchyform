@@ -11,6 +11,7 @@ Item {
   objectName: "board-item-" + iid
 
   required property var ctl
+  readonly property var theme: node.ctl.theme
   required property int index
   required property int iid
   required property string kind
@@ -68,15 +69,15 @@ Item {
   readonly property bool painted: node.kind === "ellipse" || node.kind === "diamond"
   readonly property bool foundMatch: node.live && node.ctl.matchesFind(node.itext)
   readonly property bool emphasised: node.selected || node.linkSource
-  readonly property color fill: node.ctl.tintFill(node.itint, node.emphasised)
+  readonly property color fill: node.theme.tintFill(node.itint, node.emphasised)
   // The item's own border says what tint it carries and nothing else. Selection
   // used to thicken and brighten this border, which meant an accent-tinted item
   // sitting idle looked more selected than the cursor did on a muted one. The
   // ring below carries selection instead, in one colour at one width, whatever
   // the item is tinted.
   readonly property color outline: node.linkSource || node.foundMatch
-    ? node.ctl.accent
-    : node.ctl.tintBorder(node.itint, false)
+    ? node.theme.accent
+    : node.theme.tintBorder(node.itint, false)
 
   // Both modes narrow the board the same way: what you are not working on
   // recedes rather than disappearing, so the shape of the board is still there.
@@ -91,12 +92,12 @@ Item {
   // follow around a diamond.
   Rectangle {
     anchors.fill: parent
-    anchors.margins: -node.ctl.sp(4)
+    anchors.margins: -node.theme.sp(4)
     visible: node.selected && !node.ctl.showPinned
     color: "transparent"
-    radius: node.ctl.cornerRadius > 0 ? node.ctl.cornerRadius + node.ctl.sp(4) : 0
-    border.width: node.cursor ? node.ctl.borderWidth * 2 : node.ctl.borderWidth
-    border.color: node.ctl.accent
+    radius: node.theme.cornerRadius > 0 ? node.theme.cornerRadius + node.theme.sp(4) : 0
+    border.width: node.cursor ? node.theme.borderWidth * 2 : node.theme.borderWidth
+    border.color: node.theme.accent
     opacity: node.cursor ? 1 : 0.55
     antialiasing: true
   }
@@ -120,9 +121,9 @@ Item {
     anchors.fill: parent
     visible: !node.painted
     color: node.fill
-    radius: node.ctl.cornerRadius
+    radius: node.theme.cornerRadius
     antialiasing: true
-    border.width: node.linkSource || node.foundMatch ? node.ctl.borderWidth * 2 : node.ctl.borderWidth
+    border.width: node.linkSource || node.foundMatch ? node.theme.borderWidth * 2 : node.theme.borderWidth
     border.color: node.outline
   }
 
@@ -132,7 +133,7 @@ Item {
   Image {
     id: picture
     anchors.fill: parent
-    anchors.margins: node.ctl.borderWidth
+    anchors.margins: node.theme.borderWidth
     visible: node.isImage
     source: node.isImage ? node.ctl.imagePath(node.isrc) : ""
     fillMode: Image.PreserveAspectFit
@@ -147,7 +148,7 @@ Item {
   // leaving an empty box that looks like a bug.
   Text {
     anchors.centerIn: parent
-    width: parent.width - node.ctl.sp(16)
+    width: parent.width - node.theme.sp(16)
     visible: node.isImage && picture.status === Image.Error
     text: "missing image\n" + node.isrc
     horizontalAlignment: Text.AlignHCenter
@@ -157,9 +158,9 @@ Item {
     // Same reason as the header: a theme's muted can sit on top of its own
     // background, and "missing image" is the one line that has to be readable.
     opacity: 0.85
-    color: node.ctl.foreground
-    font.family: node.ctl.fontFamily
-    font.pixelSize: node.ctl.fontBody
+    color: node.theme.foreground
+    font.family: node.theme.fontFamily
+    font.pixelSize: node.theme.fontBody
   }
 
   // Geometry, not a picture of geometry. A Canvas rasterises at the item's own
@@ -182,7 +183,7 @@ Item {
       strokeColor: node.outline
       // Unchanged from the canvas, including its disagreement with the
       // Rectangle above, which thickens on foundMatch rather than on cursor.
-      strokeWidth: node.cursor || node.linkSource ? node.ctl.borderWidth * 2 : node.ctl.borderWidth
+      strokeWidth: node.cursor || node.linkSource ? node.theme.borderWidth * 2 : node.theme.borderWidth
       joinStyle: ShapePath.MiterJoin
       PathSvg { path: Store.shapePath(node.kind, node.width, node.height) }
     }
@@ -194,8 +195,8 @@ Item {
   Rectangle {
     id: header
     anchors { top: parent.top; left: parent.left; right: parent.right }
-    anchors.margins: node.ctl.borderWidth
-    height: node.ctl.borderWidth * 3
+    anchors.margins: node.theme.borderWidth
+    height: node.theme.borderWidth * 3
     visible: node.isNote
     color: node.outline
   }
@@ -204,8 +205,8 @@ Item {
     id: textViewport
     visible: !node.isImage
     anchors.fill: parent
-    anchors.margins: node.ctl.sp(14)
-    anchors.topMargin: node.isNote ? header.height + node.ctl.sp(14) : node.ctl.sp(14)
+    anchors.margins: node.theme.sp(14)
+    anchors.topMargin: node.isNote ? header.height + node.theme.sp(14) : node.theme.sp(14)
     contentWidth: width
     contentHeight: body.height
     clip: true
@@ -217,9 +218,9 @@ Item {
     width: textViewport.width
     height: Math.max(textViewport.height, contentHeight)
     text: node.itext
-    color: node.ctl.foreground
-    font.family: node.ctl.fontFamily
-    font.pixelSize: node.ctl.fontSubtitle
+    color: node.theme.foreground
+    font.family: node.theme.fontFamily
+    font.pixelSize: node.theme.fontSubtitle
     wrapMode: TextEdit.Wrap
     clip: true
     // Pinned: board files are shareable, and RichText here would let someone
@@ -269,18 +270,18 @@ Item {
     // corner read as one confusing thing.
     anchors.left: parent.left
     anchors.bottom: parent.bottom
-    anchors.margins: node.ctl.borderWidth
-    width: node.ctl.sp(22)
-    height: node.ctl.sp(14)
+    anchors.margins: node.theme.borderWidth
+    width: node.theme.sp(22)
+    height: node.theme.sp(14)
     visible: body.contentHeight > textViewport.height && node.ctl.editIndex !== node.index
-    color: node.ctl.tintBorder(node.itint, true)
-    radius: node.ctl.cornerRadius > 0 ? node.ctl.sp(3) : 0
+    color: node.theme.tintBorder(node.itint, true)
+    radius: node.theme.cornerRadius > 0 ? node.theme.sp(3) : 0
     Text {
       anchors.centerIn: parent
       text: "…"
-      color: node.ctl.canvasBackground
-      font.family: node.ctl.fontFamily
-      font.pixelSize: node.ctl.fontBody
+      color: node.theme.canvasBackground
+      font.family: node.theme.fontFamily
+      font.pixelSize: node.theme.fontBody
     }
   }
 
@@ -360,7 +361,7 @@ Item {
       width: 8
       height: 2
       rotation: -45
-      color: node.ctl.foreground
+      color: node.theme.foreground
       opacity: 0.35
     }
   }

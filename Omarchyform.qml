@@ -19,83 +19,18 @@ Item {
   property bool opened: false
 
   // --------------------------------------------------------------- appearance
-  // Every read of the shell's internal singletons goes through a guard: they
-  // are not a versioned API, and a rename upstream should cost a wrong colour,
-  // not a board that refuses to open. (An import that disappears entirely is
-  // still fatal — QML has no optional imports.)
-  function token(read, fallback) {
-    try {
-      var v = read()
-      return v === undefined || v === null ? fallback : v
-    } catch (e) {
-      return fallback
-    }
-  }
-  function sp(n) { return root.token(function () { return Style.space(n) }, n) }
+  // What the board looks like is in Theme.qml: one object to pass around and
+  // one object for a test to hold, rather than twenty properties here that a
+  // stub has to guess at.
+  Theme { id: themeTokens }
+  readonly property Theme theme: themeTokens
 
-  property color canvasBackground: root.token(function () { return Color.background }, "#101315")
-  property color foreground: root.token(function () { return Color.foreground }, "#CACCCC")
-  // The board's own header is a bar, so it is painted in the colours the theme
-  // paints the desktop's bar with rather than in the canvas colour. A theme
-  // that gives its bar its own background and its own text gets both here; one
-  // that does not is back where it started, since those keys derive from the
-  // background and foreground above.
-  property color barBackground: root.token(function () { return Color.bar.background }, root.canvasBackground)
-  property color barForeground: root.token(function () { return Color.bar.text }, root.foreground)
-  property color accent: root.token(function () { return Color.accent }, "#CACCCC")
-  property color urgent: root.token(function () { return Color.urgent }, "#A55555")
-  property color muted: root.token(function () { return Color.muted }, "#707880")
-
-  // The theme's own font, at the theme's own sizes, so the board follows
-  // `omarchy display text size` like everything else on the desktop.
-  property string fontFamily: root.token(function () { return Style.font.family },
-                                          root.token(function () { return Style.font.menuFamily }, "monospace"))
-  readonly property int fontBody: root.token(function () { return Style.font.body }, 12)
-  readonly property int fontSubtitle: root.token(function () { return Style.font.subtitle }, 13)
-  readonly property int fontHeading: root.token(function () { return Style.font.heading }, 16)
-
-  // Omarchy is square-cornered with hairline borders by default; both come
-  // from the theme rather than being invented here.
-  readonly property int cornerRadius: root.token(function () { return Style.cornerRadius }, 0)
-  readonly property int borderWidth: Math.max(1, root.token(function () { return Style.normalBorderWidth }, 1))
-
-  // Day or night is a property of the theme, not a setting of ours: Omarchy
-  // themes declare `mode` in colors.toml. Luminance is only the fallback for a
-  // third-party theme that leaves it out.
-  readonly property string themePath: Quickshell.env("HOME") + "/.local/state/omarchy/current/theme/colors.toml"
-  property string themeMode: ""
-  readonly property bool isLight: root.themeMode !== ""
-    ? root.themeMode === "light"
-    : Store.isLightColor(root.canvasBackground.r, root.canvasBackground.g, root.canvasBackground.b)
-
-  // A wash reads differently on paper than on ink, so the weights differ.
-  readonly property color dotColor: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b,
-                                            root.isLight ? 0.13 : 0.08)
   readonly property int minItemSize: Store.MIN_SIZE
 
   // The step is what the eye sees, so it is divided by the zoom: otherwise one
   // press moves an eighth of the distance when zoomed out and four times it
   // when zoomed in.
   readonly property real worldStep: root.step / root.zoom
-
-  // An item is a translucent wash of a theme role plus a hairline of the same
-  // role, which is how the rest of the shell draws a surface.
-  function tintColor(tint) {
-    if (tint === "accent") return root.accent
-    if (tint === "urgent") return root.urgent
-    if (tint === "muted") return root.muted
-    return root.foreground
-  }
-  function tintFill(tint, strong) {
-    var c = root.tintColor(tint)
-    var a = root.isLight ? (strong ? 0.20 : 0.10) : (strong ? 0.22 : 0.12)
-    return Qt.rgba(c.r * a + root.canvasBackground.r * (1-a), c.g * a + root.canvasBackground.g * (1-a), c.b * a + root.canvasBackground.b * (1-a), 1)
-  }
-  function tintBorder(tint, strong) {
-    var c = root.tintColor(tint)
-    var a = strong ? 1.0 : (root.isLight ? 0.55 : 0.45)
-    return Qt.rgba(c.r, c.g, c.b, a)
-  }
 
   // -------------------------------------------------------------------- state
   property alias items: itemModel
@@ -499,7 +434,7 @@ Item {
   // The accent as markup understands it. The hint lines name their keys in it,
   // the way btop colours the letter a menu entry answers to, and StyledText
   // wants a string where the rest of the board wants a colour.
-  readonly property string accentMarkup: Store.hexColor(root.accent)
+  readonly property string accentMarkup: Store.hexColor(root.theme.accent)
 
   // What an operation applies to: everything marked, or the cursor alone.
   // Descending, so removing by index cannot shift the ones still to come.
@@ -1669,7 +1604,9 @@ Item {
   // belongs. Without this the overlay lands wherever Quickshell picks, which
   // on a two-monitor desk is rarely the one being used.
   function focusedScreen() {
-    var monitor = root.token(function () { return Hyprland.focusedMonitor }, null)
+    // The same guard the theme reads its own singletons through: this one is
+    // Hyprland's, and it is no more a versioned API than the palette is.
+    var monitor = root.theme.token(function () { return Hyprland.focusedMonitor }, null)
     var wanted = monitor ? String(monitor.name || "") : ""
     var screens = Quickshell.screens
     if (!screens || screens.length === 0) return null
@@ -1925,21 +1862,6 @@ Item {
     onLoadFailed: root.applyState("")
   }
 
-  FileView {
-    id: themeFile
-    path: root.themePath
-    watchChanges: true
-    printErrors: false
-    onLoaded: root.themeMode = Store.parseThemeMode(text())
-    onLoadFailed: root.themeMode = ""
-    onFileChanged: reload()
-  }
-
-  // The current theme is a symlink, so a switch retargets it rather than
-  // editing the file a watcher is holding. The shell updates its own colours
-  // on every theme change, so follow that instead.
-  onCanvasBackgroundChanged: themeFile.reload()
-
   // ----------------------------------------------------------------- surfaces
   // Built through Variants so the surface is constructed with its screen
   // already set: assigning `screen` to a window that already exists leaves it
@@ -1973,7 +1895,7 @@ Item {
     id: boardWindow
     visible: root.opened && root.windowMode
     title: "Omarchyform"
-    color: root.canvasBackground
+    color: root.theme.canvasBackground
     implicitWidth: 1100
     implicitHeight: 750
     minimumSize: Qt.size(480, 360)

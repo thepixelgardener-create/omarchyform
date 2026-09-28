@@ -7,13 +7,14 @@ import "BoardStore.js" as Store
 Rectangle {
   id: help
   required property var ctl
+  readonly property var theme: help.ctl.theme
   visible: ctl.helpVisible
-  width: Math.min(parent.width - ctl.sp(32), ctl.sp(700))
-  height: Math.min(parent.height - ctl.sp(32), helpColumn.height + ctl.sp(48))
-  color: Qt.rgba(ctl.canvasBackground.r, ctl.canvasBackground.g, ctl.canvasBackground.b, 1)
-  border.width: ctl.borderWidth
-  border.color: Qt.rgba(ctl.foreground.r, ctl.foreground.g, ctl.foreground.b, 0.18)
-  radius: ctl.cornerRadius
+  width: Math.min(parent.width - theme.sp(32), theme.sp(700))
+  height: Math.min(parent.height - theme.sp(32), helpColumn.height + theme.sp(48))
+  color: Qt.rgba(theme.canvasBackground.r, theme.canvasBackground.g, theme.canvasBackground.b, 1)
+  border.width: theme.borderWidth
+  border.color: Qt.rgba(theme.foreground.r, theme.foreground.g, theme.foreground.b, 0.18)
+  radius: theme.cornerRadius
 
   function scroll(delta) {
     content.contentY = Math.max(0, Math.min(content.contentHeight - content.height, content.contentY + delta))
@@ -34,13 +35,13 @@ Rectangle {
     anchors.top: content.top
     anchors.bottom: content.bottom
     anchors.right: parent.right
-    anchors.rightMargin: help.ctl.sp(10)
+    anchors.rightMargin: help.theme.sp(10)
   }
 
   Flickable {
     id: content
     anchors.fill: parent
-    anchors.margins: help.ctl.sp(24)
+    anchors.margins: help.theme.sp(24)
     contentWidth: width
     contentHeight: helpColumn.height
     clip: true
@@ -66,8 +67,8 @@ Rectangle {
         Text {
           required property var modelData
           text: modelData[0]
-          font.family: help.ctl.fontFamily
-          font.pixelSize: help.ctl.fontBody
+          font.family: help.theme.fontFamily
+          font.pixelSize: help.theme.fontBody
         }
       }
     }
@@ -75,13 +76,13 @@ Rectangle {
     Column {
       id: helpColumn
       width: content.width
-      spacing: help.ctl.sp(10)
+      spacing: help.theme.sp(10)
       Text {
         text: "Keyboard shortcuts"
-        color: help.ctl.foreground
-        font.family: help.ctl.fontFamily
-        font.pixelSize: help.ctl.fontHeading
-        bottomPadding: help.ctl.sp(14)
+        color: help.theme.foreground
+        font.family: help.theme.fontFamily
+        font.pixelSize: help.theme.fontHeading
+        bottomPadding: help.theme.sp(14)
       }
       Repeater {
         model: Store.KEY_HELP
@@ -94,27 +95,27 @@ Rectangle {
           // against the keys, so a long label cannot squeeze the descriptions
           // into something narrower than itself on a small window.
           readonly property real keyColumn: Math.min(Math.ceil(keyRuler.implicitWidth),
-                                                     (helpColumn.width - help.ctl.sp(18)) * 0.5)
+                                                     (helpColumn.width - help.theme.sp(18)) * 0.5)
           Text {
             id: shortcut
             width: row.keyColumn
             horizontalAlignment: Text.AlignRight
             wrapMode: Text.Wrap
             text: row.modelData[0]
-            color: help.ctl.accent
-            font.family: help.ctl.fontFamily
-            font.pixelSize: help.ctl.fontBody
+            color: help.theme.accent
+            font.family: help.theme.fontFamily
+            font.pixelSize: help.theme.fontBody
           }
           Text {
             id: description
             anchors.left: parent.left
-            anchors.leftMargin: row.keyColumn + help.ctl.sp(18)
+            anchors.leftMargin: row.keyColumn + help.theme.sp(18)
             anchors.right: parent.right
             wrapMode: Text.Wrap
             text: row.modelData[1]
-            color: help.ctl.foreground
-            font.family: help.ctl.fontFamily
-            font.pixelSize: help.ctl.fontBody
+            color: help.theme.foreground
+            font.family: help.theme.fontFamily
+            font.pixelSize: help.theme.fontBody
           }
         }
       }

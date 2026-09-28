@@ -19,17 +19,18 @@ import "BoardStore.js" as Store
 Rectangle {
   id: panel
   required property var ctl
+  readonly property var theme: panel.ctl.theme
   // The board behind it, which owns what a key means: the field hands back
   // the ones the panel uses rather than deciding them a second time.
   required property var board
 
   visible: panel.ctl.paletteVisible
-  width: Math.min(parent.width - panel.ctl.sp(64), panel.ctl.sp(560))
+  width: Math.min(parent.width - panel.theme.sp(64), panel.theme.sp(560))
 
   // How many rows there is room for, rather than how many there are. A list of
   // nine at a theme's large font is taller than a small window, and a panel
   // that runs off the bottom hides the very commands it exists to show.
-  readonly property int room: Math.max(panel.rowHeight * 2, parent.height - y - panel.ctl.sp(24))
+  readonly property int room: Math.max(panel.rowHeight * 2, parent.height - y - panel.theme.sp(24))
   // Everything in the panel that is not a row: the padding above and below, the
   // two gaps the column leaves, the line you type into and the rule under it.
   // Measured off the parts themselves, because a number guessed here crops the
@@ -39,12 +40,12 @@ Rectangle {
   readonly property int visibleRows: Math.max(1, Math.min(panel.ctl.paletteMatches.length,
                                                           panel.ctl.paletteRows, panel.fits))
   height: panel.chrome + panel.rowHeight * panel.visibleRows
-  color: Qt.rgba(panel.ctl.canvasBackground.r, panel.ctl.canvasBackground.g,
-                 panel.ctl.canvasBackground.b, 0.92)
-  border.width: panel.ctl.borderWidth
-  border.color: Qt.rgba(panel.ctl.foreground.r, panel.ctl.foreground.g,
-                        panel.ctl.foreground.b, 0.35)
-  radius: panel.ctl.cornerRadius
+  color: Qt.rgba(panel.theme.canvasBackground.r, panel.theme.canvasBackground.g,
+                 panel.theme.canvasBackground.b, 0.92)
+  border.width: panel.theme.borderWidth
+  border.color: Qt.rgba(panel.theme.foreground.r, panel.theme.foreground.g,
+                        panel.theme.foreground.b, 0.35)
+  radius: panel.theme.cornerRadius
 
   // Swallow clicks so they do not reach the board underneath.
   MouseArea { anchors.fill: parent }
@@ -56,17 +57,17 @@ Rectangle {
     id: ruler
     visible: false
     text: "Ag"
-    font.family: panel.ctl.fontFamily
-    font.pixelSize: panel.ctl.fontSubtitle
+    font.family: panel.theme.fontFamily
+    font.pixelSize: panel.theme.fontSubtitle
   }
-  readonly property int rowHeight: ruler.implicitHeight + panel.ctl.sp(8)
+  readonly property int rowHeight: ruler.implicitHeight + panel.theme.sp(8)
 
   Column {
     id: body
-    y: panel.ctl.sp(16)
-    x: panel.ctl.sp(16)
-    width: parent.width - panel.ctl.sp(32)
-    spacing: panel.ctl.sp(10)
+    y: panel.theme.sp(16)
+    x: panel.theme.sp(16)
+    width: parent.width - panel.theme.sp(32)
+    spacing: panel.theme.sp(10)
 
     Row {
       width: parent.width
@@ -75,9 +76,9 @@ Rectangle {
       Text {
         id: query
         text: "run: "
-        color: panel.ctl.foreground
-        font.family: panel.ctl.fontFamily
-        font.pixelSize: panel.ctl.fontSubtitle
+        color: panel.theme.foreground
+        font.family: panel.theme.fontFamily
+        font.pixelSize: panel.theme.fontSubtitle
       }
 
       // A real field: a query that only grew at the end could not be moved
@@ -87,12 +88,12 @@ Rectangle {
         id: typed
         width: parent.width - query.width
         clip: true
-        color: panel.ctl.foreground
-        selectionColor: panel.ctl.accent
-        selectedTextColor: panel.ctl.canvasBackground
+        color: panel.theme.foreground
+        selectionColor: panel.theme.accent
+        selectedTextColor: panel.theme.canvasBackground
         selectByMouse: true
-        font.family: panel.ctl.fontFamily
-        font.pixelSize: panel.ctl.fontSubtitle
+        font.family: panel.theme.fontFamily
+        font.pixelSize: panel.theme.fontSubtitle
 
         Accessible.role: Accessible.EditableText
         Accessible.name: "Command to run"
@@ -124,9 +125,9 @@ Rectangle {
     Rectangle {
       id: rule
       width: parent.width
-      height: panel.ctl.borderWidth
-      color: Qt.rgba(panel.ctl.foreground.r, panel.ctl.foreground.g,
-                     panel.ctl.foreground.b, 0.25)
+      height: panel.theme.borderWidth
+      color: Qt.rgba(panel.theme.foreground.r, panel.theme.foreground.g,
+                     panel.theme.foreground.b, 0.25)
     }
 
     Item {
@@ -136,7 +137,7 @@ Rectangle {
       ListView {
         id: list
         anchors.fill: parent
-        anchors.rightMargin: panel.ctl.sp(10)
+        anchors.rightMargin: panel.theme.sp(10)
         clip: true
         model: panel.ctl.paletteMatches
         currentIndex: panel.ctl.paletteIndex
@@ -173,7 +174,7 @@ Rectangle {
           Rectangle {
             anchors.fill: parent
             visible: row.current
-            color: Qt.rgba(panel.ctl.accent.r, panel.ctl.accent.g, panel.ctl.accent.b, 0.18)
+            color: Qt.rgba(panel.theme.accent.r, panel.theme.accent.g, panel.theme.accent.b, 0.18)
           }
 
           // The cursor is a mark as well as a colour, so which row is current
@@ -182,26 +183,26 @@ Rectangle {
             id: marker
             anchors.verticalCenter: parent.verticalCenter
             anchors.left: parent.left
-            anchors.leftMargin: panel.ctl.sp(8)
+            anchors.leftMargin: panel.theme.sp(8)
             text: row.current ? "›" : " "
-            color: panel.ctl.accent
-            font.family: panel.ctl.fontFamily
-            font.pixelSize: panel.ctl.fontSubtitle
+            color: panel.theme.accent
+            font.family: panel.theme.fontFamily
+            font.pixelSize: panel.theme.fontSubtitle
           }
 
           Text {
             id: name
             anchors.verticalCenter: parent.verticalCenter
             anchors.left: marker.right
-            anchors.leftMargin: panel.ctl.sp(6)
+            anchors.leftMargin: panel.theme.sp(6)
             anchors.right: excuse.left
-            anchors.rightMargin: panel.ctl.sp(12)
+            anchors.rightMargin: panel.theme.sp(12)
             elide: Text.ElideRight
             text: row.modelData.name
-            color: panel.ctl.foreground
+            color: panel.theme.foreground
             opacity: !row.ready ? 0.4 : row.current ? 1.0 : 0.75
-            font.family: panel.ctl.fontFamily
-            font.pixelSize: panel.ctl.fontSubtitle
+            font.family: panel.theme.fontFamily
+            font.pixelSize: panel.theme.fontSubtitle
           }
 
           // Why it cannot run, where the eye is already going to look for how
@@ -211,25 +212,25 @@ Rectangle {
             id: excuse
             anchors.verticalCenter: parent.verticalCenter
             anchors.right: shortcut.left
-            anchors.rightMargin: panel.ctl.sp(10)
+            anchors.rightMargin: panel.theme.sp(10)
             visible: !row.ready
             text: panel.ctl.commandExcuse(row.modelData.needs)
-            color: panel.ctl.foreground
+            color: panel.theme.foreground
             opacity: 0.45
-            font.family: panel.ctl.fontFamily
-            font.pixelSize: panel.ctl.fontBody
+            font.family: panel.theme.fontFamily
+            font.pixelSize: panel.theme.fontBody
           }
 
           Text {
             id: shortcut
             anchors.verticalCenter: parent.verticalCenter
             anchors.right: parent.right
-            anchors.rightMargin: panel.ctl.sp(8)
+            anchors.rightMargin: panel.theme.sp(8)
             text: row.modelData.key
-            color: panel.ctl.accent
+            color: panel.theme.accent
             opacity: row.ready ? 0.9 : 0.4
-            font.family: panel.ctl.fontFamily
-            font.pixelSize: panel.ctl.fontSubtitle
+            font.family: panel.theme.fontFamily
+            font.pixelSize: panel.theme.fontSubtitle
           }
 
           MouseArea {
@@ -244,10 +245,10 @@ Rectangle {
         Text {
           anchors.centerIn: parent
           visible: list.count === 0
-          color: panel.ctl.foreground
+          color: panel.theme.foreground
           opacity: 0.5
-          font.family: panel.ctl.fontFamily
-          font.pixelSize: panel.ctl.fontBody
+          font.family: panel.theme.fontFamily
+          font.pixelSize: panel.theme.fontBody
           text: "nothing goes by that"
         }
       }
