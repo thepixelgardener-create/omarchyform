@@ -19,6 +19,7 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const { spawnSync } = require('child_process')
+const { runHeld } = require('./held-runner')
 
 const repo = path.join(__dirname, '..')
 const omarchy = process.env.OMARCHY_PATH || '/usr/share/omarchy'
@@ -70,7 +71,35 @@ try {
   process.exit(2)
 }
 
-function capture(theme) {
+// This run's directory, by name — never a pattern: another run may be open in
+// another terminal, and its boards are the ones somebody is looking at.
+//
+// A board that could not be written is often a directory that cannot be
+// written to, and a directory that cannot be written to cannot be emptied
+// either. So the permissions are put back before giving up, and if it still
+// will not go the path is printed rather than left as a surprise in /tmp.
+function discard(dir) {
+  try {
+    fs.rmSync(dir, { recursive: true, force: true })
+    return
+  } catch {}
+  try {
+    spawnSync('chmod', ['-R', 'u+rwX', dir])
+    fs.rmSync(dir, { recursive: true, force: true })
+  } catch (error) {
+    console.error(`Could not remove ${dir}: ${error.message}`)
+  }
+}
+
+function report(theme, out) {
+  const taken = fs.readdirSync(out).filter(f => f.endsWith('.png'))
+  console.log(`${theme.label} (${modeOf(theme.dir)}) — ${taken.length} pictures in ${out}`)
+}
+
+// Asynchronous only so a held run can be waited on inside the try below: a
+// promise returned from it would run the cleanup while the board was still up,
+// and take the boards out from under the person driving it.
+async function capture(theme) {
   const out = path.join(cache, theme.label)
   fs.rmSync(out, { recursive: true, force: true })
   fs.mkdirSync(out, { recursive: true })
@@ -109,35 +138,36 @@ function capture(theme) {
     }
 
     const display = process.env.WAYLAND_DISPLAY || ''
-    const result = spawnSync('qs', ['--no-color', '-p', path.join(dir, 'shell.qml')], {
-      // No deadline while it is being driven by hand; the run ends when the
-      // board is closed.
-      encoding: 'utf8', timeout: hold ? undefined : 120000,
-      stdio: hold ? 'inherit' : 'pipe',
-      env: { ...process.env, HOME: home, QT_QPA_PLATFORM: 'wayland',
-        QT_QPA_PLATFORMTHEME: '', QT_QUICK_CONTROLS_STYLE: 'Basic',
-        XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR,
-        WAYLAND_DISPLAY: path.isAbsolute(display) ? display
-          : path.join(process.env.XDG_RUNTIME_DIR || '', display),
-        OMARCHYFORM_SHOT_DIR: out, OMARCHYFORM_TEST_DIR: dir,
-        OMARCHYFORM_SHOT_HOLD: hold ? '1' : '' }
-    })
-    // Held open, the output went to the terminal rather than into a buffer:
-    // whoever is driving the board wants to see it as it happens.
+    const shellEnv = { ...process.env, HOME: home, QT_QPA_PLATFORM: 'wayland',
+      QT_QPA_PLATFORMTHEME: '', QT_QUICK_CONTROLS_STYLE: 'Basic',
+      XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR,
+      WAYLAND_DISPLAY: path.isAbsolute(display) ? display
+        : path.join(process.env.XDG_RUNTIME_DIR || '', display),
+      OMARCHYFORM_SHOT_DIR: out, OMARCHYFORM_TEST_DIR: dir,
+      OMARCHYFORM_SHOT_HOLD: hold ? '1' : '' }
+    const args = ['--no-color', '-p', path.join(dir, 'shell.qml')]
+
+    // Held open, this waits on a person rather than on a deadline, so it is
+    // not spawnSync: that blocks the loop, which means a Ctrl-C reaches node
+    // as a default-action kill and the cleanup below never runs. Waiting on
+    // the child asynchronously leaves room for a signal handler that ends the
+    // child first and then removes this run's directory — this one, by name,
+    // never a pattern: another run may be open in another terminal.
     if (hold) {
-      const taken = fs.readdirSync(out).filter(f => f.endsWith('.png'))
-      console.log(`${theme.label} (${modeOf(theme.dir)}) — ${taken.length} pictures in ${out}`)
-      return result.status === 0
+      const held = await runHeld('qs', args, { env: shellEnv })
+      report(theme, out)
+      return held
     }
+
+    const result = spawnSync('qs', args, { encoding: 'utf8', timeout: 120000, env: shellEnv })
     const output = (result.stdout || '') + (result.stderr || '')
-    if (!output.includes('SHOTS_DONE')) {
+    if (result.error || result.status !== 0 || !output.includes('SHOTS_DONE')) {
       console.error(output.split('\n').slice(-25).join('\n'))
-      return false
+      return 1
     }
-    const taken = fs.readdirSync(out).filter(f => f.endsWith('.png'))
-    console.log(`${theme.label} (${modeOf(theme.dir)}) — ${taken.length} pictures in ${out}`)
-    return true
-  } finally { fs.rmSync(dir, { recursive: true, force: true }) }
+    report(theme, out)
+    return 0
+  } finally { discard(dir) }
 }
 
 if (!process.env.WAYLAND_DISPLAY) {
@@ -148,6 +178,13 @@ if (hold && requested.length > 1) {
   console.error('--hold drives one board at a time: name one theme, or none.')
   process.exit(2)
 }
-let ok = true
-for (const theme of requested) ok = capture(theme) && ok
-process.exit(ok ? 0 : 1)
+async function run() {
+  let code = 0
+  for (const theme of requested) {
+    const result = await capture(theme)
+    if (result !== 0) code = result
+    if (result === 130 || result === 143) break
+  }
+  process.exitCode = code
+}
+run().catch(error => { console.error(error.message); process.exitCode = 1 })

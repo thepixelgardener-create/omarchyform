@@ -27,8 +27,14 @@ try {
     fs.mkdirSync(path.join(dir, 'stubs'))
     fs.writeFileSync(path.join(dir, 'pixels.png'), Buffer.from(
       'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP4z8AARAwQCgAf7gP9i18U1AAAAABJRU5ErkJggg==', 'base64'))
+    // The last stage asks what happens when the clipboard does not answer, so
+    // the stub refuses once the test drops a marker beside it. A failure the
+    // board only hears about through a real non-zero exit is the one worth
+    // testing: assigning the message by hand would pass whatever the producers
+    // actually do.
     fs.writeFileSync(path.join(dir, 'stubs/wl-paste'),
-      '#!/bin/bash\nif [[ $1 == --list-types ]]; then echo image/png; else cat "$OMARCHYFORM_TEST_DIR/pixels.png"; fi\n', {mode: 0o755})
+      '#!/bin/bash\nif [[ -e "$OMARCHYFORM_TEST_DIR/no-clipboard" ]]; then exit 1; fi\n'
+      + 'if [[ $1 == --list-types ]]; then echo image/png; else cat "$OMARCHYFORM_TEST_DIR/pixels.png"; fi\n', {mode: 0o755})
   }
   // A board built by bin/omarchyform, waiting in the boards directory for the
   // real shell to open. The CLI's own suite checks its output against the

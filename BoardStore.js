@@ -176,6 +176,24 @@ var PROMPT_HINTS = [["enter", "confirm"], ["esc", "cancel"]]
 var EMPTY_HINTS = [["a", "add a board"], ["A", "Add a folder"]]
 var START_HINTS = [["n", "New note"], ["Ctrl+V", "Paste text"]]
 
+// ------------------------------------------------------------- failures
+// What an operation that can fail on its own time belongs to. A subprocess
+// answers whenever it answers — a clipboard that never replied, a file the
+// helper would not read — and by then the person is somewhere else on the
+// board, so the line has to hold the answer rather than flash it past them.
+//
+// The kind is what tells a later success from an unrelated one: copying
+// something out after a failed copy means the clipboard is working again;
+// saving a PNG after a failed copy means nothing about the clipboard. Only a
+// success of the same kind takes the failure down.
+//
+// Severity is not read out of the message. Every producer says which of these
+// it is at the point it knows, because "Could not" is a phrase, not a type,
+// and a line that guesses from the words is one translation away from lying.
+var FAILURE_KINDS = ["clipboard", "board", "picture", "png"]
+
+function isFailureKind(kind) { return FAILURE_KINDS.indexOf(kind) >= 0 }
+
 // ------------------------------------------------------------ connectors
 // Only one connector runs between any pair, so drawing one is three different
 // operations depending on what is already there. Which one it will be is

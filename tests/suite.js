@@ -666,6 +666,18 @@ function tests(S) {
     }
   })
 
+  // Severity and subject come from the producer. This is the list they name,
+  // and the only thing that decides whether a success means a failure has
+  // recovered — which is why an unknown one must not quietly pass for one.
+  test("a failure belongs to an operation, named from a fixed list", () => {
+    ok(S.FAILURE_KINDS.length > 0, "there are kinds")
+    eq(S.FAILURE_KINDS, S.FAILURE_KINDS.map(k => k.toLowerCase().trim()), "already folded")
+    eq(S.FAILURE_KINDS.length, new Set(S.FAILURE_KINDS).size, "each one once")
+    for (const kind of S.FAILURE_KINDS) ok(S.isFailureKind(kind), kind + " is one of them")
+    for (const not of ["", "  ", "Clipboard", "clipboards", "nonsense", null, undefined, 0])
+      ok(!S.isFailureKind(not), String(not) + " is not")
+  })
+
   // Drawing a connector is three operations wearing one keystroke. The line
   // that promises which one and the change that carries it out ask this.
   test("what drawing a connector will do is one question", () => {

@@ -563,6 +563,7 @@ npm run test:qml # headless persistence tests; requires installed Quickshell
 npm run test:paste # live canvas image paste test; uses an isolated clipboard stub and board library
 npm run test:ui  # Qt Quick pointer, theme, and layout tests
 npm run shots -- --hold # leave an isolated board up for docs/pointer-checks.md
+npm run test:hold # that held board starts, survives a mode switch, and ends
 npm run test:omarchy -- --keep # live desktop smoke test, isolated board data
 npm run shots   # photograph every state, for judging by eye
 npm run preview # remake the picture at the top of this README
@@ -619,7 +620,12 @@ connector. It is there for `docs/pointer-checks.md`: a pointer cannot be
 synthesised into a running compositor from here, so whether the middle button
 reaches the fullscreen overlay and the windowed toplevel is checked by hand, and
 it must not be checked on the installed plugin or on real boards. Close it with
-`esc` `esc`.
+`esc` `esc`, or `Ctrl-C` the terminal: either way the board is dismissed, what
+it was writing is finished, and the scratch tree that run built is removed —
+that one, by name, so a second held run in another terminal keeps its boards. A
+board that cannot be written when it closes says so and exits non-zero rather
+than hanging. `npm run test:hold` drives all four of those without a hand on
+the keyboard.
 
 ```bash
 npm run shots -- --hold

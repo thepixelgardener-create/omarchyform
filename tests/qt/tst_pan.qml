@@ -101,6 +101,7 @@ TestCase {
     property string saveError: ""
     property bool diskChanged: false
     property string statusText: ""
+    property string failureText: ""
     property string trashIndexError: ""
     property string boardTitle: "notes"
     property string boardState: "Saved locally"
@@ -270,6 +271,7 @@ TestCase {
     ctl.actionsOpened = 0
     ctl.markedRect = null
     ctl.statusText = ""
+    ctl.failureText = ""
     ctl.linkingFrom = -1
     ctl.linkOutcome = "none"
     ctl.conflictVisible = false
@@ -573,6 +575,9 @@ TestCase {
   }
 
   function test_anActiveConnectorOutranksAStaleMessage(row) {
+    // statusText only: what arrives here is an acknowledgement. A failure that
+    // reached the same property would be covered by this very rule, which is
+    // what test_aFailureIsVisibleThroughWhateverIsBeingDone is about.
     ctl.statusText = row.said
     ctl.linkingFrom = 1
     ctl.linkOutcome = row.outcome
@@ -662,6 +667,83 @@ TestCase {
     verify(plain.indexOf("done typing") >= 0, "says how to stop typing, not: " + plain)
     verify(plain.indexOf("connects these two") < 0, "and does not promise x will connect anything")
     ctl.editIndex = -1
+  }
+
+  // The other half of the same problem. Ranking the connector outcome above a
+  // flash fixed a stale "Duplicated" covering it — and would have buried a
+  // clipboard that never answered under the same rule, because both arrive on
+  // statusText. A failure is its own rank: under the things that stop the
+  // board saving, over everything the person has started since.
+  function test_aFailureIsVisibleThroughWhateverIsBeingDone_data() {
+    return [
+      { tag: "while connecting", mode: "linking", said: "Could not reach the clipboard" },
+      { tag: "while typing", mode: "editing", said: "Could not save PNG; choose a location outside the app data folder" },
+      { tag: "while arranging", mode: "arranging", said: "That is not an image this can read" },
+      { tag: "in backgrounds", mode: "pinned", said: "A picture in that board could not be read; nothing was imported" },
+      { tag: "with the command list open", mode: "palette", said: "Clipboard has no available text" },
+      { tag: "with nothing else going on", mode: "", said: "Could not copy that picture" }
+    ]
+  }
+
+  function test_aFailureIsVisibleThroughWhateverIsBeingDone(row) {
+    // And a stale acknowledgement underneath it, which is what it has to beat.
+    ctl.statusText = "Duplicated"
+    if (row.mode === "linking") { ctl.linkingFrom = 1; ctl.linkOutcome = "create" }
+    else if (row.mode === "editing") ctl.editIndex = 0
+    else if (row.mode === "arranging") ctl.arranging = true
+    else if (row.mode === "pinned") ctl.showPinned = true
+    else if (row.mode === "palette") ctl.paletteVisible = true
+    ctl.failureText = row.said
+    wait(0)
+
+    var line = findChild(surface, "board-status")
+    var plain = line.text.replace(/<[^>]*>/g, "")
+    compare(plain, row.said, "the failure has the line " + row.tag)
+    verify(line.visible, "and is on screen to be read")
+  }
+
+  // Under the four that do not go away on their own. Those are conditions, not
+  // events: each one is a reason the board is not saving at all, and a failed
+  // copy is not a reason to stop saying so.
+  function test_aBlockedSaveStillOutranksAFailure_data() {
+    return [
+      { tag: "a failed write", set: "saveError", says: "could not be written" },
+      { tag: "a trash index that will not save", set: "trashIndexError", says: "trash index" },
+      { tag: "two versions of the board", set: "diskChanged", says: "changed on disk" },
+      { tag: "a board that could not be read", set: "damaged", says: "not saving over it" }
+    ]
+  }
+
+  function test_aBlockedSaveStillOutranksAFailure(row) {
+    ctl.failureText = "Could not reach the clipboard"
+    if (row.set === "saveError") ctl.saveError = "notes.json could not be written"
+    else if (row.set === "trashIndexError") ctl.trashIndexError = "the trash index could not be saved"
+    else if (row.set === "diskChanged") ctl.diskChanged = true
+    else ctl.damaged = true
+    wait(0)
+
+    var plain = findChild(surface, "board-status").text.replace(/<[^>]*>/g, "")
+    verify(plain.toLowerCase().indexOf(row.says) >= 0, "says '" + row.says + "', not: " + plain)
+    verify(plain.indexOf("clipboard") < 0, "and not the failure underneath it: " + plain)
+
+    ctl.saveError = ""
+    ctl.trashIndexError = ""
+    ctl.diskChanged = false
+    ctl.damaged = false
+  }
+
+  // The line renders markup, and a failure has been through a file name, a
+  // helper's output or a board somebody else wrote. This is the one place on
+  // the board that reads tags, so what arrives here is escaped like everything
+  // else that reaches it from outside.
+  function test_aFailureCannotPutMarkupOnTheLine() {
+    ctl.failureText = "Could not read <b>bold</b> & <font color=\"red\">red</font>.png"
+    wait(0)
+    var line = findChild(surface, "board-status")
+    verify(line.text.indexOf("&lt;b&gt;") >= 0, "the tags arrive as text: " + line.text)
+    verify(line.text.indexOf("&amp;") >= 0, "and so does the ampersand")
+    verify(line.text.indexOf("<b>") < 0, "nothing in it is a tag the line obeys")
+    verify(line.text.indexOf("<font color=\"red\">") < 0, "including one that would recolour it")
   }
 
   // A theme with large text in a small window is where a hint stops fitting.

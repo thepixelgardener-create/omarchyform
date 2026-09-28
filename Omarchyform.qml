@@ -108,7 +108,7 @@ Item {
     itemModel.setProperty(root.selectedIndex, "iw", 300)
     itemModel.setProperty(root.selectedIndex, "ih", 200)
     root.save()
-    root.flash("Text pasted · enter to edit")
+    root.flash("Text pasted · enter to edit", "clipboard")
     root.focusKeys()
   }
 
@@ -140,8 +140,9 @@ Item {
     while (waiting.length > stale && waiting[stale].board !== root.currentBoard) stale += 1
     if (stale > 0) {
       root.imageQueue = waiting.slice(stale)
-      root.flash(stale === 1 ? "Board changed; that picture was not added"
-                             : "Board changed; " + stale + " pictures were not added")
+      root.report(stale === 1 ? "Board changed; that picture was not added"
+                              : "Board changed; " + stale + " pictures were not added",
+                  waiting[0].atPoint ? "picture" : "clipboard")
     }
     if (root.imageQueue.length === 0) return
     if (root.activeBoard) root.activeBoard.probeImage(root.imageQueue[0].name)
@@ -175,7 +176,8 @@ Item {
     // The size arrived after a board switch. The point this was meant for
     // belongs to a board that is no longer open, so the picture is not placed.
     if (placing && placing.board !== root.currentBoard) {
-      root.flash("Board changed; that picture was not added")
+      root.report("Board changed; that picture was not added",
+                  placing.atPoint ? "picture" : "clipboard")
       root.pumpImages()
       return
     }
@@ -199,7 +201,10 @@ Item {
     itemModel.setProperty(root.selectedIndex, "ix", atX - fitW / 2)
     itemModel.setProperty(root.selectedIndex, "iy", atY - fitH / 2)
     root.save()
-    root.flash(naturalWidth > 0 ? "Image added" : "Image added · it could not be read, so the size is a guess")
+    // A drop carries the point it was let go of; a paste does not. That is
+    // also which operation it recovers: the file manager or the clipboard.
+    root.flash(naturalWidth > 0 ? "Image added" : "Image added · it could not be read, so the size is a guess",
+               placing && placing.atPoint ? "picture" : "clipboard")
     root.focusKeys()
     root.pumpImages()
   }
@@ -228,7 +233,8 @@ Item {
     id: imagePublish
     onExited: function(code) {
       root.imageBusy = false
-      root.flash(code === 0 ? "PNG saved · full board, without controls" : "Could not save PNG; choose a location outside the app data folder")
+      if (code === 0) root.flash("PNG saved · full board, without controls", "png")
+      else root.report("Could not save PNG; choose a location outside the app data folder", "png")
     }
   }
 
@@ -275,9 +281,10 @@ Item {
       if (editFirst) root.pendingFirstNote = path
       root.openBoard(path, false)
       root.rescan()
-      root.flash(editFirst ? "New board · F2 to name it" : "Board imported" + exchange.createdNote)
+      root.flash(editFirst ? "New board · F2 to name it" : "Board imported" + exchange.createdNote, "board")
     }
-    onFinished: function(message) { root.flash(message) }
+    onFinished: function(message, kind) { root.flash(message, kind) }
+    onFailed: function(message, kind) { root.report(message, kind) }
     onCopied: function(name) {
       root.rescan()
       session.keptAsCopy(name)
@@ -287,10 +294,42 @@ Item {
   // A line that says what just happened and then goes away. Deleting is one
   // keystroke, so it should at least say so, and say how to take it back.
   property string statusText: ""
-  function flash(text) {
+  // Something happened and is worth a moment of the line. `kind` says which
+  // operation it belongs to, and is only passed where a success means an
+  // earlier failure of the same kind has recovered — copying something out
+  // after the clipboard would not answer. A success of another kind says
+  // nothing about it and leaves it where it is.
+  function flash(text, kind) {
     root.statusText = text
     statusTimer.restart()
+    if (kind !== undefined && kind !== "" && kind === root.failureKind) root.clearFailure()
   }
+
+  // Something the person asked for did not happen. It outranks the gesture
+  // they have started since, because a flash they were not looking at is a
+  // failure they never learn about, and these arrive on a subprocess's own
+  // schedule rather than on the keystroke that caused them.
+  property string failureText: ""
+  property string failureKind: ""
+
+  function report(message, kind) {
+    root.failureText = message
+    root.failureKind = Store.isFailureKind(kind) ? kind : ""
+  }
+
+  function clearFailure() {
+    root.failureText = ""
+    root.failureKind = ""
+  }
+
+  // Whether the line is actually showing it. Only the things that block saving
+  // outrank a failure, and the panels that cover the line hide everything on
+  // it — so this is the render condition, and the timer below runs on it. A
+  // failure that is not on screen is not spending its time on screen.
+  readonly property bool failureVisible: root.opened && root.failureText !== ""
+    && root.saveError === "" && root.trashIndexError === ""
+    && !root.diskChanged && !root.damaged
+    && !root.helpVisible && !root.browserVisible && !root.finding
 
   // Configurable from the bar widget's settings, and remembered in state.json
   // so opening from the keyboard uses the same values.
@@ -1306,6 +1345,10 @@ Item {
     else if (root.showPinned) { root.showPinned = false; root.selectedIndex = -1 }
     else if (root.clearMarks()) root.flash("marks cleared")
     else if (root.linkingFrom >= 0) { root.linkingFrom = -1; root.repaintLinks() }
+    // Last, so escape never has to choose between dismissing a failure and
+    // leaving a mode — and before closing, so the keystroke that takes an
+    // answer down is not also the one that closes the board.
+    else if (root.failureText !== "") root.clearFailure()
     else root.dismiss()
   }
 
@@ -1755,6 +1798,18 @@ Item {
     interval: 2600
     repeat: false
     onTriggered: root.statusText = ""
+  }
+
+  // Longer than a flash, because it is an answer rather than an acknowledgement
+  // — and it only runs while the failure is the thing on the line. Held behind
+  // a conflict or under the browser it does not tick, so a failure cannot
+  // expire in the time it spent where nobody could read it.
+  Timer {
+    id: failureTimer
+    interval: 6000
+    repeat: false
+    running: root.failureVisible
+    onTriggered: root.clearFailure()
   }
 
   // The boards directory has to exist before the first atomic write, otherwise

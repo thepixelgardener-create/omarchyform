@@ -791,12 +791,13 @@ FocusScope {
     // keyboard is escaped on the way: this is the one place on the board that
     // renders tags, and a board is a file other people can send you.
     textFormat: Text.StyledText
-    // One line, four kinds of thing wanting it, in this order:
+    // One line, five kinds of thing wanting it, in this order:
     //
-    //   1. the board is not being saved, and here is why
-    //   2. what the keyboard is about to do
-    //   3. what it just did
-    //   4. what it is busy with, or nothing in particular
+    //   1.  the board is not being saved, and here is why
+    //   1b. something asked for did not happen
+    //   2.  what the keyboard is about to do
+    //   3.  what it just did
+    //   4.  what it is busy with, or nothing in particular
     //
     // The order used to run 1, 2, 3 for three of the modes and 3, 1, 2 for the
     // rest, which put a message that fades in front of two things that do not.
@@ -818,6 +819,13 @@ FocusScope {
       ? Store.escapeMarkup(board.ctl.boardTitle + " " + board.ctl.damageReason + " — not opening it")
       : board.ctl.damaged
       ? Store.escapeMarkup(board.ctl.boardTitle + " could not be read — not saving over it")
+
+      // 1b. Something asked for did not happen. Below the four above, which
+      // are conditions rather than events and do not go away on their own;
+      // above everything below, because a subprocess answers on its own time
+      // and by then the person has started something else. Escaped like any
+      // other text that has been through a file name or a helper's output.
+      : board.ctl.failureText !== "" ? Store.escapeMarkup(board.ctl.failureText)
 
       // 2. What the next keystroke means, narrowest claim on the keyboard
       // first. Typing comes before connecting because both can be true at

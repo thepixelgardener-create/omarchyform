@@ -31,9 +31,24 @@ and your real boards are not touched, and must not be used for these checks.**
 It leaves a board carrying one of everything below: a pinned background, two
 notes, an ellipse, a picture, and a connector between the two notes.
 
-Close it with `esc` `esc` when you are done — that ends the run and cleans up
-the temporary tree. If you kill it instead, remove `/tmp/omarchyform-shots-*`
-by hand.
+Close it with `esc` `esc` when you are done. That ends the run: the board is
+dismissed, whatever it was writing is finished, and the scratch tree it built
+is removed. `Ctrl-C` terminates the test process and cleans up its scratch tree;
+that cancellation exits 130 (SIGTERM exits 143), rather than claiming the checks
+completed. Ordinary close exits 0 only after setup reached readiness and pending
+writes finished. Setup errors, unexpected signals and missing completion markers
+exit non-zero. Setup has a two-minute deadline; interactive time is unlimited.
+
+Either way it removes **its own** directory and nothing else. If you have a
+second held run open in another terminal, its board is still there and still
+yours. Should a run ever fail to clean up — a directory that cannot be written
+to is also one that cannot be emptied — it prints the path it could not remove;
+remove that path, not a pattern, or you will take the other run's boards with
+it.
+
+If the board will not write when you close it, the run says so and exits
+non-zero rather than sitting there. `npm run test:hold` is what holds that
+behaviour in place.
 
 Run it once per window mode. `w` switches between fullscreen and windowed
 without losing your place.

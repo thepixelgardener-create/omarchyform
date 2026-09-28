@@ -154,7 +154,50 @@ since older boards are migrated on load rather than rejected.
   checked by hand — and must not be checked on the installed plugin or on real
   boards.
 
+  Closing it ends the run. The first version of it did not: hiding a window is
+  not closing a board, so the process stayed up with nobody watching it and a
+  scratch tree nobody removed. It follows the controller's own state now rather
+  than any one surface's, which is also why moving between fullscreen and
+  windowed no longer looks like leaving — one surface goes and another arrives,
+  and the board was never closed. Dismissing it waits for what it was writing
+  and exits; a write that fails, or will not finish in five seconds, says which
+  and exits non-zero instead of hanging. `Ctrl-C` closes the board first and
+  then cleans up. Each run removes its own directory by name, never a pattern,
+  so a second held board in another terminal keeps its boards.
+  A successful held run now requires both readiness and completion markers.
+  Setup timeouts and unexpected child signals fail; Ctrl-C exits 130 and SIGTERM
+  exits 143 after cleanup. The runner prints its child PID, and the interruption
+  test verifies that exact process has exited. Deterministic subprocess tests
+  cover failure exits, missing markers, interruption and forced termination.
+  `npm run test:hold` drives the live lifecycle without a hand on the keyboard.
+
 ### Fixed
+
+- **A failure no longer waits behind whatever you started next.** Ranking the
+  connector outcome above a flash fixed a stale "Duplicated" covering it — and
+  would have buried a clipboard that never answered under the same rule, because
+  both arrive on the same property. A subprocess answers on its own time: by
+  then the person is somewhere else on the board, and a failure they were not
+  looking at is one they never learn about.
+
+  The producers say which is which now, at the point they know. `BoardExchange`
+  answers on `finished` or on `failed`, and both carry which operation they are
+  about — the clipboard, a board file, a picture, a PNG — so a later success can
+  take down the failure it recovered from and leave the others alone. Copying
+  something out after the clipboard would not answer means the clipboard is
+  working; saving a PNG says nothing about it. Severity is never read out of the
+  words: "Could not" is a phrase, not a type, and `tests/contract.js` refuses a
+  call site that does not name a kind from the list.
+
+  A failure sits under the four things that stop the board saving — a failed
+  write, a trash index that will not save, two versions of a board, a board that
+  could not be read — and above everything the person has started since. Its
+  time only runs while it is the thing on screen, so it cannot expire behind a
+  conflict, under the browser, or while the board is closed. A live regression
+  closes the board for seven seconds and checks the failure after reopening.
+  Escape takes it down once nothing else is
+  waiting for escape, which means the keystroke that dismisses an answer is
+  never also the one that closes the board.
 
 - **The line under the header stopped promising the wrong thing.** A flash sits
   on the line for two and a half seconds, and it outranked the connector

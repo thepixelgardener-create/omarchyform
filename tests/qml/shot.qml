@@ -311,8 +311,6 @@ ShellRoot {
     plugin.items.setProperty(0, "iw", 900)
     plugin.items.setProperty(0, "ih", 620)
     plugin.items.setProperty(0, "itext", "a background")
-    plugin.selectOnly(0)
-    plugin.togglePin()
 
     plugin.addItem("note", 240, 260)
     plugin.items.setProperty(1, "itext", "a note to type in")
@@ -330,6 +328,13 @@ ShellRoot {
     plugin.items.setProperty(4, "iw", 220)
     plugin.items.setProperty(4, "ih", 160)
 
+    // Pinned last, once every item exists. Pinning moves a delegate from the
+    // foreground to the background, and adding items after that asks the
+    // repeater to stack a new one behind one that is no longer its sibling —
+    // which it says so about, in the terminal of whoever is driving the board.
+    plugin.selectOnly(0)
+    plugin.togglePin()
+
     plugin.stopEditing()
     plugin.selectedIndex = -1
     plugin.resetView()
@@ -346,12 +351,106 @@ ShellRoot {
   // are done by hand, and this is what they are done to.
   readonly property bool hold: Quickshell.env("OMARCHYFORM_SHOT_HOLD") === "1"
 
+  // Where a held run has got to. Held open, this process has no deadline of
+  // its own, so the only thing that ends it is the board being dismissed —
+  // and the first version of this never ended at all, because hiding a window
+  // is not the same as closing a board.
+  //
+  //   preparing  taking the pictures
+  //   ready      the board is up and being driven by hand
+  //   closing    it was dismissed; waiting for what it was writing
+  //   finished   everything is on disk, exit 0
+  //   failed     a write failed or would not finish, exit 1
+  property string phase: "preparing"
+  property int readyAt: 0
+  property int closingSince: 0
+  // Five seconds at fifty milliseconds a tick. Long enough for an atomic write
+  // and its backup, short enough that a stuck one is reported rather than sat
+  // through: a run that hangs is a temporary directory nobody cleans up.
+  readonly property int writeGrace: 100
+
+  function finish(how, why) {
+    shots.phase = how
+    if (how === "finished") {
+      console.log("SHOTS_HELD_DONE")
+      Qt.quit()
+    } else {
+      console.error("SHOTS_HELD_FAILED — " + why)
+      Qt.exit(1)
+    }
+  }
+
+  // Ticks to wait before dismissing the board without being asked, so the
+  // lifecycle above can be tested without a hand on the keyboard. Only set by
+  // tests/shots.js when it is checking itself; unset, a held run waits for a
+  // person, which is the whole point of it.
+  readonly property int dismissAfter: parseInt(Quickshell.env("OMARCHYFORM_SHOT_DISMISS") || "0", 10)
+
+  // Set alongside the dismissal, to check that a write that cannot finish is
+  // reported rather than sat through. The boards directory is taken away from
+  // the board while it is open, so the flush that closing does has somewhere
+  // it cannot write to — the same shape as a full disk or a directory someone
+  // moved, which is not a thing a suite can arrange any other way.
+  readonly property bool failTheWrite: Quickshell.env("OMARCHYFORM_SHOT_FAILWRITE") === "1"
+  Process { id: breakWrites }
+
+  // Ticks to wait before switching between fullscreen and windowed, so the
+  // check that a held run survives it does not need a hand either. One surface
+  // goes and another arrives; the board is never closed, and neither is this.
+  readonly property int toggleAfter: parseInt(Quickshell.env("OMARCHYFORM_SHOT_TOGGLE") || "0", 10)
+  property bool toggled: false
+
+  function held() {
+    if (shots.phase === "ready" && shots.toggleAfter > 0 && !shots.toggled
+        && shots.ticks - shots.readyAt > shots.toggleAfter) {
+      shots.toggled = true
+      plugin.toggleWindowMode()
+      console.log("SHOTS_HELD_TOGGLED to " + (plugin.windowMode ? "windowed" : "fullscreen"))
+    }
+    if (shots.phase === "ready" && shots.dismissAfter > 0
+        && shots.ticks - shots.readyAt > shots.dismissAfter) {
+      if (shots.failTheWrite) {
+        breakWrites.command = ["chmod", "500", plugin.boardsDir]
+        breakWrites.running = true
+        plugin.items.setProperty(1, "itext", "something to fail to save")
+      }
+      console.log("SHOTS_HELD_DISMISSING")
+      plugin.dismiss()
+    }
+    if (shots.phase === "ready") {
+      // The controller's own answer, not any one window's. close() refuses
+      // while an image export is running, and switching between fullscreen and
+      // windowed takes one surface down and puts another up without the board
+      // ever being closed — watching a window would end the run on both.
+      if (!plugin.opened) {
+        shots.phase = "closing"
+        shots.closingSince = shots.ticks
+      }
+      return
+    }
+    if (shots.phase !== "closing") return
+    // Closing flushes; a board that could not be written is the one thing a
+    // held run must not exit quietly on, because the point of it is the board.
+    if (plugin.saveError !== "") {
+      shots.finish("failed", "the board could not be written: " + plugin.saveError)
+      return
+    }
+    if (plugin.saving || plugin.pendingBoard !== null || plugin.exchangeBusy || plugin.imageBusy) {
+      if (shots.ticks - shots.closingSince > shots.writeGrace)
+        shots.finish("failed", "something was still being written five seconds after closing")
+      return
+    }
+    shots.finish("finished", "")
+  }
+
   function advance() {
     shots.scene += 1
     if (shots.scene >= shots.scenes.length) {
       console.log("SHOTS_DONE")
       if (shots.hold) {
         shots.buildHeldBoard()
+        shots.phase = "ready"
+        shots.readyAt = shots.ticks
         console.log("SHOTS_HOLDING — the board is yours; close it with esc esc")
         return
       }
@@ -368,7 +467,10 @@ ShellRoot {
     shots.grabbing = true
     shots.grabWanted = false
     plugin.activeBoard.grabToImage(function (result) {
-      result.saveToFile(shots.dir + "/" + shots.scenes[shots.scene].name + ".png")
+      if (!result.saveToFile(shots.dir + "/" + shots.scenes[shots.scene].name + ".png")) {
+        shots.finish("failed", "could not save screenshot " + shots.scenes[shots.scene].name)
+        return
+      }
       console.log("SHOT " + shots.scenes[shots.scene].name)
       shots.grabbing = false
       shots.settle(3)
@@ -389,11 +491,13 @@ ShellRoot {
     running: true
     onTriggered: {
       shots.ticks++
-      // The clock does not run out on a board being driven by hand.
-      if (shots.hold && shots.scene >= shots.scenes.length) return
+      // The clock does not run out on a board being driven by hand: from here
+      // the run ends when the board is dismissed, or when what it was writing
+      // will not finish.
+      if (shots.hold && shots.scene >= shots.scenes.length) { shots.held(); return }
       if (shots.ticks > 900) {
         console.error("SHOTS_TIMEOUT at scene " + shots.scene)
-        Qt.quit()
+        Qt.exit(1)
         return
       }
       if (shots.grabbing || shots.ticks < shots.waitUntil) return
