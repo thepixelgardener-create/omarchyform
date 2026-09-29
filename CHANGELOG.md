@@ -173,6 +173,10 @@ since older boards are migrated on load rather than rejected.
 
 ### Fixed
 
+- Each newly reported failure gets a fresh six-second display interval. Replacing
+  a visible failure no longer inherits the previous message's expiry deadline.
+  Failures received while the board is closed still wait until it opens.
+
 - **A failure no longer waits behind whatever you started next.** Ranking the
   connector outcome above a flash fixed a stale "Duplicated" covering it — and
   would have buried a clipboard that never answered under the same rule, because

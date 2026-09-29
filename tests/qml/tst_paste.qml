@@ -9,6 +9,7 @@ ShellRoot {
   property int stage: 0
   property int ticks: 0
   property int closedAt: 0
+  property double reportedAt: 0
   function check(ok, message) {
     if (!ok) { console.error("FAIL: " + message); Qt.quit(); throw new Error(message) }
   }
@@ -20,7 +21,7 @@ ShellRoot {
     repeat: true
     running: true
     onTriggered: {
-      test.check(++test.ticks < 450, "paste completed at stage " + test.stage)
+      test.check(++test.ticks < 550, "paste completed at stage " + test.stage)
       if (test.stage === 0 && plugin.boardLoaded) {
         plugin.windowMode = true
         plugin.open("{}")
@@ -75,17 +76,34 @@ ShellRoot {
         plugin.flash("PNG saved · full board, without controls", "png")
         test.check(plugin.failureText !== "", "another operation working says nothing about it")
         plugin.close()
+        plugin.report("Failure received while closed", "clipboard")
         test.closedAt = test.ticks
         test.stage = 6
       } else if (test.stage === 6 && test.ticks - test.closedAt > 140) {
         test.check(!plugin.opened, "board stayed closed for seven seconds")
-        test.check(plugin.failureText !== "", "closed board did not expire the failure")
+        test.check(plugin.failureText === "Failure received while closed",
+                   "reporting while closed did not start the expiry timer")
         plugin.open("{}")
         test.stage = 7
       } else if (test.stage === 7 && plugin.activeBoard) {
         test.check(plugin.failureVisible, "reopening shows the retained failure")
         plugin.flash("Copied", "clipboard")
         test.check(plugin.failureText === "", "the clipboard answering does")
+        plugin.report("First visible failure", "clipboard")
+        test.reportedAt = Date.now()
+        test.stage = 8
+      } else if (test.stage === 8 && Date.now() - test.reportedAt >= 5000) {
+        plugin.report("Second visible failure", "png")
+        test.reportedAt = Date.now()
+        test.stage = 9
+      } else if (test.stage === 9 && Date.now() - test.reportedAt >= 1500) {
+        // The first message's six-second deadline has passed. A replacement
+        // must still have its own time on screen, not the old timer's remainder.
+        test.check(plugin.failureText === "Second visible failure",
+                   "a replacement gets a fresh display interval")
+        test.stage = 10
+      } else if (test.stage === 10 && Date.now() - test.reportedAt >= 6500) {
+        test.check(plugin.failureText === "", "the replacement eventually expires")
         console.log("OMARCHY_TESTS_PASSED")
         Qt.quit()
       }

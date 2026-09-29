@@ -315,6 +315,9 @@ Item {
   function report(message, kind) {
     root.failureText = message
     root.failureKind = Store.isFailureKind(kind) ? kind : ""
+    // Replacing a visible failure leaves failureVisible true, so its binding
+    // alone cannot reset the elapsed time. Hidden failures wait for visibility.
+    if (root.failureVisible) failureTimer.restart()
   }
 
   function clearFailure() {

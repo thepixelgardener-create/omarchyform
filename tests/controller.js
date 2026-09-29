@@ -79,7 +79,7 @@ function controller() {
   const scanProc = { running: false }
   const context = vm.createContext({ root, session, Store: loadStore(), itemModel: items, linkModel: links,
     persistence, exchange, trashIndexFile, scanProc,
-    statusTimer: {restart() {}}, saveTimer: { running: false, stop() {}, restart() {} }, stateFile: {setText() {}} })
+    statusTimer: {restart() {}}, failureTimer: {restart() {}}, saveTimer: { running: false, stop() {}, restart() {} }, stateFile: {setText() {}} })
   function loadFunctions(target, qml) {
     for (const match of qml.matchAll(/^  function (\w+)\((.*?)\) \{\n([\s\S]*?)^  }/gm))
       target[match[1]] = vm.runInContext(`(function(${match[2]}) {${match[3]}})`, context)
