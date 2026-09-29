@@ -577,7 +577,13 @@ It cannot draw: a picture of a board needs the running shell, so `ctrl+e`
 on an open board exports a PNG and nothing here does.
 
 `skills/omarchyform/SKILL.md` ships alongside it, so a coding agent asked to
-sketch something out as a board can do it without being told any of this.
+sketch something out as a board can do it without being told any of this, and
+[`docs/for-agents.md`](docs/for-agents.md) is the long version — this same
+program explained to something that drives it through files and will never see
+the screen. Most of it is the part a command list cannot teach: how big a note
+is, how far apart two of them have to be before they read as two, how much text
+fits before it scrolls, which shape means what, and how little of a board to
+tint. A board built without that reads as generated whatever is written on it.
 
 ## Tests
 

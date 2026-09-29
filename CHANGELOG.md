@@ -7,6 +7,20 @@ since older boards are migrated on load rather than rejected.
 
 ### Added
 
+- **A manual for the thing reading it.** `docs/for-agents.md` is Omarchyform
+  explained to something that drives it through files and a command line and
+  will never see the screen. The verbs were already documented; what was not is
+  everything a generated board gets wrong for want of knowing it — that items
+  are placed by their top-left corner, that a default note is 220 by 160 and
+  wants 60 between it and the next one, that six short lines is what fits
+  before the text starts scrolling, which shape means what, and that two or
+  three tinted items on a board of a dozen is the whole budget. It also writes
+  down where the command line and the keyboard differ about connectors, which
+  they do deliberately: `link` is idempotent and answers `already`, while
+  pressing `x` a second time removes the connector.
+
+  `skills/omarchyform/SKILL.md` points at it and keeps its own short version.
+
 - **A picture of part of a board, in colours that are not the desktop's.** A
   board is drawn in whatever theme the desktop is wearing, which is usually
   dark, and a dark picture is the wrong thing to put in a document, a slide or
