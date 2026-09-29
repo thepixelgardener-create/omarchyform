@@ -4,7 +4,8 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const { spawnSync } = require('child_process')
-const { coverage, read, background } = require('./png')
+const { read, paper, inked, canvasColour } = require('./png')
+const { checkExport } = require('./picture')
 if (!process.argv.includes('--live')) {
   console.error('This test requires a running Omarchy/Hyprland desktop; pass --live to open isolated test surfaces.')
   process.exit(2)
@@ -81,16 +82,23 @@ try {
     console.log('ok — clipboard images reach the live canvas, repeat, undo and save')
   } else {
     // The status line said the export succeeded; this says the board is in it.
-    // An item culled by mistake draws nothing and still exports at the right
-    // size, so neither the file existing nor its dimensions would notice.
+    // The status line said the export succeeded; this says the board is in it.
+    // An item culled by mistake draws nothing and still exports at exactly the
+    // right size, so neither the file existing nor its dimensions would notice.
     //
-    // The two notes this test exports cover 28% of the frame. With the items
-    // culled out of it, only the connector between them is left and coverage
-    // falls to 11%, so the two cases are not close; a fifth is between them
-    // with room on both sides.
-    const inked = coverage(path.join(dir, 'export.png'))
-    if (inked < 0.2) {
-      console.error(`exported PNG is ${(inked * 100).toFixed(1)}% inked: the board did not render into it`)
+    // Asked of each item's own rectangle rather than of the whole frame. The
+    // gate this replaces wanted a fifth of the picture to be inked, and an
+    // export is the board's bounds plus padding — so how much of it two notes
+    // cover depends on how far apart they are, and the paste that makes one of
+    // them lands at the centre of the *view*. It was measuring the display. On
+    // a wide enough one the notes fell 728px apart and a complete export scored
+    // 16%. The board is pinned to a fixed shape before the export now, and what
+    // is asked of it no longer depends on the frame at all: see picture.js, and
+    // tests/export.js for each fault being caught without a desktop.
+    const problems = checkExport(read(path.join(dir, 'export.png')),
+      JSON.parse(fs.readFileSync(path.join(dir, 'editable.json'), 'utf8')))
+    if (problems.length) {
+      for (const problem of problems) console.error(problem)
       process.exitCode = 1
       return
     }
@@ -102,14 +110,20 @@ try {
     // the size, which is what the crop changes.
     const whole = read(path.join(dir, 'export.png'))
     const cropped = read(path.join(dir, 'export-light.png'))
-    const paper = background(path.join(dir, 'export-light.png'))
-    if (paper !== '#ffffff') {
-      console.error(`a PNG asked for on white came out on ${paper}`)
+    const page = paper(cropped)
+    // Not checkExport: that reads its rectangles from a board file, and this
+    // picture is of part of a board. What is asked of it is the two things a
+    // crop and a palette change — what it came out on, and how big it is —
+    // plus that something is in it at all.
+    const filled = inked(cropped, { x: 0, y: 0, w: cropped.width, h: cropped.height },
+                         canvasColour(cropped))
+    if (page !== '#ffffff') {
+      console.error(`a PNG asked for on white came out on ${page}`)
       process.exitCode = 1
     } else if (cropped.width >= whole.width) {
       console.error(`framing around one of two notes gave ${cropped.width}px, no narrower than the board's ${whole.width}px`)
       process.exitCode = 1
-    } else if (coverage(path.join(dir, 'export-light.png')) < 0.2) {
+    } else if (filled <= 0) {
       console.error('the cropped PNG has nothing in it')
       process.exitCode = 1
     } else console.log('ok — full Omarchy plugin smoke test (live Wayland)')
