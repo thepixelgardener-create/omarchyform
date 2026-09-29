@@ -241,6 +241,8 @@ TestCase {
       property int fontHeading: 18
       property int borderWidth: 1
       property int cornerRadius: 0
+      readonly property var markupColors: ({ foreground: "#cccccc", accent: "#00ffff",
+                                             urgent: "#ff5555", muted: "#888888" })
       function sp(n) { return n }
       function tintFill(tint, strong) { return "#181818" }
       function tintBorder(tint, strong) { return "#cccccc" }

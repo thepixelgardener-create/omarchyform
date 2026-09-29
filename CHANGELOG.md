@@ -21,6 +21,40 @@ since older boards are migrated on load rather than rejected.
 
   `skills/omarchyform/SKILL.md` points at it and keeps its own short version.
 
+- **A note can say more than its words.** A board of twenty notes was twenty
+  identical rectangles with identical text in them, and no amount of arranging
+  fixed that. Notes now carry a small markup: `# a line` is a heading, `*bold*`
+  and `_italic_` are emphasis, `` `a key` `` is drawn in the accent the way
+  every key in this shell is, and `[accent]…[/]` puts a span in one of the
+  theme's four roles.
+
+  Roles rather than colours, for the same reason items carry roles: a board
+  follows whatever theme the desktop is wearing, and there is still no way to
+  put a hex colour into a board file. An exported picture draws them in whatever
+  palette it was asked for, so a note's accent is the light palette's blue on
+  white and the board's own accent on the board.
+
+  While typing, `ctrl+b`, `ctrl+i` and `ctrl+k` put a mark round the selection
+  and take it off again when pressed a second time; `ctrl+1` to `ctrl+4` colour
+  it. Nothing selected leaves the caret between the marks, which is how a bold
+  word gets started rather than finished.
+
+  The safety is the order, and it is the one the status line already used.
+  Everything arriving from a board file is escaped before any of this is
+  applied — a board is a file other people can send you, and the note is the
+  part they write — so no tag anyone else wrote survives to reach the renderer.
+  A note saying `<b>hello</b>` shows those characters.
+
+  You see the marks while the caret is in the note and the note once it leaves.
+  The text being edited and the text being looked at have to be the same string,
+  or the caret lands where the characters are not.
+
+- **The editor takes the board's version back.** Typing into a note replaces
+  the binding that filled it, so after the first keystroke it held its own copy.
+  Anything that changed the item since was invisible there: an undo restored the
+  note on screen, which reads the item directly, and left the editor showing
+  what had just been undone. It re-reads the item each time the caret arrives.
+
 - **A picture of part of a board, in colours that are not the desktop's.** A
   board is drawn in whatever theme the desktop is wearing, which is usually
   dark, and a dark picture is the wrong thing to put in a document, a slide or

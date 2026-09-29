@@ -58,6 +58,14 @@ Item {
       property int fontBody: picture.theme.fontBody
       property int borderWidth: picture.theme.borderWidth
       property int cornerRadius: picture.theme.cornerRadius
+      // A note's coloured spans follow whatever the picture is drawn in, the
+      // same way its fills and borders do.
+      readonly property var markupColors: picture.chosen ? ({
+        foreground: picture.chosen.foreground,
+        accent: picture.chosen.borders.accent,
+        urgent: picture.chosen.borders.urgent,
+        muted: picture.chosen.borders.muted
+      }) : picture.theme.markupColors
       function sp(n) { return picture.theme.sp(n) }
       // A chosen palette names its fills and borders outright rather than
       // blending them, so nothing here has to reproduce the theme's arithmetic

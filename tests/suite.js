@@ -794,6 +794,84 @@ function tests(S) {
        "and a failure does not cover a board that is not being saved")
   })
 
+  // A note carries a little markup so a board can have a shape to it — a
+  // heading, a key, a word that matters. The whole of the safety is the order:
+  // everything from the board file is escaped first, and only then is this
+  // syntax turned into tags, so nothing anyone else wrote can arrive as markup.
+  test("a note says a little more than its words, and nothing it was sent", () => {
+    const c = { foreground: "#cccccc", accent: "#00ffff", urgent: "#ff5555", muted: "#888888" }
+    const m = t => S.noteMarkup(t, c)
+
+    eq(m("plain"), "plain", "most of a note is words")
+    eq(m("# Capture"), '<font size="5"><b>Capture</b></font>', "a heading")
+    eq(m("*bold*"), "<b>bold</b>")
+    eq(m("_soft_"), "<i>soft</i>")
+    eq(m("press `n`"), 'press <font color="#00ffff">n</font>', "a key, in the accent")
+    eq(m("[urgent]careful[/]"), '<font color="#ff5555">careful</font>')
+    eq(m("a\nb"), "a<br>b", "a line break is a line break")
+
+    // A board is a file other people can send you, and the note is the part
+    // they write. Nothing in it reaches the renderer as a tag.
+    for (const attack of ['<b>bold</b>', '<font color="red">x</font>', '<img src=x>',
+                          '&lt;b&gt;', '<a href="http://x">y</a>']) {
+      const out = m(attack)
+      ok(out.indexOf("<b>") < 0 || attack.indexOf("*") >= 0, "no tag survives: " + out)
+      ok(out.indexOf("<img") < 0 && out.indexOf("<a ") < 0, "nor these: " + out)
+      ok(out.indexOf("&lt;") >= 0 || attack === "&lt;b&gt;", "they arrive as text: " + out)
+    }
+    eq(m("<script>x</script>"), "&lt;script&gt;x&lt;/script&gt;")
+    eq(m("a & b"), "a &amp; b", "and an ampersand is an ampersand")
+
+    // Order inside one line: the first thing to match at a position wins, so
+    // a star inside a key is part of the key.
+    eq(m("a `*b*` c"), 'a <font color="#00ffff">*b*</font> c')
+    eq(m("[accent]a *strong* span[/]"),
+       '<font color="#00ffff">a <b>strong</b> span</font>', "a role can hold emphasis")
+    eq(m("# a `key` here"),
+       '<font size="5"><b>a <font color="#00ffff">key</font> here</b></font>',
+       "and a heading can hold anything a line can")
+
+    // What is not markup stays as it was typed, rather than eating the rest.
+    eq(m("2 * 3 * 4"), "2 <b> 3 </b> 4", "a lone pair of stars is emphasis, for better or worse")
+    eq(m("*unclosed"), "*unclosed", "an unclosed mark is punctuation")
+    eq(m("[accent]unclosed"), "[accent]unclosed")
+    eq(m("[nosuchrole]x[/]"), "[nosuchrole]x[/]", "and a role nobody has heard of is text")
+    eq(m("#nospace"), "#nospace", "a hash needs a space to be a heading")
+    eq(m(""), "", "nothing says nothing")
+    eq(m(undefined), "", "and so does nothing at all")
+    for (const role of S.MARKUP_ROLES)
+      eq(m("[" + role + "]x[/]"), '<font color="' + c[role] + '">x</font>', role)
+  })
+
+  // Pressing the chord twice takes the mark off again, so it is one key rather
+  // than two to remember — and the selection comes back where it was, because a
+  // chord that moves the caret is a chord nobody presses twice.
+  test("a mark goes round the selection, and comes off it", () => {
+    const put = (t, a, b) => S.wrapSelection(t, a, b, "*", "*")
+
+    eq(put("hello world", 0, 5), { text: "*hello* world", from: 1, to: 6 }, "round it")
+    eq(put("*hello* world", 1, 6), { text: "hello world", from: 0, to: 5 }, "and off, from inside")
+    eq(put("*hello* world", 0, 7), { text: "hello world", from: 0, to: 5 }, "and off, from outside")
+
+    // Nothing selected leaves the caret between the marks, ready to type into.
+    eq(put("ab", 1, 1), { text: "a**b", from: 2, to: 2 })
+    // Backwards is the same selection.
+    eq(put("hello world", 5, 0), put("hello world", 0, 5), "either way round")
+
+    // A role is a longer mark, and unwraps the same way.
+    const role = (t, a, b) => S.wrapSelection(t, a, b, "[accent]", "[/]")
+    eq(role("hi", 0, 2), { text: "[accent]hi[/]", from: 8, to: 10 })
+    eq(role("[accent]hi[/]", 8, 10), { text: "hi", from: 0, to: 2 })
+
+    // Nothing here may reach outside the string it was given.
+    for (const [a, b] of [[-5, 99], [99, -5], [0, 0], [2, 2]]) {
+      const out = S.wrapSelection("ab", a, b, "*", "*")
+      ok(out.from >= 0 && out.to <= out.text.length && out.from <= out.to,
+         `selection stays inside the text: ${JSON.stringify(out)}`)
+    }
+    eq(S.wrapSelection(undefined, 0, 0, "*", "*").text, "**", "and nothing is still something to mark")
+  })
+
   // Drawing a connector is three operations wearing one keystroke. The line
   // that promises which one and the change that carries it out ask this.
   test("what drawing a connector will do is one question", () => {

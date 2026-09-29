@@ -75,6 +75,17 @@ Item {
     if (tint === "muted") return theme.muted
     return theme.foreground
   }
+  // The four roles as markup wants them. A QML colour prints its alpha first,
+  // which StyledText reads as red, so they go through hexColor on the way. One
+  // object for the whole board rather than one per item: a note asks for this
+  // on every repaint, and a board can hold thousands of them.
+  readonly property var markupColors: ({
+    foreground: Store.hexColor(theme.foreground),
+    accent: Store.hexColor(theme.accent),
+    urgent: Store.hexColor(theme.urgent),
+    muted: Store.hexColor(theme.muted)
+  })
+
   function tintFill(tint, strong) {
     var c = theme.tintColor(tint)
     var a = theme.isLight ? (strong ? 0.20 : 0.10) : (strong ? 0.22 : 0.12)
