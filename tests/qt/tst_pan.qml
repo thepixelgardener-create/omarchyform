@@ -493,6 +493,28 @@ TestCase {
     compare(itemModel.count, 4, "a new note")
   }
 
+  // Two middle clicks in the same place, inside the interval that makes a
+  // double click. A hand checking that a middle click does nothing does this
+  // by accident, and on bare canvas a double click is how a note is made —
+  // so the two together are the way the middle button could still reach
+  // something it has no business reaching.
+  function test_aMiddleDoubleClickLeavesNothingBehind_data() {
+    return [
+      { tag: "on bare canvas", x: 700, y: 520 },
+      { tag: "on a note", x: -1, y: -1 }
+    ]
+  }
+
+  function test_aMiddleDoubleClickLeavesNothingBehind(row) {
+    var at = row.x < 0 ? onTheNote() : [row.x, row.y]
+    var before = geometry()
+    mouseDoubleClickSequence(surface, at[0], at[1], Qt.MiddleButton)
+    compare(itemModel.count, 3, "nothing was added " + row.tag)
+    compare(geometry(), before, "and nothing already there changed")
+    compare(ctl.editIndex, -1, "nothing was opened for typing")
+    compare(ctl.undoCount, 0, "and there is nothing to undo")
+  }
+
   // The gesture leaves the caret where it was: panning past a note being typed
   // in must not end the editing it crossed, or take the keyboard with it.
   function test_typingStillWorksAfterPanningOverTheEditor() {

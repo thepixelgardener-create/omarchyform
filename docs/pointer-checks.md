@@ -110,6 +110,69 @@ tried, which zoom levels, and every row that did something other than the table
 says. A row you did not get to is not a row that passed — leave it blank rather
 than ticked.
 
+---
+
+# Results
+
+## 2026-09-29 — every row, both window modes, passed
+
+| | |
+|---|---|
+| Omarchy | 4.0.0.r2158.gd174d4a-1 |
+| Hyprland | 0.56.2 |
+| Quickshell | 0.3.1-1 |
+| Qt | 6.11.2-3 |
+| Output | 1920x1080@60Hz |
+| Plugin | `27ce783` |
+
+Driven by hand; verified in two halves. The person at the keyboard reported what
+they saw, and the board file was checksummed between batches to establish the
+other half — that nothing moved, resized, was deleted or was typed into. The
+board was the isolated one `npm run shots -- --hold` builds, so no real board
+was touched.
+
+**Windowed**, at 100% and at roughly 400%:
+
+| Press on | Middle-drag | Middle-click |
+|---|---|---|
+| Empty canvas | pans | nothing |
+| A note | pans | nothing |
+| An ellipse | pans | nothing |
+| A picture | pans | nothing |
+| A pinned background | pans | nothing |
+| A background in `shift+p` mode | pans | nothing |
+| A selected note's resize grip | pans | nothing |
+| A note being typed in | pans | nothing, **and no text arrived** |
+
+The header, the command list, the help panel and the board browser each took
+the gesture themselves; the board behind did not move.
+
+**Fullscreen** — the layer-shell surface, which is the case no offscreen test
+can reach — the same rows, the same answers, including the note being typed in
+and the pan at 400% following the pointer one for one rather than by the zoom.
+
+### What the file said
+
+Two changes appeared during the pass and neither was the middle button:
+
+- An empty note, at a fractional position, which is what a **left** double-click
+  on bare canvas makes. Confirmed by the person, and
+  `test_aMiddleDoubleClickLeavesNothingBehind` was added in the same session to
+  hold the other reading shut: two middle clicks inside the double-click
+  interval add nothing, on bare canvas or on a note.
+- One note resized from 180x140 to 187.478x137.599. Settled by repeating the
+  row deliberately in fullscreen: a middle-drag on that same grip left the size
+  untouched, so the resize was a left drag during exploration.
+
+### What this does and does not settle
+
+It settles the thing the suite cannot reach: on this compositor, in both window
+modes, the middle button reaches the board's pan surface and nothing under it.
+
+It is one machine, one compositor, one output, on one day. It is not a standing
+guarantee, and it is not a substitute for the offscreen suite, which is what
+catches a regression in the board's own input tree on every push.
+
 If a row fails, note what it did instead and which window mode it was in: the
 board's input tree is already covered by the suite, so a failure here is almost
 certainly about how the compositor routes the button to a layer-shell surface
