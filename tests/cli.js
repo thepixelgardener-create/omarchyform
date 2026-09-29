@@ -229,14 +229,23 @@ try {
     assert.equal(run('new', file).status, 0)
     fs.chmodSync(folder, 0o500)
     try {
-      const refused = pipe(JSON.stringify([{ op: 'add', args: ['note', 0, 0] }]), 'apply', file)
-      assert.equal(refused.status, 1, refused.raw)
-      assert.equal(refused.out.ok, false)
-      assert.match(refused.out.error, /cannot write/)
-      assert.deepEqual(fs.readdirSync(folder), ['i.json'], 'and nothing is left behind')
+      // Skipped where the folder can still be written to — root ignores the
+      // mode bits, and a container often runs as root — because otherwise the
+      // write succeeds and the check fails without anything being wrong.
+      let writable = true
+      try { fs.accessSync(folder, fs.constants.W_OK) } catch { writable = false }
+      if (writable) {
+        console.log('skipped: the unwritable board check needs a user the folder mode can refuse')
+      } else {
+        const refused = pipe(JSON.stringify([{ op: 'add', args: ['note', 0, 0] }]), 'apply', file)
+        assert.equal(refused.status, 1, refused.raw)
+        assert.equal(refused.out.ok, false)
+        assert.match(refused.out.error, /cannot write/)
+        assert.deepEqual(fs.readdirSync(folder), ['i.json'], 'and nothing is left behind')
+        // The original is untouched: it was never opened for writing.
+        assert.equal(asThePluginWouldLoad(file).rows.length, 0)
+      }
     } finally { fs.chmodSync(folder, 0o700) }
-    // The original is untouched: it was never opened for writing.
-    assert.equal(asThePluginWouldLoad(file).rows.length, 0)
   }
 
   {
