@@ -8,6 +8,27 @@ import "services" as Host
 ShellRoot {
   id: test
   property int stage: 0
+
+  // `saving` is a write being in flight, and it reads false on both sides of
+  // one — before it starts as well as after it ends. Waiting for it to be
+  // false is therefore not waiting for a write: under load the tick that
+  // checked arrived in the gap before the write began, and read the file as it
+  // was before the change. That is the flake this replaces.
+  //
+  // These watch the edges instead. `expectWrite()` arms before the thing that
+  // causes the write, and `wrote` turns true only once one has both started
+  // and finished since. A stage that never sees its write runs out the clock
+  // and says which stage it was, rather than passing on stale contents.
+  property bool writing: false
+  property bool wrote: false
+  function expectWrite() { test.writing = false; test.wrote = false }
+  Connections {
+    target: plugin
+    function onSavingChanged() {
+      if (plugin.saving) test.writing = true
+      else if (test.writing) { test.writing = false; test.wrote = true }
+    }
+  }
   property int ticks: 0
   property int hides: 0
   property int switchedAt: 0
@@ -231,24 +252,27 @@ ShellRoot {
         plugin.items.setProperty(1, "iy", plugin.items.get(0).iy + 20)
         plugin.selectOnly(0)
         test.check(test.drawnAfter("board-item-2", "board-item-1"), "the later item starts on top")
+        test.expectWrite()
         plugin.layerTargets("front")
-        test.stage = 61
-      } else if (test.stage === 61 && !plugin.saving) {
+        test.stage = 610
+      } else if (test.stage === 610 && test.wrote) {
         test.check(test.drawnAfter("board-item-1", "board-item-2"),
                    "bringing one forward draws it over the other")
         test.check(test.boardData(plugin.currentBoard).items[1].id === 1,
                    "and the file says so too, which is what reopening reads")
+        test.expectWrite()
         plugin.undo()
-        test.stage = 62
-      } else if (test.stage === 62 && !plugin.saving) {
+        test.stage = 611
+      } else if (test.stage === 611 && test.wrote) {
         test.check(test.drawnAfter("board-item-2", "board-item-1"), "undo puts the order back")
-        test.stage = 66
-      } else if (test.stage === 66) {
+        test.stage = 612
+      } else if (test.stage === 612) {
         // Pin an existing item after foreground items already exist.
+        test.expectWrite()
         plugin.selectOnly(0)
         plugin.togglePin()
-        test.stage = 60
-      } else if (test.stage === 60 && !plugin.saving) {
+        test.stage = 613
+      } else if (test.stage === 613 && test.wrote) {
         var pinned = test.findItem(plugin.activeBoard, "board-item-1")
         test.check(pinned && pinned.parent.objectName === "background-world", "pinned item renders in background")
         test.check(test.boardData(plugin.currentBoard).items[0].pinned, "pin saved to disk")
@@ -257,13 +281,14 @@ ShellRoot {
         plugin.clearMarks()
         plugin.togglePinnedSelection()
         test.check(plugin.selectedIndex === 0, "background selection reaches pinned item")
+        test.expectWrite()
         plugin.togglePin()
-        test.stage = 61
-      } else if (test.stage === 61 && !plugin.saving) {
+        test.stage = 614
+      } else if (test.stage === 614 && test.wrote) {
         test.check(test.findItem(plugin.activeBoard, "board-item-1").parent.objectName === "foreground-world", "unpin restores foreground")
         plugin.openBrowser()
-        test.stage = 62
-      } else if (test.stage === 62 && !plugin.browserBusy) {
+        test.stage = 615
+      } else if (test.stage === 615 && !plugin.browserBusy) {
         plugin.prompt("folder", "new folder:", "test-folder")
         plugin.commitPrompt()
         test.stage = 7

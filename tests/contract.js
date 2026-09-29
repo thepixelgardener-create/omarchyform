@@ -334,6 +334,29 @@ checkKinds("BoardExchange.qml", "exchange.failed", false)
 checkKinds("BoardExchange.qml", "exchange.fail", false)
 checkKinds("Omarchyform.qml", "root.report", false)
 
+// The live suite walks numbered stages down one if/else chain, so a number used
+// twice makes the second one unreachable — and which of the blocks between them
+// run at all is then decided by whichever guard the timing happens to satisfy.
+// That is how five assertions about pinning stopped running, on a suite that
+// went on reporting ok. Nothing in a QML file notices a duplicated number, and
+// nothing in a passing run looks different from one that skipped half of it.
+//
+// The reverse is not a fault: a stage nothing branches on is how that file
+// parks while an asynchronous grab is in flight, with the callback setting the
+// real next one.
+const live = read("tests/qml/tst_omarchy.qml")
+const branchedOn = [...live.matchAll(/test\.stage === (\d+)/g)].map(m => m[1])
+const seenStage = new Set()
+for (const stage of branchedOn) {
+  if (seenStage.has(stage))
+    failures.push(`tests/qml/tst_omarchy.qml: stage ${stage} is branched on twice, so the second one can never be reached`)
+  seenStage.add(stage)
+}
+const assignedStage = new Set([...live.matchAll(/test\.stage = (\d+)/g)].map(m => m[1]))
+for (const stage of seenStage)
+  if (stage !== "0" && !assignedStage.has(stage))
+    failures.push(`tests/qml/tst_omarchy.qml: stage ${stage} is branched on but nothing ever sets it`)
+
 // An id that is also a property every Item has is a name Qt may resolve two
 // ways. `palette` is one: inside a delegate, Qt 6.4 resolves it to the item's
 // own palette rather than to the id, and every binding under it then reads off
