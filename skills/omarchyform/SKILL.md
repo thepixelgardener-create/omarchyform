@@ -55,6 +55,15 @@ Run `omarchyform ops` for the current list rather than trusting this one: it
 prints the same table `apply` dispatches through, along with the kinds, the
 theme roles and the minimum item size.
 
+## The full manual
+
+`docs/for-agents.md` in this repository is the long version: the data model,
+what a board tolerates, how the command line and the keyboard differ about
+connectors, and — the part that decides whether a generated board looks made or
+generated — sizes, spacing, when to use which shape, how much text fits, and
+how little to tint. **Read it before building a board of more than a few
+items.** What follows here is enough for small changes.
+
 ## Laying a board out
 
 Nothing arranges items for you, so positions are yours to choose. Items are
@@ -87,6 +96,14 @@ A board reported as **newer than this understands** is not a broken one. It was
 written by a later Omarchyform and the board itself opens it read-only rather
 than losing what it cannot represent. Do not offer to repair or rewrite it; say
 it came from a newer version.
+
+## Checking what you made
+
+`validate` then `inspect`. Then read the geometry and ask three questions: does
+any pair of items overlap, is anything stranded far from its neighbours, is
+more than a third of the board tinted. Those catch most of it.
+
+You cannot see the board. Say so rather than claiming it looks good.
 
 ## What this cannot do
 

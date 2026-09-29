@@ -7,6 +7,50 @@ since older boards are migrated on load rather than rejected.
 
 ### Added
 
+- **A manual for the thing reading it.** `docs/for-agents.md` is Omarchyform
+  explained to something that drives it through files and a command line and
+  will never see the screen. The verbs were already documented; what was not is
+  everything a generated board gets wrong for want of knowing it — that items
+  are placed by their top-left corner, that a default note is 220 by 160 and
+  wants 60 between it and the next one, that six short lines is what fits
+  before the text starts scrolling, which shape means what, and that two or
+  three tinted items on a board of a dozen is the whole budget. It also writes
+  down where the command line and the keyboard differ about connectors, which
+  they do deliberately: `link` is idempotent and answers `already`, while
+  pressing `x` a second time removes the connector.
+
+  `skills/omarchyform/SKILL.md` points at it and keeps its own short version.
+
+- **A picture of part of a board, in colours that are not the desktop's.** A
+  board is drawn in whatever theme the desktop is wearing, which is usually
+  dark, and a dark picture is the wrong thing to put in a document, a slide or
+  a printout. The command list now offers the same export **on white**, **on
+  black** and **in black and white** beside the one that keeps the board's own
+  colours. Each is its own command rather than a mode to be in, so `:` and a
+  few letters — `white`, `print` — reach the one you want, and there is nothing
+  new on the board to look at.
+
+  The palettes are written out rather than blended from the theme. A fill is
+  its tint mixed into the background it sits on, which is right for a board
+  that has to match the desktop it belongs to and is mud on a page it was never
+  chosen for. What an item says is at least 13:1 against the fill behind it in
+  every palette, and every border and connector clears 3:1 against the page;
+  `tests/suite.js` holds them there rather than trusting the eye that picked
+  them.
+
+  **Mark items first and the picture is of those**, framed around them with the
+  same padding an export has always had. Connectors leaving the marked set
+  leave with it, so what comes out is what was chosen rather than whatever
+  happened to be beside it and got cut off at the edge. Backgrounds are the
+  exception: a pinned shape is scenery, so a cluster lifted off a board keeps
+  the panel it was sitting on, and the frame is not put round it — a background
+  is usually most of the board, and framing to it would undo the crop. Nothing
+  marked is still the whole board.
+
+  The live suite reads the picture back: the page of one asked for on white is
+  white, and the one framed around a single note of two is narrower than the
+  board. Neither is a thing a count of ink can see.
+
 - Super+C and Super+V are the primary copy/paste shortcuts in the help and
   command palette. The canvas accepts them directly; Ctrl+C and Ctrl+V remain
   available. Omarchy’s universal clipboard bindings continue to work.

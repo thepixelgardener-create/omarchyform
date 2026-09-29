@@ -373,6 +373,20 @@ ShellRoot {
         test.stage = 27
       } else if (test.stage === 27 && !plugin.imageBusy) {
         test.check(plugin.statusText.indexOf("PNG saved") === 0, "PNG export succeeds")
+        test.check(plugin.statusText.indexOf("full board") > 0, "of the whole board: " + plugin.statusText)
+        // The same board, framed around one marked item and drawn on white.
+        // Both of the things an export can now be asked to vary, at once.
+        plugin.markedIds = [plugin.items.get(0).iid]
+        plugin.pngPalette = "light"
+        plugin.exportPng(Quickshell.env("OMARCHYFORM_TEST_DIR") + "/export-light.png")
+        test.stage = 271
+      } else if (test.stage === 271 && !plugin.imageBusy) {
+        test.check(plugin.statusText.indexOf("what was marked") > 0,
+                   "the line says what it framed: " + plugin.statusText)
+        test.check(plugin.statusText.indexOf("on white") > 0,
+                   "and what it drew it in: " + plugin.statusText)
+        plugin.markedIds = []
+        plugin.pngPalette = "theme"
         // The round trip that matters: a board bin/omarchyform wrote before
         // the shell started, opened by the shell itself. Reading it back with
         // the same loader proves the format; only this proves the board opens.

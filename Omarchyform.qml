@@ -222,8 +222,26 @@ Item {
   // separate thing with a name of its own, because a copy that quietly arrives
   // without them is what this used to do by accident.
   function exportBoardPlain() { exchange.choose("plain") }
-  function choosePng() { exchange.choose("png") }
-  function exportPng(path) { if (root.activeBoard) root.activeBoard.exportPng(path) }
+  // Which colours the next picture is drawn in. Set by the command that asked
+  // for it and read by the board when it renders, rather than carried through
+  // the file dialog: choosing where to put a picture and choosing what it looks
+  // like are two questions, and the dialog belongs to the desktop.
+  property string pngPalette: "theme"
+
+  function choosePng(palette) {
+    root.pngPalette = Store.exportPalette(palette) === null && palette !== "theme"
+      ? "theme" : (palette === undefined ? "theme" : palette)
+    exchange.choose("png")
+  }
+  // Whether the last picture was framed around a marked set rather than the
+  // whole board. Read off before rendering, because marks can be dropped while
+  // the helper is still copying the file into place.
+  property bool pngCropped: false
+  function exportPng(path) {
+    if (!root.activeBoard) return
+    root.pngCropped = root.targets().length > 0
+    root.activeBoard.exportPng(path)
+  }
 
   function finishPng(path) {
     imagePublish.command = root.fileCommand("export", [root.dataDir + "/.image-export.png", path, root.dataDir])
@@ -233,7 +251,9 @@ Item {
     id: imagePublish
     onExited: function(code) {
       root.imageBusy = false
-      if (code === 0) root.flash("PNG saved · full board, without controls", "png")
+      // What it actually made a picture of, because the two things that can
+      // vary are the two things worth confirming afterwards.
+      if (code === 0) root.flash("PNG saved · " + Store.exportNote(root.pngPalette, root.pngCropped), "png")
       else root.report("Could not save PNG; choose a location outside the app data folder", "png")
     }
   }

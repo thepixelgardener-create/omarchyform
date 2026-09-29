@@ -92,6 +92,9 @@ TestCase {
       itemModel.setProperty(i, "iw", Math.max(ctl.minItemSize, itemModel.get(i).iw + dx))
       itemModel.setProperty(i, "ih", Math.max(ctl.minItemSize, itemModel.get(i).ih + dy))
     }
+    // What a picture would be framed around, and what it would be drawn in.
+    property string pngPalette: "theme"
+    function targets() { return ctl.selectedIndex >= 0 ? [ctl.selectedIndex] : [] }
     function removeTargets() { ctl.removeCount++ }
     function pushUndo() { ctl.undoCount++ }
     function save(quiet) { ctl.saveCount++ }

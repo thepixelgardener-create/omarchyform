@@ -69,7 +69,10 @@ function controller() {
     } }
   // Stands in for BoardExchange: the controller hands it filtered paths and
   // never learns what happens to them.
-  const exchange = { imported: [], copied: [], copies: [],
+  const exchange = { imported: [], copied: [], copies: [], chosen: [],
+    // The file dialog belongs to the desktop; what the controller does with it
+    // is ask for one, which is the part worth watching here.
+    choose(action) { exchange.chosen.push(action) },
     importDropped(entries) { exchange.imported.push(...entries) },
     copyItems(indices) { exchange.copied.push(Array.from(indices)) },
     saveCopy(text, name) { exchange.copies.push({ text, name }); return true } }
@@ -1450,3 +1453,51 @@ console.log('ok — controller: what a connector gesture promises, and what it t
   }
 }
 console.log('ok — controller: a failure that arrives while you are somewhere else')
+{
+  // A picture of a board is usually going somewhere that is not this desktop,
+  // and is often of part of the board rather than all of it. Both choices are
+  // made before the file dialog opens, because where to put a picture and what
+  // it should look like are two questions.
+  const S = loadStore()
+  const c = controller()
+  c.session.loadBoard('{"version":5,"items":[]}', false)
+  c.root.addItem('note', 0, 0)
+  c.root.addItem('note', 400, 0)
+
+  c.root.choosePng('light')
+  assert.equal(c.root.pngPalette, 'light', 'the command carries which palette')
+  assert.deepEqual(c.exchange.chosen, ['png'], 'and still asks where to put it')
+  c.root.choosePng('theme')
+  assert.equal(c.root.pngPalette, 'theme')
+
+  // A name nothing recognises draws the board as it looks rather than refusing
+  // to draw it: a picture in the wrong colours beats no picture.
+  for (const nonsense of [undefined, '', 'chartreuse', 'Light'])
+    { c.root.choosePng(nonsense); assert.equal(c.root.pngPalette, 'theme', String(nonsense)) }
+  for (const name of S.EXPORT_PALETTE_NAMES)
+    { c.root.choosePng(name); assert.equal(c.root.pngPalette, name, name) }
+
+  // What the picture is framed around is whatever a command would act on, so
+  // marking is the only thing to learn.
+  // Shaped like the board the controller talks to: exporting is the only thing
+  // asked of it here, but selecting reaches for the rest.
+  c.root.activeBoard = { exported: [], exportPng(path) { this.exported.push(path) },
+                         repaintLinks() {}, repaintGrid() {}, focusKeys() {} }
+  c.root.selectOnly(-1)
+  c.root.markedIds = []
+  c.root.exportPng('/tmp/whole.png')
+  assert.equal(c.root.pngCropped, false, 'nothing marked is the whole board')
+  c.root.selectOnly(0)
+  c.root.exportPng('/tmp/part.png')
+  assert.equal(c.root.pngCropped, true, 'and a selection is a crop')
+  assert.deepEqual(c.root.activeBoard.exported, ['/tmp/whole.png', '/tmp/part.png'],
+    'and the board was asked for both pictures')
+
+  // The line afterwards says both, because both could have been otherwise.
+  assert.equal(S.exportNote('theme', false), 'full board, without controls')
+  assert.equal(S.exportNote('light', true), 'what was marked, without controls, on white')
+  assert.equal(S.exportNote('mono', false), 'full board, without controls, in black and white')
+  for (const name of S.EXPORT_PALETTE_NAMES)
+    assert.ok(S.exportNote(name, false).indexOf('full board') === 0, name + ' says what it was of')
+}
+console.log('ok — controller: what a picture is of, and what it is drawn in')

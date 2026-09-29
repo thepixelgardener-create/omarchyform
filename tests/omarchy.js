@@ -4,7 +4,7 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const { spawnSync } = require('child_process')
-const { coverage } = require('./png')
+const { coverage, read, background } = require('./png')
 if (!process.argv.includes('--live')) {
   console.error('This test requires a running Omarchy/Hyprland desktop; pass --live to open isolated test surfaces.')
   process.exit(2)
@@ -91,6 +91,26 @@ try {
     const inked = coverage(path.join(dir, 'export.png'))
     if (inked < 0.2) {
       console.error(`exported PNG is ${(inked * 100).toFixed(1)}% inked: the board did not render into it`)
+      process.exitCode = 1
+      return
+    }
+
+    // The same board asked for on white and framed around one of its two
+    // notes. A palette is the one thing about an export that a count of ink
+    // cannot see — the same board covers the same fraction of the frame
+    // whatever it is drawn in — so this looks at what it was drawn on, and at
+    // the size, which is what the crop changes.
+    const whole = read(path.join(dir, 'export.png'))
+    const cropped = read(path.join(dir, 'export-light.png'))
+    const paper = background(path.join(dir, 'export-light.png'))
+    if (paper !== '#ffffff') {
+      console.error(`a PNG asked for on white came out on ${paper}`)
+      process.exitCode = 1
+    } else if (cropped.width >= whole.width) {
+      console.error(`framing around one of two notes gave ${cropped.width}px, no narrower than the board's ${whole.width}px`)
+      process.exitCode = 1
+    } else if (coverage(path.join(dir, 'export-light.png')) < 0.2) {
+      console.error('the cropped PNG has nothing in it')
       process.exitCode = 1
     } else console.log('ok — full Omarchy plugin smoke test (live Wayland)')
   }

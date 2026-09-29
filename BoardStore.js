@@ -198,6 +198,120 @@ var FAILURE_KINDS = ["copy", "paste", "board", "picture", "png"]
 
 function isFailureKind(kind) { return FAILURE_KINDS.indexOf(kind) >= 0 }
 
+// -------------------------------------------------------------- exporting
+// What an exported picture is drawn in. The board wears whatever theme the
+// desktop is wearing, which is usually dark, and a dark picture is the wrong
+// thing to put in a document, a slide or something meant to be printed. These
+// are the answers to "the same board, but light".
+//
+// Written out rather than computed. A theme's fills and borders are its tint
+// colour blended into its background, which is right for a board that has to
+// sit on the desktop it belongs to — but an exported picture has no desktop to
+// match, and a blend of colours chosen for a dark canvas makes mud on a white
+// one. Each of these is picked to read on its own background, with the four
+// tint roles still told apart at a glance. What an item says is at least 13:1
+// against the fill behind it, and every border and connector clears 3:1
+// against its own background — muted sits closest to that line, because being
+// recessive is the whole of its job, and tests/suite.js holds it there.
+//
+// `theme` is not here: it means the board's own colours, and is the absence of
+// an override rather than a palette of its own.
+var EXPORT_PALETTES = {
+  light: {
+    label: "on white",
+    background: "#ffffff",
+    foreground: "#1b1f24",
+    connector: "#57606a",
+    fills: { foreground: "#f4f5f7", accent: "#e8f1fc", urgent: "#fdecec", muted: "#f1f2f4" },
+    borders: { foreground: "#6e7781", accent: "#1f6feb", urgent: "#b42318", muted: "#878e97" }
+  },
+  dark: {
+    label: "on black",
+    background: "#0d1117",
+    foreground: "#e6edf3",
+    connector: "#8b949e",
+    fills: { foreground: "#161b22", accent: "#12233c", urgent: "#2d1416", muted: "#15191f" },
+    borders: { foreground: "#8b949e", accent: "#58a6ff", urgent: "#f85149", muted: "#6e7681" }
+  },
+  // For printing, and for anywhere colour is not going to survive the journey.
+  // Nothing here carries meaning by hue: the roles differ in weight instead, so
+  // the board still reads in one ink.
+  mono: {
+    label: "in black and white",
+    background: "#ffffff",
+    foreground: "#000000",
+    connector: "#000000",
+    fills: { foreground: "#ffffff", accent: "#ebebeb", urgent: "#d6d6d6", muted: "#f7f7f7" },
+    borders: { foreground: "#000000", accent: "#000000", urgent: "#000000", muted: "#767676" }
+  }
+}
+
+// What a picture of part of a board is of. Marking three notes and asking for
+// a picture means those three: everything else drawn and then cut off at the
+// frame reads as a rendering fault rather than as a choice, whatever a crop
+// means to a photograph.
+//
+// Backgrounds are the exception, because they are scenery rather than content.
+// A cluster lifted off a board keeps the panel it was sitting on — so they are
+// drawn, and the frame is not put round them: a background is usually most of
+// the board, and framing to it would undo the crop.
+//
+// Connectors need no filtering of their own. fillLinks already drops any whose
+// ends are not both on the board it is given, so one leaving the crop leaves
+// with it.
+function cropRows(rows, indices) {
+  if (!indices || indices.length === 0) return { draw: rows, frame: rows }
+  var wanted = {}
+  for (var i = 0; i < indices.length; i++) wanted[indices[i]] = true
+  var draw = [], frame = []
+  for (var j = 0; j < rows.length; j++) {
+    if (wanted[j] === true) { draw.push(rows[j]); frame.push(rows[j]) }
+    else if (rows[j].pinned === true) draw.push(rows[j])
+  }
+  // Nothing but scenery is nothing worth framing: fall back to the whole board
+  // rather than to a picture of an empty panel.
+  return frame.length === 0 ? { draw: rows, frame: rows } : { draw: draw, frame: frame }
+}
+
+// The same rectangle bounds() finds, over rows as they come out of a board
+// file rather than over a model the scene has been filled with.
+function boundsOfRows(rows) {
+  if (!rows || rows.length === 0) return null
+  var b = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity }
+  for (var i = 0; i < rows.length; i++) {
+    var n = rows[i]
+    b.minX = Math.min(b.minX, n.x)
+    b.minY = Math.min(b.minY, n.y)
+    b.maxX = Math.max(b.maxX, n.x + n.w)
+    b.maxY = Math.max(b.maxY, n.y + n.h)
+  }
+  return b
+}
+
+// The board's own colours are named too, so a command can offer all four and
+// the list reads as one choice rather than a default and three exceptions.
+var EXPORT_PALETTE_NAMES = ["theme", "light", "dark", "mono"]
+
+function exportPalette(name) {
+  return EXPORT_PALETTES[name] === undefined ? null : EXPORT_PALETTES[name]
+}
+
+// Which tint role a colour is asked for, with anything unrecognised drawn the
+// way an untinted item is. Board files are hand-editable and come from other
+// machines, so a tint this version has never heard of must still draw.
+// What the board says after a picture is written. The two things that can vary
+// are the two worth confirming: what it was of, and what it was drawn in.
+function exportNote(name, cropped) {
+  var what = cropped ? "what was marked" : "full board"
+  var p = exportPalette(name)
+  return what + ", without controls" + (p ? ", " + p.label : "")
+}
+
+function paletteTint(palette, group, tint) {
+  var table = palette[group]
+  return table[tint] === undefined ? table.foreground : table[tint]
+}
+
 // ----------------------------------------------------------- the status line
 // One line under the header, and five kinds of thing wanting it. Which one gets
 // it is decided here, once, because it used to be decided twice — the view drew
@@ -353,7 +467,17 @@ var COMMANDS = [
   { name: "Import a board", key: "ctrl+o", run: "importBoard", needs: "" },
   { name: "Save a copy to share", key: "ctrl+shift+s", run: "exportBoard", needs: "" },
   { name: "Save a copy without its pictures", key: "", run: "exportBoardPlain", needs: "" },
-  { name: "Export a PNG", key: "ctrl+e", run: "choosePng", needs: "" },
+  // One command per palette rather than a mode to be in: the list is reached
+  // by typing, so "white" finds the one that matters without anything new on
+  // the board to look at. `ctrl+e` keeps its meaning — the board as it looks.
+  { name: "Export a PNG", key: "ctrl+e", run: "choosePng", arg: "theme", needs: "",
+    also: ["image", "picture", "screenshot"] },
+  { name: "Export a PNG on white", key: "", run: "choosePng", arg: "light", needs: "",
+    also: ["png light", "light png", "white background"] },
+  { name: "Export a PNG on black", key: "", run: "choosePng", arg: "dark", needs: "",
+    also: ["png dark", "dark png", "black background"] },
+  { name: "Export a PNG in black and white", key: "", run: "choosePng", arg: "mono", needs: "",
+    also: ["png mono", "monochrome", "greyscale", "grayscale", "print"] },
   { name: "Save now", key: "ctrl+s", run: "flushSave", needs: "" },
   // Only offered while two versions of the open board exist. They have no keys
   // of their own: the panel that appears with the conflict numbers them, and
@@ -423,7 +547,9 @@ var KEY_HELP = [
   ["ctrl+n / F2", "new board / name the current board"],
   ["super+v", "paste a picture or text (also ctrl+v)"],
   ["ctrl+o", "import a native board"],
-  ["ctrl+shift+s / ctrl+e", "export editable copy / PNG"],
+  ["ctrl+shift+s / ctrl+e", "export editable copy / PNG of the board"],
+  ["mark, then ctrl+e", "a PNG of just what is marked, backgrounds included"],
+  [": png", "the same picture on white, on black, or in black and white"],
   ["n", "new note beside the selected one"],
   ["r / e", "new box / ellipse"],
   ["p / shift+p", "pin as background / select backgrounds"],
