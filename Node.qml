@@ -64,6 +64,10 @@ Item {
   // outline so you can still tell where the keyboard is.
   readonly property bool selected: node.cursor || node.marked
   readonly property bool linkSource: node.ctl.linkingFrom === node.iid
+  readonly property bool editing: node.ctl.editIndex === node.index
+  // What the note is actually drawing, so a test can read it back rather than
+  // photograph it.
+  readonly property string markup: shown.text
   readonly property bool isNote: node.kind === "note"
   readonly property bool isImage: node.kind === "image"
   readonly property bool painted: node.kind === "ellipse" || node.kind === "diamond"
@@ -208,13 +212,41 @@ Item {
     anchors.margins: node.theme.sp(14)
     anchors.topMargin: node.isNote ? header.height + node.theme.sp(14) : node.theme.sp(14)
     contentWidth: width
-    contentHeight: body.height
+    contentHeight: node.editing ? body.height : shown.height
     clip: true
-    interactive: node.ctl.editIndex === node.index
+    interactive: node.editing
     boundsBehavior: Flickable.StopAtBounds
+
+  // What the note says, once you have stopped saying it. A note carries a small
+  // markup — a heading, emphasis, a key, a span in one of the theme's roles —
+  // and this is where it is drawn. The editor below shows the source instead
+  // while the caret is in it: the text you are editing and the text you are
+  // looking at have to be the same string, or the caret ends up somewhere the
+  // characters are not.
+  Text {
+    id: shown
+    objectName: "note-text"
+    visible: !node.editing
+    width: textViewport.width
+    height: Math.max(textViewport.height, contentHeight)
+    text: Store.noteMarkup(node.itext, node.theme.markupColors)
+    // The one place an item renders tags. Everything that reached it from the
+    // board file was escaped on the way in, so the only markup here is the
+    // markup this made.
+    textFormat: Text.StyledText
+    color: node.theme.foreground
+    font.family: node.theme.fontFamily
+    font.pixelSize: node.theme.fontSubtitle
+    wrapMode: Text.Wrap
+    clip: true
+    horizontalAlignment: node.isNote ? Text.AlignLeft : Text.AlignHCenter
+    verticalAlignment: node.isNote ? Text.AlignTop : Text.AlignVCenter
+  }
 
   TextEdit {
     id: body
+    objectName: "note-editor"
+    visible: node.editing
     width: textViewport.width
     height: Math.max(textViewport.height, contentHeight)
     text: node.itext
@@ -239,18 +271,39 @@ Item {
     }
     onActiveFocusChanged: if (!activeFocus) node.ctl.flushSave()
     Keys.onEscapePressed: node.ctl.stopEditing()
+    // Put a mark round what is selected, or take it off again if it is already
+    // there. Nothing selected wraps an empty span and leaves the caret between
+    // the marks, which is how you start a bold word rather than finish one.
+    function style(open, close) {
+      var next = Store.wrapSelection(body.text, body.selectionStart, body.selectionEnd, open, close)
+      body.text = next.text
+      body.select(next.from, next.to)
+    }
+
     Keys.onPressed: function(event) {
-      if (event.key === Qt.Key_N && (event.modifiers & Qt.ControlModifier)) {
-        node.ctl.newBoard()
-        event.accepted = true
-      } else if (event.key === Qt.Key_S && (event.modifiers & Qt.ControlModifier)) {
-        node.ctl.flushSave()
-        event.accepted = true
-      }
+      if ((event.modifiers & Qt.ControlModifier) === 0) return
+      if (event.key === Qt.Key_N) node.ctl.newBoard()
+      else if (event.key === Qt.Key_S) node.ctl.flushSave()
+      else if (event.key === Qt.Key_B) body.style("*", "*")
+      else if (event.key === Qt.Key_I) body.style("_", "_")
+      else if (event.key === Qt.Key_K) body.style("`", "`")
+      // The four roles, in the order they are named everywhere else.
+      else if (event.key >= Qt.Key_1 && event.key <= Qt.Key_4)
+        body.style("[" + Store.MARKUP_ROLES[event.key - Qt.Key_1] + "]", "[/]")
+      else return
+      event.accepted = true
     }
 
     readonly property bool wantsEdit: node.ctl.editIndex === node.index
     onWantsEditChanged: if (wantsEdit) {
+      // Typing into a TextEdit replaces the binding that filled it, and so does
+      // a chord putting a mark round the selection — after either, this holds
+      // its own copy rather than the board's. Anything that changed the item
+      // since is therefore invisible here: an undo restores the note on screen,
+      // which reads `itext` directly, and used to leave the editor showing what
+      // had just been undone. It takes the board's version back each time the
+      // caret arrives.
+      if (body.text !== node.itext) body.text = node.itext
       forceActiveFocus()
       cursorPosition = length
     } else textViewport.contentY = 0
@@ -273,7 +326,7 @@ Item {
     anchors.margins: node.theme.borderWidth
     width: node.theme.sp(22)
     height: node.theme.sp(14)
-    visible: body.contentHeight > textViewport.height && node.ctl.editIndex !== node.index
+    visible: shown.contentHeight > textViewport.height && !node.editing
     color: node.theme.tintBorder(node.itint, true)
     radius: node.theme.cornerRadius > 0 ? node.theme.sp(3) : 0
     Text {

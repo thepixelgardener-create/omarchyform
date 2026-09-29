@@ -196,6 +196,31 @@ If you have more to say, that is two items and a connector, not a bigger note.
 A note that has to be 400 tall to fit its text is a paragraph someone pasted
 into a canvas.
 
+### Markup in a note
+
+A note is plain text carrying a small syntax, so write it into `text` like any
+other characters:
+
+```
+# A heading          bigger and heavier — one per note, at the top
+*bold*               emphasis
+_italic_             quieter emphasis
+`a key`              drawn in the accent, the way keys are drawn everywhere here
+[accent]span[/]      a span in one of the four roles
+```
+
+Roles, not colours — `foreground`, `accent`, `urgent`, `muted` — the same four
+an item's `tint` uses, so text follows the theme like everything else.
+
+**Give every note a heading.** It is the single biggest difference between a
+board that reads and a board that is twenty grey rectangles, and it costs two
+characters. Then keep the budget below as it was: emphasis inside the body is
+worth one or two words a note, not a sentence.
+
+Everything you write is escaped before the syntax is applied, so a note is safe
+to fill with anything — but that also means you cannot emit HTML and have it
+render. `<b>x</b>` in a note's text draws those characters.
+
 ### Shapes
 
 Use them for what they are, not for variety:

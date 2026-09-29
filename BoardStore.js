@@ -398,6 +398,89 @@ function linkHint(outcome, color) {
   return line + " \u00b7 " + hintMarkup("esc", "cancel", color)
 }
 
+// ------------------------------------------------------------ note markup
+// What a note may say beyond words. Small on purpose: a note is 220 by 160 and
+// most of Markdown has nowhere to go on a canvas.
+//
+//   # a line          a heading — bigger and heavier
+//   *bold*            emphasis
+//   _italic_          quieter emphasis
+//   `a key`           drawn in the accent, the way every key in this shell is
+//   [accent]…[/]      a span in one of the theme's four roles
+//
+// Roles rather than colours, for the reason items carry roles: a board follows
+// whatever theme the desktop is wearing, and there is still no way to put a hex
+// colour into a board file.
+//
+// The safety is the order. Everything arriving from a board file is escaped
+// first — a board is a file other people can send you, and the note is the one
+// part of it they write — and only then is this syntax turned into tags. No tag
+// from outside survives escaping, so nothing anyone else writes can reach the
+// renderer as markup. It is the same bargain the status line makes.
+var MARKUP_ROLES = ["foreground", "accent", "urgent", "muted"]
+
+// One pass, left to right, so the first alternative to match at a position wins:
+// a `*` inside a pair of backticks is consumed as part of the code span and is
+// never seen as emphasis.
+var MARKUP_SPAN = /`([^`\n]+)`|\[(foreground|accent|urgent|muted)\]([\s\S]*?)\[\/\]|\*([^*\n]+)\*|_([^_\n]+)_/g
+
+function markupSpans(text, colors) {
+  return text.replace(MARKUP_SPAN, function (all, code, role, coloured, bold, italic) {
+    if (code !== undefined)
+      return '<font color="' + colors.accent + '">' + code + "</font>"
+    // Recursed, so a coloured span can still carry emphasis inside it. An
+    // unclosed one finds no `[/]`, matches nothing, and stays as the text it is.
+    if (role !== undefined)
+      return '<font color="' + (colors[role] || colors.foreground) + '">'
+        + markupSpans(coloured, colors) + "</font>"
+    if (bold !== undefined) return "<b>" + bold + "</b>"
+    if (italic !== undefined) return "<i>" + italic + "</i>"
+    return all
+  })
+}
+
+function noteMarkup(text, colors) {
+  var lines = escapeMarkup(text === undefined || text === null ? "" : text).split("\n")
+  var out = []
+  for (var i = 0; i < lines.length; i++) {
+    var heading = /^#[ \t]+(.*)$/.exec(lines[i])
+    out.push(heading
+      ? '<font size="5"><b>' + markupSpans(heading[1], colors) + "</b></font>"
+      : markupSpans(lines[i], colors))
+  }
+  return out.join("<br>")
+}
+
+// Putting a mark round the selection, and taking it off again if it is already
+// there — pressed twice, a chord undoes itself. Returns where the selection
+// should be afterwards, because a chord that leaves the caret somewhere else is
+// a chord nobody presses twice.
+//
+// The marks are recognised from either side: selected inside them, or selected
+// including them.
+function wrapSelection(text, from, to, open, close) {
+  var source = text === undefined || text === null ? "" : String(text)
+  var a = Math.max(0, Math.min(source.length, Math.min(from, to)))
+  var b = Math.max(0, Math.min(source.length, Math.max(from, to)))
+  var inner = source.slice(a, b)
+
+  if (source.slice(a - open.length, a) === open && open.length > 0
+      && source.slice(b, b + close.length) === close)
+    return { text: source.slice(0, a - open.length) + inner + source.slice(b + close.length),
+             from: a - open.length, to: b - open.length }
+
+  if (inner.length >= open.length + close.length
+      && inner.slice(0, open.length) === open
+      && inner.slice(inner.length - close.length) === close) {
+    var bare = inner.slice(open.length, inner.length - close.length)
+    return { text: source.slice(0, a) + bare + source.slice(b),
+             from: a, to: a + bare.length }
+  }
+
+  return { text: source.slice(0, a) + open + inner + close + source.slice(b),
+           from: a + open.length, to: b + open.length }
+}
+
 // ---------------------------------------------------------------- commands
 // Every command the board has, as data. The keys were the only way in: a board
 // you have not used for a month is a list of letters you have to remember, and
@@ -565,6 +648,10 @@ var KEY_HELP = [
   ["u / ctrl+r", "undo / redo"],
   ["b", "boards: browse, open, create"],
   ["enter / i", "type in the selected item"],
+  ["while typing: ctrl+b / ctrl+i", "*bold* / _italic_ round what is selected"],
+  ["ctrl+k", "`a key`, drawn in the accent"],
+  ["ctrl+1..4", "colour it: foreground, accent, urgent, muted"],
+  ["# at the start of a line", "a heading, bigger and heavier"],
   ["esc", "back out, then close the board"],
   ["h j k l", "move the selection around"],
   ["H J K L", "push the selected item"],

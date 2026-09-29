@@ -32,6 +32,8 @@ TestCase {
       property int fontBody: 11
       property color muted: "#999999"
       property color canvasBackground: "#111111"
+      readonly property var markupColors: ({ foreground: "#cccccc", accent: "#00ffff",
+                                             urgent: "#ff5555", muted: "#888888" })
       function sp(n) { return n }
       function tintFill(tint, strong) { return ctl.itemFill }
       function tintBorder(tint, strong) { return "#999999" }
@@ -309,6 +311,74 @@ TestCase {
     compare(model.count, 1, "still one item")
     compare(ctl.selectedIndex, 0, "still selected")
     compare(backgroundMiddlePresses, 1, "and the button went past it")
+  }
+
+  // The note shows what it says; the editor shows how it was said. They are two
+  // items, swapped on the caret, because the text being edited and the text
+  // being looked at have to be the same string for the caret to land right.
+  function test_aNoteShowsItsMarkupAndEditsItsSource() {
+    model.set(0, {ix:100, iy:100, iw:180, ih:140, itext:"# Head\npress `n` for *this*"})
+    verify(waitForRendering(subject))
+
+    var shown = findChild(subject, "")  // the rendered Text is the visible one
+    compare(ctl.editIndex, -1, "not being typed in")
+    // Rendered: the marks are gone and tags have taken their place.
+    verify(subject.markup.indexOf("<b>Head</b>") > 0, "the heading is heavy: " + subject.markup)
+    verify(subject.markup.indexOf("<b>this</b>") > 0, "and the emphasis is emphasis")
+    verify(subject.markup.indexOf("`") < 0, "the marks themselves are not drawn")
+
+    // Editing shows the source, marks and all, so what is typed is what is there.
+    mouseDoubleClickSequence(test, 140, 140, Qt.LeftButton)
+    compare(ctl.editIndex, 0, "now being typed in")
+    compare(model.get(0).itext.indexOf("# Head"), 0, "the source still carries the marks")
+    keyClick(Qt.Key_Escape)
+  }
+
+  // ctrl+b and the rest put a mark round the selection, and take it off again
+  // when pressed a second time.
+  function test_chordsWrapTheSelection_data() {
+    return [
+      { tag: "bold", key: Qt.Key_B, wrapped: "*ab*" },
+      { tag: "italic", key: Qt.Key_I, wrapped: "_ab_" },
+      { tag: "a key", key: Qt.Key_K, wrapped: "`ab`" },
+      { tag: "the accent role", key: Qt.Key_2, wrapped: "[accent]ab[/]" }
+    ]
+  }
+
+  function test_chordsWrapTheSelection(row) {
+    model.set(0, {ix:100, iy:100, iw:180, ih:140, itext:"ab"})
+    mouseDoubleClickSequence(test, 140, 140, Qt.LeftButton)
+    compare(ctl.editIndex, 0)
+    var editor = findChild(subject, "note-editor")
+    verify(editor !== null, "the editor is there to type into")
+    editor.selectAll()
+
+    keyClick(row.key, Qt.ControlModifier)
+    compare(model.get(0).itext, row.wrapped, row.tag + " goes round it")
+    keyClick(row.key, Qt.ControlModifier)
+    compare(model.get(0).itext, "ab", "and comes off again")
+    keyClick(Qt.Key_Escape)
+  }
+
+  // Typing replaces the binding that filled the editor, so what it holds and
+  // what the board holds can part company. Undo changes the board; the note on
+  // screen follows it, and the editor has to as well the next time it is opened.
+  function test_theEditorTakesTheBoardsVersionBack() {
+    mouseDoubleClickSequence(test, 140, 140, Qt.LeftButton)
+    keyClick(Qt.Key_A)
+    compare(model.get(0).itext, "a")
+    keyClick(Qt.Key_Escape)
+
+    // Something else changes the item — an undo does exactly this.
+    model.setProperty(0, "itext", "from the board")
+    verify(waitForRendering(subject))
+    verify(subject.markup.indexOf("from the board") >= 0, "the note shows it: " + subject.markup)
+
+    mouseDoubleClickSequence(test, 140, 140, Qt.LeftButton)
+    compare(ctl.editIndex, 0)
+    compare(findChild(subject, "note-editor").text, "from the board",
+            "and so does the editor, rather than what was typed before")
+    keyClick(Qt.Key_Escape)
   }
 
   function test_edit() {

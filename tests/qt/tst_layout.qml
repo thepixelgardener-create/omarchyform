@@ -40,6 +40,8 @@ TestCase {
       property int cornerRadius: 0
       property bool isLight: false
       property color dotColor: "#202020"
+      readonly property var markupColors: ({ foreground: "#cccccc", accent: "#00ffff",
+                                             urgent: "#ff5555", muted: "#888888" })
       function sp(n) { return n }
       function tintColor(tint) { return "#cccccc" }
       function tintFill(tint, strong) { return "#181818" }
