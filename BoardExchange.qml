@@ -452,6 +452,11 @@ Item {
       // 5 is the helper's way of saying the file is too big to put on a board,
       // which is worth saying differently from "that is not a picture".
       else if (code === 5) exchange.failed("That file is too large to put on a board", "picture")
+      // Its own answer, because the file can be tiny: what is too big is what
+      // it decodes to, and "too large" over a hundred-kilobyte file reads as a
+      // bug rather than as a limit.
+      else if (code === 7)
+        exchange.failed("That picture has too many pixels to put on a board", "picture")
       // 6 needs two pictures to arrive in the same millisecond, but saying the
       // wrong thing about it would be worse than the line it costs.
       else if (code === 6) exchange.failed("A picture of that name is already there", "picture")
@@ -469,6 +474,7 @@ Item {
       // is not a failure: text is the other thing it could be holding.
       if (code === 4) { clipboard.running = true; return }
       if (code === 6) { exchange.failed("A picture of that name is already there", "paste"); return }
+      if (code === 7) { exchange.failed("That picture has too many pixels to put on a board", "paste"); return }
       if (code !== 0 || !grabbed.text) { exchange.failed("Could not read the clipboard image", "paste"); return }
       exchange.ctl.imagePasted(grabbed.text)
     }

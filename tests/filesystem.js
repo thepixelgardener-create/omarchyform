@@ -284,6 +284,50 @@ try {
   assert.deepEqual(fs.readdirSync(images).filter(f=>f.startsWith('shared-')),['shared-1.png'],
     'nothing else landed')
 
+  // What a picture costs to draw is its pixels, and the byte limit above never
+  // sees them: a PNG of one flat colour is a hundred kilobytes and half a
+  // gigabyte decoded, which is under every other limit here and small enough to
+  // travel inside a board somebody sends you.
+  //
+  // Built by patching the header of the real picture above rather than by
+  // carrying a big one: the dimensions are read out of IHDR, so a header that
+  // says twelve thousand square is the whole of what is under test. The CRC is
+  // wrong afterwards and nothing here cares — `file` reads the signature and the
+  // fields, and the picture is refused before anything would decode it.
+  const claiming=(w,h)=>{
+    const bomb=Buffer.from(pngBytes)
+    bomb.writeUInt32BE(w,16)
+    bomb.writeUInt32BE(h,20)
+    return bomb
+  }
+  assert.equal(spawnSync('file',['-bL','--mime-type',path.join(source,'shot.png')],
+    {encoding:'utf8'}).stdout.trim(),'image/png','the fixture is sniffed as a PNG')
+
+  fs.writeFileSync(path.join(source,'bomb.png'),claiming(12000,12000))
+  assert.equal(drop('drop-bomb','bomb.png').status,7,'a picture that decodes to half a gigabyte')
+  assert.equal(fs.existsSync(path.join(images,'drop-bomb.png')),false,'and nothing lands')
+
+  // The area alone would let a strip through, and a side alone would let a
+  // square through, so both are held.
+  fs.writeFileSync(path.join(source,'strip.png'),claiming(1,100000000))
+  assert.equal(drop('drop-strip','strip.png').status,7,'one pixel by a hundred million')
+  fs.writeFileSync(path.join(source,'wide.png'),claiming(30000,4))
+  assert.equal(drop('drop-wide','wide.png').status,7,'thirty thousand by four')
+  fs.writeFileSync(path.join(source,'zero.png'),claiming(0,0))
+  assert.equal(drop('drop-zero','zero.png').status,7,'and a header claiming nothing at all')
+
+  // It arrives inside a shared board by the same route, which is the one nobody
+  // chose to open.
+  assert.notEqual(unbundle('shared-bomb',claiming(12000,12000).toString('base64')).status,0,
+    'nor from inside a board somebody sent')
+  assert.equal(fs.existsSync(path.join(images,'shared-bomb.png')),false)
+
+  // And what is merely large still goes on a board: this is a limit, not a
+  // suspicion of big pictures.
+  fs.writeFileSync(path.join(source,'big.png'),claiming(4000,4000))
+  assert.equal(drop('drop-big','big.png').status,0,'sixteen megapixels is a picture, not a bomb')
+  assert.equal(fs.existsSync(path.join(images,'drop-big.png')),true)
+
   assert.deepEqual(fs.readdirSync(images).filter(f=>f.startsWith('.')),[],'no temporaries left behind')
 
 } finally {fs.rmSync(dir,{recursive:true,force:true})}

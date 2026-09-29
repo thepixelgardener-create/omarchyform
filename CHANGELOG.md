@@ -21,6 +21,27 @@ since older boards are migrated on load rather than rejected.
 
   `skills/omarchyform/SKILL.md` points at it and keeps its own short version.
 
+- **A picture is now guarded by its pixels, not only by its bytes.** Everything
+  about pictures was checked except the one number that decides what drawing one
+  costs. A PNG of a single flat colour, twelve thousand square, is a hundred and
+  thirty kilobytes on disk and about half a gigabyte decoded — under the 32 MB
+  limit, sniffed as a genuine `image/png`, small enough to travel inside a
+  shared board, and nothing downstream could decline it: Qt's PNG reader does
+  not do scaled reading, so asking it for less does not get less.
+
+  The dimensions are read out of the header now — PNG, GIF and BMP each keep
+  them at a fixed offset, which is exact and needs nothing installed — and a
+  picture over forty megapixels, or over twenty thousand on a side, is refused
+  with its own exit code and its own message. "Too large" over a hundred
+  kilobyte file reads as a bug rather than as a limit. All three ways a picture
+  arrives are held to it: dropped, pasted, and unpacked from a board somebody
+  else made, which is the one nobody chose.
+
+  The limit is generous on purpose. Sixteen megapixels still goes on a board;
+  this is a bound, not a suspicion of large pictures. JPEG and WebP keep their
+  dimensions behind a walk of the file, so those are left to the byte limit and
+  to Qt's JPEG reader, which does scale while decoding.
+
 - **What a note is allowed to cost.** The markup below is applied to text that
   arrives from a board file, and a board file comes from whoever sent it. The
   escaping was already the right shape — everything from the file is escaped

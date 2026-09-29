@@ -65,9 +65,16 @@ ShellRoot {
         test.check(plugin.failureKind === "paste",
                    "a clipboard with nothing to give is a failure to paste: " + plugin.failureKind)
         test.check(plugin.items.count === 2, "and nothing was added")
-        // It is a failure, not an acknowledgement: it does not go on the line
-        // that fades, and a gesture started afterwards does not take it down.
-        test.check(plugin.statusText === "", "it did not arrive as a flash")
+        // It is a failure, not an acknowledgement: it went to the line that
+        // waits rather than the one that fades, and a gesture started
+        // afterwards does not take it down.
+        //
+        // Asked about this message rather than about the whole line being
+        // empty. A flash from something earlier can still be inside its two and
+        // a half seconds, which has nothing to do with the claim and made this
+        // fail about one run in five.
+        test.check(plugin.statusText.indexOf(plugin.failureText) < 0,
+                   "the failure did not also arrive as a flash: " + plugin.statusText)
         plugin.selectOnly(0)
         plugin.toggleLinking()
         test.check(plugin.failureText !== "", "starting a connector leaves it alone")
