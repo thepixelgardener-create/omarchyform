@@ -190,9 +190,66 @@ var START_HINTS = [["n", "New note"], ["Ctrl+V", "Paste text"]]
 // Severity is not read out of the message. Every producer says which of these
 // it is at the point it knows, because "Could not" is a phrase, not a type,
 // and a line that guesses from the words is one translation away from lying.
-var FAILURE_KINDS = ["clipboard", "board", "picture", "png"]
+// Copying out and pasting in are two operations, not one resource. A clipboard
+// that took a copy says nothing about whether there is anything in it to paste,
+// and treating them as one meant a successful copy took down "clipboard has no
+// available text" as though it had answered it.
+var FAILURE_KINDS = ["copy", "paste", "board", "picture", "png"]
 
 function isFailureKind(kind) { return FAILURE_KINDS.indexOf(kind) >= 0 }
+
+// ----------------------------------------------------------- the status line
+// One line under the header, and five kinds of thing wanting it. Which one gets
+// it is decided here, once, because it used to be decided twice — the view drew
+// the line and the controller worked out separately whether a failure was on
+// screen, so that it could stop timing one that was not. The two disagreed
+// about `opened`, and a failure reported while the board was closed spent its
+// six seconds where nobody could see it. Two copies of a precedence is one
+// copy too many.
+//
+// The tiers, in order:
+//
+//   none            the line is not on screen at all
+//   saveError       the board is not being saved, and here is why. These are
+//   trashIndexError conditions rather than events: none of them fades, and each
+//   conflict        names something to be done before edits reach the disk.
+//   damaged
+//   failure         something asked for did not happen. A subprocess answers on
+//                   its own time, and by then the person is elsewhere, so it
+//                   outranks whatever they have started since.
+//   palette         what the next keystroke means, narrowest claim first.
+//   arrange         Typing comes before connecting because both can be true at
+//   backgrounds     once — x holds a source, i starts a caret — and while there
+//   editing         is a caret in a note, x is the letter x.
+//   linking
+//   flash           what just happened, and goes away by itself.
+//   switching       what it is busy with.
+//   saving
+//   hints           nothing in particular: the keys.
+var STATUS_TIERS = ["none", "saveError", "trashIndexError", "conflict", "damaged", "failure",
+                    "palette", "arrange", "backgrounds", "editing", "linking",
+                    "flash", "switching", "saving", "hints"]
+
+function statusTier(s) {
+  if (!s) return "none"
+  // Not on screen: no board, or something covering the line. The find query
+  // stands in the same place while it is being typed.
+  if (!s.opened || s.helpVisible || s.browserVisible || s.finding) return "none"
+  if (s.saveError !== "") return "saveError"
+  if (s.trashIndexError !== "") return "trashIndexError"
+  if (s.diskChanged) return "conflict"
+  if (s.damaged) return "damaged"
+  if (s.failureText !== "") return "failure"
+  if (s.paletteVisible) return "palette"
+  if (s.arranging) return "arrange"
+  if (s.showPinned) return "backgrounds"
+  if (s.editing) return "editing"
+  if (s.linking) return "linking"
+  if (s.statusText !== "") return "flash"
+  if (s.switching) return "switching"
+  if (s.saving) return "saving"
+  return "hints"
+}
 
 // ------------------------------------------------------------ connectors
 // Only one connector runs between any pair, so drawing one is three different

@@ -173,6 +173,22 @@ since older boards are migrated on load rather than rejected.
 
 ### Fixed
 
+- **The line under the header is decided in one place.** Its precedence was
+  written out twice: once in the view that draws it, and once in the controller,
+  which has to know whether a failure is on screen so that it can stop timing
+  one that is not. The two disagreed about a closed board, and a failure
+  reported into one spent its six seconds where nobody could read it — the exact
+  thing the timer exists to prevent. `Store.statusTier` answers it now, for both,
+  from one state the controller gathers; the view only joins and colours what it
+  is told. The order is unchanged, and `tests/suite.js` walks every tier against
+  every tier below it, so one quietly moving down the list is caught here rather
+  than by somebody watching the board.
+
+- **Copying out and pasting in are two operations.** They shared a failure kind,
+  so a copy that worked took down "clipboard has no available text" as though it
+  had answered it. A clipboard that accepted a copy says nothing about there
+  being anything in it to paste.
+
 - Each newly reported failure gets a fresh six-second display interval. Replacing
   a visible failure no longer inherits the previous message's expiry deadline.
   Failures received while the board is closed still wait until it opens.

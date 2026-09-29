@@ -59,6 +59,19 @@ TestCase {
     property int removeCount: 0
     property int minItemSize: 60
     property bool culling: false
+    // The same shape the controller builds, because the board asks one question
+    // of BoardStore rather than deciding the line twice.
+    function statusState() {
+      return {
+        opened: true, helpVisible: ctl.helpVisible, browserVisible: ctl.browserVisible,
+        finding: ctl.finding, saveError: ctl.saveError, trashIndexError: ctl.trashIndexError,
+        diskChanged: ctl.diskChanged, damaged: ctl.damaged, failureText: ctl.failureText,
+        paletteVisible: ctl.paletteVisible, arranging: ctl.arranging,
+        showPinned: ctl.showPinned, editing: ctl.editIndex >= 0,
+        linking: ctl.linkingFrom >= 0, statusText: ctl.statusText,
+        switching: ctl.pendingBoard !== null, saving: ctl.saving
+      }
+    }
     function isMarked(id) { return false }
     function matchesFind(text) { return false }
     // A two-pixel red PNG, inline: a real decode with no file to create, so an

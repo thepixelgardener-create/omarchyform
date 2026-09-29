@@ -108,7 +108,7 @@ Item {
     itemModel.setProperty(root.selectedIndex, "iw", 300)
     itemModel.setProperty(root.selectedIndex, "ih", 200)
     root.save()
-    root.flash("Text pasted · enter to edit", "clipboard")
+    root.flash("Text pasted · enter to edit", "paste")
     root.focusKeys()
   }
 
@@ -142,7 +142,7 @@ Item {
       root.imageQueue = waiting.slice(stale)
       root.report(stale === 1 ? "Board changed; that picture was not added"
                               : "Board changed; " + stale + " pictures were not added",
-                  waiting[0].atPoint ? "picture" : "clipboard")
+                  waiting[0].atPoint ? "picture" : "paste")
     }
     if (root.imageQueue.length === 0) return
     if (root.activeBoard) root.activeBoard.probeImage(root.imageQueue[0].name)
@@ -177,7 +177,7 @@ Item {
     // belongs to a board that is no longer open, so the picture is not placed.
     if (placing && placing.board !== root.currentBoard) {
       root.report("Board changed; that picture was not added",
-                  placing.atPoint ? "picture" : "clipboard")
+                  placing.atPoint ? "picture" : "paste")
       root.pumpImages()
       return
     }
@@ -204,7 +204,7 @@ Item {
     // A drop carries the point it was let go of; a paste does not. That is
     // also which operation it recovers: the file manager or the clipboard.
     root.flash(naturalWidth > 0 ? "Image added" : "Image added · it could not be read, so the size is a guess",
-               placing && placing.atPoint ? "picture" : "clipboard")
+               placing && placing.atPoint ? "picture" : "paste")
     root.focusKeys()
     root.pumpImages()
   }
@@ -325,14 +325,30 @@ Item {
     root.failureKind = ""
   }
 
-  // Whether the line is actually showing it. Only the things that block saving
-  // outrank a failure, and the panels that cover the line hide everything on
-  // it — so this is the render condition, and the timer below runs on it. A
-  // failure that is not on screen is not spending its time on screen.
-  readonly property bool failureVisible: root.opened && root.failureText !== ""
-    && root.saveError === "" && root.trashIndexError === ""
-    && !root.diskChanged && !root.damaged
-    && !root.helpVisible && !root.browserVisible && !root.finding
+  // Everything the line under the header is decided from, gathered in one
+  // place. A function rather than a property so that the suite gets it along
+  // with the rest of the controller: the decision it feeds is the same one the
+  // board draws with, and a second copy of it here is how `opened` went missing
+  // from one side and a failure timed out unseen.
+  function statusState() {
+    return {
+      opened: root.opened, helpVisible: root.helpVisible,
+      browserVisible: root.browserVisible, finding: root.finding,
+      saveError: root.saveError, trashIndexError: root.trashIndexError,
+      diskChanged: root.diskChanged, damaged: root.damaged,
+      failureText: root.failureText,
+      paletteVisible: root.paletteVisible, arranging: root.arranging,
+      showPinned: root.showPinned, editing: root.editIndex >= 0,
+      linking: root.linkingFrom >= 0, statusText: root.statusText,
+      switching: root.pendingBoard !== null, saving: root.saving
+    }
+  }
+
+  // Whether the line is actually showing the failure, which is what the timer
+  // below runs on: one that is not on screen is not spending its time on
+  // screen. Asked of the same decision the board draws with, so the two cannot
+  // come apart again.
+  readonly property bool failureVisible: Store.statusTier(root.statusState()) === "failure"
 
   // Configurable from the bar widget's settings, and remembered in state.json
   // so opening from the keyboard uses the same values.

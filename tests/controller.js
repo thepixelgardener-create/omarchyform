@@ -1368,9 +1368,9 @@ console.log('ok — controller: what a connector gesture promises, and what it t
   c.root.addItem('note', 200, 0)
 
   // Severity comes from the producer, not from the words.
-  c.root.report('Could not reach the clipboard', 'clipboard')
+  c.root.report('Could not reach the clipboard', 'copy')
   assert.equal(c.root.failureText, 'Could not reach the clipboard')
-  assert.equal(c.root.failureKind, 'clipboard')
+  assert.equal(c.root.failureKind, 'copy')
   assert.ok(c.root.failureVisible, 'and the line is showing it')
 
   // A gesture started afterwards does not take it down, and does not cover it.
@@ -1390,8 +1390,14 @@ console.log('ok — controller: what a connector gesture promises, and what it t
     'another operation working says nothing about this one')
 
   // The same operation working does mean it recovered.
-  c.root.flash('Copied', 'clipboard')
-  assert.equal(c.root.failureText, '', 'the clipboard answered, so the line lets go')
+  // Copying out and pasting in are two operations: a copy that worked says
+  // nothing about there being anything to paste, so only the one that failed
+  // takes its own failure down.
+  c.root.flash('Text pasted · enter to edit', 'paste')
+  assert.equal(c.root.failureText, 'Could not reach the clipboard',
+    'pasting working says nothing about copying')
+  c.root.flash('Copied', 'copy')
+  assert.equal(c.root.failureText, '', 'the copy answered, so the line lets go')
   assert.equal(c.root.failureKind, '')
 
   // One failure at a time: a newer one replaces the one before it.
@@ -1424,7 +1430,7 @@ console.log('ok — controller: what a connector gesture promises, and what it t
 
   // The timer runs on whether it is on screen, so a failure cannot expire in
   // the time it spent where nobody could read it.
-  c.root.report('Could not read the clipboard image', 'clipboard')
+  c.root.report('Could not read the clipboard image', 'paste')
   assert.ok(c.root.failureVisible)
   for (const [set, unset] of [
     [() => { c.root.opened = false }, () => { c.root.opened = true }],

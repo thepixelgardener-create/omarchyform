@@ -785,76 +785,47 @@ FocusScope {
     opacity: 0.85
     font.family: board.theme.fontFamily
     font.pixelSize: board.theme.fontBody
-    visible: !board.ctl.helpVisible && !board.ctl.browserVisible && !board.ctl.finding
+    visible: status.tier !== "none"
     // Markup, so a key can be a different colour from the word it sits in.
     // Everything reaching this line from a board file, a file name or the
     // keyboard is escaped on the way: this is the one place on the board that
     // renders tags, and a board is a file other people can send you.
     textFormat: Text.StyledText
-    // One line, five kinds of thing wanting it, in this order:
-    //
-    //   1.  the board is not being saved, and here is why
-    //   1b. something asked for did not happen
-    //   2.  what the keyboard is about to do
-    //   3.  what it just did
-    //   4.  what it is busy with, or nothing in particular
-    //
-    // The order used to run 1, 2, 3 for three of the modes and 3, 1, 2 for the
-    // rest, which put a message that fades in front of two things that do not.
-    // A connector gesture is the case that made it matter: the line is the
-    // only place the impending outcome is said, so a flash still on screen
-    // from the last one — "connector removed", well inside its two and a half
-    // seconds — left the line promising the wrong thing about the next.
+    // Which of the things wanting this line gets it is decided in BoardStore,
+    // by the same call the controller makes to know whether a failure is on
+    // screen and its time is running. Here it is only joined and coloured.
+    readonly property string tier: Store.statusTier(board.ctl.statusState())
     text:
-      // 1. Nothing here fades, and each one names something to be done before
-      // edits reach the disk: a conflict stops the session saving at all, and
-      // so does a board that could not be read. A message about what just
-      // happened must not sit on top of the reason it did not persist.
-      board.ctl.saveError !== "" ? Store.escapeMarkup(board.ctl.saveError)
-      : board.ctl.trashIndexError !== "" ? Store.escapeMarkup(board.ctl.trashIndexError)
-      : board.ctl.diskChanged
+      status.tier === "saveError" ? Store.escapeMarkup(board.ctl.saveError)
+      : status.tier === "trashIndexError" ? Store.escapeMarkup(board.ctl.trashIndexError)
+      : status.tier === "conflict"
       ? Store.escapeMarkup(board.ctl.boardTitle) + " changed on disk · "
         + Store.hintMarkup("ctrl+s", "choose which version to keep", board.ctl.accentMarkup)
-      : board.ctl.damaged && board.ctl.damageReason !== ""
-      ? Store.escapeMarkup(board.ctl.boardTitle + " " + board.ctl.damageReason + " — not opening it")
-      : board.ctl.damaged
-      ? Store.escapeMarkup(board.ctl.boardTitle + " could not be read — not saving over it")
-
-      // 1b. Something asked for did not happen. Below the four above, which
-      // are conditions rather than events and do not go away on their own;
-      // above everything below, because a subprocess answers on its own time
-      // and by then the person has started something else. Escaped like any
-      // other text that has been through a file name or a helper's output.
-      : board.ctl.failureText !== "" ? Store.escapeMarkup(board.ctl.failureText)
-
-      // 2. What the next keystroke means, narrowest claim on the keyboard
-      // first. Typing comes before connecting because both can be true at
-      // once — x holds a source, i starts a caret — and while there is a
-      // caret in a note, x is the letter x.
-      : board.ctl.paletteVisible
+      : status.tier === "damaged"
+      ? Store.escapeMarkup(board.ctl.damageReason !== ""
+          ? board.ctl.boardTitle + " " + board.ctl.damageReason + " — not opening it"
+          : board.ctl.boardTitle + " could not be read — not saving over it")
+      // Escaped like any other text that has been through a file name or a
+      // helper's output: this is the one place on the board that renders tags.
+      : status.tier === "failure" ? Store.escapeMarkup(board.ctl.failureText)
+      : status.tier === "palette"
       ? "commands · " + Store.hintLine(Store.PALETTE_HINTS, board.ctl.accentMarkup)
-      : board.ctl.arranging
+      : status.tier === "arrange"
       ? "arrange · " + Store.hintLine(Store.ARRANGE_HINTS, board.ctl.accentMarkup)
-      : board.ctl.showPinned
+      : status.tier === "backgrounds"
       ? "backgrounds · " + Store.hintLine(Store.PINNED_HINTS, board.ctl.accentMarkup)
-      : board.ctl.editIndex >= 0
+      : status.tier === "editing"
       ? Store.hintMarkup("esc", "done typing", board.ctl.accentMarkup)
       // While the far end is being chosen, the line says what x will do to
       // this pair rather than what x is for: connect them, turn the one that
-      // is already there round, or take it away. The controller works that
-      // out from the same table addLink changes, so the line cannot promise
-      // one thing and the board do another.
-      : board.ctl.linkingFrom >= 0
+      // is already there round, or take it away. The controller works that out
+      // from the same table addLink changes, so the line cannot promise one
+      // thing and the board do another.
+      : status.tier === "linking"
       ? Store.linkHint(board.ctl.linkOutcome, board.ctl.accentMarkup)
-
-      // 3. What just happened. It gets the line back the moment the gesture
-      // above it ends, and its own timer is still what clears it, so nothing
-      // held back here comes out of hiding later than it would have.
-      : board.ctl.statusText !== "" ? Store.escapeMarkup(board.ctl.statusText)
-
-      // 4. Work in progress, then the keys.
-      : board.ctl.pendingBoard !== null ? "saving before switching boards…"
-      : board.ctl.saving ? "saving…"
+      : status.tier === "flash" ? Store.escapeMarkup(board.ctl.statusText)
+      : status.tier === "switching" ? "saving before switching boards…"
+      : status.tier === "saving" ? "saving…"
       : Store.hintLine(Store.BOARD_HINTS, board.ctl.accentMarkup)
   }
 }

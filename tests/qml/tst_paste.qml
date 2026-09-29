@@ -62,8 +62,8 @@ ShellRoot {
         plugin.pasteClipboard()
         test.stage = 5
       } else if (test.stage === 5 && plugin.failureText !== "") {
-        test.check(plugin.failureKind === "clipboard",
-                   "a clipboard that will not answer is a clipboard failure: " + plugin.failureKind)
+        test.check(plugin.failureKind === "paste",
+                   "a clipboard with nothing to give is a failure to paste: " + plugin.failureKind)
         test.check(plugin.items.count === 2, "and nothing was added")
         // It is a failure, not an acknowledgement: it does not go on the line
         // that fades, and a gesture started afterwards does not take it down.
@@ -76,7 +76,7 @@ ShellRoot {
         plugin.flash("PNG saved · full board, without controls", "png")
         test.check(plugin.failureText !== "", "another operation working says nothing about it")
         plugin.close()
-        plugin.report("Failure received while closed", "clipboard")
+        plugin.report("Failure received while closed", "paste")
         test.closedAt = test.ticks
         test.stage = 6
       } else if (test.stage === 6 && test.ticks - test.closedAt > 140) {
@@ -87,9 +87,12 @@ ShellRoot {
         test.stage = 7
       } else if (test.stage === 7 && plugin.activeBoard) {
         test.check(plugin.failureVisible, "reopening shows the retained failure")
-        plugin.flash("Copied", "clipboard")
-        test.check(plugin.failureText === "", "the clipboard answering does")
-        plugin.report("First visible failure", "clipboard")
+        // Copying out is its own operation: it cannot answer for pasting.
+        plugin.flash("Copied", "copy")
+        test.check(plugin.failureText !== "", "a copy working says nothing about a paste")
+        plugin.flash("Text pasted · enter to edit", "paste")
+        test.check(plugin.failureText === "", "the paste answering does")
+        plugin.report("First visible failure", "paste")
         test.reportedAt = Date.now()
         test.stage = 8
       } else if (test.stage === 8 && Date.now() - test.reportedAt >= 5000) {

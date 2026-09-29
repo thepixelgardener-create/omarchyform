@@ -393,16 +393,16 @@ Item {
     id: copyProc
     property int copied: 0
     onExited: function (code) {
-      if (code !== 0) exchange.failed("Could not reach the clipboard", "clipboard")
-      else exchange.finished(copyProc.copied === 1 ? "Copied" : "Copied " + copyProc.copied + " items", "clipboard")
+      if (code !== 0) exchange.failed("Could not reach the clipboard", "copy")
+      else exchange.finished(copyProc.copied === 1 ? "Copied" : "Copied " + copyProc.copied + " items", "copy")
     }
   }
 
   Process {
     id: copyImageProc
     onExited: function (code) {
-      if (code === 0) exchange.finished("Picture copied", "clipboard")
-      else exchange.failed("Could not copy that picture", "clipboard")
+      if (code === 0) exchange.finished("Picture copied", "copy")
+      else exchange.failed("Could not copy that picture", "copy")
     }
   }
 
@@ -464,12 +464,12 @@ Item {
     id: imageGrab
     stdout: StdioCollector { id: grabbed; waitForEnd: true }
     onExited: function (code) {
-      if (exchange.pasteBoard !== exchange.ctl.currentBoard) { exchange.failed("Board changed; paste again", "clipboard"); return }
+      if (exchange.pasteBoard !== exchange.ctl.currentBoard) { exchange.failed("Board changed; paste again", "paste"); return }
       // 4 is the script's way of saying the clipboard holds no picture, which
       // is not a failure: text is the other thing it could be holding.
       if (code === 4) { clipboard.running = true; return }
-      if (code === 6) { exchange.failed("A picture of that name is already there", "clipboard"); return }
-      if (code !== 0 || !grabbed.text) { exchange.failed("Could not read the clipboard image", "clipboard"); return }
+      if (code === 6) { exchange.failed("A picture of that name is already there", "paste"); return }
+      if (code !== 0 || !grabbed.text) { exchange.failed("Could not read the clipboard image", "paste"); return }
       exchange.ctl.imagePasted(grabbed.text)
     }
   }
@@ -478,8 +478,8 @@ Item {
     command: ["timeout", "3", "wl-paste", "--no-newline", "--type", "text"]
     stdout: StdioCollector { id: pasted; waitForEnd: true }
     onExited: function(code) {
-      if (code !== 0) { exchange.failed("Clipboard has no available text", "clipboard"); return }
-      if (exchange.pasteBoard !== exchange.ctl.currentBoard) { exchange.failed("Board changed; paste again", "clipboard"); return }
+      if (code !== 0) { exchange.failed("Clipboard has no available text", "paste"); return }
+      if (exchange.pasteBoard !== exchange.ctl.currentBoard) { exchange.failed("Board changed; paste again", "paste"); return }
       exchange.ctl.pasteText(pasted.text)
     }
   }
