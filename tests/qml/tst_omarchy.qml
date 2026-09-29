@@ -53,6 +53,16 @@ ShellRoot {
   function check(condition, message) {
     if (!condition) { console.error("FAIL: " + message); Qt.quit(); throw new Error(message) }
   }
+  // No absolute placement in the plugin's own API: items move by dragging or
+  // nudging, both relative. The model is what an export reads, so the test
+  // writes it the same way it writes text into a note.
+  function place(index, x, y, w, h) {
+    plugin.items.setProperty(index, "ix", x)
+    plugin.items.setProperty(index, "iy", y)
+    plugin.items.setProperty(index, "iw", w)
+    plugin.items.setProperty(index, "ih", h)
+  }
+
   // Painting order is the order the delegates sit in under their parent: the
   // last one is drawn over the ones before it. Nothing exposes that as a
   // property, so it is read off the scene.
@@ -360,6 +370,16 @@ ShellRoot {
         plugin.stopEditing()
         plugin.pasteText("Pasted thought\nSecond line")
         test.check(plugin.items.count === 2 && plugin.items.get(1).itext === "Pasted thought\nSecond line", "multiline paste creates one note")
+        // From here to the PNG the board is a fixed shape, because the exported
+        // frame is the board's own bounds and the paste above lands at the
+        // centre of the *view*: on a wider window the notes end up further
+        // apart and the frame grows, so anything measured over the whole frame
+        // would be measuring the screen. Two notes in a row with a gap between
+        // them, and the connector crossing the gap where nothing else draws.
+        test.place(0, 0, 0, 240, 160)
+        test.place(1, 400, 0, 300, 200)
+        plugin.addLink(1, 2)
+        test.check(plugin.links.count === 1, "connector for the exported picture")
         test.exchangeApi = test.findItem(plugin, "board-exchange")
         test.exchangeApi.exportJson(Quickshell.env("OMARCHYFORM_TEST_DIR") + "/editable.json")
         test.stage = 25
@@ -369,6 +389,7 @@ ShellRoot {
         test.stage = 26
       } else if (test.stage === 26 && plugin.currentBoard === "editable.json" && plugin.boardLoaded) {
         test.check(plugin.items.count === 2 && plugin.items.get(1).itext === "Pasted thought\nSecond line", "native import preserves contents")
+        test.check(plugin.links.count === 1, "native import preserves connectors")
         plugin.exportPng(Quickshell.env("OMARCHYFORM_TEST_DIR") + "/export.png")
         test.stage = 27
       } else if (test.stage === 27 && !plugin.imageBusy) {

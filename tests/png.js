@@ -61,36 +61,81 @@ function read(file) {
   return { width: header.width, height: header.height, channels, pixels: out }
 }
 
-// The fraction of the picture that is not its most common colour — how much
-// of it has anything on it at all. Geometry rather than palette: how much of
-// the frame the items cover barely moves between themes, while how many
-// distinct colours they are drawn in moves a great deal.
-function coverage(file) {
-  const image = read(file)
+function rgb(image, x, y) {
+  const i = (y * image.width + x) * image.channels
+  return (image.pixels[i] << 16) | (image.pixels[i + 1] << 8) | image.pixels[i + 2]
+}
+
+// The colour the canvas was painted, taken as the commonest in the whole
+// picture: an export is the board's bounds plus padding on every side, so the
+// canvas outnumbers anything drawn on it, and reading it from the picture
+// rather than naming one keeps this working in any theme.
+//
+// Deliberately not the corner, even though the corner is canvas too. A check
+// that the padding carries no ink cannot define the canvas as the colour of
+// the padding — it would be asking whether the corner matches itself, and a
+// picture whose frame has slipped far enough for the items to spill into the
+// corner would sail through it. tests/export.js has that case.
+function canvasColour(source) {
+  const image = typeof source === 'string' ? read(source) : source
   const counts = new Map()
   for (let i = 0; i < image.pixels.length; i += image.channels) {
     const key = (image.pixels[i] << 16) | (image.pixels[i + 1] << 8) | image.pixels[i + 2]
     counts.set(key, (counts.get(key) || 0) + 1)
   }
+  let colour = 0
   let commonest = 0
-  for (const n of counts.values()) if (n > commonest) commonest = n
-  const total = image.width * image.height
-  return total ? (total - commonest) / total : 0
+  for (const [key, n] of counts) if (n > commonest) { commonest = n; colour = key }
+  return colour
 }
 
-// What the picture is drawn on, as it would be written down. That is the one
-// thing a palette changes which a count of ink cannot see: the same board on
-// white and on black covers the same fraction of the frame.
+// What the picture came out on, as it would be written down — which is the
+// one thing a palette changes that no count of ink can see, since the same
+// board covers the same fraction of the frame whatever it is drawn in.
 //
-// The corner, not the commonest colour. An export is framed with padding round
-// whatever it is of, so the corner is always the page — while the commonest
-// colour is whatever is biggest in the picture, and a frame drawn around a
-// single note is mostly that note's fill.
-function background(file) {
-  const image = read(file)
-  const at = image.channels // one pixel in from the very edge
-  return '#' + [image.pixels[at], image.pixels[at + 1], image.pixels[at + 2]]
-    .map(v => v.toString(16).padStart(2, '0')).join('')
+// The corner rather than the commonest colour, because this is also asked of
+// a picture framed around a single item, where the commonest colour is that
+// item's own fill. A corner of the padding is the page by construction. Read
+// as the commonest colour in a small block so one stray edge pixel cannot
+// answer for it.
+function paper(source, inset) {
+  const image = typeof source === 'string' ? read(source) : source
+  const span = Math.max(1, Math.min(inset === undefined ? 12 : inset, image.width, image.height))
+  const counts = new Map()
+  for (let y = 0; y < span; y++)
+    for (let x = 0; x < span; x++) {
+      const key = rgb(image, x, y)
+      counts.set(key, (counts.get(key) || 0) + 1)
+    }
+  let colour = 0
+  let commonest = 0
+  for (const [key, n] of counts) if (n > commonest) { commonest = n; colour = key }
+  return '#' + colour.toString(16).padStart(6, '0')
 }
 
-module.exports = { read, coverage, background }
+// The fraction of one rectangle that is not the background colour. Asked about
+// the rectangle an item occupies this is close to all or nothing, because a
+// note fills its own rectangle with its tint blended into the canvas: an item
+// that drew reads ~1 and an item culled out of the picture reads 0, with no
+// threshold in between to tune. Asked about a rectangle nothing should have
+// drawn into, it says whether the measurement means anything at all.
+//
+// The rectangle is in pixels and is clipped to the picture; a rectangle that
+// falls entirely outside it has nothing to measure and reads 0.
+function inked(image, rect, colour) {
+  const x0 = Math.max(0, Math.round(rect.x))
+  const y0 = Math.max(0, Math.round(rect.y))
+  const x1 = Math.min(image.width, Math.round(rect.x + rect.w))
+  const y1 = Math.min(image.height, Math.round(rect.y + rect.h))
+  let on = 0
+  let total = 0
+  for (let y = y0; y < y1; y++) {
+    for (let x = x0; x < x1; x++) {
+      total++
+      if (rgb(image, x, y) !== colour) on++
+    }
+  }
+  return total ? on / total : 0
+}
+
+module.exports = { read, canvasColour, paper, inked }

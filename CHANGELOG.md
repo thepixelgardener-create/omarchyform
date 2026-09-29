@@ -217,6 +217,31 @@ since older boards are migrated on load rather than rejected.
 
 ### Fixed
 
+- **The export gate was measuring the display.** The live smoke test asked what
+  fraction of the exported picture was not its commonest colour and wanted a
+  fifth. An export is the board's bounds plus padding, and one of the two notes
+  in that board is pasted — which lands at the centre of the *view*. So on a
+  wider window the notes ended up further apart, the frame grew, and the same
+  complete export scored less: on one screen the notes fell 728px apart and it
+  came out at 16% against a threshold of 20%. It failed there and passed
+  everywhere else, and nobody watching it pass could have told.
+
+  The board is pinned to a fixed shape before the export now, so the frame does
+  not depend on the window at all. And what is asked of the picture no longer
+  depends on the frame: each item's own rectangle is measured instead. A note
+  fills its rectangle with its tint blended into the canvas, so one that drew
+  reads about 100% and one culled out reads 0%, with no threshold in between to
+  tune. Connectors are checked at the midpoint between the two notes, where
+  nothing else draws, and a corner of the padding is checked for being clean —
+  ink there means the frame does not line up and nothing else measured meant
+  anything.
+
+  `tests/export.js` is the gate itself under test, on pictures built in memory
+  rather than on a desktop: each fault caught separately, at three scales
+  including a fractional display scale, plus the old whole-frame score kept as
+  a measurement to show why it was the wrong question. Until now the only thing
+  ever demonstrated about that gate was that it passed.
+
 - **The line under the header is decided in one place.** Its precedence was
   written out twice: once in the view that draws it, and once in the controller,
   which has to know whether a failure is on screen so that it can stop timing
