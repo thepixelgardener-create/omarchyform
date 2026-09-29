@@ -12,9 +12,9 @@ Item {
   // Which colours to draw in, and which items to draw around. Both are set by
   // the board just before it asks for a picture: "theme" and an empty crop are
   // the whole board in its own colours, which is what ctrl+e has always done.
-  property string palette: "theme"
+  property string exportColors: "theme"
   property var crop: []
-  readonly property var chosen: Store.exportPalette(picture.palette)
+  readonly property var chosen: Store.exportPalette(picture.exportColors)
   signal finished(bool success)
   width: area ? Math.ceil((area.maxX - area.minX + 64) * ratio) : 1
   height: area ? Math.ceil((area.maxY - area.minY + 64) * ratio) : 1
@@ -104,6 +104,7 @@ Item {
     function save() {}
     function scheduleSave() {}
     function pushUndo() {}
+    function beginTextPalette(editor) {}
     function stopEditing() {}
     function newBoard() {}
     function removeItem(index) {}

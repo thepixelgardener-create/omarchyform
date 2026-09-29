@@ -473,6 +473,8 @@ Item {
       // 4 is the script's way of saying the clipboard holds no picture, which
       // is not a failure: text is the other thing it could be holding.
       if (code === 4) { clipboard.running = true; return }
+      if (code === 5) { exchange.failed("Clipboard image exceeds 32 MiB", "paste"); return }
+      if (code === 8) { exchange.failed("Clipboard image is invalid or could not be read", "paste"); return }
       if (code === 6) { exchange.failed("A picture of that name is already there", "paste"); return }
       if (code === 7) { exchange.failed("That picture has too many pixels to put on a board", "paste"); return }
       if (code !== 0 || !grabbed.text) { exchange.failed("Could not read the clipboard image", "paste"); return }
@@ -481,9 +483,10 @@ Item {
   }
   Process {
     id: clipboard
-    command: ["timeout", "3", "wl-paste", "--no-newline", "--type", "text"]
+    command: exchange.ctl.fileCommand("cliptext", [])
     stdout: StdioCollector { id: pasted; waitForEnd: true }
     onExited: function(code) {
+      if (code === 5) { exchange.failed("Clipboard text exceeds 1 MiB", "paste"); return }
       if (code !== 0) { exchange.failed("Clipboard has no available text", "paste"); return }
       if (exchange.pasteBoard !== exchange.ctl.currentBoard) { exchange.failed("Board changed; paste again", "paste"); return }
       exchange.ctl.pasteText(pasted.text)

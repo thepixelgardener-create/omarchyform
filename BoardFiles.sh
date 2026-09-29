@@ -12,7 +12,8 @@ set -euo pipefail
 place_new() {
   local temporary=$1 destination=$2
   [[ ! -e $destination && ! -L $destination ]] || exit 6
-  mv -T -- "$temporary" "$destination"
+  mv -nT -- "$temporary" "$destination"
+  [[ ! -e $temporary ]] || exit 6
 }
 
 # A picture bigger than this has no business on a board, whichever way it
@@ -61,12 +62,12 @@ image_pixels() {
       ;;
     bmp)
       # BITMAPINFOHEADER: width then height, little-endian, offset 18. Height
-      # is signed — a negative one means the rows are stored top-down — so the
-      # sign bit is dropped rather than read as an enormous picture.
+      # is signed — a negative one means the rows are stored top-down — so its
+      # two's-complement magnitude is used for top-down pictures.
       read -ra b < <(od -An -tu1 -j18 -N8 -- "$path" | tr -s ' ')
       (( ${#b[@]} == 8 )) || return 1
-      printf '%s %s' $(( b[0]|(b[1]<<8)|(b[2]<<16)|((b[3]&127)<<24) )) \
-                     $(( b[4]|(b[5]<<8)|(b[6]<<16)|((b[7]&127)<<24) ))
+      printf '%s %s' $(( b[0]|(b[1]<<8)|(b[2]<<16)|(b[3]<<24) )) \
+                     $(( (b[7] & 128) ? 4294967296 - (b[4]|(b[5]<<8)|(b[6]<<16)|(b[7]<<24)) : (b[4]|(b[5]<<8)|(b[6]<<16)|(b[7]<<24)) ))
       ;;
     *) return 1 ;;
   esac
@@ -183,15 +184,30 @@ case "$operation" in
     confined "$images_root" "$base_name.$extension"
     temporary=$(mktemp -- "$images_root/.omarchyform-paste-XXXXXX")
     trap 'rm -f -- "$temporary"' EXIT
-    timeout 10 wl-paste --no-newline --type "$mime" > "$temporary" || exit 4
+    read_status=0
+    timeout 10 wl-paste --no-newline --type "$mime" | head -c "$((max_image_bytes + 1))" > "$temporary" || read_status=$?
     [[ -s $temporary ]] || exit 4
     # The same limit a dropped file gets. A picture is a picture however it
     # arrived, and the clipboard can hold a screenshot of a 4K desktop.
     size=$(stat -Lc %s -- "$temporary") || exit 4
     (( size <= max_image_bytes )) || exit 5
+    (( read_status == 0 )) || exit 8
+    extension=$(image_extension "$temporary") || exit 8
+    confined "$images_root" "$base_name.$extension"
     refuse_huge_pictures "$temporary" "$extension"
     place_new "$temporary" "$images_root/$base_name.$extension"
     printf '%s' "$base_name.$extension"
+    ;;
+  cliptext)
+    # Bound the bytes before QML collects stdout. Never return a partial note.
+    temporary=$(mktemp)
+    trap 'rm -f -- "$temporary"' EXIT
+    read_status=0
+    timeout 3 wl-paste --no-newline --type text | head -c 1048577 > "$temporary" || read_status=$?
+    size=$(stat -Lc %s -- "$temporary")
+    (( size <= 1048576 )) || exit 5
+    (( read_status == 0 )) || exit 4
+    cat -- "$temporary"
     ;;
   clipcopy)
     # wl-copy forks and keeps serving the clipboard for as long as it owns it,
@@ -226,7 +242,12 @@ case "$operation" in
     confined "$images_root" "$base_name.$extension"
     temporary=$(mktemp -- "$images_root/.omarchyform-drop-XXXXXX")
     trap 'rm -f -- "$temporary"' EXIT
-    cp -- "$source_path" "$temporary"
+    head -c "$((max_image_bytes + 1))" -- "$source_path" > "$temporary"
+    size=$(stat -Lc %s -- "$temporary")
+    (( size <= max_image_bytes )) || exit 5
+    extension=$(image_extension "$temporary") || exit 4
+    confined "$images_root" "$base_name.$extension"
+    refuse_huge_pictures "$temporary" "$extension"
     place_new "$temporary" "$images_root/$base_name.$extension"
     printf '%s' "$base_name.$extension"
     ;;

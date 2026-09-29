@@ -524,6 +524,21 @@ var COMMANDS = [
   { name: "New box", key: "r", run: "addRelative", arg: "rect", needs: "edit", also: ["rectangle"] },
   { name: "New ellipse", key: "e", run: "addRelative", arg: "ellipse", needs: "edit" },
   { name: "Type in it", key: "i", run: "editSelected", needs: "target", also: ["edit", "edit text"] },
+  // Only while there is a caret in a note. `ctrl+p` opens the list there the
+  // way it does on the board, narrowed to these, so the marks are reachable by
+  // name before the chords are in the hands.
+  { name: "Bold", key: "ctrl+b", run: "markText", arg: "bold", needs: "typing",
+    also: ["strong", "emphasis"] },
+  { name: "Italic", key: "ctrl+i", run: "markText", arg: "italic", needs: "typing",
+    also: ["emphasis"] },
+  { name: "Draw it as a key", key: "ctrl+k", run: "markText", arg: "key", needs: "typing",
+    also: ["code", "monospace", "shortcut"] },
+  { name: "Make it a heading", key: "", run: "headText", needs: "typing",
+    also: ["title", "bigger"] },
+  { name: "Colour it plain", key: "ctrl+1", run: "markText", arg: "foreground", needs: "typing" },
+  { name: "Colour it accent", key: "ctrl+2", run: "markText", arg: "accent", needs: "typing" },
+  { name: "Colour it urgent", key: "ctrl+3", run: "markText", arg: "urgent", needs: "typing" },
+  { name: "Colour it muted", key: "ctrl+4", run: "markText", arg: "muted", needs: "typing" },
   { name: "Change shape", key: "s", run: "cycleKind", needs: "target" },
   { name: "Change colour", key: "c", run: "recolorItem", needs: "target" },
   { name: "Connect to another", key: "x", run: "toggleLinking", needs: "target", also: ["link"] },
@@ -598,6 +613,25 @@ var COMMANDS = [
 // offers, as opposed to everything the board can do.
 var SELECTION_NEEDS = ["target", "item", "group"]
 
+// What a command needs a caret in a note for. Its own scope, because the list
+// opened while typing is a different list: everything else on the board acts on
+// items, and while there is a caret in a note the thing being worked on is the
+// words.
+var TYPING_NEEDS = ["typing"]
+
+// The marks each text command puts round the selection. Kept beside the command
+// table rather than inside the controller so the chord and the command cannot
+// drift: both dispatch through this.
+var TEXT_MARKS = {
+  bold: ["*", "*"],
+  italic: ["_", "_"],
+  key: ["`", "`"],
+  foreground: ["[foreground]", "[/]"],
+  accent: ["[accent]", "[/]"],
+  urgent: ["[urgent]", "[/]"],
+  muted: ["[muted]", "[/]"]
+}
+
 // An alias is a way in, not a name: it is matched from its start, the way a
 // name is, so `select all` answers "sel" and `rectangle` does not answer "a".
 // A substring rule here would put New box in the list for half the alphabet.
@@ -619,6 +653,10 @@ function matchCommands(query, scope) {
   for (var i = 0; i < COMMANDS.length; i++) {
     if (COMMANDS[i].listed === false) continue
     if (scope === "selection" && SELECTION_NEEDS.indexOf(COMMANDS[i].needs) < 0) continue
+    if (scope === "typing" && TYPING_NEEDS.indexOf(COMMANDS[i].needs) < 0) continue
+    // And the other way: what only makes sense with a caret in a note stays out
+    // of the list the board opens, where there is nothing for it to act on.
+    if (scope !== "typing" && TYPING_NEEDS.indexOf(COMMANDS[i].needs) >= 0) continue
     if (needle === "") { rest.push(COMMANDS[i]); continue }
     var name = COMMANDS[i].name.toLowerCase()
     var at = name.indexOf(needle)
@@ -663,6 +701,7 @@ var KEY_HELP = [
   ["u / ctrl+r", "undo / redo"],
   ["b", "boards: browse, open, create"],
   ["enter / i", "type in the selected item"],
+  ["while typing: ctrl+p", "format selected text by name"],
   ["while typing: ctrl+b / ctrl+i", "*bold* / _italic_ round what is selected"],
   ["ctrl+k", "`a key`, drawn in the accent"],
   ["ctrl+1..4", "colour it: foreground, accent, urgent, muted"],

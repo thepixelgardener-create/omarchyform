@@ -76,7 +76,7 @@ Rectangle {
 
       Text {
         id: query
-        text: "run: "
+        text: panel.ctl.paletteScope === "typing" ? "format: " : "run: "
         color: panel.theme.foreground
         font.family: panel.theme.fontFamily
         font.pixelSize: panel.theme.fontSubtitle

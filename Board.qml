@@ -21,7 +21,7 @@ FocusScope {
     if (board.ctl.items.count === 0) { board.ctl.flash("Add a note before exporting an image"); return }
     board.ctl.imageBusy = true
     exportDestination = path
-    picture.palette = board.ctl.pngPalette
+    picture.exportColors = board.ctl.pngPalette
     // What is marked is what the picture is framed around; with nothing marked
     // it is the whole board, which is what exporting has always meant.
     picture.crop = board.ctl.targets()

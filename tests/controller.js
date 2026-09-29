@@ -810,7 +810,7 @@ console.log('ok — controller: walking the header menu and running its commands
   assert.equal(c.root.paletteVisible, true)
   assert.equal(c.root.paletteQuery, '')
   assert.equal(c.root.paletteIndex, 0, 'opens on the first, ready to run')
-  assert.equal(c.root.paletteMatches.length, S.COMMANDS.filter(x => x.listed !== false).length,
+  assert.equal(c.root.paletteMatches.length, S.COMMANDS.filter(x => x.listed !== false && x.needs !== "typing").length,
     'every command but the ways into this list')
 
   // Typing narrows it, and the cursor goes back to the top rather than staying
@@ -1501,3 +1501,25 @@ console.log('ok — controller: a failure that arrives while you are somewhere e
     assert.ok(S.exportNote(name, false).indexOf('full board') === 0, name + ' says what it was of')
 }
 console.log('ok — controller: what a picture is of, and what it is drawn in')
+
+// Text commands keep the editor and selection alive while the list has focus.
+{
+  const c = controller()
+  c.root.editIndex = 0
+  const calls = []
+  const editor = { style: (...marks) => calls.push(marks), heading: () => calls.push('heading'), forceActiveFocus() {} }
+  c.root.beginTextPalette(editor)
+  assert.equal(c.root.paletteScope, 'typing')
+  assert.equal(c.root.editIndex, 0)
+  assert.ok(c.root.paletteMatches.every(command => command.needs === 'typing'))
+  c.root.setPaletteQuery('bold')
+  c.root.runPaletteChoice()
+  assert.deepEqual(calls, [['*', '*']])
+  assert.equal(c.root.editIndex, 0)
+  c.root.beginTextPalette(editor)
+  c.root.endPalette()
+  assert.equal(calls.length, 1, 'cancel changes nothing')
+  c.root.stopEditing()
+  c.root.markText('italic')
+  assert.equal(calls.length, 1, 'stale editor cannot modify a note')
+}

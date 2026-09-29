@@ -164,6 +164,31 @@ ShellRoot {
         test.key("a")
         test.stage = 43
       } else if (test.stage === 43 && plugin.items.get(2).itext === "a") {
+        var note = test.findItem(plugin.activeBoard, "board-item-" + plugin.items.get(2).iid)
+        var editor = test.findItem(note, "note-editor")
+        editor.selectAll()
+        test.key("p", "CTRL")
+        test.stage = 431
+      } else if (test.stage === 431 && plugin.paletteVisible) {
+        test.check(plugin.paletteScope === "typing", "Ctrl+P opens text commands")
+        test.check(plugin.editIndex === 2, "formatting keeps editing active")
+        plugin.setPaletteQuery("bold")
+        test.switchedAt = test.ticks
+        test.stage = 432
+      } else if (test.stage === 432 && test.ticks > test.switchedAt + 3) {
+        test.key("Return")
+        test.stage = 433
+      } else if (test.stage === 433 && !plugin.paletteVisible) {
+        test.check(plugin.items.get(2).itext === "*a*", "format command uses the selected text")
+        test.check(plugin.textEditor.activeFocus, "format command restores editor focus")
+        test.key("p", "CTRL")
+        test.stage = 434
+      } else if (test.stage === 434 && plugin.paletteVisible) {
+        test.key("Escape")
+        test.stage = 435
+      } else if (test.stage === 435 && !plugin.paletteVisible) {
+        test.check(plugin.editIndex === 2 && plugin.textEditor.activeFocus, "Escape returns to typing")
+        test.check(plugin.items.get(2).itext === "*a*", "cancel leaves text unchanged")
         test.key("Escape")
         test.stage = 44
       } else if (test.stage === 44 && plugin.editIndex === -1) {

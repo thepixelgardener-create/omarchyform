@@ -73,6 +73,8 @@ TestCase {
     function save() { saveCount++ }
     function scheduleSave() { saveCount++ }
     function flushSave() { flushCount++ }
+    property var paletteEditor: null
+    function beginTextPalette(editor) { paletteEditor = editor }
     function stopEditing() { editIndex = -1 }
     function removeItem(index) { model.remove(index) }
     ListModel {
@@ -331,6 +333,21 @@ TestCase {
     mouseDoubleClickSequence(test, 140, 140, Qt.LeftButton)
     compare(ctl.editIndex, 0, "now being typed in")
     compare(model.get(0).itext.indexOf("# Head"), 0, "the source still carries the marks")
+    keyClick(Qt.Key_Escape)
+  }
+
+  function test_textPaletteAndHeading() {
+    model.setProperty(0, "itext", "first\nsecond")
+    mouseDoubleClickSequence(test, 140, 140, Qt.LeftButton)
+    var editor = findChild(subject, "note-editor")
+    editor.selectAll()
+    keyClick(Qt.Key_P, Qt.ControlModifier)
+    compare(ctl.paletteEditor, editor)
+    compare(editor.selectedText, "first\nsecond")
+    editor.heading()
+    compare(model.get(0).itext, "# first\n# second")
+    editor.heading()
+    compare(model.get(0).itext, "first\nsecond")
     keyClick(Qt.Key_Escape)
   }
 

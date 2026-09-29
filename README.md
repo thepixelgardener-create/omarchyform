@@ -211,6 +211,7 @@ colours apart, and the controls carry names and roles for a screen reader.
 | `}` / `{` | Bring right to the front / send right to the back |
 | `?` / `F1` | Keybinding list |
 | `:` / `ctrl+p` | Run any command by name, without knowing its key |
+| `ctrl+p` while typing | Format selected text: bold, italic, key, heading or colour |
 
 Overlapping items are drawn in the order the board file lists them, and `]` `[`
 `}` `{` move the selected ones through that order. Several at once keep their
@@ -767,6 +768,10 @@ fatal — QML has no optional imports.
 The overlay is built through `Variants` so its surface is constructed with its
 screen already set, and it opens on whichever output Hyprland has focused.
 Assigning `screen` to a window that already exists leaves it unmapped.
+
+Pasting onto the canvas accepts up to 1 MiB of text or 32 MiB per picture.
+An oversized paste is rejected in full. Picture formats are checked from their
+contents, including pictures supplied by the clipboard.
 
 ## Dependencies
 

@@ -77,16 +77,28 @@ try {
   assert.equal(paste('text/plain','hello',images,'paste-1').status,4,'no picture on the clipboard is not a failure')
   assert.deepEqual(fs.readdirSync(images),[],'and nothing is left behind')
 
-  const png=paste('text/plain\nimage/png','PNGBYTES',images,'paste-1')
+  const clipPixels=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP4z8AARAwQCgAf7gP9i18U1AAAAABJRU5ErkJggg==','base64')
+  const clipFile=path.join(dir,'clipboard.png')
+  fs.writeFileSync(clipFile,clipPixels)
+  const png=paste('text/plain\nimage/png','',images,'paste-1',clipFile)
   assert.equal(png.status,0)
-  assert.equal(png.stdout,'paste-1.png','the caller is told the name it got')
-  assert.equal(fs.readFileSync(path.join(images,'paste-1.png'),'utf8'),'PNGBYTES')
+  assert.equal(png.stdout,'paste-1.png')
+  assert.deepEqual(fs.readFileSync(path.join(images,'paste-1.png')),clipPixels)
+  assert.equal(paste('image/jpeg','',images,'paste-2',clipFile).stdout,'paste-2.png','actual bytes decide the format')
+  assert.equal(paste('image/png','OTHERBYTES',images,'invalid').status,8)
+  assert.equal(paste('image/png','',images,'paste-1',clipFile).status,6)
+  assert.deepEqual(fs.readFileSync(path.join(images,'paste-1.png')),clipPixels)
 
-  assert.equal(paste('image/jpeg','JPGBYTES',images,'paste-2').stdout,'paste-2.jpg','the format picks the extension')
-
-  // The same rule for a paste: a name already on disk is not written over.
-  assert.equal(paste('image/png','OTHERBYTES',images,'paste-1').status,6)
-  assert.equal(fs.readFileSync(path.join(images,'paste-1.png'),'utf8'),'PNGBYTES','the first one still stands')
+  const pasteText=(file)=>spawnSync('bash',[path.join(__dirname,'../BoardFiles.sh'),'cliptext'],
+    {encoding:'utf8',maxBuffer:2*1024*1024,env:{...process.env,PATH:stubs+':'+process.env.PATH,FAKE_FILE:file}})
+  const clipTextFile=path.join(dir,'clipboard.txt')
+  fs.writeFileSync(clipTextFile,'<b>literal</b>\nsecond line')
+  assert.equal(pasteText(clipTextFile).stdout,'<b>literal</b>\nsecond line')
+  fs.writeFileSync(clipTextFile,'x'.repeat(1048576))
+  assert.equal(pasteText(clipTextFile).stdout.length,1048576)
+  fs.appendFileSync(clipTextFile,'x')
+  assert.equal(pasteText(clipTextFile).status,5)
+  assert.equal(pasteText(clipTextFile).stdout,'','oversized text is never partially pasted')
 
   // An empty clipboard read must not leave a zero-byte image on the board.
   assert.equal(paste('image/png','',images,'paste-3').status,4)
@@ -94,7 +106,7 @@ try {
 
   for (const bad of ['../escape','a/b','.hidden','-dash'])
     assert.notEqual(paste('image/png','X',images,bad).status,0,bad)
-  assert.deepEqual(fs.readdirSync(images).sort(),['paste-1.png','paste-2.jpg'],'no strays, no temporaries')
+  assert.deepEqual(fs.readdirSync(images).sort(),['paste-1.png','paste-2.png'],'no strays, no temporaries')
 
   // Copying out: a stub wl-copy records what it was handed, so the real
   // clipboard is never touched by a test run.
@@ -321,6 +333,17 @@ try {
   assert.notEqual(unbundle('shared-bomb',claiming(12000,12000).toString('base64')).status,0,
     'nor from inside a board somebody sent')
   assert.equal(fs.existsSync(path.join(images,'shared-bomb.png')),false)
+
+  // Signed BMP height describes row order; it must not look like a huge image.
+  const bmp=Buffer.alloc(70)
+  bmp.write('BM'); bmp.writeUInt32LE(70,2); bmp.writeUInt32LE(54,10)
+  bmp.writeUInt32LE(40,14); bmp.writeInt32LE(2,18); bmp.writeInt32LE(-2,22)
+  bmp.writeUInt16LE(1,26); bmp.writeUInt16LE(24,28)
+  fs.writeFileSync(path.join(source,'top-down.bmp'),bmp)
+  assert.equal(drop('top-down','top-down.bmp').status,0)
+  bmp.writeUInt32LE(0x80000001,18)
+  fs.writeFileSync(path.join(source,'invalid-width.bmp'),bmp)
+  assert.notEqual(drop('invalid-width','invalid-width.bmp').status,0)
 
   // And what is merely large still goes on a board: this is a limit, not a
   // suspicion of big pictures.
