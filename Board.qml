@@ -21,6 +21,10 @@ FocusScope {
     if (board.ctl.items.count === 0) { board.ctl.flash("Add a note before exporting an image"); return }
     board.ctl.imageBusy = true
     exportDestination = path
+    picture.palette = board.ctl.pngPalette
+    // What is marked is what the picture is framed around; with nothing marked
+    // it is the whole board, which is what exporting has always meant.
+    picture.crop = board.ctl.targets()
     picture.save(board.ctl.dataDir + "/.image-export.png")
   }
   BoardImage {
@@ -485,7 +489,7 @@ FocusScope {
         else if (event.key === Qt.Key_D) board.ctl.duplicateTargets()
         else if (event.key === Qt.Key_V) board.ctl.pasteClipboard()
         else if (event.key === Qt.Key_O) board.ctl.importBoard()
-        else if (event.key === Qt.Key_E) board.ctl.choosePng()
+        else if (event.key === Qt.Key_E) board.ctl.choosePng("theme")
         else if (event.key === Qt.Key_P) board.ctl.beginPalette()
         else return
         event.accepted = true

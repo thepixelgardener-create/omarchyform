@@ -78,4 +78,19 @@ function coverage(file) {
   return total ? (total - commonest) / total : 0
 }
 
-module.exports = { read, coverage }
+// What the picture is drawn on, as it would be written down. That is the one
+// thing a palette changes which a count of ink cannot see: the same board on
+// white and on black covers the same fraction of the frame.
+//
+// The corner, not the commonest colour. An export is framed with padding round
+// whatever it is of, so the corner is always the page — while the commonest
+// colour is whatever is biggest in the picture, and a frame drawn around a
+// single note is mostly that note's fill.
+function background(file) {
+  const image = read(file)
+  const at = image.channels // one pixel in from the very edge
+  return '#' + [image.pixels[at], image.pixels[at + 1], image.pixels[at + 2]]
+    .map(v => v.toString(16).padStart(2, '0')).join('')
+}
+
+module.exports = { read, coverage, background }

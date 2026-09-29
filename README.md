@@ -183,7 +183,7 @@ colours apart, and the controls carry names and roles for a screen reader.
 | `super+v` / `ctrl+v` | Paste a picture from the clipboard, or text as a note |
 | `ctrl+o` | Open a board file from anywhere |
 | `ctrl+shift+s` | Save a copy of this board somewhere else |
-| `ctrl+e` | Export the board as a PNG |
+| `ctrl+e` | Export a PNG — the whole board, or just what is marked |
 | `enter` / `i` | Type in the selected note |
 | `esc` | Stop typing, drop the marks, then close the board |
 | `h` `j` `k` `l` | Move the selection to the nearest note that way |
@@ -270,6 +270,37 @@ That is how a single connector is removed: select the item it starts at, press
 `x`, select the item it ends at, press `x`. `X` is the bulk answer — it removes
 every connector on the selected item at once, in both directions, in one undo
 step. There is no way to click a connector itself; they are drawn, not selected.
+
+## Pictures of a board
+
+`ctrl+e` writes a PNG of the board with none of the controls in it — no header,
+no grid, no selection rings, no resize grips.
+
+**Mark some items first and you get a picture of those**, framed around them
+with the same padding. Connectors that leave the marked set leave with it, so
+the picture is of what you chose rather than of what happened to be next to it.
+Backgrounds are the exception: a pinned shape is scenery, so a cluster lifted
+off a board keeps the panel it was sitting on, and the frame is not put round
+it. Nothing marked is the whole board, which is what `ctrl+e` has always meant.
+
+A board is drawn in whatever theme your desktop is wearing, which is usually
+dark — and a dark picture is the wrong thing to put in a document, a slide or a
+printout. The command list has the same export in three other palettes:
+
+| Run | Gives you |
+|-----|-----------|
+| **Export a PNG** (`ctrl+e`) | The board in its own colours |
+| **Export a PNG on white** | A white page, dark text, colour kept for the tints |
+| **Export a PNG on black** | A dark page that does not depend on your theme |
+| **Export a PNG in black and white** | One ink, for printing — the tints differ by weight rather than hue |
+
+Type `:` then `white`, or `print`, or `png`. Each is its own command, so the
+one you want is a few letters away and there is nothing new on the board to
+look at. What a picture says is at least 13:1 against the fill behind it in
+every palette, and every border and connector clears 3:1 against the page.
+
+The line under the header afterwards tells you what it made: what it was of,
+and what it was drawn in.
 
 ## Backgrounds
 

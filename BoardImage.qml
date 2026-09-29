@@ -9,15 +9,25 @@ Item {
   property var area: null
   property real ratio: 1
   property string destination: ""
+  // Which colours to draw in, and which items to draw around. Both are set by
+  // the board just before it asks for a picture: "theme" and an empty crop are
+  // the whole board in its own colours, which is what ctrl+e has always done.
+  property string palette: "theme"
+  property var crop: []
+  readonly property var chosen: Store.exportPalette(picture.palette)
   signal finished(bool success)
   width: area ? Math.ceil((area.maxX - area.minX + 64) * ratio) : 1
   height: area ? Math.ceil((area.maxY - area.minY + 64) * ratio) : 1
   z: -100
 
   function save(path) {
-    Store.fillItems(nodes, Store.itemRows(picture.ctl.items))
+    // What is drawn and what the frame is put round are two lists: a crop
+    // keeps the backgrounds its items were sitting on without being framed
+    // around them.
+    var part = Store.cropRows(Store.itemRows(picture.ctl.items), picture.crop)
+    Store.fillItems(nodes, part.draw)
     Store.fillLinks(edges, nodes, Store.linkRows(picture.ctl.links))
-    area = Store.bounds(nodes)
+    area = Store.boundsOfRows(part.frame)
     if (!area) { finished(false); return }
     ratio = Math.min(1, 4096 / (area.maxX-area.minX+64), 4096 / (area.maxY-area.minY+64))
     destination = path
@@ -39,18 +49,28 @@ Item {
     // plainly here. Shaped like the real theme because a Node cannot tell the
     // difference — tests/contract.js is what holds the two shapes together.
     property QtObject theme: QtObject {
-      property color foreground: picture.theme.foreground
-      property color accent: picture.theme.accent
-      property color muted: picture.theme.muted
-      property color canvasBackground: picture.theme.canvasBackground
+      property color foreground: picture.chosen ? picture.chosen.foreground : picture.theme.foreground
+      property color accent: picture.chosen ? picture.chosen.borders.accent : picture.theme.accent
+      property color muted: picture.chosen ? picture.chosen.borders.muted : picture.theme.muted
+      property color canvasBackground: picture.chosen ? picture.chosen.background : picture.theme.canvasBackground
       property string fontFamily: picture.theme.fontFamily
       property int fontSubtitle: picture.theme.fontSubtitle
       property int fontBody: picture.theme.fontBody
       property int borderWidth: picture.theme.borderWidth
       property int cornerRadius: picture.theme.cornerRadius
       function sp(n) { return picture.theme.sp(n) }
-      function tintFill(tint, strong) { return picture.theme.tintFill(tint, false) }
-      function tintBorder(tint, strong) { return picture.theme.tintBorder(tint, false) }
+      // A chosen palette names its fills and borders outright rather than
+      // blending them, so nothing here has to reproduce the theme's arithmetic
+      // against colours it was never chosen for. `strong` is ignored either
+      // way: nothing in a picture is selected.
+      function tintFill(tint, strong) {
+        return picture.chosen ? Store.paletteTint(picture.chosen, "fills", tint)
+                              : picture.theme.tintFill(tint, false)
+      }
+      function tintBorder(tint, strong) {
+        return picture.chosen ? Store.paletteTint(picture.chosen, "borders", tint)
+                              : picture.theme.tintBorder(tint, false)
+      }
     }
     property int minItemSize: picture.ctl.minItemSize
     function imagePath(name) { return picture.ctl.imagePath(name) }
@@ -83,7 +103,10 @@ Item {
     function moveTargets(dx, dy) {}
     function resizeTargets(dx, dy) {}
   }
-  Rectangle { anchors.fill: parent; color: picture.theme.canvasBackground }
+  Rectangle {
+    anchors.fill: parent
+    color: picture.chosen ? picture.chosen.background : picture.theme.canvasBackground
+  }
   Item {
     id: world
     z: 2
@@ -109,9 +132,12 @@ Item {
         c.reset()
         c.scale(picture.ratio, picture.ratio)
         c.translate(picture.area ? 32-picture.area.minX : 0, picture.area ? 32-picture.area.minY : 0)
-        c.strokeStyle = picture.theme.foreground
-        c.fillStyle = picture.theme.foreground
-        c.globalAlpha = 0.65
+        c.strokeStyle = picture.chosen ? picture.chosen.connector : picture.theme.foreground
+        c.fillStyle = c.strokeStyle
+        // A chosen palette's connector colour is already the weight it wants
+        // against its own background; the theme's foreground is not, and is
+        // held back here the way the board holds it back.
+        c.globalAlpha = picture.chosen ? 1 : 0.65
         c.lineWidth = 1.5
         var byId = Store.idIndex(nodes)
         for (var i=0; i<edges.count; i++) {

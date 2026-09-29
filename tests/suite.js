@@ -678,6 +678,58 @@ function tests(S) {
       ok(!S.isFailureKind(not), String(not) + " is not")
   })
 
+  // A picture of a board is usually going into something that is not this
+  // desktop — a document, a slide, a printer — so it is drawn in a palette
+  // chosen for paper rather than in whatever the shell is wearing. These
+  // numbers are the reason to write the colours out instead of blending the
+  // theme's: a blend picked to sit on a dark canvas is mud on a white one.
+  test("an exported picture reads in every palette it offers", () => {
+    const channel = c => {
+      const v = c / 255
+      return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)
+    }
+    const luminance = hex => {
+      ok(/^#[0-9a-f]{6}$/.test(hex), hex + " is a plain six-digit colour")
+      const n = parseInt(hex.slice(1), 16)
+      return 0.2126 * channel(n >> 16 & 255) + 0.7152 * channel(n >> 8 & 255) + 0.0722 * channel(n & 255)
+    }
+    const contrast = (a, b) => {
+      const x = luminance(a), y = luminance(b)
+      return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05)
+    }
+
+    eq(S.EXPORT_PALETTE_NAMES[0], "theme", "the board's own colours are the first answer")
+    eq(S.exportPalette("theme"), null, "and are the absence of an override")
+    eq(S.exportPalette("nothing like a palette"), null, "as is a name nobody has heard of")
+
+    const named = S.EXPORT_PALETTE_NAMES.slice(1)
+    eq(named.sort(), Object.keys(S.EXPORT_PALETTES).sort(), "every palette is offered, and only those")
+
+    for (const name of named) {
+      const p = S.exportPalette(name)
+      ok(typeof p.label === "string" && p.label !== "", name + " says what it is in a command")
+      for (const role of ["foreground", "accent", "urgent", "muted"]) {
+        // What an item says, against the fill it says it on.
+        const readable = contrast(p.foreground, p.fills[role])
+        ok(readable >= 13, name + "/" + role + ": text on its fill is " + readable.toFixed(2) + ":1")
+        // The edge of an item, and the connectors between them, against the
+        // page. Three to one is the bar for something that is not text.
+        const edge = contrast(p.borders[role], p.background)
+        ok(edge >= 3, name + "/" + role + ": its border is " + edge.toFixed(2) + ":1 on the background")
+      }
+      const line = contrast(p.connector, p.background)
+      ok(line >= 3, name + ": connectors are " + line.toFixed(2) + ":1 on the background")
+
+      // A tint from a board this version has never heard of still draws, the
+      // way an untinted item does, rather than coming out undefined.
+      for (const group of ["fills", "borders"]) {
+        eq(S.paletteTint(p, group, "accent"), p[group].accent, name + " knows accent")
+        eq(S.paletteTint(p, group, "chartreuse"), p[group].foreground,
+           name + " draws an unknown tint plainly")
+      }
+    }
+  })
+
   // The line under the header had its precedence written out twice — once in
   // the view that draws it, once in the controller that has to know whether a
   // failure is on screen so it can stop timing one that is not. They disagreed
