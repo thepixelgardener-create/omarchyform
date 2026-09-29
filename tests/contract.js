@@ -257,6 +257,83 @@ for (const command of Store.COMMANDS)
   if (!controller.has(command.run))
     failures.push(`BoardStore.js: "${command.name}" runs ${command.run}(), which the controller does not have`)
 
+// Severity and subject come from the producer, never from the words. Every
+// answer the exchange gives names which operation it is about, so a success can
+// take down the failure it recovered from and leave the others alone — and a
+// call site that forgets is a failure that either never clears or clears the
+// wrong one. Checked here because it is a property of every call site rather
+// than of any one path a test happens to take.
+function callArguments(source, callee) {
+  const calls = []
+  let at = 0
+  while ((at = source.indexOf(callee + "(", at)) >= 0) {
+    let i = at + callee.length + 1
+    let depth = 1
+    let quote = ""
+    for (; i < source.length && depth > 0; i++) {
+      const c = source[i]
+      if (quote) { if (c === "\\") i++; else if (c === quote) quote = "" }
+      else if (c === '"' || c === "'") quote = c
+      else if (c === "(") depth++
+      else if (c === ")") depth--
+    }
+    calls.push({ at, text: source.slice(at + callee.length + 1, i - 1) })
+    at = i
+  }
+  return calls
+}
+
+// The last argument, whatever the ones before it contain: a message is often a
+// sum of strings with commas inside them, so the split has to see through
+// quotes and brackets the way the scan above does.
+function lastArgument(text) {
+  let depth = 0
+  let quote = ""
+  let cut = -1
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]
+    if (quote) { if (c === "\\") i++; else if (c === quote) quote = "" }
+    else if (c === '"' || c === "'") quote = c
+    else if ("([{".includes(c)) depth++
+    else if (")]}".includes(c)) depth--
+    else if (c === "," && depth === 0) cut = i
+  }
+  return cut < 0 ? "" : text.slice(cut + 1)
+}
+
+const kinds = new Set(Store.FAILURE_KINDS)
+function checkKinds(file, callee, allowNone) {
+  const source = read(file)
+  const found = callArguments(source, callee)
+  if (found.length === 0) failures.push(`${file}: nothing calls ${callee}()`)
+  for (const call of found) {
+    const line = source.slice(0, call.at).split("\n").length
+    const tail = lastArgument(call.text)
+    // A kind chosen at runtime is still written out: the branches of
+    // `atPoint ? "picture" : "clipboard"` are both names to check. What is not
+    // allowed is a kind with no literal in it at all, which nothing here can
+    // hold to the list.
+    const named = [...tail.matchAll(/"([^"]*)"/g)].map(m => m[1])
+    if (named.length === 0) {
+      // Passing a kind straight through is how the controller forwards what a
+      // producer already decided; the producer is checked at its own call.
+      if (/^\s*kind\s*$/.test(tail)) continue
+      failures.push(`${file}:${line}: ${callee}() ends with no kind that can be read from the source`)
+      continue
+    }
+    for (const kind of named)
+      if (!(kind === "" && allowNone) && !kinds.has(kind))
+        failures.push(`${file}:${line}: ${callee}() names "${kind}", which is not one of ${[...kinds].join(", ")}`)
+  }
+}
+
+// A success may recover nothing, and says so with "". A failure is always about
+// something: there is no such thing as a failure of no operation.
+checkKinds("BoardExchange.qml", "exchange.finished", true)
+checkKinds("BoardExchange.qml", "exchange.failed", false)
+checkKinds("BoardExchange.qml", "exchange.fail", false)
+checkKinds("Omarchyform.qml", "root.report", false)
+
 // An id that is also a property every Item has is a name Qt may resolve two
 // ways. `palette` is one: inside a delegate, Qt 6.4 resolves it to the item's
 // own palette rather than to the id, and every binding under it then reads off

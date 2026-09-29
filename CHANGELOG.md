@@ -146,7 +146,100 @@ since older boards are migrated on load rather than rejected.
   `~/.cache/omarchyform/shots/`. It asserts nothing and is not part of
   `tests/run`; it is for the questions only eyes answer.
 
+  `--hold` takes the pictures and then leaves the board on screen, on the
+  isolated boards that run built, carrying one of everything a pointer can be
+  pressed on. It is there for `docs/pointer-checks.md`: a pointer cannot be
+  synthesised into a running compositor from this repository, so whether the
+  middle button reaches the fullscreen overlay and the windowed toplevel is
+  checked by hand — and must not be checked on the installed plugin or on real
+  boards.
+
+  Closing it ends the run. The first version of it did not: hiding a window is
+  not closing a board, so the process stayed up with nobody watching it and a
+  scratch tree nobody removed. It follows the controller's own state now rather
+  than any one surface's, which is also why moving between fullscreen and
+  windowed no longer looks like leaving — one surface goes and another arrives,
+  and the board was never closed. Dismissing it waits for what it was writing
+  and exits; a write that fails, or will not finish in five seconds, says which
+  and exits non-zero instead of hanging. `Ctrl-C` closes the board first and
+  then cleans up. Each run removes its own directory by name, never a pattern,
+  so a second held board in another terminal keeps its boards.
+  A successful held run now requires both readiness and completion markers.
+  Setup timeouts and unexpected child signals fail; Ctrl-C exits 130 and SIGTERM
+  exits 143 after cleanup. The runner prints its child PID, and the interruption
+  test verifies that exact process has exited. Deterministic subprocess tests
+  cover failure exits, missing markers, interruption and forced termination.
+  `npm run test:hold` drives the live lifecycle without a hand on the keyboard.
+
 ### Fixed
+
+- **The line under the header is decided in one place.** Its precedence was
+  written out twice: once in the view that draws it, and once in the controller,
+  which has to know whether a failure is on screen so that it can stop timing
+  one that is not. The two disagreed about a closed board, and a failure
+  reported into one spent its six seconds where nobody could read it — the exact
+  thing the timer exists to prevent. `Store.statusTier` answers it now, for both,
+  from one state the controller gathers; the view only joins and colours what it
+  is told. The order is unchanged, and `tests/suite.js` walks every tier against
+  every tier below it, so one quietly moving down the list is caught here rather
+  than by somebody watching the board.
+
+- **Copying out and pasting in are two operations.** They shared a failure kind,
+  so a copy that worked took down "clipboard has no available text" as though it
+  had answered it. A clipboard that accepted a copy says nothing about there
+  being anything in it to paste.
+
+- Each newly reported failure gets a fresh six-second display interval. Replacing
+  a visible failure no longer inherits the previous message's expiry deadline.
+  Failures received while the board is closed still wait until it opens.
+
+- **A failure no longer waits behind whatever you started next.** Ranking the
+  connector outcome above a flash fixed a stale "Duplicated" covering it — and
+  would have buried a clipboard that never answered under the same rule, because
+  both arrive on the same property. A subprocess answers on its own time: by
+  then the person is somewhere else on the board, and a failure they were not
+  looking at is one they never learn about.
+
+  The producers say which is which now, at the point they know. `BoardExchange`
+  answers on `finished` or on `failed`, and both carry which operation they are
+  about — the clipboard, a board file, a picture, a PNG — so a later success can
+  take down the failure it recovered from and leave the others alone. Copying
+  something out after the clipboard would not answer means the clipboard is
+  working; saving a PNG says nothing about it. Severity is never read out of the
+  words: "Could not" is a phrase, not a type, and `tests/contract.js` refuses a
+  call site that does not name a kind from the list.
+
+  A failure sits under the four things that stop the board saving — a failed
+  write, a trash index that will not save, two versions of a board, a board that
+  could not be read — and above everything the person has started since. Its
+  time only runs while it is the thing on screen, so it cannot expire behind a
+  conflict, under the browser, or while the board is closed. A live regression
+  closes the board for seven seconds and checks the failure after reopening.
+  Escape takes it down once nothing else is
+  waiting for escape, which means the keystroke that dismisses an answer is
+  never also the one that closes the board.
+
+- **The line under the header stopped promising the wrong thing.** A flash sits
+  on the line for two and a half seconds, and it outranked the connector
+  outcome: press `x`, connect two notes, press `x` again on a pair that already
+  has one, and "connector removed · u to undo" was still on screen while the
+  next gesture was being aimed — the one line that says what the next keystroke
+  will do, saying what the last one did instead.
+
+  The order was the cause, and it was inconsistent: three of the modes were
+  ranked above a flash and the rest below it, which also put a message that
+  fades in front of two things that do not. It reads in four tiers now — the
+  board is not being saved and here is why, then what the keyboard is about to
+  do, then what it just did, then what it is busy with. So a failed write, a
+  conflict with the version on disk and a board that could not be read are no
+  longer covered by a flash or by a mode that stays open, which matters because
+  each of those stops the session saving at all; and typing outranks a held
+  connector, because while there is a caret in a note, `x` is the letter x.
+
+  Starting a connector also drops whatever the line was holding, so a message
+  from the previous gesture cannot come back out from underneath this one when
+  it finishes. Its own timer is still what expires it: nothing held back
+  reappears later than it would have.
 
 - **A middle-drag over an item no longer deletes it.** Middle-drag was the pan
   gesture on the canvas, and a middle-click on an item removed it, so the same

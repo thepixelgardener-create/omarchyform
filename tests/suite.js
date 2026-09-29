@@ -666,6 +666,82 @@ function tests(S) {
     }
   })
 
+  // Severity and subject come from the producer. This is the list they name,
+  // and the only thing that decides whether a success means a failure has
+  // recovered — which is why an unknown one must not quietly pass for one.
+  test("a failure belongs to an operation, named from a fixed list", () => {
+    ok(S.FAILURE_KINDS.length > 0, "there are kinds")
+    eq(S.FAILURE_KINDS, S.FAILURE_KINDS.map(k => k.toLowerCase().trim()), "already folded")
+    eq(S.FAILURE_KINDS.length, new Set(S.FAILURE_KINDS).size, "each one once")
+    for (const kind of S.FAILURE_KINDS) ok(S.isFailureKind(kind), kind + " is one of them")
+    for (const not of ["", "  ", "Clipboard", "clipboards", "nonsense", null, undefined, 0])
+      ok(!S.isFailureKind(not), String(not) + " is not")
+  })
+
+  // The line under the header had its precedence written out twice — once in
+  // the view that draws it, once in the controller that has to know whether a
+  // failure is on screen so it can stop timing one that is not. They disagreed
+  // about a closed board, and a failure reported into one spent its six seconds
+  // where nobody could see it. One decision now, and this is it.
+  test("one thing at a time gets the line, in one order", () => {
+    const quiet = {
+      opened: true, helpVisible: false, browserVisible: false, finding: false,
+      saveError: "", trashIndexError: "", diskChanged: false, damaged: false,
+      failureText: "", paletteVisible: false, arranging: false, showPinned: false,
+      editing: false, linking: false, statusText: "", switching: false, saving: false
+    }
+    const on = over => S.statusTier(Object.assign({}, quiet, over))
+
+    eq(on({}), "hints", "an idle board offers the keys")
+    eq(S.statusTier(undefined), "none", "and nothing at all is nothing")
+
+    // What each tier is switched on by, and that each one is reachable: a tier
+    // nothing can produce is a branch in the view that never draws.
+    const turnsOn = [
+      ["saveError", { saveError: "could not write" }],
+      ["trashIndexError", { trashIndexError: "bad index" }],
+      ["conflict", { diskChanged: true }],
+      ["damaged", { damaged: true }],
+      ["failure", { failureText: "Could not reach the clipboard" }],
+      ["palette", { paletteVisible: true }],
+      ["arrange", { arranging: true }],
+      ["backgrounds", { showPinned: true }],
+      ["editing", { editing: true }],
+      ["linking", { linking: true }],
+      ["flash", { statusText: "Copied" }],
+      ["switching", { switching: true }],
+      ["saving", { saving: true }]
+    ]
+    for (const [tier, state] of turnsOn) eq(on(state), tier, tier + " on its own")
+    eq(turnsOn.length + 2, S.STATUS_TIERS.length, "every tier is named and reachable")
+    for (const [tier] of turnsOn) ok(S.STATUS_TIERS.indexOf(tier) >= 0, tier + " is in the list")
+
+    // Nothing shows while the line is not on screen, whatever else is true.
+    for (const gone of [{ opened: false }, { helpVisible: true }, { browserVisible: true },
+                        { finding: true }])
+      eq(on(Object.assign({ saveError: "x", failureText: "y", statusText: "z" }, gone)), "none",
+         JSON.stringify(gone) + " covers the line entirely")
+
+    // The order itself: each tier beats every one below it. Set the whole tail
+    // at once, so a tier that quietly moved down the list is caught here rather
+    // than by somebody watching the board.
+    for (let i = 0; i < turnsOn.length; i++) {
+      const all = {}
+      for (let j = i; j < turnsOn.length; j++) Object.assign(all, turnsOn[j][1])
+      eq(on(all), turnsOn[i][0], turnsOn[i][0] + " beats everything under it")
+    }
+
+    // The two that matter most, spelled out rather than left to the loop: a
+    // message that fades must not cover the reason the board is not saving,
+    // and a gesture the person has started must not cover a failure.
+    eq(on({ statusText: "Duplicated", linking: true }), "linking",
+       "an acknowledgement does not cover what the next key will do")
+    eq(on({ statusText: "Duplicated", failureText: "Could not copy that picture" }), "failure",
+       "nor a failure")
+    eq(on({ failureText: "Could not copy that picture", diskChanged: true }), "conflict",
+       "and a failure does not cover a board that is not being saved")
+  })
+
   // Drawing a connector is three operations wearing one keystroke. The line
   // that promises which one and the change that carries it out ask this.
   test("what drawing a connector will do is one question", () => {

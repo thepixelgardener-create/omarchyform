@@ -22,7 +22,14 @@ Item {
   property string createdNote: ""
   readonly property bool dialogOpen: picker.visible
   signal created(string path, bool editFirst)
-  signal finished(string message)
+  // Two answers, not one with a phrase in it. `finished` is something that
+  // happened; `failed` is something the person asked for that did not, and the
+  // board ranks the two differently because one can wait and the other cannot.
+  // Both carry which operation they are about, so a success can take down the
+  // failure it recovered from and leave the rest alone. The kinds are
+  // Store.FAILURE_KINDS; "" on a `finished` means it recovers nothing.
+  signal finished(string message, string kind)
+  signal failed(string message, string kind)
   // A board written into the library that is not the one to open: the copy
   // someone keeps when two versions of a board have to survive.
   signal copied(string name)
@@ -31,10 +38,10 @@ Item {
   // what refuses the next import, so leaving it set after a failure strands
   // importing and exporting for the rest of the session, and a failure nobody
   // is told about looks exactly like nothing having happened.
-  function fail(message) {
+  function fail(message, kind) {
     busy = false
     error = message
-    finished(message)
+    failed(message, kind)
   }
 
   function stage(text, name, editFirst) {
@@ -98,9 +105,9 @@ Item {
     onExited: function (code) {
       exchange.busy = false
       var bytes = code === 0 ? parseInt(measured.text, 10) : 0
-      if (!isFinite(bytes) || bytes <= 0) { exchange.fail("Could not read that board"); return }
+      if (!isFinite(bytes) || bytes <= 0) { exchange.fail("Could not read that board", "board"); return }
       if (bytes > exchange.maxImportBytes) {
-        exchange.fail("That file is " + Math.round(bytes / 1048576) + " MB — too large for a board")
+        exchange.fail("That file is " + Math.round(bytes / 1048576) + " MB — too large for a board", "board")
         return
       }
       exchange.readImport(measure.source)
@@ -116,8 +123,8 @@ Item {
     input.reload()
     input.waitForJob()
     var raw = input.text()
-    if (!raw) { exchange.fail("Could not read that board"); return }
-    if (!Store.readFile(raw)) { exchange.fail("That file is not a supported board"); return }
+    if (!raw) { exchange.fail("Could not read that board", "board"); return }
+    if (!Store.readFile(raw)) { exchange.fail("That file is not a supported board", "board"); return }
     var base = Store.baseName(path).replace(/(\.omarchyform)?\.json$/i, "")
     // A copy saved to share carries its pictures inside it. They have to be
     // written into this machine's own images folder, under names of its
@@ -131,7 +138,7 @@ Item {
     var declared = Store.declaredImageCount(raw)
     if (declared !== names.length) {
       exchange.fail("That board carries " + (declared - names.length) + " of " + declared
-                    + " pictures this cannot accept; nothing was imported")
+                    + " pictures this cannot accept; nothing was imported", "board")
       return
     }
     if (names.length === 0) { exchange.stage(raw, base, false); return }
@@ -169,7 +176,7 @@ Item {
     // the same way a picture whose item was deleted does.
     if (name === "") {
       exchange.sharing = null
-      exchange.fail("A picture in that board could not be read; nothing was imported")
+      exchange.fail("A picture in that board could not be read; nothing was imported", "board")
       return
     }
     job.landed[job.names[job.at]] = name
@@ -255,7 +262,7 @@ Item {
     stdout: StdioCollector { id: collected; waitForEnd: true }
     onExited: function (code) {
       if (!exchange.snapshot || collect.forExport !== exchange.snapshot.id) return
-      if (code !== 0) { exchange.fail("Could not read this board's pictures"); return }
+      if (code !== 0) { exchange.fail("Could not read this board's pictures", "board"); return }
       var images = {}
       var missing = 0
       var oversize = -1
@@ -276,12 +283,12 @@ Item {
         exchange.fail("This board's pictures come to " + Math.round(oversize / 1048576)
                       + " MB, more than a copy can carry ("
                       + Math.round(exchange.bundleBudget / 1048576) + " MB)"
-                      + " · save a copy without its pictures instead")
+                      + " · save a copy without its pictures instead", "board")
         return
       }
       if (missing > 0) {
         exchange.fail(missing + (missing === 1 ? " picture this board names is" : " pictures this board names are")
-                      + " missing from your library · save a copy without its pictures instead")
+                      + " missing from your library · save a copy without its pictures instead", "board")
         return
       }
       exchange.exportNote = ", with its pictures"
@@ -337,7 +344,7 @@ Item {
     // can be imported afterwards.
     onSaveFailed: function (reason) {
       exchange.fail((exchange.operation === "export" ? "Could not prepare the copy: " : "Could not prepare that board: ")
-                    + FileViewError.toString(reason))
+                    + FileViewError.toString(reason), "board")
     }
     onSaved: {
       if (exchange.operation === "publish" || exchange.operation === "copy") {
@@ -355,10 +362,10 @@ Item {
     stdout: StdioCollector { id: published; waitForEnd: true }
     onExited: function(code) {
       exchange.busy = false
-      if (code !== 0) { exchange.fail("Could not save there; choose a location outside the app data folder"); return }
+      if (code !== 0) { exchange.fail("Could not save there; choose a location outside the app data folder", "board"); return }
       if (exchange.operation === "copy") exchange.copied(published.text)
       else if (exchange.operation === "publish") exchange.created(published.text, exchange.firstNote)
-      else exchange.finished("Editable copy saved" + exchange.exportNote)
+      else exchange.finished("Editable copy saved" + exchange.exportNote, "board")
     }
   }
   // Copying out. One picture on its own goes as the picture, so it can be
@@ -376,7 +383,7 @@ Item {
       }
     }
     var text = Store.copyText(exchange.ctl.items, indices)
-    if (text === "") { exchange.finished("nothing written on it to copy"); return }
+    if (text === "") { exchange.finished("nothing written on it to copy", ""); return }
     copyProc.command = exchange.ctl.fileCommand("clipcopy", [text])
     copyProc.copied = indices.length
     copyProc.running = true
@@ -386,15 +393,16 @@ Item {
     id: copyProc
     property int copied: 0
     onExited: function (code) {
-      if (code !== 0) exchange.finished("Could not reach the clipboard")
-      else exchange.finished(copyProc.copied === 1 ? "Copied" : "Copied " + copyProc.copied + " items")
+      if (code !== 0) exchange.failed("Could not reach the clipboard", "copy")
+      else exchange.finished(copyProc.copied === 1 ? "Copied" : "Copied " + copyProc.copied + " items", "copy")
     }
   }
 
   Process {
     id: copyImageProc
     onExited: function (code) {
-      exchange.finished(code === 0 ? "Picture copied" : "Could not copy that picture")
+      if (code === 0) exchange.finished("Picture copied", "copy")
+      else exchange.failed("Could not copy that picture", "copy")
     }
   }
 
@@ -439,15 +447,15 @@ Item {
       // one that has to be dropped again, so the copy is abandoned in the
       // pictures folder rather than placed anywhere.
       if (code === 0 && importedName.text && done.board !== exchange.ctl.currentBoard)
-        exchange.finished("Board changed; drop that picture again")
+        exchange.failed("Board changed; drop that picture again", "picture")
       else if (code === 0 && importedName.text) exchange.ctl.imageDropped(importedName.text, done.x, done.y)
       // 5 is the helper's way of saying the file is too big to put on a board,
       // which is worth saying differently from "that is not a picture".
-      else if (code === 5) exchange.finished("That file is too large to put on a board")
+      else if (code === 5) exchange.failed("That file is too large to put on a board", "picture")
       // 6 needs two pictures to arrive in the same millisecond, but saying the
       // wrong thing about it would be worse than the line it costs.
-      else if (code === 6) exchange.finished("A picture of that name is already there")
-      else exchange.finished("That is not an image this can read")
+      else if (code === 6) exchange.failed("A picture of that name is already there", "picture")
+      else exchange.failed("That is not an image this can read", "picture")
       exchange.nextDrop()
     }
   }
@@ -456,12 +464,12 @@ Item {
     id: imageGrab
     stdout: StdioCollector { id: grabbed; waitForEnd: true }
     onExited: function (code) {
-      if (exchange.pasteBoard !== exchange.ctl.currentBoard) { exchange.finished("Board changed; paste again"); return }
+      if (exchange.pasteBoard !== exchange.ctl.currentBoard) { exchange.failed("Board changed; paste again", "paste"); return }
       // 4 is the script's way of saying the clipboard holds no picture, which
       // is not a failure: text is the other thing it could be holding.
       if (code === 4) { clipboard.running = true; return }
-      if (code === 6) { exchange.finished("A picture of that name is already there"); return }
-      if (code !== 0 || !grabbed.text) { exchange.finished("Could not read the clipboard image"); return }
+      if (code === 6) { exchange.failed("A picture of that name is already there", "paste"); return }
+      if (code !== 0 || !grabbed.text) { exchange.failed("Could not read the clipboard image", "paste"); return }
       exchange.ctl.imagePasted(grabbed.text)
     }
   }
@@ -470,8 +478,8 @@ Item {
     command: ["timeout", "3", "wl-paste", "--no-newline", "--type", "text"]
     stdout: StdioCollector { id: pasted; waitForEnd: true }
     onExited: function(code) {
-      if (code !== 0) { exchange.finished("Clipboard has no available text"); return }
-      if (exchange.pasteBoard !== exchange.ctl.currentBoard) { exchange.finished("Board changed; paste again"); return }
+      if (code !== 0) { exchange.failed("Clipboard has no available text", "paste"); return }
+      if (exchange.pasteBoard !== exchange.ctl.currentBoard) { exchange.failed("Board changed; paste again", "paste"); return }
       exchange.ctl.pasteText(pasted.text)
     }
   }

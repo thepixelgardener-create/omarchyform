@@ -4,10 +4,11 @@
   "private": true,
   "description": "Tests for the pure board logic in BoardStore.js",
   "scripts": {
-    "test": "node tests/run.js && node tests/controller.js && node tests/contract.js && node tests/filesystem.js && node tests/desktop.js && node tests/cli.js",
+    "test": "node tests/run.js && node tests/controller.js && node tests/contract.js && node tests/filesystem.js && node tests/desktop.js && node tests/cli.js && node tests/held-runner-test.js",
     "mutate": "node tests/mutate.js",
     "test:qml": "node tests/persistence.js",
     "test:ui": "node tests/ui.js",
+    "test:hold": "node tests/hold.js",
     "test:paste": "node tests/omarchy.js --live --paste",
     "test:omarchy": "node tests/omarchy.js --live",
     "bench": "node tests/bench.js",

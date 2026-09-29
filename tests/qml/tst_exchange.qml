@@ -14,6 +14,11 @@ ShellRoot {
   property string pastedImage: ""
   property string importedBoard: ""
   property string lastMessage: ""
+  // Which signal carried it, and what it said it was about. A failure that
+  // arrives on `finished` reaches the board as an acknowledgement and is gone
+  // in two and a half seconds; this is where that would be caught.
+  property string lastKind: ""
+  property bool lastFailed: false
   function check(condition, message) {
     if (!condition) { console.error("FAIL: " + message); Qt.quit(); throw new Error(message) }
   }
@@ -56,7 +61,12 @@ ShellRoot {
     id: exchange
     ctl: ctl
     onCreated: function (path, editFirst) { test.importedBoard = path }
-    onFinished: function (message) { test.lastMessage = message }
+    onFinished: function (message, kind) {
+      test.lastMessage = message; test.lastKind = kind; test.lastFailed = false
+    }
+    onFailed: function (message, kind) {
+      test.lastMessage = message; test.lastKind = kind; test.lastFailed = true
+    }
   }
 
   Timer {
@@ -73,6 +83,8 @@ ShellRoot {
       } else if (test.stage === 1 && test.lastMessage !== "" && !exchange.busy) {
         test.check(test.importedBoard === "", "a board with an unreadable picture is not imported")
         test.check(test.lastMessage.indexOf("could not be read") > 0, test.lastMessage)
+        test.check(test.lastFailed, "an import that could not finish is a failure, not a notice")
+        test.check(test.lastKind === "board", "about the board that was being imported: " + test.lastKind)
         test.check(test.read(test.dir + "/broken.omarchyform.json") !== "", "and the file is left alone")
         test.check(test.read(ctl.boardsDir + "/broken.json") === "", "with nothing published")
 
@@ -83,6 +95,7 @@ ShellRoot {
       } else if (test.stage === 2 && test.lastMessage !== "" && !exchange.busy) {
         test.check(test.importedBoard === "", "nor is one naming a picture it may not name")
         test.check(test.lastMessage.indexOf("cannot accept") > 0, test.lastMessage)
+        test.check(test.lastFailed && test.lastKind === "board", "reported as a board failure")
 
         // And a file too large to read is refused by its size, before it is.
         test.lastMessage = ""
@@ -90,6 +103,7 @@ ShellRoot {
         exchange.importPath(test.dir + "/enormous.omarchyform.json")
       } else if (test.stage === 3 && test.lastMessage !== "" && !exchange.busy) {
         test.check(test.lastMessage.indexOf("too large") > 0, test.lastMessage)
+        test.check(test.lastFailed && test.lastKind === "board", "reported as a board failure")
         test.check(test.importedBoard === "", "and nothing was imported")
 
         // The whole one. Two pictures, one of them named twice, and one of
@@ -138,6 +152,8 @@ ShellRoot {
         test.check(copy.images !== undefined && copy.images["pic.png"] === test.pixels,
                    "and carries the bytes of it")
         test.check(test.lastMessage === "Editable copy saved, with its pictures", test.lastMessage)
+        test.check(!test.lastFailed, "a copy that was written is not a failure")
+        test.check(test.lastKind === "board", "and says which operation came back: " + test.lastKind)
 
         // The whole point, in one run: the copy that was just written is read
         // back in, and the bytes that come out of it are the bytes that went
@@ -166,6 +182,7 @@ ShellRoot {
         exchange.exportJson(test.dir + "/incomplete.omarchyform.json")
       } else if (test.stage === 6 && test.lastMessage !== "" && !exchange.busy) {
         test.check(test.lastMessage.indexOf("missing from your library") > 0, test.lastMessage)
+        test.check(test.lastFailed && test.lastKind === "board", "an export that could not finish is a failure")
         test.check(test.read(test.dir + "/incomplete.omarchyform.json") === "",
                    "nothing is published when a picture is missing")
 

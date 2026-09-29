@@ -11,6 +11,10 @@ function controller() {
     camX: 0, camY: 0, zoom: 1, activeBoard: null, markedIds: [], showPinned: false, arranging: false,
     finding: false, findQuery: '', findCount: 0, imageQueue: [],
     menuVisible: false, zoomMenuVisible: false, menuIndex: 0, helpVisible: false,
+    // Declared on the controller and defaulted there; the harness needs them
+    // because a failure's time on screen is measured against what is covering
+    // the line, and an undeclared name reads as undefined rather than as empty.
+    trashIndexError: '', browserVisible: false, opened: true,
     paletteVisible: false, paletteQuery: '', paletteIndex: 0, paletteRows: 9,
     conflictVisible: false, conflictIndex: 0, paletteScope: 'all',
     boardsDir: '/boards', backupsDir: '/backups', worldStep: 40, minItemSize: 60, viewW: 1000, viewH: 700 }
@@ -37,6 +41,13 @@ function controller() {
   // the QML declares and this harness would otherwise not have. Kept as close
   // to the original as a getter can be, so a change to one is visible as a
   // difference from the other.
+  // The binding the failure timer runs on, which the QML declares and this
+  // harness would otherwise not have. Same shape as the original, so a change
+  // to one shows up as a difference from the other.
+  Object.defineProperty(root, 'failureVisible', { get: () =>
+    root.opened && root.failureText !== '' && root.saveError === '' && root.trashIndexError === ''
+    && !root.diskChanged && !root.damaged
+    && !root.helpVisible && !root.browserVisible && !root.finding })
   Object.defineProperty(root, 'linkOutcome', { get: () => {
     if (root.linkingFrom < 0 || !root.canEdit) return 'none'
     if (root.selectedIndex < 0 || root.selectedIndex >= items.count) return 'none'
@@ -68,7 +79,7 @@ function controller() {
   const scanProc = { running: false }
   const context = vm.createContext({ root, session, Store: loadStore(), itemModel: items, linkModel: links,
     persistence, exchange, trashIndexFile, scanProc,
-    statusTimer: {restart() {}}, saveTimer: { running: false, stop() {}, restart() {} }, stateFile: {setText() {}} })
+    statusTimer: {restart() {}}, failureTimer: {restart() {}}, saveTimer: { running: false, stop() {}, restart() {} }, stateFile: {setText() {}} })
   function loadFunctions(target, qml) {
     for (const match of qml.matchAll(/^  function (\w+)\((.*?)\) \{\n([\s\S]*?)^  }/gm))
       target[match[1]] = vm.runInContext(`(function(${match[2]}) {${match[3]}})`, context)
@@ -1324,5 +1335,118 @@ console.log('ok — controller: a first board built only from names in the list'
   assert.equal(c.links.count, 0, 'X takes them all')
   c.root.undo()
   assert.equal(c.links.count, 2, 'in one step')
+
+  // A message about the last thing that finished does not survive the start of
+  // the next gesture. The line under the header already ranks the outcome above
+  // it while the gesture runs; this is so it cannot reappear underneath once the
+  // gesture ends, still inside the two and a half seconds it was given.
+  c.root.selectOnly(0)
+  c.root.flash('Duplicated')
+  assert.equal(c.root.statusText, 'Duplicated')
+  c.root.toggleLinking()
+  assert.equal(c.root.statusText, '', 'starting a connector drops it')
+  assert.equal(c.root.linkingFrom, a, 'and the gesture is under way')
+  c.root.selectedIndex = 1
+  const outcome = c.root.linkOutcome
+  c.root.toggleLinking()
+  assert.equal(c.root.linkingFrom, -1, 'which finishes')
+  // Removing one has something to say; the other two outcomes do not, and
+  // either way what the line holds afterwards is about this gesture.
+  if (outcome === 'remove') assert.match(c.root.statusText, /connector removed/,
+    'the completion still speaks')
+  else assert.equal(c.root.statusText, '', 'and nothing stale is left behind')
 }
 console.log('ok — controller: what a connector gesture promises, and what it then does')
+{
+  // A subprocess answers whenever it answers. By then the person has started
+  // something else, and the line they were not looking at is a failure they
+  // never learn about — so a failure outranks the gesture and waits.
+  const S = loadStore()
+  const c = controller()
+  c.session.loadBoard('{"version":5,"items":[]}', false)
+  c.root.addItem('note', 0, 0)
+  c.root.addItem('note', 200, 0)
+
+  // Severity comes from the producer, not from the words.
+  c.root.report('Could not reach the clipboard', 'copy')
+  assert.equal(c.root.failureText, 'Could not reach the clipboard')
+  assert.equal(c.root.failureKind, 'copy')
+  assert.ok(c.root.failureVisible, 'and the line is showing it')
+
+  // A gesture started afterwards does not take it down, and does not cover it.
+  c.root.selectOnly(0)
+  c.root.toggleLinking()
+  assert.equal(c.root.statusText, '', 'the last acknowledgement goes')
+  assert.equal(c.root.failureText, 'Could not reach the clipboard', 'the failure stays')
+  c.root.back()
+  assert.equal(c.root.linkingFrom, -1, 'escape ends the gesture')
+  assert.equal(c.root.failureText, 'Could not reach the clipboard', 'and still leaves it')
+
+  // An acknowledgement of something else is not a recovery.
+  c.root.flash('Duplicated')
+  assert.equal(c.root.failureText, 'Could not reach the clipboard', 'no kind, nothing recovered')
+  c.root.flash('PNG saved · full board, without controls', 'png')
+  assert.equal(c.root.failureText, 'Could not reach the clipboard',
+    'another operation working says nothing about this one')
+
+  // The same operation working does mean it recovered.
+  // Copying out and pasting in are two operations: a copy that worked says
+  // nothing about there being anything to paste, so only the one that failed
+  // takes its own failure down.
+  c.root.flash('Text pasted · enter to edit', 'paste')
+  assert.equal(c.root.failureText, 'Could not reach the clipboard',
+    'pasting working says nothing about copying')
+  c.root.flash('Copied', 'copy')
+  assert.equal(c.root.failureText, '', 'the copy answered, so the line lets go')
+  assert.equal(c.root.failureKind, '')
+
+  // One failure at a time: a newer one replaces the one before it.
+  c.root.report('Could not save PNG; choose a location outside the app data folder', 'png')
+  c.root.report('That is not an image this can read', 'picture')
+  assert.equal(c.root.failureText, 'That is not an image this can read')
+  assert.equal(c.root.failureKind, 'picture')
+
+  // Escape takes it down — last, after every mode, so the keystroke that
+  // dismisses an answer is never the one that closes the board.
+  c.root.selectOnly(0)
+  c.root.toggleLinking()
+  c.root.back()
+  assert.equal(c.root.failureText, 'That is not an image this can read', 'the gesture went first')
+  c.root.back()
+  assert.equal(c.root.failureText, '', 'and then the failure')
+  assert.equal(c.root.dismissed, undefined, 'without closing the board')
+
+  // A kind the table does not have is not a kind. It is still reported —
+  // losing the message would be worse — but nothing can claim to recover it.
+  c.root.report('something went wrong somewhere', 'nonsense')
+  assert.equal(c.root.failureText, 'something went wrong somewhere')
+  assert.equal(c.root.failureKind, '', 'not a kind any success can match')
+  for (const kind of S.FAILURE_KINDS) {
+    c.root.flash('fine', kind)
+    assert.equal(c.root.failureText, 'something went wrong somewhere',
+      kind + ' cannot recover a failure that belongs to nothing')
+  }
+  c.root.clearFailure()
+
+  // The timer runs on whether it is on screen, so a failure cannot expire in
+  // the time it spent where nobody could read it.
+  c.root.report('Could not read the clipboard image', 'paste')
+  assert.ok(c.root.failureVisible)
+  for (const [set, unset] of [
+    [() => { c.root.opened = false }, () => { c.root.opened = true }],
+    [() => { c.session.saveError = 'notes.json could not be written' }, () => { c.session.saveError = '' }],
+    [() => { c.root.trashIndexError = 'x' }, () => { c.root.trashIndexError = '' }],
+    [() => { c.session.conflict = true }, () => { c.session.conflict = false }],
+    [() => { c.session.damaged = true }, () => { c.session.damaged = false }],
+    [() => { c.root.helpVisible = true }, () => { c.root.helpVisible = false }],
+    [() => { c.root.browserVisible = true }, () => { c.root.browserVisible = false }],
+    [() => { c.root.finding = true }, () => { c.root.finding = false }]
+  ]) {
+    set()
+    assert.equal(c.root.failureVisible, false, 'covered, so its time is not running')
+    assert.equal(c.root.failureText, 'Could not read the clipboard image', 'and it is still there')
+    unset()
+    assert.ok(c.root.failureVisible, 'and comes back when the cover goes')
+  }
+}
+console.log('ok — controller: a failure that arrives while you are somewhere else')
