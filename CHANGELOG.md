@@ -217,6 +217,27 @@ since older boards are migrated on load rather than rejected.
 
 ### Fixed
 
+- **Part of the live smoke test was not running, and nothing said so.** Its
+  stages are numbers matched down one if/else chain, and two of them were used
+  twice. The second of each pair was unreachable, so whether the blocks between
+  them ran at all came down to which branch the timing picked: a tick that
+  arrived while a write was in flight fell past the first `62` to the second,
+  and skipped the pin run entirely — that a pinned item draws in the background
+  layer, that pinning is saved to disk, that mark-all passes backgrounds over,
+  that background selection reaches one, and that unpinning puts it back. Five
+  assertions, silently not run, on a suite that reported ok.
+
+  The stages in that run are their own numbers now, and a check counts them:
+  no duplicates, nothing branched on that is never set.
+
+  The same timing was the long-standing flake in that suite. Stages waited for
+  `saving` to be false, which is not waiting for a write — it reads false
+  before one starts as well as after one ends, so under load the check ran
+  against the file as it was before the change and failed on "and the file says
+  so too". They wait for the write itself now: armed before the thing that
+  causes it, satisfied only once one has both started and finished. Four runs
+  under a mutation pass, which is what used to fail it.
+
 - **The export gate was measuring the display.** The live smoke test asked what
   fraction of the exported picture was not its commonest colour and wanted a
   fifth. An export is the board's bounds plus padding, and one of the two notes
