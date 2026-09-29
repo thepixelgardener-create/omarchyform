@@ -439,8 +439,19 @@ function markupSpans(text, colors) {
   })
 }
 
+// How much of a note is put through the parser. A note is 220 by 160 and shows
+// a few dozen words; everything past that is scrolled or clipped, so parsing it
+// buys nothing that can be seen. A board file, on the other hand, can carry a
+// note of any length and comes from whoever sent it — `fillItems` takes the
+// text as it finds it, because truncating somebody's note on load would lose
+// what they wrote. So the item keeps every character and the renderer is given
+// a bounded piece of it.
+var MARKUP_LIMIT = 4000
+
 function noteMarkup(text, colors) {
-  var lines = escapeMarkup(text === undefined || text === null ? "" : text).split("\n")
+  var raw = text === undefined || text === null ? "" : String(text)
+  if (raw.length > MARKUP_LIMIT) raw = raw.slice(0, MARKUP_LIMIT)
+  var lines = escapeMarkup(raw).split("\n")
   var out = []
   for (var i = 0; i < lines.length; i++) {
     var heading = /^#[ \t]+(.*)$/.exec(lines[i])
@@ -464,8 +475,12 @@ function wrapSelection(text, from, to, open, close) {
   var b = Math.max(0, Math.min(source.length, Math.max(from, to)))
   var inner = source.slice(a, b)
 
-  if (source.slice(a - open.length, a) === open && open.length > 0
-      && source.slice(b, b + close.length) === close)
+  // Both marks, or neither. Checked separately because a note can hold a lone
+  // one — a bare `*` is punctuation, and taking it for half a pair would eat
+  // the character next to it.
+  var opened = open !== "" && source.slice(a - open.length, a) === open
+  var closed = close !== "" && source.slice(b, b + close.length) === close
+  if (opened && closed)
     return { text: source.slice(0, a - open.length) + inner + source.slice(b + close.length),
              from: a - open.length, to: b - open.length }
 

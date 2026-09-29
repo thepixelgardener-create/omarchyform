@@ -21,6 +21,28 @@ since older boards are migrated on load rather than rejected.
 
   `skills/omarchyform/SKILL.md` points at it and keeps its own short version.
 
+- **What a note is allowed to cost.** The markup below is applied to text that
+  arrives from a board file, and a board file comes from whoever sent it. The
+  escaping was already the right shape — everything from the file is escaped
+  before any syntax is applied — but nothing bounded how much of it the parser
+  was handed: `fillItems` takes a note's text as it finds it, with no limit, and
+  every note now goes through a parser on the way to the screen.
+
+  The item still keeps every character, because truncating somebody's note on
+  load would lose what they wrote. What is bounded is the parse: 4000
+  characters, which is more than twenty times what fits in a note that size and
+  is all anyone can see of it.
+
+  Hostile notes are now driven through QML's own engine rather than only the
+  one the store suite runs in — a different stack and a different regex
+  implementation, so the store's word for it was not enough. Tags, entities,
+  quotes where an attribute would be, two thousand levels of nesting and a
+  hundred thousand characters: the board renders, and the next note after it
+  draws normally. The assertion is that stripping the handful of tags this code
+  emits leaves no angle bracket at all, rather than a list of tags to be afraid
+  of — `href` and `onload` do appear in that output, as text, which is the
+  point.
+
 - **A note can say more than its words.** A board of twenty notes was twenty
   identical rectangles with identical text in them, and no amount of arranging
   fixed that. Notes now carry a small markup: `# a line` is a heading, `*bold*`
