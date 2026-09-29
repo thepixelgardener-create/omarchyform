@@ -12,12 +12,77 @@ set -euo pipefail
 place_new() {
   local temporary=$1 destination=$2
   [[ ! -e $destination && ! -L $destination ]] || exit 6
-  mv -T -- "$temporary" "$destination"
+  mv -nT -- "$temporary" "$destination"
+  [[ ! -e $temporary ]] || exit 6
 }
 
 # A picture bigger than this has no business on a board, whichever way it
 # arrived: dropped, pasted, or carried inside a shared copy.
 max_image_bytes=33554432
+
+# What a picture costs to draw is its pixels, not its bytes, and the two are not
+# related: a PNG of one flat colour compresses to almost nothing and still asks
+# for four bytes a pixel when it is decoded. Twelve thousand square is a hundred
+# and thirty kilobytes on disk and half a gigabyte in memory — under every byte
+# limit here, and small enough to travel inside a shared board. Qt's PNG reader
+# does not do scaled reading, so nothing downstream can decline to allocate it.
+#
+# Forty megapixels is past any camera and any panorama worth putting on a board,
+# and bounds a decode at about a hundred and sixty megabytes. The per-side limit
+# is there because the area alone would let through a one-by-a-hundred-million
+# strip.
+max_image_pixels=40000000
+max_image_side=20000
+
+# The dimensions, read out of the header. Not out of `file`'s description: that
+# is prose, it differs per format, and a JPEG's mentions "density 1x1" before it
+# mentions the size. PNG, GIF and BMP each put them at a fixed offset, which is
+# exact and needs nothing installed.
+#
+# JPEG and WebP keep theirs behind a walk of the file, so those are left to the
+# byte limit and to what the reader does with them — Qt's JPEG reader does scale
+# while decoding, which is the one case where asking for less actually gets it.
+# Answers nothing when it cannot tell, and the caller lets those through.
+image_pixels() {
+  local path=$1 kind=$2
+  local -a b
+  case "$kind" in
+    png)
+      # IHDR is the first chunk: width then height, big-endian, at offset 16.
+      read -ra b < <(od -An -tu1 -j16 -N8 -- "$path" | tr -s ' ')
+      (( ${#b[@]} == 8 )) || return 1
+      printf '%s %s' $(( (b[0]<<24)|(b[1]<<16)|(b[2]<<8)|b[3] )) \
+                     $(( (b[4]<<24)|(b[5]<<16)|(b[6]<<8)|b[7] ))
+      ;;
+    gif)
+      # Logical screen descriptor: width then height, little-endian, offset 6.
+      read -ra b < <(od -An -tu1 -j6 -N4 -- "$path" | tr -s ' ')
+      (( ${#b[@]} == 4 )) || return 1
+      printf '%s %s' $(( b[0]|(b[1]<<8) )) $(( b[2]|(b[3]<<8) ))
+      ;;
+    bmp)
+      # BITMAPINFOHEADER: width then height, little-endian, offset 18. Height
+      # is signed — a negative one means the rows are stored top-down — so its
+      # two's-complement magnitude is used for top-down pictures.
+      read -ra b < <(od -An -tu1 -j18 -N8 -- "$path" | tr -s ' ')
+      (( ${#b[@]} == 8 )) || return 1
+      printf '%s %s' $(( b[0]|(b[1]<<8)|(b[2]<<16)|(b[3]<<24) )) \
+                     $(( (b[7] & 128) ? 4294967296 - (b[4]|(b[5]<<8)|(b[6]<<16)|(b[7]<<24)) : (b[4]|(b[5]<<8)|(b[6]<<16)|(b[7]<<24)) ))
+      ;;
+    *) return 1 ;;
+  esac
+}
+
+# Exit 7 is "too many pixels", which is a different thing to say than exit 5 and
+# needs saying: the file on disk may be tiny.
+refuse_huge_pictures() {
+  local dimensions width height
+  dimensions=$(image_pixels "$1" "$2") || return 0
+  read -r width height <<< "$dimensions"
+  (( width > 0 && height > 0 )) || exit 7
+  (( width <= max_image_side && height <= max_image_side )) || exit 7
+  (( width * height <= max_image_pixels )) || exit 7
+}
 
 # The type comes from the bytes, never from the name: a dropped path and a
 # shared board are both somebody else's idea of what a file is called. Exit 4
@@ -119,14 +184,30 @@ case "$operation" in
     confined "$images_root" "$base_name.$extension"
     temporary=$(mktemp -- "$images_root/.omarchyform-paste-XXXXXX")
     trap 'rm -f -- "$temporary"' EXIT
-    timeout 10 wl-paste --no-newline --type "$mime" > "$temporary" || exit 4
+    read_status=0
+    timeout 10 wl-paste --no-newline --type "$mime" | head -c "$((max_image_bytes + 1))" > "$temporary" || read_status=$?
     [[ -s $temporary ]] || exit 4
     # The same limit a dropped file gets. A picture is a picture however it
     # arrived, and the clipboard can hold a screenshot of a 4K desktop.
     size=$(stat -Lc %s -- "$temporary") || exit 4
     (( size <= max_image_bytes )) || exit 5
+    (( read_status == 0 )) || exit 8
+    extension=$(image_extension "$temporary") || exit 8
+    confined "$images_root" "$base_name.$extension"
+    refuse_huge_pictures "$temporary" "$extension"
     place_new "$temporary" "$images_root/$base_name.$extension"
     printf '%s' "$base_name.$extension"
+    ;;
+  cliptext)
+    # Bound the bytes before QML collects stdout. Never return a partial note.
+    temporary=$(mktemp)
+    trap 'rm -f -- "$temporary"' EXIT
+    read_status=0
+    timeout 3 wl-paste --no-newline --type text | head -c 1048577 > "$temporary" || read_status=$?
+    size=$(stat -Lc %s -- "$temporary")
+    (( size <= 1048576 )) || exit 5
+    (( read_status == 0 )) || exit 4
+    cat -- "$temporary"
     ;;
   clipcopy)
     # wl-copy forks and keeps serving the clipboard for as long as it owns it,
@@ -157,10 +238,16 @@ case "$operation" in
     (( size > 0 )) || exit 4
     (( size <= max_image_bytes )) || exit 5
     extension=$(image_extension "$source_path") || exit 4
+    refuse_huge_pictures "$source_path" "$extension"
     confined "$images_root" "$base_name.$extension"
     temporary=$(mktemp -- "$images_root/.omarchyform-drop-XXXXXX")
     trap 'rm -f -- "$temporary"' EXIT
-    cp -- "$source_path" "$temporary"
+    head -c "$((max_image_bytes + 1))" -- "$source_path" > "$temporary"
+    size=$(stat -Lc %s -- "$temporary")
+    (( size <= max_image_bytes )) || exit 5
+    extension=$(image_extension "$temporary") || exit 4
+    confined "$images_root" "$base_name.$extension"
+    refuse_huge_pictures "$temporary" "$extension"
     place_new "$temporary" "$images_root/$base_name.$extension"
     printf '%s' "$base_name.$extension"
     ;;
@@ -198,7 +285,8 @@ case "$operation" in
     # A picture that arrived inside a board. The name it came with is not used
     # for anything: the caller picks the name, the type comes from the decoded
     # bytes, and the size is held to the same limit a dropped file is. Exit 4
-    # means the bytes are not a picture, 5 that they are too big for a board.
+    # means the bytes are not a picture, 5 that they are too big for a board,
+    # 7 that they decode to more pixels than a board will draw.
     images_root=$1 staged=$2 base_name=$3
     [[ $base_name != */* && $base_name =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]
     [[ -f $staged && ! -L $staged ]]
@@ -209,6 +297,9 @@ case "$operation" in
     (( size > 0 )) || exit 4
     (( size <= max_image_bytes )) || exit 5
     extension=$(image_extension "$temporary") || exit 4
+    # The path that matters most: this is a picture out of a board somebody
+    # else made, and the only one that arrives without anybody choosing it.
+    refuse_huge_pictures "$temporary" "$extension"
     confined "$images_root" "$base_name.$extension"
     place_new "$temporary" "$images_root/$base_name.$extension"
     printf '%s' "$base_name.$extension"

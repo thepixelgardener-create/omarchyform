@@ -439,8 +439,19 @@ function markupSpans(text, colors) {
   })
 }
 
+// How much of a note is put through the parser. A note is 220 by 160 and shows
+// a few dozen words; everything past that is scrolled or clipped, so parsing it
+// buys nothing that can be seen. A board file, on the other hand, can carry a
+// note of any length and comes from whoever sent it — `fillItems` takes the
+// text as it finds it, because truncating somebody's note on load would lose
+// what they wrote. So the item keeps every character and the renderer is given
+// a bounded piece of it.
+var MARKUP_LIMIT = 4000
+
 function noteMarkup(text, colors) {
-  var lines = escapeMarkup(text === undefined || text === null ? "" : text).split("\n")
+  var raw = text === undefined || text === null ? "" : String(text)
+  if (raw.length > MARKUP_LIMIT) raw = raw.slice(0, MARKUP_LIMIT)
+  var lines = escapeMarkup(raw).split("\n")
   var out = []
   for (var i = 0; i < lines.length; i++) {
     var heading = /^#[ \t]+(.*)$/.exec(lines[i])
@@ -464,8 +475,12 @@ function wrapSelection(text, from, to, open, close) {
   var b = Math.max(0, Math.min(source.length, Math.max(from, to)))
   var inner = source.slice(a, b)
 
-  if (source.slice(a - open.length, a) === open && open.length > 0
-      && source.slice(b, b + close.length) === close)
+  // Both marks, or neither. Checked separately because a note can hold a lone
+  // one — a bare `*` is punctuation, and taking it for half a pair would eat
+  // the character next to it.
+  var opened = open !== "" && source.slice(a - open.length, a) === open
+  var closed = close !== "" && source.slice(b, b + close.length) === close
+  if (opened && closed)
     return { text: source.slice(0, a - open.length) + inner + source.slice(b + close.length),
              from: a - open.length, to: b - open.length }
 
@@ -509,6 +524,21 @@ var COMMANDS = [
   { name: "New box", key: "r", run: "addRelative", arg: "rect", needs: "edit", also: ["rectangle"] },
   { name: "New ellipse", key: "e", run: "addRelative", arg: "ellipse", needs: "edit" },
   { name: "Type in it", key: "i", run: "editSelected", needs: "target", also: ["edit", "edit text"] },
+  // Only while there is a caret in a note. `ctrl+p` opens the list there the
+  // way it does on the board, narrowed to these, so the marks are reachable by
+  // name before the chords are in the hands.
+  { name: "Bold", key: "ctrl+b", run: "markText", arg: "bold", needs: "typing",
+    also: ["strong", "emphasis"] },
+  { name: "Italic", key: "ctrl+i", run: "markText", arg: "italic", needs: "typing",
+    also: ["emphasis"] },
+  { name: "Draw it as a key", key: "ctrl+k", run: "markText", arg: "key", needs: "typing",
+    also: ["code", "monospace", "shortcut"] },
+  { name: "Make it a heading", key: "", run: "headText", needs: "typing",
+    also: ["title", "bigger"] },
+  { name: "Colour it plain", key: "ctrl+1", run: "markText", arg: "foreground", needs: "typing" },
+  { name: "Colour it accent", key: "ctrl+2", run: "markText", arg: "accent", needs: "typing" },
+  { name: "Colour it urgent", key: "ctrl+3", run: "markText", arg: "urgent", needs: "typing" },
+  { name: "Colour it muted", key: "ctrl+4", run: "markText", arg: "muted", needs: "typing" },
   { name: "Change shape", key: "s", run: "cycleKind", needs: "target" },
   { name: "Change colour", key: "c", run: "recolorItem", needs: "target" },
   { name: "Connect to another", key: "x", run: "toggleLinking", needs: "target", also: ["link"] },
@@ -583,6 +613,25 @@ var COMMANDS = [
 // offers, as opposed to everything the board can do.
 var SELECTION_NEEDS = ["target", "item", "group"]
 
+// What a command needs a caret in a note for. Its own scope, because the list
+// opened while typing is a different list: everything else on the board acts on
+// items, and while there is a caret in a note the thing being worked on is the
+// words.
+var TYPING_NEEDS = ["typing"]
+
+// The marks each text command puts round the selection. Kept beside the command
+// table rather than inside the controller so the chord and the command cannot
+// drift: both dispatch through this.
+var TEXT_MARKS = {
+  bold: ["*", "*"],
+  italic: ["_", "_"],
+  key: ["`", "`"],
+  foreground: ["[foreground]", "[/]"],
+  accent: ["[accent]", "[/]"],
+  urgent: ["[urgent]", "[/]"],
+  muted: ["[muted]", "[/]"]
+}
+
 // An alias is a way in, not a name: it is matched from its start, the way a
 // name is, so `select all` answers "sel" and `rectangle` does not answer "a".
 // A substring rule here would put New box in the list for half the alphabet.
@@ -604,6 +653,10 @@ function matchCommands(query, scope) {
   for (var i = 0; i < COMMANDS.length; i++) {
     if (COMMANDS[i].listed === false) continue
     if (scope === "selection" && SELECTION_NEEDS.indexOf(COMMANDS[i].needs) < 0) continue
+    if (scope === "typing" && TYPING_NEEDS.indexOf(COMMANDS[i].needs) < 0) continue
+    // And the other way: what only makes sense with a caret in a note stays out
+    // of the list the board opens, where there is nothing for it to act on.
+    if (scope !== "typing" && TYPING_NEEDS.indexOf(COMMANDS[i].needs) >= 0) continue
     if (needle === "") { rest.push(COMMANDS[i]); continue }
     var name = COMMANDS[i].name.toLowerCase()
     var at = name.indexOf(needle)
@@ -648,6 +701,7 @@ var KEY_HELP = [
   ["u / ctrl+r", "undo / redo"],
   ["b", "boards: browse, open, create"],
   ["enter / i", "type in the selected item"],
+  ["while typing: ctrl+p", "format selected text by name"],
   ["while typing: ctrl+b / ctrl+i", "*bold* / _italic_ round what is selected"],
   ["ctrl+k", "`a key`, drawn in the accent"],
   ["ctrl+1..4", "colour it: foreground, accent, urgent, muted"],

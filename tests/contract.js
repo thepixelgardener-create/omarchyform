@@ -247,6 +247,11 @@ const board = read("Board.qml")
 for (const command of Store.COMMANDS) {
   const chord = /^(?:ctrl|super)\+([a-z])$/.exec(command.key)
   if (!chord) continue
+  if (command.needs === "typing") {
+    const editorBranch = new RegExp("Key_" + chord[1].toUpperCase() + "\\b[^\\n]*body\\.markText\\(\"" + command.arg + "\"\\)")
+    if (!editorBranch.test(read("Node.qml"))) failures.push("Missing editor chord for " + command.name)
+    continue
+  }
   const branch = new RegExp("Key_" + chord[1].toUpperCase() + "\\b[^\\n]*board\\.ctl\\." + command.run + "\\(")
   if (!branch.test(board))
     failures.push(`Board.qml: nothing under ctrl+${chord[1]} runs ${command.run}() for "${command.name}"`)

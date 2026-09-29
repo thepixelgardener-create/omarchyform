@@ -73,6 +73,8 @@ TestCase {
     function save() { saveCount++ }
     function scheduleSave() { saveCount++ }
     function flushSave() { flushCount++ }
+    property var paletteEditor: null
+    function beginTextPalette(editor) { paletteEditor = editor }
     function stopEditing() { editIndex = -1 }
     function removeItem(index) { model.remove(index) }
     ListModel {
@@ -334,6 +336,21 @@ TestCase {
     keyClick(Qt.Key_Escape)
   }
 
+  function test_textPaletteAndHeading() {
+    model.setProperty(0, "itext", "first\nsecond")
+    mouseDoubleClickSequence(test, 140, 140, Qt.LeftButton)
+    var editor = findChild(subject, "note-editor")
+    editor.selectAll()
+    keyClick(Qt.Key_P, Qt.ControlModifier)
+    compare(ctl.paletteEditor, editor)
+    compare(editor.selectedText, "first\nsecond")
+    editor.heading()
+    compare(model.get(0).itext, "# first\n# second")
+    editor.heading()
+    compare(model.get(0).itext, "first\nsecond")
+    keyClick(Qt.Key_Escape)
+  }
+
   // ctrl+b and the rest put a mark round the selection, and take it off again
   // when pressed a second time.
   function test_chordsWrapTheSelection_data() {
@@ -379,6 +396,55 @@ TestCase {
     compare(findChild(subject, "note-editor").text, "from the board",
             "and so does the editor, rather than what was typed before")
     keyClick(Qt.Key_Escape)
+  }
+
+  // A board is a file somebody else can send you, and the note is the part they
+  // write. Whatever is in it reaches the renderer through the same parser, in
+  // QML's own engine rather than the one the store suite runs in — a different
+  // stack and a different regex implementation, so the store's word for it is
+  // not enough. What must not happen is the board going down on being opened.
+  function test_aHostileNoteCannotTakeTheBoardDown_data() {
+    return [
+      { tag: "tags", text: "<b>x</b><img src='/etc/passwd'><a href='http://x'>y</a>" },
+      { tag: "entities", text: "&lt;b&gt;&amp;&#60;script&#62;" },
+      { tag: "quotes in a span", text: '[accent]a" onload="x[/]' },
+      { tag: "deep nesting", text: "DEEPNEST" },
+      { tag: "a very long note", text: "LONGNOTE" },
+      { tag: "lone marks", text: "* _ ` [accent] [/] # " }
+    ]
+  }
+
+  function test_aHostileNoteCannotTakeTheBoardDown(row) {
+    var text = row.text
+    if (text === "DEEPNEST") {
+      text = ""
+      for (var d = 0; d < 2000; d++) text += "[accent]"
+      text += "x"
+      for (var e = 0; e < 2000; e++) text += "[/]"
+    } else if (text === "LONGNOTE") {
+      text = ""
+      for (var n = 0; n < 4000; n++) text += "[urgent]word[/] *bold* `key` "
+    }
+
+    model.set(0, {ix:100, iy:100, iw:180, ih:140, itext:text})
+    verify(waitForRendering(subject), row.tag + ": the board is still drawing")
+
+    var drawn = subject.markup
+    verify(typeof drawn === "string" && drawn.length > 0, row.tag + ": it rendered something")
+
+    // The precise claim, rather than a list of tags to be afraid of: take out
+    // the handful this file emits, and no angle bracket may be left. Anything
+    // the note itself said arrives as &lt; and is drawn as a character.
+    // `href` and `onload` appear in the output of the first row — as text,
+    // which is exactly right, so looking for the words would prove nothing.
+    var ours = drawn.replace(/<\/?b>|<\/?i>|<br>|<font (?:color="#[0-9a-f]{6}"|size="\d")>|<\/font>/g, "")
+    verify(ours.indexOf("<") < 0, row.tag + ": only this file's own tags survive: "
+           + ours.slice(0, 120))
+    verify(ours.indexOf(">") < 0, row.tag + ": and no stray bracket either")
+    // And the board is still working afterwards, which is the whole claim.
+    model.set(0, {ix:100, iy:100, iw:180, ih:140, itext:"after"})
+    verify(waitForRendering(subject))
+    compare(subject.markup, "after", row.tag + ": the next note draws normally")
   }
 
   function test_edit() {

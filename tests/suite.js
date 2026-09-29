@@ -570,7 +570,7 @@ function tests(S) {
   test("the command list offers what was typed, best first", () => {
     // Nothing typed is the whole table, minus the ways into the list itself.
     const all = S.matchCommands("")
-    eq(all.length, S.COMMANDS.filter(c => c.listed !== false).length)
+    eq(all.length, S.COMMANDS.filter(c => c.listed !== false && c.needs !== "typing").length)
     ok(all.every(c => c.listed !== false), "the ways in do not list themselves")
 
     // Asked for a selection, it is the commands that act on one — which is
@@ -646,7 +646,7 @@ function tests(S) {
 
     // Nothing typed is still the whole table in table order.
     eq(S.matchCommands("").map(c => c.name).join(","),
-       S.COMMANDS.filter(c => c.listed !== false).map(c => c.name).join(","),
+       S.COMMANDS.filter(c => c.listed !== false && c.needs !== "typing").map(c => c.name).join(","),
        "an empty query is the table, unchanged")
 
     // Scope is still the first question asked: an alias cannot smuggle a
@@ -837,6 +837,29 @@ function tests(S) {
     eq(m("[accent]unclosed"), "[accent]unclosed")
     eq(m("[nosuchrole]x[/]"), "[nosuchrole]x[/]", "and a role nobody has heard of is text")
     eq(m("#nospace"), "#nospace", "a hash needs a space to be a heading")
+    // A board file can carry a note of any length, and comes from whoever sent
+    // it. The item keeps every character — truncating somebody's note on load
+    // would lose what they wrote — and the renderer is handed a bounded piece,
+    // because nothing past the first screenful of a 220x160 note can be seen.
+    const huge = "[accent]x[/] ".repeat(20000)
+    ok(huge.length > S.MARKUP_LIMIT * 2, "the note is longer than the parser will take")
+    const started = Date.now()
+    const drawn = m(huge)
+    ok(Date.now() - started < 400, "a note that size is still drawn promptly")
+    ok(drawn.length < S.MARKUP_LIMIT * 20, "and what comes out is bounded too: " + drawn.length)
+    eq(m("a".repeat(S.MARKUP_LIMIT + 500)), "a".repeat(S.MARKUP_LIMIT), "cut, not parsed further")
+    eq(m("a".repeat(S.MARKUP_LIMIT)), "a".repeat(S.MARKUP_LIMIT), "and everything up to it is kept")
+
+    // Nesting is bounded by the text, not by the stack: a board someone sent
+    // must not be able to take the board down by being opened.
+    for (const depth of [500, 5000]) {
+      const nested = "[accent]".repeat(depth) + "x" + "[/]".repeat(depth)
+      let out
+      ok((() => { try { out = m(nested); return true } catch (e) { return false } })(),
+         depth + " deep does not throw")
+      ok(typeof out === "string", depth + " deep still renders")
+    }
+
     eq(m(""), "", "nothing says nothing")
     eq(m(undefined), "", "and so does nothing at all")
     for (const role of S.MARKUP_ROLES)
@@ -862,6 +885,27 @@ function tests(S) {
     const role = (t, a, b) => S.wrapSelection(t, a, b, "[accent]", "[/]")
     eq(role("hi", 0, 2), { text: "[accent]hi[/]", from: 8, to: 10 })
     eq(role("[accent]hi[/]", 8, 10), { text: "hi", from: 0, to: 2 })
+
+    // Half a pair is not a pair. A note can hold a lone star — it is
+    // punctuation — and mistaking it for an opening mark would eat the
+    // character beside it.
+    eq(put("*hello world", 1, 6), { text: "**hello* world", from: 2, to: 7 },
+       "a mark before it with none after is left where it is, and a real pair goes on")
+    eq(put("hello* world", 0, 5), { text: "*hello** world", from: 1, to: 6 },
+       "and the same the other way round")
+    eq(S.wrapSelection("[accent]hi", 8, 10, "[accent]", "[/]").text, "[accent][accent]hi[/]",
+       "a role with no close is text, and gets a real pair of its own")
+
+    // Half a mark selected, which is where taking the marks off starts costing
+    // characters. Both of these looked safe and were not: mutation testing put
+    // its finger on them by flipping the two guards below and finding nothing
+    // that could tell.
+    eq(put("*", 0, 1), { text: "***", from: 1, to: 2 },
+       "a lone mark, selected, is wrapped like any other character — not eaten")
+    eq(put("*hello* world", 0, 6), { text: "**hello** world", from: 1, to: 7 },
+       "a selection holding the opening mark but not the closing one is not a pair")
+    eq(put("*hello* world", 1, 7), { text: "**hello** world", from: 2, to: 8 },
+       "nor one holding the closing mark but not the opening")
 
     // Nothing here may reach outside the string it was given.
     for (const [a, b] of [[-5, 99], [99, -5], [0, 0], [2, 2]]) {
@@ -902,7 +946,7 @@ function tests(S) {
     for (const command of S.COMMANDS) {
       ok(typeof command.name === "string" && command.name !== "", "a name")
       ok(typeof command.run === "string" && command.run !== "", command.name + " runs something")
-      ok(["", "edit", "target", "item", "group", "conflict"].indexOf(command.needs) >= 0,
+      ok(["", "edit", "target", "item", "group", "conflict", "typing"].indexOf(command.needs) >= 0,
          command.name + " needs something known")
       eq(names[command.name], undefined, "one entry called " + command.name)
       if (command.key !== "") eq(keys[command.key], undefined, "one command on " + command.key)

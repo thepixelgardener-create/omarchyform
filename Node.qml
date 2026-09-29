@@ -261,6 +261,7 @@ Item {
     horizontalAlignment: node.isNote ? TextEdit.AlignLeft : TextEdit.AlignHCenter
     verticalAlignment: node.isNote ? TextEdit.AlignTop : TextEdit.AlignVCenter
     selectByMouse: true
+    persistentSelection: true
     readOnly: !node.ctl.canEdit || node.ipinned
     enabled: !node.ipinned && !node.ctl.showPinned
     // Guarded so the model write cannot bounce back and reset the caret.
@@ -280,16 +281,33 @@ Item {
       body.select(next.from, next.to)
     }
 
+    function markText(name) {
+      var marks = Store.TEXT_MARKS[name]
+      if (marks) body.style(marks[0], marks[1])
+    }
+
+    function heading() {
+      var start = body.selectionStart === 0 ? 0 : body.text.lastIndexOf("\n", body.selectionStart - 1) + 1
+      var end = body.text.indexOf("\n", body.selectionEnd)
+      if (end < 0) end = body.text.length
+      var lines = body.text.slice(start, end).split("\n")
+      var remove = lines.every(function(line) { return line.indexOf("# ") === 0 })
+      var replacement = lines.map(function(line) { return remove ? line.slice(2) : "# " + line }).join("\n")
+      body.text = body.text.slice(0, start) + replacement + body.text.slice(end)
+      body.select(start, start + replacement.length)
+    }
+
     Keys.onPressed: function(event) {
       if ((event.modifiers & Qt.ControlModifier) === 0) return
-      if (event.key === Qt.Key_N) node.ctl.newBoard()
+      if (event.key === Qt.Key_P) node.ctl.beginTextPalette(body)
+      else if (event.key === Qt.Key_N) node.ctl.newBoard()
       else if (event.key === Qt.Key_S) node.ctl.flushSave()
-      else if (event.key === Qt.Key_B) body.style("*", "*")
-      else if (event.key === Qt.Key_I) body.style("_", "_")
-      else if (event.key === Qt.Key_K) body.style("`", "`")
+      else if (event.key === Qt.Key_B) body.markText("bold")
+      else if (event.key === Qt.Key_I) body.markText("italic")
+      else if (event.key === Qt.Key_K) body.markText("key")
       // The four roles, in the order they are named everywhere else.
       else if (event.key >= Qt.Key_1 && event.key <= Qt.Key_4)
-        body.style("[" + Store.MARKUP_ROLES[event.key - Qt.Key_1] + "]", "[/]")
+        body.markText(Store.MARKUP_ROLES[event.key - Qt.Key_1])
       else return
       event.accepted = true
     }

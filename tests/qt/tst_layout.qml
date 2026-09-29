@@ -79,6 +79,7 @@ TestCase {
     function browserEnter() {}
     // The palette draws the real command table, so what this renders is what a
     // board renders — including how many of them there are.
+    property string paletteScope: "all"
     property bool paletteVisible: true
     property string paletteQuery: ""
     property int paletteIndex: 0

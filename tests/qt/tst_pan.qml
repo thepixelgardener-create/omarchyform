@@ -100,6 +100,7 @@ TestCase {
     function save(quiet) { ctl.saveCount++ }
     function scheduleSave() { ctl.saveCount++ }
     function flushSave() {}
+    function beginTextPalette(editor) {}
     function stopEditing() { ctl.editIndex = -1 }
     function editSelected() { ctl.editIndex = ctl.selectedIndex }
     function addItem(kind, x, y) {
@@ -138,6 +139,7 @@ TestCase {
     property bool menuVisible: false
     property bool zoomMenuVisible: false
     property int menuIndex: 0
+    property string paletteScope: "all"
     property bool paletteVisible: false
     property string paletteQuery: ""
     property int paletteIndex: 0

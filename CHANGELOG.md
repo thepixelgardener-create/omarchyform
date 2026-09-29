@@ -21,6 +21,49 @@ since older boards are migrated on load rather than rejected.
 
   `skills/omarchyform/SKILL.md` points at it and keeps its own short version.
 
+- **A picture is now guarded by its pixels, not only by its bytes.** Everything
+  about pictures was checked except the one number that decides what drawing one
+  costs. A PNG of a single flat colour, twelve thousand square, is a hundred and
+  thirty kilobytes on disk and about half a gigabyte decoded — under the 32 MB
+  limit, sniffed as a genuine `image/png`, small enough to travel inside a
+  shared board, and nothing downstream could decline it: Qt's PNG reader does
+  not do scaled reading, so asking it for less does not get less.
+
+  The dimensions are read out of the header now — PNG, GIF and BMP each keep
+  them at a fixed offset, which is exact and needs nothing installed — and a
+  picture over forty megapixels, or over twenty thousand on a side, is refused
+  with its own exit code and its own message. "Too large" over a hundred
+  kilobyte file reads as a bug rather than as a limit. All three ways a picture
+  arrives are held to it: dropped, pasted, and unpacked from a board somebody
+  else made, which is the one nobody chose.
+
+  The limit is generous on purpose. Sixteen megapixels still goes on a board;
+  this is a bound, not a suspicion of large pictures. JPEG and WebP keep their
+  dimensions behind a walk of the file, so those are left to the byte limit and
+  to Qt's JPEG reader, which does scale while decoding.
+
+- **What a note is allowed to cost.** The markup below is applied to text that
+  arrives from a board file, and a board file comes from whoever sent it. The
+  escaping was already the right shape — everything from the file is escaped
+  before any syntax is applied — but nothing bounded how much of it the parser
+  was handed: `fillItems` takes a note's text as it finds it, with no limit, and
+  every note now goes through a parser on the way to the screen.
+
+  The item still keeps every character, because truncating somebody's note on
+  load would lose what they wrote. What is bounded is the parse: 4000
+  characters, which is more than twenty times what fits in a note that size and
+  is all anyone can see of it.
+
+  Hostile notes are now driven through QML's own engine rather than only the
+  one the store suite runs in — a different stack and a different regex
+  implementation, so the store's word for it was not enough. Tags, entities,
+  quotes where an attribute would be, two thousand levels of nesting and a
+  hundred thousand characters: the board renders, and the next note after it
+  draws normally. The assertion is that stripping the handful of tags this code
+  emits leaves no angle bracket at all, rather than a list of tags to be afraid
+  of — `href` and `onload` do appear in that output, as text, which is the
+  point.
+
 - **A note can say more than its words.** A board of twenty notes was twenty
   identical rectangles with identical text in them, and no amount of arranging
   fixed that. Notes now carry a small markup: `# a line` is a heading, `*bold*`
