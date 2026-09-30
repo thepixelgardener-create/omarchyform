@@ -351,6 +351,27 @@ TestCase {
     keyClick(Qt.Key_Escape)
   }
 
+  function test_headingSelection_data() {
+    return [
+      { tag: "exclusive endpoint", text: "first\nsecond", from: 0, to: 6, expected: "# first\nsecond" },
+      { tag: "backwards selection", text: "first\nsecond", from: 6, to: 0, expected: "# first\nsecond" },
+      { tag: "caret at line start", text: "first\nsecond", from: 6, to: 6, expected: "first\n# second" },
+      { tag: "mixed headings", text: "# first\nsecond", from: 0, to: 14, expected: "# first\n# second" },
+      { tag: "tab heading", text: "#\tfirst\nsecond", from: 0, to: 14, expected: "#\tfirst\n# second" },
+      { tag: "remove headings", text: "# first\n#\tsecond", from: 0, to: 16, expected: "first\nsecond" }
+    ]
+  }
+
+  function test_headingSelection(row) {
+    model.setProperty(0, "itext", row.text)
+    mouseDoubleClickSequence(test, 140, 140, Qt.LeftButton)
+    var editor = findChild(subject, "note-editor")
+    editor.select(row.from, row.to)
+    editor.heading()
+    compare(model.get(0).itext, row.expected)
+    keyClick(Qt.Key_Escape)
+  }
+
   // ctrl+b and the rest put a mark round the selection, and take it off again
   // when pressed a second time.
   function test_chordsWrapTheSelection_data() {

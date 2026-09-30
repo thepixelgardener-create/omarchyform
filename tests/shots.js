@@ -118,6 +118,8 @@ async function capture(theme) {
     fs.copyFileSync(path.join(omarchy, 'shell/services/PluginShellApi.qml'),
       path.join(dir, 'services/PluginShellApi.qml'))
     fs.copyFileSync(path.join(__dirname, 'qml/shot.qml'), path.join(dir, 'shell.qml'))
+    fs.copyFileSync(path.join(repo, 'examples/From spark to shipped.omarchyform.json'),
+      path.join(dir, 'showcase.json'))
 
     // The theme is the only thing reaching out of the isolated HOME: board data,
     // state and images all stay inside it.

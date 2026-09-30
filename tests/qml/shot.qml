@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.Commons
+import "BoardStore.js" as Store
 import "services" as Host
 
 // Puts the real plugin into each state worth looking at and saves a picture of
@@ -18,6 +19,11 @@ ShellRoot {
   property int scene: -1
   property bool grabbing: false
   property bool grabWanted: false
+
+  FileView {
+    id: showcase
+    path: Quickshell.env("OMARCHYFORM_TEST_DIR") + "/showcase.json"
+  }
 
   // Each scene puts the board in a state and is photographed once it settles.
   // Order matters only in that each one starts from where the last left off.
@@ -259,33 +265,15 @@ ShellRoot {
         plugin.statusText = ""
         plugin.selectedIndex = -1
         plugin.markedIds = []
-        plugin.items.clear()
-        plugin.links.clear()
-        plugin.addItem("note", 240, 200)
-        plugin.items.setProperty(0, "itext", "Freeform, but it\nbelongs to the desktop")
-        plugin.addItem("rect", 660, 180)
-        plugin.items.setProperty(1, "itext", "Keyboard first.\nMouse works too.")
-        plugin.addItem("diamond", 1080, 360)
-        plugin.items.setProperty(2, "itext", "Many boards,\none key away")
-        plugin.addItem("note", 240, 560)
-        plugin.items.setProperty(3, "itext", "Notes, boxes,\nellipses, diamonds")
-        plugin.addItem("ellipse", 660, 600)
-        plugin.items.setProperty(4, "itext", "Connect them")
-        plugin.addLink(plugin.items.get(0).iid, plugin.items.get(1).iid)
-        plugin.addLink(plugin.items.get(1).iid, plugin.items.get(2).iid)
-        plugin.addLink(plugin.items.get(3).iid, plugin.items.get(4).iid)
-        plugin.addLink(plugin.items.get(4).iid, plugin.items.get(2).iid)
+        plugin.restore(Store.readFile(showcase.text()))
         plugin.stopEditing()
         plugin.selectedIndex = -1
         plugin.fitToItems()
-        // A fit centres the board in the window, which on a tall one leaves a
-        // band of nothing under the header. The picture is cropped to the top
-        // of the window, so the items are pulled up against the chrome first —
-        // measured, because the window is whatever size the compositor gave us.
-        var top = Infinity
-        for (var i = 0; i < plugin.items.count; i++)
-          top = Math.min(top, plugin.items.get(i).iy)
-        plugin.camY -= plugin.toScreenY(top) - (plugin.activeBoard.headerHeight + 56)
+        // Fit the complete example beneath the chrome, including on tall displays.
+        var available = plugin.viewH - plugin.activeBoard.headerHeight - 48
+        plugin.zoom = Math.min(1, (plugin.viewW - 96) / 1020, available / 725)
+        plugin.camX = (plugin.viewW - 1020 * plugin.zoom) / 2
+        plugin.camY = plugin.activeBoard.headerHeight + 24
         plugin.repaintGrid()
         plugin.repaintLinks()
       }

@@ -88,12 +88,16 @@ Item {
 
   function tintFill(tint, strong) {
     var c = theme.tintColor(tint)
-    var a = theme.isLight ? (strong ? 0.20 : 0.10) : (strong ? 0.22 : 0.12)
+    // Use the shell's surface weights. Coloured notes get a little more ink;
+    // ordinary notes stay quiet enough that the text carries the hierarchy.
+    var normal = theme.token(function () { return Style.normalFillAlpha }, 0.04)
+    var selected = theme.token(function () { return Style.selectedFillAlpha }, 0.18)
+    var a = strong ? selected : Math.min(1, normal + (tint === "accent" || tint === "urgent" ? 0.04 : 0.02))
     return Qt.rgba(c.r * a + theme.canvasBackground.r * (1-a), c.g * a + theme.canvasBackground.g * (1-a), c.b * a + theme.canvasBackground.b * (1-a), 1)
   }
   function tintBorder(tint, strong) {
     var c = theme.tintColor(tint)
-    var a = strong ? 1.0 : (theme.isLight ? 0.55 : 0.45)
+    var a = strong ? 1.0 : theme.token(function () { return Style.normalBorderAlpha }, 0.4)
     return Qt.rgba(c.r, c.g, c.b, a)
   }
 

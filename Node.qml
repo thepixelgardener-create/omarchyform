@@ -200,7 +200,7 @@ Item {
     id: header
     anchors { top: parent.top; left: parent.left; right: parent.right }
     anchors.margins: node.theme.borderWidth
-    height: node.theme.borderWidth * 3
+    height: node.theme.borderWidth
     visible: node.isNote
     color: node.outline
   }
@@ -288,11 +288,16 @@ Item {
 
     function heading() {
       var start = body.selectionStart === 0 ? 0 : body.text.lastIndexOf("\n", body.selectionStart - 1) + 1
-      var end = body.text.indexOf("\n", body.selectionEnd)
+      // A selection ends before its endpoint; a caret belongs to its own line.
+      var last = body.selectionEnd > body.selectionStart ? body.selectionEnd - 1 : body.selectionEnd
+      var end = body.text.indexOf("\n", last)
       if (end < 0) end = body.text.length
       var lines = body.text.slice(start, end).split("\n")
-      var remove = lines.every(function(line) { return line.indexOf("# ") === 0 })
-      var replacement = lines.map(function(line) { return remove ? line.slice(2) : "# " + line }).join("\n")
+      var prefix = /^#[ \t]+/
+      var remove = lines.every(function(line) { return prefix.test(line) })
+      var replacement = lines.map(function(line) {
+        return remove ? line.replace(prefix, "") : prefix.test(line) ? line : "# " + line
+      }).join("\n")
       body.text = body.text.slice(0, start) + replacement + body.text.slice(end)
       body.select(start, start + replacement.length)
     }
