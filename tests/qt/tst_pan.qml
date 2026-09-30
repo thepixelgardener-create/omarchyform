@@ -883,4 +883,36 @@ TestCase {
     compare(ctl.camX, 0, "the board stayed where it was under " + row.tag)
     compare(ctl.camY, 0)
   }
+
+  // ------------------------------------------------------------------- layers
+
+  // What is drawn on top is what the board says is on top, beside a background
+  // too. The repeater stacks each item after the one before it in the model,
+  // and a pinned one has been moved to the layer underneath, where it cannot
+  // be stacked after. So on a board that starts with a background — which is
+  // how one is usually built — `]` changed the file and left the screen as it
+  // was. A picture and a note overlap here; the pixel they share says which is
+  // drawn on top, since the stand-in draws every picture red and every note in
+  // the same dark fill.
+  function test_theItemOnTopIsTheOneTheBoardSaysIsOnTop() {
+    itemModel.clear()
+    itemModel.append({ iid: 1, kind: "rect", ix: 60, iy: 180, iw: 420, ih: 300,
+                       itint: "foreground", itext: "", ipinned: true, isrc: "" })
+    itemModel.append({ iid: 2, kind: "image", ix: 100, iy: 220, iw: 200, ih: 150,
+                       itint: "foreground", itext: "", ipinned: false, isrc: "red.png" })
+    itemModel.append({ iid: 3, kind: "note", ix: 200, iy: 280, iw: 200, ih: 150,
+                       itint: "foreground", itext: "", ipinned: false, isrc: "" })
+    var red = Qt.rgba(1, 0, 0, 1)
+    // Where only the picture is, so the wait is for the picture and nothing else.
+    tryVerify(function () { return grabImage(surface).pixel(150, 300) === red }, 2000, "the picture arrived")
+    function pictureOnTop() { return grabImage(surface).pixel(240, 330) === red }
+
+    verify(!pictureOnTop(), "the note, last on the board, is drawn over the picture")
+    itemModel.move(2, 1, 1)
+    wait(0)
+    verify(pictureOnTop(), "sent back one, the note goes under the picture")
+    itemModel.move(1, 2, 1)
+    wait(0)
+    verify(!pictureOnTop(), "brought forward again, it comes back over it")
+  }
 }

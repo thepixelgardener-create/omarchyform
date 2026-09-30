@@ -261,6 +261,11 @@ FocusScope {
       delegate: Node {
         ctl: board.ctl
         parent: ipinned ? backgroundWorld : foregroundWorld
+        // Stacked by place on the board rather than left to the repeater: it
+        // stands each item after the one before it, and cannot once that one
+        // is a background living in the other layer — so an item brought
+        // forward over a board that starts with one stayed where it was.
+        z: index
       }
     }
   }

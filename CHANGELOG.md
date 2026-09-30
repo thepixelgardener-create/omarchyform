@@ -330,6 +330,12 @@ since older boards are migrated on load rather than rejected.
 
 ### Fixed
 
+- **What is drawn on top is what the board says is on top.** On a board that
+  starts with a background, which is how one is usually built, bringing an item
+  forward could change the file and leave the screen as it was until the board
+  was next loaded. Each item was stacked after the one before it on the board,
+  and that fails when the one before is a background, which lives in the layer
+  underneath. Items are now stacked by their place on the board.
 - **The two-versions question holds all it says.** Its height counted two of
   the gaps between its lines and not the other two, so with room for its line
   of hints that line sat on the panel's bottom edge, and in a small window the
