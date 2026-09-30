@@ -18,6 +18,8 @@ Item {
   property int lastSavedCount: -1
   property var pendingBoard: null
   property bool createWhenLoaded: false
+  // Set when a board is opened, so its first load frames the view; see loadBoard.
+  property bool frameWhenLoaded: false
   // A newer version of the open board is on disk and the screen has changes of
   // its own. Autosave stops while this is set and nothing clears it but a
   // decision: leaving the board, closing, renaming and the save timer all have
@@ -90,6 +92,9 @@ Item {
     session.ctl.linkingFrom = -1
     session.ctl.currentBoard = path
     session.ctl.resetView()
+    // Again once it has loaded: the view frames what is on the board, and until
+    // then the model still holds the one being left.
+    session.frameWhenLoaded = true
     session.ctl.writeState()
   }
 
@@ -284,6 +289,12 @@ Item {
     session.ctl.selectedIndex = -1
     session.ctl.undoStack = []
     session.ctl.redoStack = []
+    // Only for a board being opened. A reload because the file changed under an
+    // open board keeps the view where it is.
+    if (session.frameWhenLoaded) {
+      session.frameWhenLoaded = false
+      session.ctl.resetView()
+    }
     session.lastSavedCount = session.ctl.items.count
     // A damaged board is displayed empty but stays read-only.
     session.lastSavedText = data ? Store.writeFile(session.ctl.items, session.ctl.links, session.ctl.nextId) : ""

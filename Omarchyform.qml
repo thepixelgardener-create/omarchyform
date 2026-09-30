@@ -507,6 +507,9 @@ Item {
     : Store.filterEntries(root.browserEntries, root.browserDir, root.browserQuery)
 
   property var activeBoard: null
+  // Whether the view was last set with no surface to measure the header on.
+  property bool framePending: false
+  onActiveBoardChanged: if (root.activeBoard && root.framePending) Qt.callLater(root.resetView)
   property var boardScreen: null
   readonly property real viewW: root.activeBoard ? root.activeBoard.width : 1920
   readonly property real viewH: root.activeBoard ? root.activeBoard.height : 1080
@@ -1355,10 +1358,22 @@ Item {
 
   function zoomCentre(factor) { root.zoomAt(root.viewW / 2, root.viewH / 2, factor) }
 
+  // A board opens, and `0` goes back to it, at 100% with the top-left of what
+  // is on it just inside the window: clear of the header and the line under
+  // it, which are laid over the canvas. It used to put the world's origin at
+  // the window's corner, and a board's first row sat under the header.
+  //
+  // The header is measured on the surface, and a board loads when the shell
+  // starts, long before anyone opens it. So a view set with no surface to
+  // measure is set again when one arrives — and only then, so switching
+  // between fullscreen and windowed keeps your place.
   function resetView() {
-    root.camX = 0
-    root.camY = 0
+    var m = 24
+    var b = Store.bounds(itemModel)
     root.zoom = 1
+    root.camX = m - (b ? b.minX : 0)
+    root.camY = (root.activeBoard ? root.activeBoard.canvasTop : 0) + m - (b ? b.minY : 0)
+    root.framePending = !root.activeBoard
     root.repaintGrid()
     root.repaintLinks()
   }

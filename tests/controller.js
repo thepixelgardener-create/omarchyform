@@ -1523,3 +1523,37 @@ console.log('ok — controller: what a picture is of, and what it is drawn in')
   c.root.markText('italic')
   assert.equal(calls.length, 1, 'stale editor cannot modify a note')
 }
+
+// A board opens at 100% with the top-left of what is on it just inside the
+// window, clear of the header and the line under it. It used to put the world's
+// origin at the window's corner, and the first row of a board sat under the
+// header — which is what anyone saw who opened one of the example boards.
+{
+  const c = controller()
+  const board = '{"version":5,"items":[{"id":1,"kind":"note","x":300,"y":-100,"w":220,"h":160,"text":"a"}],"links":[]}'
+  // Loaded before any surface exists, as the last board is when the shell starts.
+  c.session.frameWhenLoaded = true
+  c.session.loadBoard(board, false)
+  assert.equal(c.root.zoom, 1)
+  assert.equal(c.root.camX, 24 - 300, 'its left edge just inside the window')
+  assert.equal(c.root.camY, 24 + 100, 'and its top, with no header to measure yet')
+  assert.equal(c.root.framePending, true, 'so it is framed again when a surface arrives')
+
+  // The surface arrives and says where its chrome ends.
+  c.root.activeBoard = { canvasTop: 120, repaintGrid() {}, repaintLinks() {}, focusKeys() {}, probeImage() {} }
+  c.root.resetView()
+  assert.equal(c.root.camY, 120 + 24 + 100, 'below the header and the line under it')
+  assert.equal(c.root.framePending, false, 'and only the once')
+
+  // A reload because the file changed under the open board leaves the view be.
+  c.root.camX = 5
+  c.root.camY = 7
+  c.session.loadBoard(board, false)
+  assert.deepEqual([c.root.camX, c.root.camY], [5, 7], 'a reload does not move the view')
+
+  // A board with nothing on it: its origin, just inside.
+  c.session.frameWhenLoaded = true
+  c.session.loadBoard('{"version":5,"items":[],"links":[]}', false)
+  assert.deepEqual([c.root.camX, c.root.camY], [24, 120 + 24])
+}
+console.log('ok — controller: a board opens clear of the header, and a reload stays put')

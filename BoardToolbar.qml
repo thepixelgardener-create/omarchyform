@@ -6,7 +6,9 @@ Rectangle {
   id: toolbar
   required property var ctl
   readonly property var theme: toolbar.ctl.theme
-  color: Qt.rgba(theme.barBackground.r, theme.barBackground.g, theme.barBackground.b, 0.92)
+  // Solid, as the shell's bar is. It was the bar colour at 0.92, and the text of
+  // a note passing under the header read through it, text over text.
+  color: Qt.rgba(theme.barBackground.r, theme.barBackground.g, theme.barBackground.b, 1)
   border.width: theme.borderWidth
   border.color: Qt.rgba(theme.barForeground.r, theme.barForeground.g, theme.barForeground.b, 0.18)
   radius: theme.cornerRadius
