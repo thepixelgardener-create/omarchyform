@@ -19,7 +19,10 @@ Item {
   property var pendingBoard: null
   property bool createWhenLoaded: false
   // Set when a board is opened, so its first load frames the view; see loadBoard.
-  property bool frameWhenLoaded: false
+  // True to begin with: the board a session starts on is loaded by the file
+  // watcher when the shell starts, not through openBoard, and it is opened
+  // all the same.
+  property bool frameWhenLoaded: true
   // A newer version of the open board is on disk and the screen has changes of
   // its own. Autosave stops while this is set and nothing clears it but a
   // decision: leaving the board, closing, renaming and the save timer all have
