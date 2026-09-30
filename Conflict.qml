@@ -7,7 +7,7 @@ import "BoardStore.js" as Store
 // wrote while it was open. Neither is thrown away by this panel appearing, and
 // neither is thrown away by ignoring it — the only things that resolve it are
 // the three choices here, each of which says what it costs.
-Rectangle {
+Item {
   id: decision
   required property var ctl
   readonly property var theme: decision.ctl.theme
@@ -33,18 +33,24 @@ Rectangle {
   // not the question. What gives way when there is no room is the line of
   // hints and the column saying what each choice costs, in that order.
   readonly property int room: Math.max(decision.rowHeight * 3, parent.height - y - decision.theme.sp(16))
-  readonly property int chrome: body.y * 2 + body.spacing * 2 + heading.implicitHeight + rule.height
-  readonly property int fullHeight: decision.chrome + decision.theme.sp(10)
-                                    + footer.implicitHeight + decision.rowHeight * 3
+  // Everything the column stacks with the gap after each: the heading, the
+  // rule and the three rows are four gaps, not two. Counting two left the
+  // panel two gaps short, and the line of hints sat on its bottom edge.
+  readonly property int chrome: body.y * 2 + heading.implicitHeight + rule.height
+                                + decision.rowHeight * 3 + body.spacing * 4
+  readonly property int fullHeight: decision.chrome + body.spacing + footer.implicitHeight
   readonly property bool compact: decision.fullHeight > decision.room
-  height: decision.compact ? decision.chrome + decision.rowHeight * 3 : decision.fullHeight
+  height: decision.compact ? decision.chrome : decision.fullHeight
 
-  color: decision.theme.canvasBackground
-  border.width: decision.theme.borderWidth
-  // Not the ordinary panel edge: this one is asking a question that does not
-  // go away, and the theme has a colour for exactly that.
-  border.color: decision.theme.urgent
-  radius: decision.theme.cornerRadius
+  // The card every summoned panel here is drawn on — but not the ordinary
+  // panel edge: this one is asking a question that does not go away, and the
+  // theme has a colour for exactly that. The width is the theme's own.
+  Surface {
+    anchors.fill: parent
+    theme: decision.theme
+    spec: ({ color: decision.theme.urgent, widths: Store.borderWidths(decision.theme.panelBorder),
+             gradient: { colors: [], angle: 0, enabled: false } })
+  }
 
   // Every button: the pan surface on the canvas is below the panels, and a
   // question being answered should not also be moving the board behind it.
@@ -52,6 +58,7 @@ Rectangle {
 
   Column {
     id: body
+    objectName: "conflict-body"
     x: decision.theme.sp(16)
     y: decision.theme.sp(16)
     width: parent.width - decision.theme.sp(32)
@@ -63,7 +70,13 @@ Rectangle {
       Accessible.name: heading.text
       width: parent.width
       wrapMode: Text.Wrap
-      color: decision.theme.foreground
+      // Three lines at most. A long board name at a large size in a small
+      // window wrapped to four, and then even the compact panel — the three
+      // choices and nothing else — ran off the bottom. The name gives way
+      // before a choice does, as it does in the header.
+      maximumLineCount: 3
+      elide: Text.ElideRight
+      color: decision.theme.panelText
       font.family: decision.theme.fontFamily
       font.pixelSize: decision.theme.fontSubtitle
       text: decision.ctl.boardTitle + " changed on disk while you had it open."
@@ -73,8 +86,8 @@ Rectangle {
       id: rule
       width: parent.width
       height: decision.theme.borderWidth
-      color: Qt.rgba(decision.theme.foreground.r, decision.theme.foreground.g,
-                     decision.theme.foreground.b, 0.25)
+      color: Qt.rgba(decision.theme.panelText.r, decision.theme.panelText.g,
+                     decision.theme.panelText.b, 0.25)
     }
 
     Repeater {
@@ -97,10 +110,13 @@ Rectangle {
           decision.ctl.runConflictChoice()
         }
 
-        Rectangle {
+        // The shell's keyboard cursor, as its menu draws one.
+        Surface {
           anchors.fill: parent
           visible: row.current
-          color: Qt.rgba(decision.theme.accent.r, decision.theme.accent.g, decision.theme.accent.b, 0.18)
+          theme: decision.theme
+          color: decision.theme.cursorFill
+          spec: decision.theme.cursorBorder
         }
 
         // The cursor is a mark as well as a colour: a row that is only
@@ -110,7 +126,7 @@ Rectangle {
           anchors.verticalCenter: parent.verticalCenter
           anchors.left: parent.left
           text: (row.current ? "›" : " ") + " " + (row.index + 1) + "  "
-          color: decision.theme.accent
+          color: row.current ? decision.theme.cursorText : decision.theme.accent
           font.family: decision.theme.fontFamily
           font.pixelSize: decision.theme.fontSubtitle
         }
@@ -122,7 +138,7 @@ Rectangle {
           anchors.rightMargin: decision.theme.sp(12)
           elide: Text.ElideRight
           text: row.modelData.name
-          color: decision.theme.foreground
+          color: row.current ? decision.theme.cursorText : decision.theme.panelText
           opacity: row.current ? 1.0 : 0.8
           font.family: decision.theme.fontFamily
           font.pixelSize: decision.theme.fontSubtitle
@@ -134,7 +150,7 @@ Rectangle {
           anchors.verticalCenter: parent.verticalCenter
           anchors.right: parent.right
           text: row.modelData.cost
-          color: decision.theme.foreground
+          color: decision.theme.panelText
           opacity: 0.55
           font.family: decision.theme.fontFamily
           font.pixelSize: decision.theme.fontBody
@@ -156,7 +172,7 @@ Rectangle {
       width: parent.width
       wrapMode: Text.Wrap
       textFormat: Text.StyledText
-      color: decision.theme.foreground
+      color: decision.theme.panelText
       opacity: 0.55
       font.family: decision.theme.fontFamily
       font.pixelSize: decision.theme.fontBody

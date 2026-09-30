@@ -40,6 +40,17 @@ TestCase {
       property int cornerRadius: 0
       property bool isLight: false
       property color dotColor: "#202020"
+      // The shell's summoned-surface tokens. A gradient border on purpose, so
+      // the ring Surface paints for one is drawn under the Qt CI runs too.
+      property color panelBackground: "#0d1117"
+      property color panelText: "#dddddd"
+      property color panelScrim: "#80101315"
+      property color cursorFill: "#14cccccc"
+      property color cursorText: "cyan"
+      property var panelBorder: ({ color: "#ffaa00", widths: { top: 2, right: 2, bottom: 2, left: 2 },
+                                   gradient: { colors: ["#ffaa00", "#ff4466"], angle: 45, enabled: true } })
+      property var cursorBorder: ({ color: "transparent", widths: { top: 0, right: 0, bottom: 0, left: 0 },
+                                    gradient: { colors: [], angle: 0, enabled: false } })
       readonly property var markupColors: ({ foreground: "#cccccc", accent: "#00ffff",
                                              urgent: "#ff5555", muted: "#888888" })
       function sp(n) { return n }
@@ -176,6 +187,65 @@ TestCase {
     verify(decision.y + decision.height <= test.height, "and does not run off the bottom")
   }
 
+  // Room for the whole question, hint line and all: the case the small window
+  // cannot ask, and the one whose hint line sat on the panel's bottom edge.
+  Component {
+    id: roomyConflict
+    Item {
+      id: roomyRig
+      width: 1600
+      height: 1000
+      // By another name: inside the panel, `ctl` is the panel's own property.
+      property var stub: ctl
+      property alias panel: inner
+      Conflict { id: inner; ctl: roomyRig.stub; y: 40; anchors.horizontalCenter: parent.horizontalCenter }
+    }
+  }
+
+  // Whatever the column stacks — heading, rule, three choices, and the hint
+  // line when there is room for it — sits inside the panel with the same
+  // margin below as above. The height was counted two gaps short, so with the
+  // hint line shown it ran onto the border.
+  function test_conflictPanelHoldsEverythingItSays() {
+    const roomy = createTemporaryObject(roomyConflict, test).panel
+    verify(!roomy.compact, "with room, the hint line is shown")
+    verify(decision.compact, "and in the small window it gives way")
+    for (const panel of [roomy, decision]) {
+      verify(waitForRendering(panel))
+      const body = findChild(panel, "conflict-body")
+      compare(panel.height - (body.y + body.height), body.y,
+              (panel.compact ? "compact" : "full") + ": as much room below the last line as above the first")
+    }
+  }
+
+  // The shell draws its summoned surfaces solid, in the menu's colour, inside
+  // the theme's border for them. The command list was the canvas at 0.92, and
+  // the board's own text read faintly through its rows.
+  // The card a panel is drawn on: the child carrying a border spec.
+  function cardOf(panel) {
+    for (let i = 0; i < panel.children.length; i++)
+      if (panel.children[i].spec !== undefined) return panel.children[i]
+    return null
+  }
+
+  function test_panelsAreSolidCardsInTheShellsColours() {
+    const cards = [cardOf(commandList), cardOf(decision), cardOf(help), findChild(browser, "browser-panel")]
+    for (const card of cards) {
+      compare(card.color, ctl.theme.panelBackground, "the menu's colour")
+      compare(card.color.a, 1, "and nothing shows through it")
+    }
+    // This stub's border is a gradient, which a Rectangle cannot draw: the card
+    // paints a ring over itself instead of using its own border.
+    const card = cardOf(commandList)
+    verify(!card.flat, "a gradient is not a flat border")
+    compare(card.border.width, 0, "so the Rectangle's own is off")
+    verify(card.children[0].visible, "and the ring is drawn")
+    // The conflict panel keeps the urgent edge at the theme's width.
+    verify(cardOf(decision).flat, "one colour: the Rectangle's own border")
+    compare(cardOf(decision).border.color, ctl.theme.urgent)
+    compare(cardOf(decision).border.width, 2)
+  }
+
   function test_helpFitsAndScrolls() {
     verify(help.width <= test.width - 32)
     verify(help.height <= test.height - 32)
@@ -257,6 +327,9 @@ TestCase {
           property color canvasBackground: ctl.theme.canvasBackground
           property color foreground: ctl.theme.foreground
           property color accent: ctl.theme.accent
+          property color panelBackground: ctl.theme.panelBackground
+          property color panelText: ctl.theme.panelText
+          property var panelBorder: ctl.theme.panelBorder
           property int borderWidth: ctl.theme.borderWidth
           property int cornerRadius: ctl.theme.cornerRadius
           property string fontFamily: ctl.theme.fontFamily

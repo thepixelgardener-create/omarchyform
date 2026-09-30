@@ -513,6 +513,52 @@ function tests(S) {
   })
 
   // -------------------------------------------------------------------- theme
+  test("a border spec from the shell becomes widths a panel can draw", () => {
+    const flat = { color: "#ffffff", widths: { top: 2, right: 2, bottom: 2, left: 2 },
+                   gradient: { colors: [], angle: 0, enabled: false } }
+    eq(JSON.stringify(S.borderWidths(flat)), '{"top":2,"right":2,"bottom":2,"left":2}', "four sides")
+    eq(S.flatBorder(flat), true, "one colour, one width: the Rectangle's own border")
+    eq(S.flatBorder(Object.assign({}, flat, { gradient: { colors: ["#f00", "#00f"], angle: 45, enabled: true } })),
+       false, "a gradient needs the ring")
+    eq(S.flatBorder(Object.assign({}, flat, { widths: { top: 0, right: 2, bottom: 2, left: 2 } })),
+       false, "so do sides of different widths")
+    // What a theme can hand over by mistake is no border, not a panel that will
+    // not draw.
+    eq(JSON.stringify(S.borderWidths(undefined)), '{"top":0,"right":0,"bottom":0,"left":0}', "no spec")
+    eq(S.borderWidths({ widths: { top: "3", right: -1, bottom: NaN, left: null } }).top, 3, "numeric strings")
+    eq(S.borderWidths({ widths: { top: "3", right: -1, bottom: NaN, left: null } }).right, 0, "negative")
+    eq(S.flatBorder(null), true, "no spec is a flat border of nothing")
+  })
+
+  test("a border gradient shades a panel the way the shell shades the menu", () => {
+    // The shell's own endpoints: along the angle, reaching the corners' shadow.
+    const across = S.gradientEndpoints(200, 100, 0)
+    eq(JSON.stringify(across), '{"x1":0,"y1":50,"x2":200,"y2":50}', "0deg runs left to right")
+    const down = S.gradientEndpoints(200, 100, 90)
+    ok(Math.abs(down.x1 - 100) < 1e-9 && Math.abs(down.y1) < 1e-9 && Math.abs(down.y2 - 100) < 1e-9,
+       "90deg runs top to bottom")
+    const diagonal = S.gradientEndpoints(100, 100, 45)
+    ok(Math.abs(diagonal.x1) < 1e-9 && Math.abs(diagonal.y2 - 100) < 1e-9, "45deg corner to corner")
+    // Two colours over ten fixed stops: both ends, and the last held after.
+    eq(S.stopPosition(["a", "b"], 0), 0, "first stop at the start")
+    eq(S.stopPosition(["a", "b"], 1), 1, "second at the end")
+    eq(S.stopColor(["a", "b"], 7), "b", "the rest hold the last colour")
+    eq(S.stopPosition(["a", "b", "c"], 1), 0.5, "three spread evenly")
+    eq(S.stopColor([], 0), "transparent", "no colours at all")
+  })
+
+  test("a border ring is the panel with its inside cut out", () => {
+    const sides = { top: 2, right: 2, bottom: 2, left: 2 }
+    eq(S.ringPath(100, 50, 0, sides),
+       "M 0 0 H 100 V 50 H 0 Z M 2 2 H 98 V 48 H 2 Z", "square corners, the default")
+    const round = S.ringPath(100, 50, 8, sides)
+    ok(/^M 8 0 H 92 A 8 8/.test(round), "rounded outside at the theme's radius")
+    ok(/M 8 2 H 92 A 6 6/.test(round), "and inside, less the border's width")
+    // A radius larger than the panel is clamped rather than drawn inside out.
+    ok(/A 5 5/.test(S.ringPath(10, 10, 40, sides)), "radius held to half the side")
+    eq(S.ringPath(3, 3, 0, sides), "M 0 0 H 3 V 3 H 0 Z ", "a panel narrower than its border is all border")
+  })
+
   test("parseThemeMode reads the mode a theme declares", () => {
     eq(S.parseThemeMode('mode = "light"\naccent = "#205EA6"'), "light", "light")
     eq(S.parseThemeMode('mode = "dark"'), "dark", "dark")

@@ -134,19 +134,22 @@ Rectangle {
           width: label.implicitWidth + toolbar.theme.sp(14)
           height: label.implicitHeight + toolbar.theme.sp(8)
           readonly property bool onIt: toolbar.ctl.menuIndex === index || mouse.containsMouse
-          color: onIt ? toolbar.theme.tintFill("foreground", true) : "transparent"
+          // The shell's keyboard cursor, with its edge kept: a row of buttons
+          // has no room for the › the lists carry, and the cursor still needs
+          // a mark that is not only a colour.
+          color: onIt ? toolbar.theme.cursorFill : "transparent"
           Accessible.role: Accessible.Button
           Accessible.name: label.text
           Accessible.focused: toolbar.ctl.menuIndex === index
           Accessible.onPressAction: toolbar.ctl.runMenu(index)
           radius: toolbar.theme.cornerRadius
           border.width: toolbar.theme.borderWidth
-          border.color: onIt ? toolbar.theme.accent : "transparent"
+          border.color: onIt ? toolbar.theme.cursorText : "transparent"
           Text {
             id: label
             anchors.centerIn: parent
             text: modelData.id === "zoom" ? modelData.label + " " + Math.round(toolbar.ctl.zoom * 100) + "%" : modelData.label
-            color: toolbar.theme.barForeground
+            color: parent.onIt ? toolbar.theme.cursorText : toolbar.theme.barForeground
             font.family: toolbar.theme.fontFamily
             font.pixelSize: toolbar.theme.fontBody
           }

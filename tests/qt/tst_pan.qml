@@ -234,6 +234,15 @@ TestCase {
       property color urgent: "red"
       property color muted: "gray"
       property color dotColor: "#202020"
+      property color panelBackground: "#101315"
+      property color panelText: "#cccccc"
+      property color panelScrim: "#80101315"
+      property color cursorFill: "#14cccccc"
+      property color cursorText: "cyan"
+      property var panelBorder: ({ color: "#cccccc", widths: { top: 2, right: 2, bottom: 2, left: 2 },
+                                   gradient: { colors: [], angle: 0, enabled: false } })
+      property var cursorBorder: ({ color: "transparent", widths: { top: 0, right: 0, bottom: 0, left: 0 },
+                                    gradient: { colors: [], angle: 0, enabled: false } })
       property string fontFamily: "monospace"
       // Not readonly: one test below turns the text up to what a theme with
       // large type does in a small window, which is where a hint that does
@@ -786,6 +795,38 @@ TestCase {
     verify(line.text.indexOf("&amp;") >= 0, "and so does the ampersand")
     verify(line.text.indexOf("<b>") < 0, "nothing in it is a tag the line obeys")
     verify(line.text.indexOf("<font color=\"red\">") < 0, "including one that would recolour it")
+  }
+
+  // A panel opens below the line under the header however many rows that line
+  // took. It was placed a fixed distance below the header, and in a narrow
+  // window the second row of hints drew over the top of it.
+  function test_aPanelOpensBelowTheWrappedLine() {
+    surface.width = 380
+    surface.height = 320
+    ctl.theme.fontBody = 24
+    const line = findChild(surface, "board-status")
+    for (const [flag, name] of [["conflictVisible", "conflict-panel"], ["paletteVisible", "command-palette"]]) {
+      ctl[flag] = true
+      wait(0)
+      verify(line.lineCount > 1, "the line wrapped for " + name)
+      const panel = findChild(surface, name)
+      verify(panel.y >= line.y + line.height, name + " starts below it")
+      ctl[flag] = false
+    }
+  }
+
+  // The board steps back while a panel is up, as the desktop does behind the
+  // shell's own menu, and comes back when it goes.
+  function test_theBoardDimsBehindAPanel() {
+    const scrim = findChild(surface, "panel-scrim")
+    verify(!scrim.visible, "nothing asked for, nothing dimmed")
+    for (const flag of ["paletteVisible", "conflictVisible", "helpVisible"]) {
+      ctl[flag] = true
+      verify(scrim.visible, flag + " dims the board")
+      compare(scrim.color, ctl.theme.panelScrim)
+      ctl[flag] = false
+    }
+    verify(!scrim.visible, "and it comes back")
   }
 
   // A theme with large text in a small window is where a hint stops fitting.

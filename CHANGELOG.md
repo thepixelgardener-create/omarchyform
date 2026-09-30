@@ -330,6 +330,14 @@ since older boards are migrated on load rather than rejected.
 
 ### Fixed
 
+- **The two-versions question holds all it says.** Its height counted two of
+  the gaps between its lines and not the other two, so with room for its line
+  of hints that line sat on the panel's bottom edge, and in a small window the
+  last choice ran past it. A board name long enough to wrap the question onto a
+  fourth line now gives way instead of a choice. The command list was see-through
+  at 0.92, and the board's own text read faintly behind its rows; it is solid.
+  Both open below the line under the header rather than a fixed distance under
+  the header, where the second row of a wrapped hint line drew over them.
 - **The board is framed below the hint line, not only the header.** `f`, and
   keeping the selection in view, framed the board from the bottom of the header;
   but the line of hints sits under it and wraps in a narrow window, so the top
@@ -612,6 +620,16 @@ since older boards are migrated on load rather than rejected.
 
 ### Changed
 
+- **The panels are drawn the way the shell draws its own.** The command list,
+  the browser, the shortcut list and the two-versions question sit on a solid
+  card in the menu's colours, inside the theme's border for summoned surfaces —
+  so under a theme with a gradient edge they wear the gradient, as the Omarchy
+  menu beside them does, where each had drawn a grey hairline of its own. The
+  board dims behind every one of them by the shell's own amount. The keyboard
+  cursor in their lists and in the header menu is the menu's too: a soft fill,
+  with the row's label in the accent, where it had been a band of accent. The
+  `›` stays, so the cursor never depends on telling two colours apart. The
+  two-versions question keeps its urgent edge, at the theme's width.
 - **Tints take the shell's own weights.** How strong an item's wash and hairline
   are comes from `Style.normalFillAlpha`, `Style.selectedFillAlpha` and
   `Style.normalBorderAlpha`, the weights the shell's own surfaces use, rather

@@ -29,11 +29,11 @@ FocusScope {
 
   anchors.fill: parent
 
-  // Dim the board behind without hiding it entirely.
+  // Dim the board behind without hiding it entirely, by as much as the shell
+  // dims the desktop behind its own menu.
   Rectangle {
     anchors.fill: parent
-    color: Qt.rgba(browser.theme.canvasBackground.r, browser.theme.canvasBackground.g,
-                   browser.theme.canvasBackground.b, 0.86)
+    color: browser.theme.panelScrim
   }
 
   // The dismiss layer, and it takes every button: the board's pan surface is
@@ -45,18 +45,14 @@ FocusScope {
     onClicked: function (mouse) { if (mouse.button === Qt.LeftButton) browser.ctl.closeBrowser() }
   }
 
-  Rectangle {
+  Surface {
     id: panel
     objectName: "browser-panel"
+    theme: browser.theme
     anchors.horizontalCenter: parent.horizontalCenter
     y: Math.max(browser.theme.sp(16), (parent.height - browserFooter.height - browser.theme.sp(32) - height) / 2)
     width: Math.min(parent.width - browser.theme.sp(80), browser.theme.sp(720))
     height: Math.max(0, Math.min(parent.height - browserFooter.height - browser.theme.sp(48), browser.theme.sp(560)))
-    color: browser.theme.canvasBackground
-    border.width: browser.theme.borderWidth
-    border.color: Qt.rgba(browser.theme.foreground.r, browser.theme.foreground.g,
-                          browser.theme.foreground.b, 0.35)
-    radius: browser.theme.cornerRadius
 
     // Swallow clicks so they do not reach the dismiss layer behind, whichever
     // button they are.
@@ -81,7 +77,7 @@ FocusScope {
           width: parent.width
           visible: !browser.typing
           elide: Text.ElideMiddle
-          color: browser.theme.foreground
+          color: browser.theme.panelText
           font.family: browser.theme.fontFamily
           font.pixelSize: browser.theme.fontSubtitle
           text: browser.ctl.trashIndexError !== "" ? browser.ctl.trashIndexError
@@ -93,7 +89,7 @@ FocusScope {
           id: label
           visible: browser.typing
           text: browser.prompting ? browser.ctl.browserPrompt + " " : "/"
-          color: browser.theme.foreground
+          color: browser.theme.panelText
           font.family: browser.theme.fontFamily
           font.pixelSize: browser.theme.fontSubtitle
         }
@@ -105,9 +101,9 @@ FocusScope {
           anchors.left: label.right
           anchors.right: parent.right
           clip: true
-          color: browser.theme.foreground
+          color: browser.theme.panelText
           selectionColor: browser.theme.accent
-          selectedTextColor: browser.theme.canvasBackground
+          selectedTextColor: browser.theme.panelBackground
           selectByMouse: true
           font.family: browser.theme.fontFamily
           font.pixelSize: browser.theme.fontSubtitle
@@ -162,8 +158,8 @@ FocusScope {
       Rectangle {
         width: parent.width
         height: browser.theme.borderWidth
-        color: Qt.rgba(browser.theme.foreground.r, browser.theme.foreground.g,
-                       browser.theme.foreground.b, 0.25)
+        color: Qt.rgba(browser.theme.panelText.r, browser.theme.panelText.g,
+                       browser.theme.panelText.b, 0.25)
       }
 
       // The list, and the rule that says how much of it you are looking at.
@@ -198,10 +194,13 @@ FocusScope {
             Accessible.name: label.text
             Accessible.focused: current
 
-            Rectangle {
+            // The shell's keyboard cursor, as its menu draws one.
+            Surface {
               anchors.fill: parent
               visible: parent.current
-              color: Qt.rgba(browser.theme.accent.r, browser.theme.accent.g, browser.theme.accent.b, 0.18)
+              theme: browser.theme
+              color: browser.theme.cursorFill
+              spec: browser.theme.cursorBorder
             }
 
             // The cursor is a mark as well as a tint, so which row it is on
@@ -212,7 +211,7 @@ FocusScope {
               anchors.left: parent.left
               anchors.leftMargin: browser.theme.sp(8)
               text: parent.current ? "›" : " "
-              color: browser.theme.accent
+              color: browser.theme.cursorText
               font.family: browser.theme.fontFamily
               font.pixelSize: browser.theme.fontSubtitle
             }
@@ -225,7 +224,7 @@ FocusScope {
               anchors.leftMargin: browser.theme.sp(6)
               anchors.rightMargin: browser.theme.sp(8)
               elide: Text.ElideMiddle
-              color: browser.theme.foreground
+              color: parent.current ? browser.theme.cursorText : browser.theme.panelText
               opacity: parent.current ? 1.0 : 0.75
               font.family: browser.theme.fontFamily
               font.pixelSize: browser.theme.fontSubtitle
@@ -257,7 +256,7 @@ FocusScope {
           Text {
             anchors.centerIn: parent
             visible: list.count === 0
-            color: browser.theme.foreground
+            color: browser.theme.panelText
             opacity: 0.5
             font.family: browser.theme.fontFamily
             font.pixelSize: browser.theme.fontBody

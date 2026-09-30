@@ -1284,6 +1284,72 @@ function isLightColor(r, g, b) {
   return (0.2126 * r + 0.7152 * g + 0.0722 * b) > 0.5
 }
 
+// The shell draws its summoned surfaces — the menu, its panels, notifications —
+// with a border spec: a colour, four side widths, and a gradient at an angle if
+// the theme names one. Theme.qml reads the spec off the shell; these turn it
+// into something plain QtQuick can paint, so the board's panels wear the same
+// edge as the menu beside them without importing anything from the shell.
+
+// The four side widths a spec carries. A spec that is missing or malformed is
+// no border, rather than a panel that will not draw.
+function borderWidths(spec) {
+  function side(v) { var n = Number(v); return isFinite(n) && n > 0 ? n : 0 }
+  var w = spec && spec.widths ? spec.widths : {}
+  return { top: side(w.top), right: side(w.right), bottom: side(w.bottom), left: side(w.left) }
+}
+
+// Whether a Rectangle's own border can draw it: one colour, one width all round.
+function flatBorder(spec) {
+  var w = borderWidths(spec)
+  var graded = !!(spec && spec.gradient && spec.gradient.enabled)
+  return !graded && w.top === w.right && w.right === w.bottom && w.bottom === w.left
+}
+
+// Where a gradient at `angle` degrees starts and ends on a w-by-h surface.
+// The shell's own arithmetic (BorderGeometry.gradientEndpoints), so a panel
+// here shades the way the menu does rather than nearly the way.
+function gradientEndpoints(w, h, angle) {
+  w = Math.max(1, Number(w) || 1)
+  h = Math.max(1, Number(h) || 1)
+  var rad = (Number(angle) || 0) * Math.PI / 180
+  var dx = Math.cos(rad)
+  var dy = Math.sin(rad)
+  var len = (Math.abs(w * dx) + Math.abs(h * dy)) / 2
+  return { x1: w / 2 - dx * len, y1: h / 2 - dy * len, x2: w / 2 + dx * len, y2: h / 2 + dy * len }
+}
+
+// A gradient in QML has a fixed number of stops, so a theme's colours are
+// spread over them: evenly while there are colours, and the last one held for
+// the stops left over. Also the shell's own.
+function stopColor(colors, index) {
+  if (!colors || colors.length === 0) return "transparent"
+  return index < colors.length ? colors[index] : colors[colors.length - 1]
+}
+function stopPosition(colors, index) {
+  var count = colors ? colors.length : 0
+  if (count <= 1) return index === 0 ? 0 : 1
+  return index >= count ? 1 : index / (count - 1)
+}
+
+// The ring a border paints, as SVG path data for an odd-even fill: the outer
+// rectangle, and the inner one the side widths cut out of it. Corners follow
+// the theme's radius outside and give up the border's width inside.
+function ringPath(w, h, radius, widths) {
+  var t = widths.top, r = widths.right, b = widths.bottom, l = widths.left
+  var inner = Math.max(0, (Number(radius) || 0) - Math.max(t, r, b, l))
+  return roundedRectPath(0, 0, w, h, radius) + " " + roundedRectPath(l, t, w - l - r, h - t - b, inner)
+}
+function roundedRectPath(x, y, w, h, radius) {
+  if (!(w > 0) || !(h > 0)) return ""
+  var k = Math.max(0, Math.min(Number(radius) || 0, w / 2, h / 2))
+  if (k === 0) return "M " + x + " " + y + " H " + (x + w) + " V " + (y + h) + " H " + x + " Z"
+  function arc(ex, ey) { return " A " + k + " " + k + " 0 0 1 " + ex + " " + ey }
+  return "M " + (x + k) + " " + y + " H " + (x + w - k) + arc(x + w, y + k)
+    + " V " + (y + h - k) + arc(x + w - k, y + h)
+    + " H " + (x + k) + arc(x, y + h - k)
+    + " V " + (y + k) + arc(x + k, y) + " Z"
+}
+
 // -------------------------------------------------------------------- geometry
 
 // Nearest item in a direction, scored by distance along the axis plus a

@@ -572,6 +572,17 @@ FocusScope {
     }
   }
 
+  // The board steps back while a panel is asking for attention, as the desktop
+  // does behind the shell's own menu. Over the canvas and under the header and
+  // the line beneath it, which go on saying what the keys do in that panel.
+  // The browser dims everything itself, header and all, as it covers it.
+  Rectangle {
+    objectName: "panel-scrim"
+    anchors.fill: parent
+    visible: board.ctl.paletteVisible || board.ctl.conflictVisible || board.ctl.helpVisible
+    color: board.theme.panelScrim
+  }
+
   BoardToolbar {
     id: toolbar
     objectName: "board-toolbar"
@@ -631,7 +642,10 @@ FocusScope {
     objectName: "conflict-panel"
     ctl: board.ctl
     anchors.horizontalCenter: parent.horizontalCenter
-    y: toolbar.y + toolbar.height + board.theme.sp(24)
+    // Below the line under the header, not a fixed distance below the header:
+    // that line wraps in a narrow window, and its second row drew over the top
+    // of the panel.
+    y: board.canvasTop + board.theme.sp(8)
   }
 
   // Under the header, where the eye already is when a command is wanted, and
@@ -642,7 +656,7 @@ FocusScope {
     ctl: board.ctl
     board: board
     anchors.horizontalCenter: parent.horizontalCenter
-    y: toolbar.y + toolbar.height + board.theme.sp(24)
+    y: board.canvasTop + board.theme.sp(8)
   }
 
   // The board browser sits above the canvas and takes the keyboard while open.

@@ -4,17 +4,16 @@ import QtQuick
 import "BoardStore.js" as Store
 
 // The same shortcut list remains readable on small windows and large fonts.
-Rectangle {
+Item {
   id: help
   required property var ctl
   readonly property var theme: help.ctl.theme
   visible: ctl.helpVisible
   width: Math.min(parent.width - theme.sp(32), theme.sp(700))
   height: Math.min(parent.height - theme.sp(32), helpColumn.height + theme.sp(48))
-  color: Qt.rgba(theme.canvasBackground.r, theme.canvasBackground.g, theme.canvasBackground.b, 1)
-  border.width: theme.borderWidth
-  border.color: Qt.rgba(theme.foreground.r, theme.foreground.g, theme.foreground.b, 0.18)
-  radius: theme.cornerRadius
+
+  // The card the shell's own summoned panels are drawn on.
+  Surface { anchors.fill: parent; theme: help.theme }
 
   function scroll(delta) {
     content.contentY = Math.max(0, Math.min(content.contentHeight - content.height, content.contentY + delta))
@@ -79,7 +78,7 @@ Rectangle {
       spacing: help.theme.sp(10)
       Text {
         text: "Keyboard shortcuts"
-        color: help.theme.foreground
+        color: help.theme.panelText
         font.family: help.theme.fontFamily
         font.pixelSize: help.theme.fontHeading
         bottomPadding: help.theme.sp(14)
@@ -113,7 +112,7 @@ Rectangle {
             anchors.right: parent.right
             wrapMode: Text.Wrap
             text: row.modelData[1]
-            color: help.theme.foreground
+            color: help.theme.panelText
             font.family: help.theme.fontFamily
             font.pixelSize: help.theme.fontBody
           }

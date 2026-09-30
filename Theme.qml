@@ -49,6 +49,34 @@ Item {
   readonly property int fontSubtitle: theme.token(function () { return Style.font.subtitle }, 13)
   readonly property int fontHeading: theme.token(function () { return Style.font.heading }, 16)
 
+  // The board's panels — the command list, the browser, help, the question
+  // asked when a board has two versions — are summoned surfaces, and the shell
+  // draws its own summoned surfaces one way: a solid card in the menu's
+  // colours, the theme's border for them (a gradient, where the theme has one),
+  // the desktop dimmed behind, and a soft fill under the keyboard cursor with
+  // the row's label in the accent. These are those tokens, read the way the
+  // menu reads them, so a panel here and the menu beside it are the same kind
+  // of thing. The fallbacks are the shell's own defaults.
+  property color panelBackground: theme.token(function () { return Color.menu.background }, theme.canvasBackground)
+  property color panelText: theme.token(function () { return Color.menu.text }, theme.foreground)
+  property color panelScrim: theme.token(function () { return Color.menu.scrim },
+                                         Qt.rgba(theme.canvasBackground.r, theme.canvasBackground.g, theme.canvasBackground.b, 0.5))
+  property color cursorFill: theme.token(function () { return Color.menu.selectedBackground },
+                                         Qt.rgba(theme.foreground.r, theme.foreground.g, theme.foreground.b, 0.08))
+  property color cursorText: theme.token(function () { return Color.menu.selectedText }, theme.accent)
+  // Plain data — a colour, four side widths and a gradient — so the panels can
+  // paint it with nothing but QtQuick (Surface.qml), and a test can hand them one.
+  property var panelBorder: theme.token(function () {
+    return Border.surfaceSpec("menu", "border", Color.menu.border, Math.max(1, Style.space(2)))
+  }, theme.flatSpec(theme.panelText, theme.sp(2)))
+  property var cursorBorder: theme.token(function () {
+    return Border.surfaceSpec("menu", "selected-border", Color.menu.selectedBorder, 0)
+  }, theme.flatSpec("transparent", 0))
+  function flatSpec(color, width) {
+    return { color: color, widths: { top: width, right: width, bottom: width, left: width },
+             gradient: { colors: [], angle: 0, enabled: false } }
+  }
+
   // Omarchy is square-cornered with hairline borders by default; both come
   // from the theme rather than being invented here.
   readonly property int cornerRadius: theme.token(function () { return Style.cornerRadius }, 0)

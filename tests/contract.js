@@ -88,7 +88,7 @@ for (const file of ["Board.qml", "Node.qml", "Browser.qml", "Help.qml", "BoardTo
 // a token Theme.qml does not declare is a TypeError on a desktop.
 const themeTokens = declaredMembers(read("Theme.qml"))
 const themed = ["Board.qml", "Node.qml", "Browser.qml", "Help.qml", "BoardToolbar.qml",
-                "BoardImage.qml", "ScrollHint.qml", "Commands.qml", "Conflict.qml"]
+                "BoardImage.qml", "ScrollHint.qml", "Commands.qml", "Conflict.qml", "Surface.qml"]
 for (const file of themed) expect(referenced(read(file), "theme."), themeTokens, "Theme.qml", file)
 
 // The session addresses it as session.ctl.
@@ -120,7 +120,8 @@ const layoutStub = nestedMembers(layoutSource, "ctl")
 // Omarchy's own singletons and that suite runs where there is only Qt. This is
 // what keeps the copy honest: everything a panel reads has to be in both.
 const layoutTheme = membersAt(blockBody(layoutSource, "property QtObject theme:"), 6)
-for (const file of ["BoardToolbar.qml", "Help.qml", "Browser.qml", "ScrollHint.qml", "Commands.qml", "Conflict.qml"]) {
+for (const file of ["BoardToolbar.qml", "Help.qml", "Browser.qml", "ScrollHint.qml", "Commands.qml", "Conflict.qml",
+                    "Surface.qml"]) {
   expect(referenced(read(file), "ctl."), layoutStub, "the tst_layout stub", file)
   expect(referenced(read(file), "theme."), layoutTheme, "the tst_layout stub's theme", file)
 }
@@ -136,8 +137,10 @@ const helpReads = read("Help.qml")
 const rigCtl = roomy.slice(roomy.indexOf("id: c"))
 expect(referenced(helpReads, "ctl."), membersAt(rigCtl, 8),
   "the roomyHelp rig's ctl", "tests/qt/tst_layout.qml")
-expect(referenced(helpReads, "theme."), membersAt(blockBody(roomy, "property QtObject theme:"), 10),
-  "the roomyHelp rig's theme", "tests/qt/tst_layout.qml")
+// Help draws its card with Surface, which reads the rig's theme as well.
+for (const reads of [helpReads, read("Surface.qml")])
+  expect(referenced(reads, "theme."), membersAt(blockBody(roomy, "property QtObject theme:"), 10),
+    "the roomyHelp rig's theme", "tests/qt/tst_layout.qml")
 
 // The canvas suite mounts the whole board — the surface, the items on it, the
 // header and every panel it hosts — against one stub, so that stub stands in
@@ -147,7 +150,7 @@ const panSource = read("tests/qt/tst_pan.qml")
 const panStub = nestedMembers(panSource, "ctl")
 const panTheme = membersAt(blockBody(panSource, "property QtObject theme:"), 6)
 for (const file of ["Board.qml", "Node.qml", "BoardToolbar.qml", "Help.qml", "Browser.qml",
-                    "ScrollHint.qml", "Commands.qml", "Conflict.qml", "BoardImage.qml"]) {
+                    "ScrollHint.qml", "Commands.qml", "Conflict.qml", "BoardImage.qml", "Surface.qml"]) {
   expect(referenced(read(file), "ctl."), panStub, "the tst_pan stub", file)
   expect(referenced(read(file), "theme."), panTheme, "the tst_pan stub's theme", file)
 }
@@ -187,7 +190,7 @@ function declaredSignals(source) {
 for (const file of ["Omarchyform.qml", "BoardSession.qml", "BoardPersistence.qml", "BoardExchange.qml",
                     "Board.qml", "Node.qml", "Browser.qml", "Help.qml", "BoardToolbar.qml",
                     "BoardImage.qml", "ScrollHint.qml", "Commands.qml", "Conflict.qml",
-                    "Theme.qml"]) {
+                    "Theme.qml", "Surface.qml"]) {
   const source = read(file)
   const rootId = (source.match(/^\s*id:\s*(\w+)\s*$/m) || [])[1]
   if (!rootId) { failures.push(`${file}: no id on the root object to check against`); continue }

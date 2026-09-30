@@ -16,7 +16,7 @@ import "BoardStore.js" as Store
 // this id — every binding in the rows then reads off undefined. Qt 6.11
 // resolves the id and says nothing, so it is a name that only breaks on the
 // version CI runs. The same reason this file is not called Palette.qml.
-Rectangle {
+Item {
   id: panel
   required property var ctl
   readonly property var theme: panel.ctl.theme
@@ -40,12 +40,10 @@ Rectangle {
   readonly property int visibleRows: Math.max(1, Math.min(panel.ctl.paletteMatches.length,
                                                           panel.ctl.paletteRows, panel.fits))
   height: panel.chrome + panel.rowHeight * panel.visibleRows
-  color: Qt.rgba(panel.theme.canvasBackground.r, panel.theme.canvasBackground.g,
-                 panel.theme.canvasBackground.b, 0.92)
-  border.width: panel.theme.borderWidth
-  border.color: Qt.rgba(panel.theme.foreground.r, panel.theme.foreground.g,
-                        panel.theme.foreground.b, 0.35)
-  radius: panel.theme.cornerRadius
+
+  // Solid, as the shell's menu is. It was the canvas at 0.92, which let the
+  // board's own text read faintly through the rows of the list over it.
+  Surface { anchors.fill: parent; theme: panel.theme }
 
   // Swallow clicks so they do not reach the board underneath — every button,
   // so a middle drag on the panel does not pan the canvas behind it.
@@ -77,7 +75,7 @@ Rectangle {
       Text {
         id: query
         text: panel.ctl.paletteScope === "typing" ? "format: " : "run: "
-        color: panel.theme.foreground
+        color: panel.theme.panelText
         font.family: panel.theme.fontFamily
         font.pixelSize: panel.theme.fontSubtitle
       }
@@ -89,9 +87,9 @@ Rectangle {
         id: typed
         width: parent.width - query.width
         clip: true
-        color: panel.theme.foreground
+        color: panel.theme.panelText
         selectionColor: panel.theme.accent
-        selectedTextColor: panel.theme.canvasBackground
+        selectedTextColor: panel.theme.panelBackground
         selectByMouse: true
         font.family: panel.theme.fontFamily
         font.pixelSize: panel.theme.fontSubtitle
@@ -127,8 +125,8 @@ Rectangle {
       id: rule
       width: parent.width
       height: panel.theme.borderWidth
-      color: Qt.rgba(panel.theme.foreground.r, panel.theme.foreground.g,
-                     panel.theme.foreground.b, 0.25)
+      color: Qt.rgba(panel.theme.panelText.r, panel.theme.panelText.g,
+                     panel.theme.panelText.b, 0.25)
     }
 
     Item {
@@ -172,10 +170,13 @@ Rectangle {
           // exist; the line below says what it is waiting for.
           readonly property bool ready: panel.ctl.commandReady(row.modelData.needs)
 
-          Rectangle {
+          // The shell's keyboard cursor, as its menu draws one.
+          Surface {
             anchors.fill: parent
             visible: row.current
-            color: Qt.rgba(panel.theme.accent.r, panel.theme.accent.g, panel.theme.accent.b, 0.18)
+            theme: panel.theme
+            color: panel.theme.cursorFill
+            spec: panel.theme.cursorBorder
           }
 
           // The cursor is a mark as well as a colour, so which row is current
@@ -186,7 +187,7 @@ Rectangle {
             anchors.left: parent.left
             anchors.leftMargin: panel.theme.sp(8)
             text: row.current ? "›" : " "
-            color: panel.theme.accent
+            color: panel.theme.cursorText
             font.family: panel.theme.fontFamily
             font.pixelSize: panel.theme.fontSubtitle
           }
@@ -200,7 +201,7 @@ Rectangle {
             anchors.rightMargin: panel.theme.sp(12)
             elide: Text.ElideRight
             text: row.modelData.name
-            color: panel.theme.foreground
+            color: row.current && row.ready ? panel.theme.cursorText : panel.theme.panelText
             opacity: !row.ready ? 0.4 : row.current ? 1.0 : 0.75
             font.family: panel.theme.fontFamily
             font.pixelSize: panel.theme.fontSubtitle
@@ -216,7 +217,7 @@ Rectangle {
             anchors.rightMargin: panel.theme.sp(10)
             visible: !row.ready
             text: panel.ctl.commandExcuse(row.modelData.needs)
-            color: panel.theme.foreground
+            color: panel.theme.panelText
             opacity: 0.45
             font.family: panel.theme.fontFamily
             font.pixelSize: panel.theme.fontBody
@@ -246,7 +247,7 @@ Rectangle {
         Text {
           anchors.centerIn: parent
           visible: list.count === 0
-          color: panel.theme.foreground
+          color: panel.theme.panelText
           opacity: 0.5
           font.family: panel.theme.fontFamily
           font.pixelSize: panel.theme.fontBody

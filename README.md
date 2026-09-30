@@ -544,6 +544,12 @@ same role. How strong the wash and the hairline are is the shell's call too:
 the weights its own surfaces use. Switch your theme and the board switches with
 it. `c` cycles the role.
 
+The board's panels — the command list, the browser, the shortcut list and the
+question asked when a board has two versions — are drawn the way the shell draws
+its own menu: a solid card in the menu's colours, inside the theme's border for
+it (a gradient, where the theme has one), with the board dimmed behind and the
+keyboard cursor as a soft fill with its label in the accent.
+
 **Day and night** is not a setting here either. Omarchy themes declare
 `mode = "light"` or `mode = "dark"` in their `colors.toml`; the board reads
 that and adjusts the weight of its dot grid accordingly. A third-party theme
@@ -557,6 +563,7 @@ that omits `mode` falls back to the background's Rec. 709 luminance.
 | `Board.qml` | The canvas surface — grid, connectors, keys, cheat sheet |
 | `BoardToolbar.qml` | The header: the board's name and save state, the zoom, and the menu |
 | `Theme.qml` | Colours, fonts, sizes and weights, all read from the shell's theme with fallbacks |
+| `Surface.qml` | The card a panel is drawn on, in the shell's menu colours and the theme's border for them |
 | `Node.qml` | One item: note, box, ellipse, diamond or picture. Shapes are `QtQuick.Shapes` geometry, so they stay sharp at any zoom |
 | `Commands.qml` | The command list on `:`, `ctrl+p` and `.` |
 | `Conflict.qml` | The question asked when a board has two versions |
@@ -691,6 +698,12 @@ npm run shots -- --light --dark
 
 It runs against the live compositor in an isolated `HOME`, so the installed
 copy of the plugin and the running shell are both left alone.
+
+A theme named here is photographed from its own folder, which holds its colours
+but not the `shell.toml` Omarchy generates when a theme is applied — so the
+shell's surface tokens, such as the menu border a gradient theme gives its
+panels, fall back to their defaults. With no name, it is the theme you are using,
+as generated, and those are exactly what it shows.
 
 `--hold` takes the pictures and then leaves the board on screen instead of
 quitting, on the isolated boards that run built, carrying one of everything a
