@@ -7,6 +7,19 @@ since older boards are migrated on load rather than rejected.
 
 ### Added
 
+- **Formatting by name while typing.** `ctrl+p` with a caret in a note opens the
+  command list narrowed to what can be done to the words: bold, italic, drawn as
+  a key, made a heading, or coloured in one of the four roles — each with its
+  chord beside it where it has one, and each found by an ordinary word as well
+  (`strong`, `code`, `title`). None of them is on the board's own list, and
+  nothing from that list is on this one.
+
+  **Make it a heading** puts a `# ` on every line the selection touches, or
+  takes it off when they all have one. A selection that ends at the start of a
+  line does not take that line in, a heading written with a tab after the `#`
+  counts as one, and on a mix the lines that are headings already are left as
+  they are rather than given a second mark.
+
 - **A manual for the thing reading it.** `docs/for-agents.md` is Omarchyform
   explained to something that drives it through files and a command line and
   will never see the screen. The verbs were already documented; what was not is
@@ -292,8 +305,44 @@ since older boards are migrated on load rather than rejected.
   cover failure exits, missing markers, interruption and forced termination.
   `npm run test:hold` drives the live lifecycle without a hand on the keyboard.
 
+- **`ctrl+c` copies out.** A picture on its own goes to the clipboard as a
+  picture, so it can be pasted into anything that takes an image; anything else
+  goes as its text, several items arriving as paragraphs in board order. The
+  round trip with `ctrl+v` is closed in both directions.
+- **Pictures can be dragged onto the board** from a file manager or a browser,
+  landing where they are let go of. Several at once are copied one at a time and
+  staggered rather than stacked. The type is read from the file's content rather
+  than its name, the destination name and folder are chosen here, and a file that
+  is not a picture or is over 32 MB is refused with a reason.
+- **`/` finds a note by its text.** Typing narrows as you go: the first match is
+  selected and centred, matches take the accent outline, and everything else
+  recedes the way it does in background mode. `enter` steps through the matches
+  and wraps; `esc` puts the board back. It is navigation rather than editing, so
+  it works on a board that opened read-only.
+- **`g` arranges what is marked.** Then `h` `j` `k` `l` for an edge, `c` or `m`
+  for centres on one line, or `H` `J` `K` `L` to spread them evenly with the
+  outermost two staying put. The footer says what the second key can be while it
+  waits, and anything else cancels rather than running its usual command.
+- **`ctrl+d` duplicates.** The copies land offset from their originals and
+  become the selection, so duplicating and then pushing the copy somewhere is
+  two commands. A connector is copied when both of its ends were; an image copy
+  points at the same file rather than duplicating it.
+
 ### Fixed
 
+- **The board is framed below the hint line, not only the header.** `f`, and
+  keeping the selection in view, framed the board from the bottom of the header;
+  but the line of hints sits under it and wraps in a narrow window, so the top
+  row of a board could land behind the hints. Both frame from below everything
+  laid over the canvas now: the header, the backgrounds banner, and the hint
+  line or the find box.
+- **A paste is bounded while it is read, not after.** Text from the clipboard is
+  capped at 1 MiB and a picture at 32 MiB as the bytes arrive, so an oversized
+  paste is refused whole rather than collected first or cut short into a partial
+  note. A pasted picture's type is read from its content, as a dropped file's
+  already was, and a picture is never moved over a file that is already there.
+  A BMP stored top-down is measured by its real height rather than as enormous
+  and refused.
 - **Part of the live smoke test was not running, and nothing said so.** Its
   stages are numbers matched down one if/else chain, and two of them were used
   twice. The second of each pair was unreachable, so whether the blocks between
@@ -563,6 +612,16 @@ since older boards are migrated on load rather than rejected.
 
 ### Changed
 
+- **Tints take the shell's own weights.** How strong an item's wash and hairline
+  are comes from `Style.normalFillAlpha`, `Style.selectedFillAlpha` and
+  `Style.normalBorderAlpha`, the weights the shell's own surfaces use, rather
+  than from numbers of this plugin's own for light and dark themes. A plain note
+  stays quiet enough that its text carries the hierarchy, and a tinted one gets
+  a little more ink. The rule across the top of a note is one border wide
+  rather than three.
+- The picture at the top of the README is of a board built through
+  `bin/omarchyform` and retaken with the current header, rather than five shapes
+  placed by hand.
 - **The command list answers to the ordinary word as well as its own.** The
   names say what a command does in the board's words — "Type in it", "Mark
   everything", "Name this board" — and searching for the word every other
@@ -677,12 +736,13 @@ since older boards are migrated on load rather than rejected.
   pointer's hover does, so both read the same. The dispatch moved to the
   controller, so a click and an `enter` cannot diverge, and the command list is
   one definition shared with the header.
-- **Secondary text is readable whatever the theme.** The save state, the
-  separators, the `menu · m` label and a missing image's name used the theme's
-  `muted` token, which a theme is free to set almost to its own background —
-  azure-glow does, giving 1.28:1, near enough invisible. They are the foreground
-  held back to 0.85 now: 9.9:1 on that theme and 4.9:1 on the lightest one
-  tested, both past the 4.5:1 the guidelines ask for body text.
+- **Secondary text is readable whatever the theme.** The save state, the zoom
+  and a missing image's name used the theme's `muted` token, which a theme is
+  free to set almost to its own background — azure-glow does, giving 1.28:1,
+  near enough invisible. They are the foreground held back to 0.85 now. In the
+  header that is 9.9:1 on that theme and 4.7:1 at worst, on rose-pine, across
+  the 24 themes installed here — all past the 4.5:1 the guidelines ask for body
+  text.
 - **All the chrome is at the top.** The status and hint line moved from the
   bottom edge to directly under the header, so the board's name, its commands
   and whatever it is telling you are one block to look at, and the bottom of the
@@ -694,12 +754,14 @@ since older boards are migrated on load rather than rejected.
   a background of its own gets it here too. It had been the canvas colour, and
   briefly transparent, which let the dot grid run through the chrome and made
   the header look like part of the board rather than something sitting on it.
-- **The header is one line.** The board's name and save state sit on the left,
-  the menu after them, the zoom on the right — where the name, the state and a
-  row of six buttons used to take three stacked rows and most of the bar's
-  height. The menu is hidden until `m` shows it, and closes again when a command
-  is picked or `esc` is pressed. Closed, it leaves a clickable `menu · m` behind,
-  so the commands are still reachable without knowing the key.
+- **The header is one line.** The board's name, in bold, and its save state sit
+  on the left; the zoom and the menu sit on the right, where they stay however
+  long the name is — where the name, the state and a row of six buttons used to
+  take three stacked rows and most of the bar's height. The zoom is always shown,
+  and clicking it fits the board to the window. The menu is a button: `m` or a
+  click opens it as a row of its own under the name, and it closes again when a
+  command is picked or `esc` is pressed. In a narrow window the save state steps
+  aside, unless what it has to say is that a save failed.
 - The README now says plainly that a rescan cannot be trusted to replace a
   plugin's loaded QML, and to restart the shell after changing it. The first
   version of this note blamed compile failures; a second case then showed a
@@ -720,31 +782,6 @@ since older boards are migrated on load rather than rejected.
   read as punctuation belonging to the note. It is a small tinted tab now, in
   the opposite corner from the resize grip.
 - The footer mentions `/`, and every footer line uses one separator style.
-
-### Added
-
-- **`ctrl+c` copies out.** A picture on its own goes to the clipboard as a
-  picture, so it can be pasted into anything that takes an image; anything else
-  goes as its text, several items arriving as paragraphs in board order. The
-  round trip with `ctrl+v` is closed in both directions.
-- **Pictures can be dragged onto the board** from a file manager or a browser,
-  landing where they are let go of. Several at once are copied one at a time and
-  staggered rather than stacked. The type is read from the file's content rather
-  than its name, the destination name and folder are chosen here, and a file that
-  is not a picture or is over 32 MB is refused with a reason.
-- **`/` finds a note by its text.** Typing narrows as you go: the first match is
-  selected and centred, matches take the accent outline, and everything else
-  recedes the way it does in background mode. `enter` steps through the matches
-  and wraps; `esc` puts the board back. It is navigation rather than editing, so
-  it works on a board that opened read-only.
-- **`g` arranges what is marked.** Then `h` `j` `k` `l` for an edge, `c` or `m`
-  for centres on one line, or `H` `J` `K` `L` to spread them evenly with the
-  outermost two staying put. The footer says what the second key can be while it
-  waits, and anything else cancels rather than running its usual command.
-- **`ctrl+d` duplicates.** The copies land offset from their originals and
-  become the selection, so duplicating and then pushing the copy somewhere is
-  two commands. A connector is copied when both of its ends were; an image copy
-  points at the same file rather than duplicating it.
 
 ## 0.3.0
 

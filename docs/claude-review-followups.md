@@ -1,5 +1,9 @@
 # Claude tasks after the deeper usability review
 
+**This is the record of a review, not a task list.** Written 2026-09-28. Tasks 1
+to 3 shipped the same day; the last of task 4 was done on 2026-09-30. What
+happened is at the end.
+
 ## Review baseline
 
 Reviewed 2026-09-28 on the-line-says-what-is-next at e8d6563. The commits have
@@ -168,3 +172,27 @@ This is supporting work, not another product feature.
 No new canvas features, new commands, connector labels, groups, schema changes or
 broad refactors are requested. The next pass is about visible failures and reliable
 test tooling.
+
+## What happened to these tasks
+
+Recorded 2026-09-30 at `9a30d9b`, so this section dates too.
+
+**Task 1 — shipped** in `bb9cb3f`. A failure carries its own kind rather than
+riding in the status text, and ranks above an active connector or a text hint,
+so starting the next thing no longer hides or clears it. Only a success of the
+same kind takes it down.
+
+**Tasks 2 and 3 — shipped** in `bb9cb3f`. A held run ends its child and removes
+its own scratch tree on `esc` `esc`, `Ctrl-C` or a terminate signal, and a held
+run that never says it is ready is a failure rather than a pass.
+`tests/held-runner-test.js` covers each way out.
+
+**Task 4 — done.** The live matrix was run on 2026-09-29 (`e3fa0f4`), every row
+passing, and the claim that a live failure was "almost certainly" compositor
+routing is gone from [pointer-checks.md](pointer-checks.md). The `12-failed-save`
+picture was the last of it: on 2026-09-30 it stopped calling `flash` with a
+made-up message, and now hands the session the failure a refused write reports.
+The picture is of the real state — "Save failed" in the header — with a
+connector still being aimed, so it shows the failure outranking it. No result is
+recorded for the conflict panel's live row, which the matrix still marks as
+optional.

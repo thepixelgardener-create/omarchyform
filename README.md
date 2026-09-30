@@ -239,8 +239,10 @@ nothing at all: it will not select, move, resize, type into or delete what it
 lands on. Deleting is `del`, `backspace`, or **Delete** in the command list,
 and it can be undone with `u`.
 
-The header menu includes **Zoom**, showing the current percentage. Open it with
-`m`, use `Tab` / `Shift+Tab` to reach Zoom, then press `Enter`. Choose 25%, 50%,
+The header shows the zoom on the right, beside the menu, and clicking it fits the
+board to the window, as `f` does. To pick a level, the header menu includes
+**Zoom**: open it with `m`, use `Tab` / `Shift+Tab` to reach Zoom, then press
+`Enter`. Choose 25%, 50%,
 75%, 100%, 125%, 150%, 200%, 300%, or 400% with Tab and Enter. **Back** returns
 to the main menu; `Esc` closes it. Zoom presets keep the canvas centre fixed.
 
@@ -537,14 +539,15 @@ by default) and borders from `Style.normalBorderWidth`.
 
 Items carry a **theme role** — `foreground`, `accent`, `urgent` or `muted` —
 rather than a fixed colour, drawn as a translucent wash plus a hairline of the
-same role. Switch your theme and the board switches with it. `c` cycles the
-role.
+same role. How strong the wash and the hairline are is the shell's call too:
+`Style.normalFillAlpha`, `Style.selectedFillAlpha` and `Style.normalBorderAlpha`,
+the weights its own surfaces use. Switch your theme and the board switches with
+it. `c` cycles the role.
 
 **Day and night** is not a setting here either. Omarchy themes declare
 `mode = "light"` or `mode = "dark"` in their `colors.toml`; the board reads
-that and adjusts the weight of its washes and its dot grid accordingly. A
-third-party theme that omits `mode` falls back to the background's Rec. 709
-luminance.
+that and adjusts the weight of its dot grid accordingly. A third-party theme
+that omits `mode` falls back to the background's Rec. 709 luminance.
 
 ## Layout
 
@@ -552,7 +555,11 @@ luminance.
 |------|-------|
 | `Omarchyform.qml` | Controller: editing, navigation, and the two surfaces |
 | `Board.qml` | The canvas surface — grid, connectors, keys, cheat sheet |
+| `BoardToolbar.qml` | The header: the board's name and save state, the zoom, and the menu |
+| `Theme.qml` | Colours, fonts, sizes and weights, all read from the shell's theme with fallbacks |
 | `Node.qml` | One item: note, box, ellipse, diamond or picture. Shapes are `QtQuick.Shapes` geometry, so they stay sharp at any zoom |
+| `Commands.qml` | The command list on `:`, `ctrl+p` and `.` |
+| `Conflict.qml` | The question asked when a board has two versions |
 | `Browser.qml` | The board browser |
 | `BoardBar.qml` | The bar widget: the board's presence in the shell |
 | `Help.qml` | Scrollable keyboard help |
@@ -560,6 +567,8 @@ luminance.
 | `BoardStore.js` | Pure logic: parsing, marshalling, geometry. No QML |
 | `BoardSession.qml` | Loading, autosave state, and board-switch coordination |
 | `BoardPersistence.qml` | Serialized backup and atomic write, with completion/failure signals |
+| `BoardExchange.qml` | Saving a copy to share and opening one, apart from the open board's saves |
+| `BoardImage.qml` | The read-only scene a PNG export is drawn from: no grid, grips or selection |
 | `BoardFiles.sh` | Confined filesystem operations and exact-path moves |
 | `bin/omarchyform` | The board, headless: build, read and change one with no display |
 | `bin/store.js` | Loading `BoardStore.js` outside QML, shared by the CLI and the tests |
@@ -655,7 +664,9 @@ npm run bench:scene -- --record  # and write docs/performance.md
 ```
 
 It prints what it measured on before what it measured — Qt, Quickshell, the
-compositor, the refresh rate, the GPU — because a frame time without the
+compositor, the refresh rate, the GPU, and the size of the window it was given,
+since a window tiled across the whole screen draws more of the board than one
+beside an editor — because a frame time without the
 machine under it is not a number anyone can check, and the same board is
 vsync-bound at 60Hz and dropping frames at 144. `--record` writes that and the
 table to [docs/performance.md](docs/performance.md), which is where the figures
@@ -709,6 +720,10 @@ kept outside the repo so it never ships: by default
 `../omarchyform-examples/From spark to shipped.omarchyform.json`, or wherever
 `OMARCHYFORM_SHOWCASE` points.
 
+Take it where the window gets the whole width of the screen, on a workspace of
+its own. Tiled beside another window it is tall and narrow, a 16:9 crop of its
+top is half the board, and the line under the header wraps.
+
 `npm run mutate` breaks `BoardStore.js` on purpose, one edit at a time, and
 checks the suite notices. The command reports its current score and survivors;
 it is a diagnostic, not a CI failure threshold.
@@ -717,8 +732,8 @@ Review survivors when changing the pure logic; a passing mutation command is
 not a substitute for the runtime and filesystem regression tests.
 
 A contract check reads the names the views and the session reach for on the
-controller and fails if any of them is missing — including from the stub the
-QML session test uses in the controller's place. QML resolves those names at
+controller and fails if any of them is missing — including from the stubs the
+QML session and exchange tests use in the controller's place. QML resolves those names at
 runtime, so a missing one is a TypeError in a suite CI cannot run, which is
 how two of them reached `main` behind green checks.
 
@@ -811,14 +826,19 @@ Validate before publishing:
 omarchy plugin validate .
 qml_imports=$(mktemp -d)
 ln -s "$OMARCHY_PATH/shell" "$qml_imports/qs"
-/usr/lib/qt6/bin/qmllint -I "$qml_imports" Omarchyform.qml Board.qml Browser.qml Node.qml Help.qml BoardSession.qml BoardPersistence.qml
+/usr/lib/qt6/bin/qmllint -I "$qml_imports" ./*.qml
 rm -rf "$qml_imports"
 ```
 
 The temporary import tree resolves Omarchy's `qs.Commons` namespace. The
 installed QML metadata still produces warnings about `PanelWindow`,
-`QProcess::ExitStatus`, and the dynamic Style font object. The live test checks
-that those types and properties work in the actual runtime.
+`QProcess::ExitStatus`, the dynamic Style font object and the members of the
+shell's plugin API. qmllint also reports unqualified access inside the header
+menu's delegate and the export scene, the same `label` id in two of the
+browser's delegates, and two unused imports, so it exits non-zero. The live test
+checks that those types and properties work in the actual runtime. CI fails on
+one category only: a property overriding a final one, which is what makes a
+surface fail to load.
 
 `keepLoaded: true` keeps this overlay mounted between summons. Save with
 `ctrl+s` and wait for the saving indicator to clear before a rescan or a shell

@@ -1,5 +1,9 @@
 # Next usability pass: make active actions clear
 
+**This is the record of a plan, not a task list.** Written 2026-09-28. Its first
+two phases shipped; its third was a proposal to be decided on evidence, and none
+has been gathered. What happened is at the end.
+
 ## Checked state
 
 Reviewed local main at 2aa8292 on 2026-09-28. The working tree was clean;
@@ -121,3 +125,26 @@ any product decisions still open. Keep Phase 1 independently reviewable. Do not
 claim the full usability plan is complete because automated checks pass.
 
 This document is a plan only. Application code was not changed during this check.
+
+## What happened to this plan
+
+Recorded 2026-09-30 at `9a30d9b`, so this section dates too.
+
+**Phase 1 — shipped** in `99f35a0`. The line under the header is ranked by what
+a message is for rather than by what reached it last, so a stale success no
+longer hides the connector outcome, and save failures and conflicts still
+outrank the connector. It has since been decided in one place for the board and
+the clock alike, and failures of every kind keep their place (`bb9cb3f`).
+
+**Phase 2 — done.** `npm run shots -- --hold` (`e8d6563`) leaves an isolated
+board up to be driven by hand, and the matrix in
+[pointer-checks.md](pointer-checks.md) was run on 2026-09-29 (`e3fa0f4`): every
+row, both window modes, 100% and 400%, passed.
+
+**Phase 3 — not taken up.** Clicking the far end still starts a fresh
+selection, and the README says the far end is chosen with the keyboard. This
+phase asked for observation before any change, and none has been made.
+
+**The observation checklist** now keeps discovery separate from directed checks:
+finding a note is said not to establish that panning works, and the absence of
+cross-board copying is said to be a property of the tasks rather than a finding.

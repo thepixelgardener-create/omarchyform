@@ -185,3 +185,9 @@ lifecycle in one file: 1,994 lines and 258 members that the contract test counts
 on every run. Session, persistence, exchange and image handling have been
 extracted since this review; the board library has not. Freehand drawing is
 still outside the scope, as this review recommended.
+
+**Since, on 2026-09-30.** The header now does what grievance 3 proposed in
+full. The zoom no longer sits only in the menu: it is always shown on the right
+of the header, beside the menu, and clicking it fits the board, while the name
+and save state keep the left. The controller the cleanup paragraph counts is
+2,064 lines and 255 members now.

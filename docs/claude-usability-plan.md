@@ -1,5 +1,10 @@
 # Claude handoff: a focused Omarchyform usability pass
 
+**This is the record of a handoff, not a task list.** It was written on
+2026-09-28 as instructions for one bounded pass, and that pass shipped the same
+day. The instructions are kept as they were given; what happened to each is at
+the end.
+
 ## Objective
 
 Improve predictable navigation and discovery of existing commands while preserving
@@ -172,3 +177,29 @@ recent/previous-board navigation. A feature's absence alone is not evidence of n
 Report what changed, checks run and their results, any unverified interactions, and
 remaining product questions. Keep the diff focused and reviewable. Do not publish,
 deploy or change the user's installed desktop as part of this handoff.
+
+## What happened to this plan
+
+Recorded 2026-09-30 at `9a30d9b`, so this section dates too.
+
+**1. Middle-button panning — shipped** in `936361d`. The board takes the middle
+button once, on a surface above the canvas and below the chrome, so a
+middle-drag pans from whatever it starts on and a middle-click that does not
+move does nothing at all; the delete it used to do is gone.
+`tests/qt/tst_pan.qml` drives it at four zoom levels, and the live matrix in
+[pointer-checks.md](pointer-checks.md) was run by hand on 2026-09-29 in both
+window modes, every row passing.
+
+**2. Command search — shipped** in `936361d`. Commands carry aliases, matched
+after names and keys, so `edit` finds **Type in it**.
+
+**3. Connector behaviour — shipped** in `936361d`. The line under the header
+says what the second `x` will do — connect, turn round or remove — before it is
+pressed.
+
+**Deferred — one has since arrived.** A persistent numeric zoom came with the
+header rework on 2026-09-30: the zoom is always shown on the right of the
+header, and clicking it fits the board. None of the others has been taken up.
+
+**The follow-up exercise** is [usability-checklist.md](usability-checklist.md).
+Nobody has been through it yet.
