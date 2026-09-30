@@ -1323,7 +1323,7 @@ Item {
     var n = root.selected()
     if (!n) return
     var m = 60
-    var topInset = root.activeBoard ? root.activeBoard.headerHeight + 24 : m
+    var topInset = root.activeBoard ? root.activeBoard.canvasTop + 24 : m
     var sx = root.toScreenX(n.ix), sy = root.toScreenY(n.iy)
     var sw = n.iw * root.zoom, sh = n.ih * root.zoom
     if (sx < m) root.camX += m - sx
@@ -1370,9 +1370,10 @@ Item {
     var pad = 80
     var w = (b.maxX - b.minX) + pad * 2
     var h = (b.maxY - b.minY) + pad * 2
-    root.zoom = Math.max(0.2, Math.min(1, Math.min(root.viewW / w, Math.max(100, root.viewH - (root.activeBoard ? root.activeBoard.headerHeight : 0)) / h)))
+    var top = root.activeBoard ? root.activeBoard.canvasTop : 0
+    root.zoom = Math.max(0.2, Math.min(1, Math.min(root.viewW / w, Math.max(100, root.viewH - top) / h)))
     root.camX = root.viewW / 2 - ((b.minX + b.maxX) / 2) * root.zoom
-    root.camY = ((root.activeBoard ? root.activeBoard.headerHeight : 0) + root.viewH) / 2 - ((b.minY + b.maxY) / 2) * root.zoom
+    root.camY = (top + root.viewH) / 2 - ((b.minY + b.maxY) / 2) * root.zoom
     root.repaintGrid()
     root.repaintLinks()
   }

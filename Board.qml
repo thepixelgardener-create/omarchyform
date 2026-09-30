@@ -13,6 +13,14 @@ FocusScope {
 
   focus: true
   readonly property real headerHeight: toolbar.y + toolbar.height
+  // Where the canvas comes clear of everything laid over its top: the header,
+  // the backgrounds banner, and the line of hints or the find query under
+  // them. That line wraps in a narrow window, so framing the board from the
+  // header alone put its top row underneath the hints.
+  readonly property real canvasTop: Math.max(headerHeight,
+    banner.visible ? banner.y + banner.height : 0,
+    status.visible ? status.y + status.height : 0,
+    findLine.visible ? findLine.y + findLine.height : 0)
 
   property string exportDestination: ""
 

@@ -270,10 +270,10 @@ ShellRoot {
         plugin.selectedIndex = -1
         plugin.fitToItems()
         // Fit the complete example beneath the chrome, including on tall displays.
-        var available = plugin.viewH - plugin.activeBoard.headerHeight - 48
+        var available = plugin.viewH - plugin.activeBoard.canvasTop - 48
         plugin.zoom = Math.min(1, (plugin.viewW - 96) / 1020, available / 725)
         plugin.camX = (plugin.viewW - 1020 * plugin.zoom) / 2
-        plugin.camY = plugin.activeBoard.headerHeight + 24
+        plugin.camY = plugin.activeBoard.canvasTop + 24
         plugin.repaintGrid()
         plugin.repaintLinks()
       }

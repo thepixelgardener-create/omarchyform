@@ -809,6 +809,7 @@ TestCase {
     verify(line.contentWidth <= line.width + 1, "it wrapped rather than running off the side")
     verify(line.y >= surface.headerHeight, "and sits under the header rather than over it")
     verify(line.y + line.height < surface.height, "with the canvas still showing below it")
+    verify(surface.canvasTop >= line.y + line.height, "and the board is framed below it, however many lines it took")
   }
 
   function test_chromeDoesNotPanTheBoard(row) {
