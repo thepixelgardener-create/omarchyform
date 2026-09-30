@@ -271,6 +271,17 @@ TestCase {
     compare(keyRows(help).length, Store.KEY_HELP.length, "and every row under one of them")
   }
 
+  // The empty field says what it is for, and says it after the caret: both
+  // started at the left edge, and the caret blinked over the first letter.
+  function test_thePromptSitsAfterTheCaret() {
+    const field = findChild(commandList, "command-query")
+    const prompt = findChild(commandList, "command-prompt")
+    compare(field.text, "", "an empty query")
+    verify(prompt.visible, "shows the prompt")
+    verify(prompt.x >= field.cursorRectangle.x + field.cursorRectangle.width,
+           "starting after the caret, not under it")
+  }
+
   // The command list's rows are the shell menu's: tall enough to read a name at
   // a glance, however small the theme sets its text.
   function test_commandRowsAreTheMenusSize() {

@@ -79,8 +79,15 @@ Item {
       implicitHeight: typed.implicitHeight
       height: query.implicitHeight
 
+      // Just after the caret rather than under it: both started at the left
+      // edge, and the blinking caret sat over the first letter. Measured off
+      // the caret itself, so it follows the font and any padding the field
+      // is given.
       Text {
+        objectName: "command-prompt"
         anchors.verticalCenter: parent.verticalCenter
+        anchors.left: parent.left
+        anchors.leftMargin: typed.cursorRectangle.x + typed.cursorRectangle.width + panel.theme.sp(4)
         visible: typed.text === ""
         text: panel.ctl.paletteScope === "typing" ? "Format the text…"
           : panel.ctl.paletteScope === "selection" ? "Do something with it…" : "Run a command…"
@@ -95,6 +102,7 @@ Item {
       // needs an input method — and the commands are found by typing.
       TextInput {
         id: typed
+        objectName: "command-query"
         width: parent.width
         clip: true
         color: panel.theme.panelText
