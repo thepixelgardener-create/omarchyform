@@ -4,7 +4,7 @@
   "name": "Omarchyform",
   "version": "0.3.0",
   "author": "frueh",
-  "description": "An infinite canvas for Omarchy: pan, zoom, and sticky notes you can drag anywhere.",
+  "description": "A local, keyboard-first board for Omarchy: notes, shapes and connectors on an infinite canvas, saved as plain JSON.",
   "kinds": [
     "overlay",
     "bar-widget"

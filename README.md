@@ -590,7 +590,8 @@ that omits `mode` falls back to the background's Rec. 709 luminance.
 `bin/omarchyform` builds and changes boards with no window and no display. The
 board's logic is plain JavaScript that already runs outside QML — it is what
 the test suite exercises — so the same code that draws a board can build one
-headlessly. Every verb answers with JSON on stdout and exits 0 or 1.
+headlessly. Every verb answers with JSON on stdout and exits 0 or 1. It runs on
+Node.js, which the board itself never needs.
 
 ```bash
 bin/omarchyform new ideas.json --note "First thought" --note "Second"
@@ -811,15 +812,22 @@ contents, including pictures supplied by the clipboard.
 
 ## Dependencies
 
-One external program of its own: **wl-clipboard**, for `wl-paste`. `ctrl+v`
-needs it and says so if it is missing; nothing else does, so a board without it
-still opens, edits, saves, imports, exports and renders a PNG. Omarchy ships it,
-so on a stock install there is nothing to do.
+One external program of its own: **wl-clipboard**, for `wl-paste` and
+`wl-copy`. Pasting (`ctrl+v`) and copying out (`super+c`) need it — without it,
+a paste reports an empty clipboard and a copy says the clipboard could not be
+reached — and nothing else does, so a board without it still opens, edits,
+saves, imports, exports and renders a PNG. Omarchy ships it, so on a stock
+install there is nothing to do.
 
 Saving also uses **flock** (util-linux) — the lock that stops two writers from
-both believing they are updating the same board — alongside the `bash` and
-coreutils the filesystem helper has always used. All three are part of a base
-Arch install; `flock` is the only one added since 0.3.0.
+both believing they are updating the same board — and pictures are recognised
+by their content with **file**, alongside the `bash` and coreutils the
+filesystem helper has always used. All four are part of a base Arch install;
+`flock` and `file` are the ones added since 0.3.0.
+
+The command line, `bin/omarchyform`, runs on **Node.js**, and so do the test
+suites. The board itself does not: nothing the plugin runs starts Node, so it
+is needed only to use the command line or to work on the plugin.
 
 Everything else is already in the shell: Qt 6 Quick, and the Quickshell process
 and file primitives. No network access, no external services, and no elevated
