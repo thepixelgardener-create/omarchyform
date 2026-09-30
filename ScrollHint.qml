@@ -33,7 +33,7 @@ Item {
   Rectangle {
     anchors.fill: parent
     radius: hint.rounding
-    color: Qt.rgba(hint.theme.foreground.r, hint.theme.foreground.g, hint.theme.foreground.b, 0.15)
+    color: Qt.rgba(hint.theme.panelText.r, hint.theme.panelText.g, hint.theme.panelText.b, 0.12)
   }
 
   Rectangle {
@@ -44,6 +44,9 @@ Item {
                      hint.height * Math.min(1, hint.view.height / Math.max(1, hint.view.contentHeight)))
     y: (hint.height - height) * hint.progress
     radius: hint.rounding
-    color: hint.theme.accent
+    // The panel's own text colour rather than the accent, which the shell keeps
+    // for the row the cursor is on. A mark that says how much more there is
+    // does not need to compete with the thing being chosen.
+    color: Qt.rgba(hint.theme.panelText.r, hint.theme.panelText.g, hint.theme.panelText.b, 0.55)
   }
 }

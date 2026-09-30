@@ -1638,6 +1638,32 @@ function tests(S) {
     }
   })
 
+  test("the shortcut list is in sections, and loses no row to them", () => {
+    ok(S.KEY_HELP_SECTIONS.length > 1, "more than one section")
+    let rows = 0
+    for (const section of S.KEY_HELP_SECTIONS) {
+      ok(section.title.length > 0, "every section is named")
+      ok(section.rows.length > 0, `${section.title} has rows`)
+      rows += section.rows.length
+    }
+    eq(S.KEY_HELP.length, rows, "the flat list is every section's rows")
+    eq(new Set(S.KEY_HELP.map(r => r[0])).size, S.KEY_HELP.length, "no key is listed twice")
+  })
+
+  test("every command in the list wears an icon", () => {
+    for (const command of S.COMMANDS) {
+      if (command.listed === false) continue
+      const icon = S.commandIcon(command)
+      eq(icon.length, 1, `"${command.name}" has one glyph`)
+      // Font Awesome's range, where Nerd Fonts keep it.
+      ok(icon.charCodeAt(0) >= 0xf000 && icon.charCodeAt(0) <= 0xf2ff, `"${command.name}" is a Font Awesome glyph`)
+    }
+    eq(S.commandIcon({ run: "zoomCentre", arg: 1.2 }), "\uf00e", "zooming in")
+    eq(S.commandIcon({ run: "zoomCentre", arg: 1 / 1.2 }), "\uf010", "zooming out")
+    eq(S.commandIcon({ run: "nothingWeKnow" }), "", "an unknown command has none rather than a wrong one")
+    eq(S.commandIcon(null), "", "nor does no command")
+  })
+
   test("kinds and swatches are unique", () => {
     eq(new Set(S.KINDS).size, S.KINDS.length, "kinds unique")
     eq(new Set(S.TINTS).size, S.TINTS.length, "tints unique")

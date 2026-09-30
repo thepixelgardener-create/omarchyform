@@ -60,7 +60,7 @@ FocusScope {
 
     Column {
       anchors.fill: parent
-      anchors.margins: browser.theme.sp(16)
+      anchors.margins: browser.theme.sp(18)
       spacing: browser.theme.sp(10)
 
       // A name being typed, or a query, is a real text field: a drawn cursor
@@ -78,8 +78,8 @@ FocusScope {
           visible: !browser.typing
           elide: Text.ElideMiddle
           color: browser.theme.panelText
-          font.family: browser.theme.fontFamily
-          font.pixelSize: browser.theme.fontSubtitle
+          font.family: browser.theme.menuFontFamily
+          font.pixelSize: browser.theme.fontHeading
           text: browser.ctl.trashIndexError !== "" ? browser.ctl.trashIndexError
             : browser.ctl.browserMessage !== "" ? browser.ctl.browserMessage
             : browser.here
@@ -90,8 +90,8 @@ FocusScope {
           visible: browser.typing
           text: browser.prompting ? browser.ctl.browserPrompt + " " : "/"
           color: browser.theme.panelText
-          font.family: browser.theme.fontFamily
-          font.pixelSize: browser.theme.fontSubtitle
+          font.family: browser.theme.menuFontFamily
+          font.pixelSize: browser.theme.fontHeading
         }
 
         TextInput {
@@ -105,8 +105,8 @@ FocusScope {
           selectionColor: browser.theme.accent
           selectedTextColor: browser.theme.panelBackground
           selectByMouse: true
-          font.family: browser.theme.fontFamily
-          font.pixelSize: browser.theme.fontSubtitle
+          font.family: browser.theme.menuFontFamily
+          font.pixelSize: browser.theme.fontHeading
           Accessible.role: Accessible.EditableText
           Accessible.name: browser.prompting ? browser.ctl.browserPrompt : "Search the boards"
 
@@ -186,7 +186,8 @@ FocusScope {
             required property int index
 
             width: list.width
-            height: label.implicitHeight + browser.theme.sp(8)
+            // The shell's menu rows, as the command list's are.
+            height: Math.max(browser.theme.sp(50), label.implicitHeight + browser.theme.sp(24))
 
             readonly property bool current: index === browser.ctl.browserIndex
 
@@ -212,8 +213,8 @@ FocusScope {
               anchors.leftMargin: browser.theme.sp(8)
               text: parent.current ? "›" : " "
               color: browser.theme.cursorText
-              font.family: browser.theme.fontFamily
-              font.pixelSize: browser.theme.fontSubtitle
+              font.family: browser.theme.menuFontFamily
+              font.pixelSize: browser.theme.fontHeading
             }
 
             Text {
@@ -225,9 +226,9 @@ FocusScope {
               anchors.rightMargin: browser.theme.sp(8)
               elide: Text.ElideMiddle
               color: parent.current ? browser.theme.cursorText : browser.theme.panelText
-              opacity: parent.current ? 1.0 : 0.75
-              font.family: browser.theme.fontFamily
-              font.pixelSize: browser.theme.fontSubtitle
+              font.family: browser.theme.menuFontFamily
+              font.pixelSize: browser.theme.fontHeading
+              font.weight: Font.Medium
               // A folder wears a trailing slash; the open board is marked.
               // In the trash an entry carries where it came from, since that is
               // what restoring it will put back.
@@ -258,7 +259,7 @@ FocusScope {
             visible: list.count === 0
             color: browser.theme.panelText
             opacity: 0.5
-            font.family: browser.theme.fontFamily
+            font.family: browser.theme.menuFontFamily
             font.pixelSize: browser.theme.fontBody
             textFormat: Text.StyledText
             text: browser.ctl.browserTrash ? "the trash is empty"
@@ -289,7 +290,7 @@ FocusScope {
     anchors.bottomMargin: browser.theme.sp(16)
     color: browser.theme.foreground
     opacity: 0.55
-    font.family: browser.theme.fontFamily
+    font.family: browser.theme.menuFontFamily
     font.pixelSize: browser.theme.fontBody
     textFormat: Text.StyledText
     text: Store.hintLine(browser.prompting ? Store.PROMPT_HINTS

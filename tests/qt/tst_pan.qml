@@ -243,6 +243,13 @@ TestCase {
                                    gradient: { colors: [], angle: 0, enabled: false } })
       property var cursorBorder: ({ color: "transparent", widths: { top: 0, right: 0, bottom: 0, left: 0 },
                                     gradient: { colors: [], angle: 0, enabled: false } })
+      // The shell's button fills, its section label and glyph sizes, and the
+      // menu's family.
+      property color controlFill: "#0acccccc"
+      property color hoverFill: "#14cccccc"
+      property string menuFontFamily: "monospace"
+      property int fontCaption: 10
+      property int fontIcon: 18
       property string fontFamily: "monospace"
       // Not readonly: one test below turns the text up to what a theme with
       // large type does in a small window, which is where a hint that does

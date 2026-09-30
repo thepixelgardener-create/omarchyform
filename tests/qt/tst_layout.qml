@@ -51,6 +51,13 @@ TestCase {
                                    gradient: { colors: ["#ffaa00", "#ff4466"], angle: 45, enabled: true } })
       property var cursorBorder: ({ color: "transparent", widths: { top: 0, right: 0, bottom: 0, left: 0 },
                                     gradient: { colors: [], angle: 0, enabled: false } })
+      // The shell's button fills, its section label and glyph sizes, and the
+      // menu's family.
+      property color controlFill: "#0acccccc"
+      property color hoverFill: "#14cccccc"
+      property string menuFontFamily: "monospace"
+      property int fontCaption: 10
+      property int fontIcon: 18
       readonly property var markupColors: ({ foreground: "#cccccc", accent: "#00ffff",
                                              urgent: "#ff5555", muted: "#888888" })
       function sp(n) { return n }
@@ -240,10 +247,34 @@ TestCase {
     verify(!card.flat, "a gradient is not a flat border")
     compare(card.border.width, 0, "so the Rectangle's own is off")
     verify(card.children[0].visible, "and the ring is drawn")
-    // The conflict panel keeps the urgent edge at the theme's width.
-    verify(cardOf(decision).flat, "one colour: the Rectangle's own border")
-    compare(cardOf(decision).border.color, ctl.theme.urgent)
-    compare(cardOf(decision).border.width, 2)
+    // The two-versions question has the ordinary edge, as the shell's own
+    // confirmation dialog does; its heading carries the urgency instead, in the
+    // theme's colour for it and behind a mark that is not only a colour.
+    compare(cardOf(decision).spec, ctl.theme.panelBorder, "the ordinary panel edge")
+    const heading = findChild(decision, "conflict-body").children[0]
+    compare(heading.color, ctl.theme.urgent, "the heading is in the urgent colour")
+    compare(heading.text.charAt(0), "\uf071", "behind a warning mark")
+  }
+
+  // The shortcut list is in sections, each under a small label, and every key
+  // is still in it.
+  function test_helpIsInLabelledSections() {
+    const content = scroller(help).contentItem
+    const labels = []
+    const stack = [content]
+    while (stack.length) {
+      const item = stack.pop()
+      if (item.font !== undefined && item.font.capitalization === Font.AllUppercase) labels.push(item.text)
+      for (let i = 0; i < item.children.length; i++) stack.push(item.children[i])
+    }
+    compare(labels.length, Store.KEY_HELP_SECTIONS.length, "one label per section")
+    compare(keyRows(help).length, Store.KEY_HELP.length, "and every row under one of them")
+  }
+
+  // The command list's rows are the shell menu's: tall enough to read a name at
+  // a glance, however small the theme sets its text.
+  function test_commandRowsAreTheMenusSize() {
+    verify(commandList.rowHeight >= ctl.theme.sp(50), "at least the menu's fifty")
   }
 
   function test_helpFitsAndScrolls() {
@@ -336,6 +367,7 @@ TestCase {
           property int fontBody: rig.fs
           property int fontSubtitle: rig.fs
           property int fontHeading: rig.fs + 4
+          property int fontCaption: rig.fs - 2
           // Spacing scales with the text, the way a theme's Style.space does.
           function sp(n) { return Math.round(n * rig.fs / 12) }
         }

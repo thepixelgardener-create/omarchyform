@@ -679,66 +679,152 @@ function commandByName(name) {
   return null
 }
 
-var KEY_HELP = [
-  ["ctrl+n / F2", "new board / name the current board"],
-  ["super+v", "paste a picture or text (also ctrl+v)"],
-  ["ctrl+o", "import a native board"],
-  ["ctrl+shift+s / ctrl+e", "export editable copy / PNG of the board"],
-  ["mark, then ctrl+e", "a PNG of just what is marked, backgrounds included"],
-  [": png", "the same picture on white, on black, or in black and white"],
-  ["n", "new note beside the selected one"],
-  ["r / e", "new box / ellipse"],
-  ["p / shift+p", "pin as background / select backgrounds"],
-  ["s", "cycle shape: note, box, ellipse, diamond"],
-  // Walked to, not clicked at: a pointer selection starts afresh and ends the
-  // half-made connector, so the keys are what the line has room to teach.
-  ["x", "connect: x on one, tab or hjkl to the other, x again"],
-  // Which of the two it will be is said on the line under the header while the
-  // far end is being chosen, so this row says that there is a choice rather
-  // than asking anyone to work out which side of it they are on.
-  ["x on a connected pair", "turn that connector round, or remove it — the line says which"],
-  ["X", "remove every connector on this item at once"],
-  ["u / ctrl+r", "undo / redo"],
-  ["b", "boards: browse, open, create"],
-  ["enter / i", "type in the selected item"],
-  ["while typing: ctrl+p", "format selected text by name"],
-  ["while typing: ctrl+b / ctrl+i", "*bold* / _italic_ round what is selected"],
-  ["ctrl+k", "`a key`, drawn in the accent"],
-  ["ctrl+1..4", "colour it: foreground, accent, urgent, muted"],
-  ["# at the start of a line", "a heading, bigger and heavier"],
-  ["esc", "back out, then close the board"],
-  ["h j k l", "move the selection around"],
-  ["H J K L", "push the selected item"],
-  ["ctrl+hjkl", "resize it, from the bottom-right"],
-  ["tab", "cycle through everything"],
-  ["space", "mark this one as well"],
-  ["a", "mark everything"],
-  ["del / backspace", "delete what is marked, or the one under the cursor"],
-  ["ctrl+d", "duplicate it, connectors between the copies included"],
-  ["m", "show or hide the menu in the header"],
-  ["m then h l / tab", "walk the menu; enter picks, esc closes"],
-  ["super+c", "copy a picture or text (also ctrl+c)"],
-  ["/", "find: type to search the notes, enter steps through matches"],
-  ["g then h j k l", "align the marked items on that edge"],
-  ["g then c / m", "align their centres on one line"],
-  ["g then H J K L", "spread them evenly, outermost two staying put"],
-  [". or right-click", "what can be done with what is selected"],
-  ["] / [", "bring forward / send backward, where they overlap"],
-  ["} / {", "bring right to the front / send right to the back"],
-  ["c", "change its colour"],
-  ["w", "fullscreen or windowed"],
-  ["f", "fit the whole board on screen"],
-  ["0", "reset the view"],
-  ["+ / -", "zoom"],
-  ["? / F1", "this list"],
-  [": / ctrl+p", "run any command by name, without knowing its key"],
-  ["shift+click", "mark items together"],
-  ["drag on canvas", "sweep a rectangle to mark everything it touches"],
-  ["shift+drag", "sweep, keeping what was already marked"],
-  ["drag an item", "move it, and everything marked with it"],
-  ["middle/right drag", "pan the canvas"],
-  ["wheel", "zoom at the pointer"]
+// The glyph a command wears in the list, as the shell's menu gives every row
+// one. Font Awesome's codepoints, which Nerd Fonts keep where Font Awesome put
+// them; the theme's font need not carry them, and Qt falls back to one that
+// does, as it does for the menu. Keyed by what a command runs, then by its
+// argument, so a new command in a family already here has one already.
+var COMMAND_ICONS = {
+  addRelative: { note: "\uf249", rect: "\uf096", ellipse: "\uf10c" },
+  editSelected: "\uf040",
+  markText: { bold: "\uf032", italic: "\uf033", key: "\uf121",
+              foreground: "\uf1fc", accent: "\uf1fc", urgent: "\uf1fc", muted: "\uf1fc" },
+  headText: "\uf1dc",
+  cycleKind: "\uf1b2",
+  recolorItem: "\uf1fc",
+  toggleLinking: "\uf0c1",
+  unlinkSelected: "\uf127",
+  duplicateTargets: "\uf24d",
+  removeTargets: "\uf1f8",
+  beginArrange: "\uf037",
+  alignTargets: { left: "\uf036", right: "\uf038", top: "\uf062", bottom: "\uf063",
+                  centreX: "\uf037", centreY: "\uf039" },
+  spreadTargets: { x: "\uf07e", y: "\uf07d" },
+  layerTargets: { forward: "\uf106", backward: "\uf107", front: "\uf102", back: "\uf103" },
+  togglePin: "\uf08d",
+  togglePinnedSelection: "\uf08d",
+  toggleMark: "\uf046",
+  markAll: "\uf14a",
+  undo: "\uf0e2",
+  redo: "\uf01e",
+  copySelection: "\uf0c5",
+  pasteClipboard: "\uf0ea",
+  beginFind: "\uf002",
+  fitToItems: "\uf065",
+  resetView: "\uf015",
+  toggleWindowMode: "\uf2d0",
+  openBrowser: "\uf07c",
+  newBoard: "\uf016",
+  renameBoard: "\uf044",
+  importBoard: "\uf019",
+  exportBoard: "\uf045",
+  exportBoardPlain: "\uf045",
+  choosePng: "\uf03e",
+  flushSave: "\uf0c7",
+  conflictUseDisk: "\uf0a0",
+  conflictSaveCopy: "\uf0c5",
+  conflictReplaceDisk: "\uf0c7",
+  toggleMenu: "\uf0c9",
+  toggleHelp: "\uf11c",
+  beginPalette: "\uf120",
+  beginSelectionActions: "\uf0ca"
+}
+function commandIcon(command) {
+  if (!command) return ""
+  // Zooming is the one family told apart by a number rather than a name.
+  if (command.run === "zoomCentre") return command.arg > 1 ? "\uf00e" : "\uf010"
+  var icon = COMMAND_ICONS[command.run]
+  if (icon && typeof icon === "object") icon = icon[command.arg]
+  return typeof icon === "string" ? icon : ""
+}
+
+// The shortcut list, in the groups a person looks for a key by. The shell's own
+// panels break a long list with small labels and a rule between sections, and
+// forty rows with nothing between them read as a wall.
+var KEY_HELP_SECTIONS = [
+  { title: "Boards and files", rows: [
+    ["b", "boards: browse, open, create"],
+    ["ctrl+n / F2", "new board / name the current board"],
+    ["ctrl+o", "import a native board"],
+    ["ctrl+shift+s / ctrl+e", "export editable copy / PNG of the board"],
+    ["mark, then ctrl+e", "a PNG of just what is marked, backgrounds included"],
+    [": png", "the same picture on white, on black, or in black and white"],
+    ["super+v", "paste a picture or text (also ctrl+v)"],
+    ["super+c", "copy a picture or text (also ctrl+c)"]
+  ] },
+  { title: "Make and change", rows: [
+    ["n", "new note beside the selected one"],
+    ["r / e", "new box / ellipse"],
+    ["s", "cycle shape: note, box, ellipse, diamond"],
+    ["c", "change its colour"],
+    ["p / shift+p", "pin as background / select backgrounds"],
+    ["ctrl+d", "duplicate it, connectors between the copies included"],
+    ["del / backspace", "delete what is marked, or the one under the cursor"],
+    ["u / ctrl+r", "undo / redo"]
+  ] },
+  { title: "Connect", rows: [
+    // Walked to, not clicked at: a pointer selection starts afresh and ends the
+    // half-made connector, so the keys are what the line has room to teach.
+    ["x", "connect: x on one, tab or hjkl to the other, x again"],
+    // Which of the two it will be is said on the line under the header while the
+    // far end is being chosen, so this row says that there is a choice rather
+    // than asking anyone to work out which side of it they are on.
+    ["x on a connected pair", "turn that connector round, or remove it — the line says which"],
+    ["X", "remove every connector on this item at once"]
+  ] },
+  { title: "Write", rows: [
+    ["enter / i", "type in the selected item"],
+    ["while typing: ctrl+p", "format selected text by name"],
+    ["while typing: ctrl+b / ctrl+i", "*bold* / _italic_ round what is selected"],
+    ["ctrl+k", "`a key`, drawn in the accent"],
+    ["ctrl+1..4", "colour it: foreground, accent, urgent, muted"],
+    ["# at the start of a line", "a heading, bigger and heavier"]
+  ] },
+  { title: "Move and arrange", rows: [
+    ["h j k l", "move the selection around"],
+    ["tab", "cycle through everything"],
+    ["H J K L", "push the selected item"],
+    ["ctrl+hjkl", "resize it, from the bottom-right"],
+    ["space", "mark this one as well"],
+    ["a", "mark everything"],
+    ["g then h j k l", "align the marked items on that edge"],
+    ["g then c / m", "align their centres on one line"],
+    ["g then H J K L", "spread them evenly, outermost two staying put"],
+    ["] / [", "bring forward / send backward, where they overlap"],
+    ["} / {", "bring right to the front / send right to the back"]
+  ] },
+  { title: "View", rows: [
+    ["f", "fit the whole board on screen"],
+    ["0", "reset the view"],
+    ["+ / -", "zoom"],
+    ["w", "fullscreen or windowed"],
+    ["/", "find: type to search the notes, enter steps through matches"]
+  ] },
+  { title: "Find your way", rows: [
+    ["? / F1", "this list"],
+    [": / ctrl+p", "run any command by name, without knowing its key"],
+    [". or right-click", "what can be done with what is selected"],
+    ["m", "show or hide the menu in the header"],
+    ["m then h l / tab", "walk the menu; enter picks, esc closes"],
+    ["esc", "back out, then close the board"]
+  ] },
+  { title: "Pointer", rows: [
+    ["shift+click", "mark items together"],
+    ["drag on canvas", "sweep a rectangle to mark everything it touches"],
+    ["shift+drag", "sweep, keeping what was already marked"],
+    ["drag an item", "move it, and everything marked with it"],
+    ["middle/right drag", "pan the canvas"],
+    ["wheel", "zoom at the pointer"]
+  ] }
 ]
+
+// Every row, in order, for what wants the whole list at once: the key column is
+// measured over all of them, so it lines up from one section to the next.
+var KEY_HELP = (function () {
+  var rows = []
+  for (var i = 0; i < KEY_HELP_SECTIONS.length; i++) rows = rows.concat(KEY_HELP_SECTIONS[i].rows)
+  return rows
+})()
 
 // ---------------------------------------------------------------- marshalling
 // One shape in, one shape out. The file, the undo stack and the models all

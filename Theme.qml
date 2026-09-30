@@ -48,6 +48,9 @@ Item {
   readonly property int fontBody: theme.token(function () { return Style.font.body }, 12)
   readonly property int fontSubtitle: theme.token(function () { return Style.font.subtitle }, 13)
   readonly property int fontHeading: theme.token(function () { return Style.font.heading }, 16)
+  // The small bold label over a section of a panel, and a row's glyph.
+  readonly property int fontCaption: theme.token(function () { return Style.font.caption }, 10)
+  readonly property int fontIcon: theme.token(function () { return Style.font.iconLarge }, 18)
 
   // The board's panels — the command list, the browser, help, the question
   // asked when a board has two versions — are summoned surfaces, and the shell
@@ -72,6 +75,15 @@ Item {
   property var cursorBorder: theme.token(function () {
     return Border.surfaceSpec("menu", "selected-border", Color.menu.selectedBorder, 0)
   }, theme.flatSpec("transparent", 0))
+  // A control at rest and under the pointer, as the shell's own buttons fill
+  // them: a faint wash, and a stronger one when hovered.
+  property color controlFill: theme.token(function () { return Style.normalFill },
+                                          Qt.rgba(theme.foreground.r, theme.foreground.g, theme.foreground.b, 0.04))
+  property color hoverFill: theme.token(function () { return Style.hoverFill },
+                                        Qt.rgba(theme.foreground.r, theme.foreground.g, theme.foreground.b, 0.08))
+  // The family the shell's summoned lists use. The same as the rest unless
+  // someone has set OMARCHY_MENU_FONT, which the menu honours and so do these.
+  property string menuFontFamily: theme.token(function () { return Style.font.menuFamily }, theme.fontFamily)
   function flatSpec(color, width) {
     return { color: color, widths: { top: width, right: width, bottom: width, left: width },
              gradient: { colors: [], angle: 0, enabled: false } }

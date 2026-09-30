@@ -83,38 +83,70 @@ Item {
         font.pixelSize: help.theme.fontHeading
         bottomPadding: help.theme.sp(14)
       }
+      // In sections, the way the shell's panels break a long list: a rule, a
+      // small bold label, then the rows. Forty keys with nothing between them
+      // was a wall to read down rather than a list to look something up in.
       Repeater {
-        model: Store.KEY_HELP
-        Item {
-          id: row
+        model: Store.KEY_HELP_SECTIONS
+        Column {
+          id: section
           required property var modelData
+          required property int index
           width: helpColumn.width
-          height: Math.max(shortcut.implicitHeight, description.implicitHeight)
-          // Never more than half the room, the gap between the columns counted
-          // against the keys, so a long label cannot squeeze the descriptions
-          // into something narrower than itself on a small window.
-          readonly property real keyColumn: Math.min(Math.ceil(keyRuler.implicitWidth),
-                                                     (helpColumn.width - help.theme.sp(18)) * 0.5)
-          Text {
-            id: shortcut
-            width: row.keyColumn
-            horizontalAlignment: Text.AlignRight
-            wrapMode: Text.Wrap
-            text: row.modelData[0]
-            color: help.theme.accent
-            font.family: help.theme.fontFamily
-            font.pixelSize: help.theme.fontBody
+          spacing: help.theme.sp(10)
+
+          Rectangle {
+            visible: section.index > 0
+            width: parent.width
+            height: 1
+            color: Qt.rgba(help.theme.panelText.r, help.theme.panelText.g, help.theme.panelText.b, 0.12)
           }
+          // The shell's section label: caption size, bold, a shade off the text.
           Text {
-            id: description
-            anchors.left: parent.left
-            anchors.leftMargin: row.keyColumn + help.theme.sp(18)
-            anchors.right: parent.right
-            wrapMode: Text.Wrap
-            text: row.modelData[1]
-            color: help.theme.panelText
+            text: section.modelData.title
+            textFormat: Text.PlainText
+            font.capitalization: Font.AllUppercase
+            font.bold: true
             font.family: help.theme.fontFamily
-            font.pixelSize: help.theme.fontBody
+            font.pixelSize: help.theme.fontCaption
+            color: Qt.darker(help.theme.panelText, 1.4)
+            topPadding: section.index > 0 ? help.theme.sp(4) : 0
+          }
+
+          Repeater {
+            model: section.modelData.rows
+            Item {
+              id: row
+              required property var modelData
+              width: helpColumn.width
+              height: Math.max(shortcut.implicitHeight, description.implicitHeight)
+              // Never more than half the room, the gap between the columns counted
+              // against the keys, so a long label cannot squeeze the descriptions
+              // into something narrower than itself on a small window.
+              readonly property real keyColumn: Math.min(Math.ceil(keyRuler.implicitWidth),
+                                                         (helpColumn.width - help.theme.sp(18)) * 0.5)
+              Text {
+                id: shortcut
+                width: row.keyColumn
+                horizontalAlignment: Text.AlignRight
+                wrapMode: Text.Wrap
+                text: row.modelData[0]
+                color: help.theme.accent
+                font.family: help.theme.fontFamily
+                font.pixelSize: help.theme.fontBody
+              }
+              Text {
+                id: description
+                anchors.left: parent.left
+                anchors.leftMargin: row.keyColumn + help.theme.sp(18)
+                anchors.right: parent.right
+                wrapMode: Text.Wrap
+                text: row.modelData[1]
+                color: help.theme.panelText
+                font.family: help.theme.fontFamily
+                font.pixelSize: help.theme.fontBody
+              }
+            }
           }
         }
       }

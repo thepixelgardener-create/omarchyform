@@ -70,7 +70,9 @@ Rectangle {
           width: zoomLabel.implicitWidth + toolbar.theme.sp(16)
           height: zoomLabel.implicitHeight + toolbar.theme.sp(8)
           radius: toolbar.theme.cornerRadius
-          color: zoomMouse.containsMouse ? toolbar.theme.tintFill("foreground", true) : "transparent"
+          // The shell's buttons: a faint fill at rest, so it reads as something
+          // to press, and a stronger one under the pointer.
+          color: zoomMouse.containsMouse ? toolbar.theme.hoverFill : toolbar.theme.controlFill
           Accessible.role: Accessible.Button
           Accessible.name: "Fit board to window, zoom " + Math.round(toolbar.ctl.zoom * 100) + " percent"
           Accessible.onPressAction: toolbar.ctl.fitToItems()
@@ -95,8 +97,9 @@ Rectangle {
           height: opener.implicitHeight + toolbar.theme.sp(8)
           radius: toolbar.theme.cornerRadius
           color: toolbar.ctl.menuVisible || menuMouse.containsMouse
-            ? toolbar.theme.tintFill("foreground", true) : "transparent"
-          border.width: toolbar.theme.borderWidth
+            ? toolbar.theme.hoverFill : toolbar.theme.controlFill
+          // Borderless at rest and edged when hot, as the shell's buttons are.
+          border.width: toolbar.ctl.menuVisible || menuMouse.containsMouse ? toolbar.theme.borderWidth : 0
           border.color: Qt.rgba(toolbar.theme.barForeground.r, toolbar.theme.barForeground.g,
                                 toolbar.theme.barForeground.b, 0.25)
           Accessible.role: Accessible.Button
@@ -137,7 +140,7 @@ Rectangle {
           // The shell's keyboard cursor, with its edge kept: a row of buttons
           // has no room for the › the lists carry, and the cursor still needs
           // a mark that is not only a colour.
-          color: onIt ? toolbar.theme.cursorFill : "transparent"
+          color: onIt ? toolbar.theme.cursorFill : toolbar.theme.controlFill
           Accessible.role: Accessible.Button
           Accessible.name: label.text
           Accessible.focused: toolbar.ctl.menuIndex === index

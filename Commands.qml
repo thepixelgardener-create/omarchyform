@@ -25,7 +25,7 @@ Item {
   required property var board
 
   visible: panel.ctl.paletteVisible
-  width: Math.min(parent.width - panel.theme.sp(64), panel.theme.sp(560))
+  width: Math.min(parent.width - panel.theme.sp(64), panel.theme.sp(600))
 
   // How many rows there is room for, rather than how many there are. A list of
   // nine at a theme's large font is taller than a small window, and a panel
@@ -56,28 +56,38 @@ Item {
     id: ruler
     visible: false
     text: "Ag"
-    font.family: panel.theme.fontFamily
-    font.pixelSize: panel.theme.fontSubtitle
+    font.family: panel.theme.menuFontFamily
+    font.pixelSize: panel.theme.fontHeading
   }
-  readonly property int rowHeight: ruler.implicitHeight + panel.theme.sp(8)
+  // The shell's menu rows: at least fifty, and more if the text needs it. Room
+  // to read a name at a glance is the point of a list that is summoned to be
+  // read; a row as tall as its text was a column of small print.
+  readonly property int rowHeight: Math.max(panel.theme.sp(50), ruler.implicitHeight + panel.theme.sp(24))
 
   Column {
     id: body
-    y: panel.theme.sp(16)
-    x: panel.theme.sp(16)
-    width: parent.width - panel.theme.sp(32)
+    y: panel.theme.sp(18)
+    x: panel.theme.sp(18)
+    width: parent.width - panel.theme.sp(36)
     spacing: panel.theme.sp(10)
 
-    Row {
+    // The line you type into, at the size the menu's is, with what it is for
+    // written in it until something else is — as the menu says "Go…".
+    Item {
+      id: query
       width: parent.width
-      spacing: 0
+      implicitHeight: typed.implicitHeight
+      height: query.implicitHeight
 
       Text {
-        id: query
-        text: panel.ctl.paletteScope === "typing" ? "format: " : "run: "
+        anchors.verticalCenter: parent.verticalCenter
+        visible: typed.text === ""
+        text: panel.ctl.paletteScope === "typing" ? "Format the text…"
+          : panel.ctl.paletteScope === "selection" ? "Do something with it…" : "Run a command…"
         color: panel.theme.panelText
-        font.family: panel.theme.fontFamily
-        font.pixelSize: panel.theme.fontSubtitle
+        opacity: 0.58
+        font.family: panel.theme.menuFontFamily
+        font.pixelSize: panel.theme.fontHeading
       }
 
       // A real field: a query that only grew at the end could not be moved
@@ -85,14 +95,14 @@ Item {
       // needs an input method — and the commands are found by typing.
       TextInput {
         id: typed
-        width: parent.width - query.width
+        width: parent.width
         clip: true
         color: panel.theme.panelText
         selectionColor: panel.theme.accent
         selectedTextColor: panel.theme.panelBackground
         selectByMouse: true
-        font.family: panel.theme.fontFamily
-        font.pixelSize: panel.theme.fontSubtitle
+        font.family: panel.theme.menuFontFamily
+        font.pixelSize: panel.theme.fontHeading
 
         Accessible.role: Accessible.EditableText
         Accessible.name: "Command to run"
@@ -188,23 +198,42 @@ Item {
             anchors.leftMargin: panel.theme.sp(8)
             text: row.current ? "›" : " "
             color: panel.theme.cursorText
-            font.family: panel.theme.fontFamily
-            font.pixelSize: panel.theme.fontSubtitle
+            font.family: panel.theme.menuFontFamily
+            font.pixelSize: panel.theme.fontHeading
+          }
+
+          // What the command does, drawn, as the menu gives every row a glyph.
+          // A fixed width, so the names line up whether or not a glyph is wide.
+          Text {
+            id: glyph
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.left: marker.right
+            anchors.leftMargin: panel.theme.sp(6)
+            width: panel.theme.fontIcon + panel.theme.sp(6)
+            horizontalAlignment: Text.AlignHCenter
+            text: Store.commandIcon(row.modelData)
+            color: row.current && row.ready ? panel.theme.cursorText : panel.theme.panelText
+            opacity: name.opacity
+            font.family: panel.theme.menuFontFamily
+            font.pixelSize: panel.theme.fontIcon
           }
 
           Text {
             id: name
             anchors.verticalCenter: parent.verticalCenter
-            anchors.left: marker.right
-            anchors.leftMargin: panel.theme.sp(6)
+            anchors.left: glyph.right
+            anchors.leftMargin: panel.theme.sp(8)
             anchors.right: excuse.left
             anchors.rightMargin: panel.theme.sp(12)
             elide: Text.ElideRight
             text: row.modelData.name
             color: row.current && row.ready ? panel.theme.cursorText : panel.theme.panelText
-            opacity: !row.ready ? 0.4 : row.current ? 1.0 : 0.75
-            font.family: panel.theme.fontFamily
-            font.pixelSize: panel.theme.fontSubtitle
+            // Full strength, as the menu's names are: the cursor is carried by
+            // the fill and the accent, so the rest need not be dimmed to show it.
+            opacity: row.ready ? 1.0 : 0.4
+            font.family: panel.theme.menuFontFamily
+            font.pixelSize: panel.theme.fontHeading
+            font.weight: Font.Medium
           }
 
           // Why it cannot run, where the eye is already going to look for how
@@ -219,20 +248,24 @@ Item {
             text: panel.ctl.commandExcuse(row.modelData.needs)
             color: panel.theme.panelText
             opacity: 0.45
-            font.family: panel.theme.fontFamily
+            font.family: panel.theme.menuFontFamily
             font.pixelSize: panel.theme.fontBody
           }
 
+          // The key, beside the name rather than over it: in the text colour,
+          // held back, as the menu's own trailing text is — but no further than
+          // 0.85, which is where it still clears 4.5:1 on every installed theme.
+          // The accent is kept for the row the cursor is on.
           Text {
             id: shortcut
             anchors.verticalCenter: parent.verticalCenter
             anchors.right: parent.right
             anchors.rightMargin: panel.theme.sp(8)
             text: row.modelData.key
-            color: panel.theme.accent
-            opacity: row.ready ? 0.9 : 0.4
-            font.family: panel.theme.fontFamily
-            font.pixelSize: panel.theme.fontSubtitle
+            color: row.current && row.ready ? panel.theme.cursorText : panel.theme.panelText
+            opacity: !row.ready ? 0.4 : row.current ? 1.0 : 0.85
+            font.family: panel.theme.menuFontFamily
+            font.pixelSize: panel.theme.fontBody
           }
 
           MouseArea {
@@ -249,7 +282,7 @@ Item {
           visible: list.count === 0
           color: panel.theme.panelText
           opacity: 0.5
-          font.family: panel.theme.fontFamily
+          font.family: panel.theme.menuFontFamily
           font.pixelSize: panel.theme.fontBody
           text: "nothing goes by that"
         }

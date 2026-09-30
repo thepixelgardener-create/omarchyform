@@ -15,6 +15,7 @@ Item {
   visible: decision.ctl.conflictVisible
   width: Math.min(parent.width - decision.theme.sp(64), decision.theme.sp(640))
 
+  readonly property string question: decision.ctl.boardTitle + " changed on disk while you had it open."
   readonly property var choices: [
     { name: "Keep the version from disk", cost: "what is on screen is lost" },
     { name: "Save my changes as a copy", cost: "both versions survive" },
@@ -42,15 +43,11 @@ Item {
   readonly property bool compact: decision.fullHeight > decision.room
   height: decision.compact ? decision.chrome : decision.fullHeight
 
-  // The card every summoned panel here is drawn on — but not the ordinary
-  // panel edge: this one is asking a question that does not go away, and the
-  // theme has a colour for exactly that. The width is the theme's own.
-  Surface {
-    anchors.fill: parent
-    theme: decision.theme
-    spec: ({ color: decision.theme.urgent, widths: Store.borderWidths(decision.theme.panelBorder),
-             gradient: { colors: [], angle: 0, enabled: false } })
-  }
+  // The card every summoned panel here is drawn on, with the ordinary edge, as
+  // the shell's own confirmation dialog has. The question is urgent, and the
+  // heading says so — in the theme's colour for it and with a mark that is not
+  // only a colour — rather than an alarm-red frame round the whole panel.
+  Surface { anchors.fill: parent; theme: decision.theme }
 
   // Every button: the pan surface on the canvas is below the panels, and a
   // question being answered should not also be moving the board behind it.
@@ -67,7 +64,7 @@ Item {
     Text {
       id: heading
       Accessible.role: Accessible.AlertMessage
-      Accessible.name: heading.text
+      Accessible.name: decision.question
       width: parent.width
       wrapMode: Text.Wrap
       // Three lines at most. A long board name at a large size in a small
@@ -76,10 +73,10 @@ Item {
       // before a choice does, as it does in the header.
       maximumLineCount: 3
       elide: Text.ElideRight
-      color: decision.theme.panelText
+      color: decision.theme.urgent
       font.family: decision.theme.fontFamily
       font.pixelSize: decision.theme.fontSubtitle
-      text: decision.ctl.boardTitle + " changed on disk while you had it open."
+      text: "\uf071  " + decision.question
     }
 
     Rectangle {

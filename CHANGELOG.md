@@ -628,8 +628,22 @@ since older boards are migrated on load rather than rejected.
   board dims behind every one of them by the shell's own amount. The keyboard
   cursor in their lists and in the header menu is the menu's too: a soft fill,
   with the row's label in the accent, where it had been a band of accent. The
-  `›` stays, so the cursor never depends on telling two colours apart. The
-  two-versions question keeps its urgent edge, at the theme's width.
+  `›` stays, so the cursor never depends on telling two colours apart.
+
+  The lists have the menu's rows as well: fifty pixels at least, a glyph for
+  every command, the name at heading size, and the prompt written in the field
+  until you type over it — "Run a command…" — where it had said `run:` in the
+  small print the rows were in. Keys sit beside the names in the text colour
+  rather than the accent, which the shell keeps for the row the cursor is on;
+  the scroll mark is the text colour too. The command list and the browser use
+  the menu's font, so `OMARCHY_MENU_FONT` reaches them.
+
+  The shortcut list is in eight sections under small bold labels, with a rule
+  between, as the shell's panels break a long list. The header's zoom, menu
+  button and menu entries are the shell's soft-filled buttons rather than bare
+  words. The two-versions question has the ordinary edge, as the shell's own
+  confirmation dialog does, and says it is urgent in its heading — the theme's
+  urgent colour, behind a warning mark — instead of a red frame.
 - **Tints take the shell's own weights.** How strong an item's wash and hairline
   are comes from `Style.normalFillAlpha`, `Style.selectedFillAlpha` and
   `Style.normalBorderAlpha`, the weights the shell's own surfaces use, rather

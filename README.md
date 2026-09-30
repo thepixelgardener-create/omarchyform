@@ -546,9 +546,12 @@ it. `c` cycles the role.
 
 The board's panels — the command list, the browser, the shortcut list and the
 question asked when a board has two versions — are drawn the way the shell draws
-its own menu: a solid card in the menu's colours, inside the theme's border for
-it (a gradient, where the theme has one), with the board dimmed behind and the
-keyboard cursor as a soft fill with its label in the accent.
+its own menu: a solid card in the menu's colours and font, inside the theme's
+border for it (a gradient, where the theme has one), with the board dimmed
+behind. Their lists have the menu's rows — a glyph, a name at heading size, and
+the keyboard cursor as a soft fill with its label in the accent, which the shell
+keeps for that row alone. The shortcut list is in labelled sections, as the
+shell's panels are, and the header's controls are its soft-filled buttons.
 
 **Day and night** is not a setting here either. Omarchy themes declare
 `mode = "light"` or `mode = "dark"` in their `colors.toml`; the board reads
