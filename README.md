@@ -701,10 +701,13 @@ npm run shots -- --hold
 
 The last of those states is the picture at the top of this file, and
 `npm run preview` is how it gets there: it takes the shots, crops the top of
-the window to 16:9 and writes `preview.png`. The board in it is composed in
-`tests/qml/shot.qml` rather than arranged by hand, so the next one can be taken
-the same way — the one before this was arranged by hand and went on showing a
-header and a hint row that had both since moved.
+the window to 16:9 and writes `preview.png`. The board in it is a saved board
+file, framed by `tests/qml/shot.qml` rather than arranged by hand, so the next
+one can be taken the same way — the one before this was arranged by hand and
+went on showing a header and a hint row that had both since moved. The file is
+kept outside the repo so it never ships: by default
+`../omarchyform-examples/From spark to shipped.omarchyform.json`, or wherever
+`OMARCHYFORM_SHOWCASE` points.
 
 `npm run mutate` breaks `BoardStore.js` on purpose, one edit at a time, and
 checks the suite notices. The command reports its current score and survivors;

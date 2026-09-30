@@ -26,6 +26,10 @@ const omarchy = process.env.OMARCHY_PATH || '/usr/share/omarchy'
 const cache = path.join(process.env.XDG_CACHE_HOME || path.join(os.homedir(), '.cache'),
   'omarchyform/shots')
 const themeDirs = [path.join(os.homedir(), '.config/omarchy/themes'), path.join(omarchy, 'themes')]
+// The board the preview scene shows. It is kept beside the repo, not in it, so
+// it never ships with the plugin.
+const showcase = process.env.OMARCHYFORM_SHOWCASE
+  || path.join(repo, '../omarchyform-examples/From spark to shipped.omarchyform.json')
 
 function modeOf(dir) {
   try {
@@ -118,8 +122,7 @@ async function capture(theme) {
     fs.copyFileSync(path.join(omarchy, 'shell/services/PluginShellApi.qml'),
       path.join(dir, 'services/PluginShellApi.qml'))
     fs.copyFileSync(path.join(__dirname, 'qml/shot.qml'), path.join(dir, 'shell.qml'))
-    fs.copyFileSync(path.join(repo, 'examples/From spark to shipped.omarchyform.json'),
-      path.join(dir, 'showcase.json'))
+    fs.copyFileSync(showcase, path.join(dir, 'showcase.json'))
 
     // The theme is the only thing reaching out of the isolated HOME: board data,
     // state and images all stay inside it.
@@ -174,6 +177,10 @@ async function capture(theme) {
 
 if (!process.env.WAYLAND_DISPLAY) {
   console.error('This needs a running Wayland session: it photographs the real components.')
+  process.exit(2)
+}
+if (!fs.existsSync(showcase)) {
+  console.error('No showcase board at ' + showcase + ' — set OMARCHYFORM_SHOWCASE to one.')
   process.exit(2)
 }
 if (hold && requested.length > 1) {
