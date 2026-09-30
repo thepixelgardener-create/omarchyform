@@ -10,6 +10,8 @@ Omarchy theme and keeps your boards on your own machine.
 
 ![Omarchyform](preview.png)
 
+![The same board in eleven Omarchy themes](preview-themes.webp)
+
 ## What it is
 
 A native Quickshell plugin. It runs inside the long-running `omarchy-shell`
