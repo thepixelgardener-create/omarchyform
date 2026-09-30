@@ -100,14 +100,16 @@ they live outside the plugin directory, in `~/.local/share/omarchyform/`. A
 board written by a newer version than the one you are running opens read-only
 rather than losing what it does not understand, so downgrading is safe too.
 
-If you installed the desktop entry, re-run `./desktop/install.sh` after an
-update to pick up any change to it. It replaces only an entry it installed
-itself and leaves your edits alone; see below.
+If you installed the desktop entry, re-run its installer,
+`desktop/install.sh` in the plugin's folder, after an update to pick up any
+change to it. It replaces only an entry it installed itself and leaves your
+edits alone; see below.
 
 ## Opening a board someone sent you
 
-`./desktop/install.sh` also registers the board file type and a small
-`omarchyform-open` command, so a board can be opened from a file manager.
+The desktop installer, `desktop/install.sh` in the plugin's folder, also
+registers the board file type and a small `omarchyform-open` command, so a
+board can be opened from a file manager.
 
 A board in your library is an ordinary `.json` and opens from the browser on
 `b`. A board saved to share — `ctrl+shift+s` — is named `*.omarchyform.json`,
@@ -121,24 +123,28 @@ which is what `ctrl+o` has always done: the file you were sent is left alone.
 
 ## Removing it
 
+If you installed the desktop entry, remove it first, while the plugin's folder
+is still there — removing the plugin deletes the folder, and the uninstaller
+with it:
+
+```bash
+~/.config/omarchy/plugins/thepixelgardener.omarchyform/desktop/install.sh --uninstall
+```
+
+That removes the launcher entry, the file type and the `omarchyform-open`
+command, and only the ones this installer wrote and you have not edited since;
+otherwise it says what it found and leaves the file alone.
+
+Then remove the plugin:
+
 ```bash
 omarchy plugin remove thepixelgardener.omarchyform
 ```
 
 That takes the bar icon with it. To put it away without uninstalling, use
 `omarchy plugin disable thepixelgardener.omarchyform`; enabling it again
-restores the icon where it was.
-
-Then delete the binding from `~/.config/hypr/bindings.lua` if you added one,
-and remove the desktop entry if you installed it:
-
-```bash
-./desktop/install.sh --uninstall
-```
-
-That removes the launcher entry, the file type and the `omarchyform-open`
-command, and only the ones this installer wrote and you have not edited since;
-otherwise it says what it found and leaves the file alone.
+restores the icon where it was. Delete the binding from
+`~/.config/hypr/bindings.lua` too, if you added one.
 
 Your boards are left alone. They live in
 `~/.local/share/omarchyform/`, and removing the plugin does not touch them, so
@@ -428,18 +434,26 @@ the board as a broken frame.
 can be captured before it is named; `F2` names it afterwards.
 
 The plugin also ships a desktop entry, so the board can be opened from a
-launcher, with a *New board* action for the same instant capture:
+launcher, with a *New board* action for the same instant capture. Its installer
+is in the plugin's folder:
 
 ```bash
-./desktop/install.sh
+~/.config/omarchy/plugins/thepixelgardener.omarchyform/desktop/install.sh
 ```
 
-It writes one file, `~/.local/share/applications/omarchyform.desktop`, and
-refuses rather than overwriting anything it did not put there: a launcher entry
-someone else owns at that path, or its own entry that you have since edited.
-Both cases print what was found and exit non-zero; `--force` replaces the file
-once you have decided that is what you want. `--uninstall` removes it under the
-same rule. Nothing else on your system is touched, and it never needs `sudo`.
+It writes three files, all in your home: the launcher entry,
+`~/.local/share/applications/omarchyform.desktop`; the board file type,
+`~/.local/share/mime/packages/omarchyform.xml`; and the small command the entry
+runs, `~/.local/bin/omarchyform-open` (under `$XDG_DATA_HOME` and
+`$XDG_BIN_HOME` when those are set). Then it refreshes the launcher and
+file-type caches in that same data directory, when their tools are installed.
+
+It checks all three before writing any, and refuses rather than overwriting
+anything it did not put there: a file someone else owns at one of those paths,
+or one of its own that you have since edited. Both cases print what was found
+and exit non-zero; `--force` replaces the file once you have decided that is
+what you want. `--uninstall` removes them under the same rule. Nothing outside
+your home is touched, and it never needs `sudo`.
 
 ## Saving
 

@@ -330,6 +330,14 @@ since older boards are migrated on load rather than rejected.
 
 ### Fixed
 
+- **The README removes the plugin in an order that works, and says what it
+  runs.** It had you remove the plugin and then run the desktop entry's
+  uninstaller, which removing the plugin had just deleted; the uninstaller now
+  comes first, by its full path. It said the desktop installer writes one file,
+  where it writes three and refreshes the launcher and file-type caches, and it
+  listed `wl-clipboard` for pasting alone. Copying out needs it too, pictures are
+  recognised with `file`, and the command line runs on Node.js, which nothing in
+  the plugin itself starts.
 - **What is drawn on top is what the board says is on top.** On a board that
   starts with a background, which is how one is usually built, bringing an item
   forward could change the file and leave the screen as it was until the board
