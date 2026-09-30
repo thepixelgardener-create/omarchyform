@@ -117,6 +117,9 @@ ShellRoot {
     bench.seen = -bench.settleFrames
     if (bench.phase >= bench.phases.length) {
       console.log("BENCH items " + bench.size)
+      // How much of the board was on screen decides what a frame cost, and
+      // the window is whatever the compositor handed out.
+      console.log("BENCH window " + Math.round(plugin.viewW) + "x" + Math.round(plugin.viewH))
       for (var i = 0; i < bench.report.length; i++) {
         var r = bench.report[i]
         console.log("BENCH " + r.name + "\t" + r.mean.toFixed(2) + "\t" + r.p95.toFixed(2))

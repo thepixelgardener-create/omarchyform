@@ -25,6 +25,13 @@ ShellRoot {
     path: Quickshell.env("OMARCHYFORM_TEST_DIR") + "/showcase.json"
   }
 
+  // The session is a child of the controller rather than a property of it.
+  function session() {
+    for (var i = 0; i < plugin.data.length; i++)
+      if (plugin.data[i] && typeof plugin.data[i].failedSave === "function") return plugin.data[i]
+    throw new Error("no board session under the controller")
+  }
+
   // Each scene puts the board in a state and is photographed once it settles.
   // Order matters only in that each one starts from where the last left off.
   readonly property var scenes: [
@@ -243,15 +250,14 @@ ShellRoot {
       }
     },
     {
-      // The gesture the scenes above left running has to end first: the line
-      // ranks a connector being aimed above a message about something that
-      // already happened, so a scene that forgets to cancel photographs the
-      // hint rather than the message it is named after.
+      // A visual fixture: the session is handed the failure a refused write
+      // reports, rather than a write being made to fail. That is the real
+      // state — "Save failed" in the header, autosave held — and not a flash
+      // that only looks like it. The connector the scenes above left being
+      // aimed stays aimed, because a failed save has to outrank it on the line.
       name: "12-failed-save",
       setup: function () {
-        plugin.linkingFrom = -1
-        plugin.repaintLinks()
-        plugin.flash("Could not write the board — ctrl+s to retry")
+        shots.session().failedSave("Could not write the board")
       }
     },
     {
@@ -262,6 +268,8 @@ ShellRoot {
       // hint row that had both since moved.
       name: "13-preview",
       setup: function () {
+        shots.session().saveError = ""
+        plugin.linkingFrom = -1
         plugin.statusText = ""
         plugin.selectedIndex = -1
         plugin.markedIds = []

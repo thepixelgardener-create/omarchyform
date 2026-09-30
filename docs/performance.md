@@ -1,6 +1,6 @@
 # What a board costs to draw
 
-Written by `npm run bench:scene -- --record` on 2026-09-27. Every frame time quoted in the
+Written by `npm run bench:scene -- --record` on 2026-09-30. Every frame time quoted in the
 changelog was measured here; a frame time without the machine under it is
 not a number anyone can check.
 
@@ -17,18 +17,19 @@ not a number anyone can check.
 | OS | Omarchy |
 | Omarchy | 4.0.0.r2158.gd174d4a-1 |
 | Display | 1920×1080 at 1.6x, single output |
+| Window | 569×651 logical px |
 
 ## Milliseconds per frame, mean/p95
 
 | phase | 100 items | 500 items | 1000 items | 3000 items |
 | --- | --- | --- | --- | --- |
-| idle | 16.7/17.1 | 16.7/17.4 | 16.7/17.0 | 16.7/17.3 |
-| pan | 16.7/19.9 | 17.0/22.3 | 29.0/34.8 | 83.5/109.6 |
-| zoom | 16.6/19.4 | 19.3/23.5 | 34.3/39.1 | 80.3/105.7 |
-| drag 1 | 16.7/19.0 | 16.7/22.9 | 17.9/24.6 | 43.3/65.9 |
-| drag all | 16.7/19.9 | 21.7/29.1 | 30.5/39.0 | 116.4/143.7 |
-| mark | 16.7/21.6 | 16.7/31.4 | 18.1/44.0 | 20.6/77.4 |
-| find | 16.7/27.4 | 17.5/37.0 | 19.8/59.5 | 27.5/125.7 |
+| idle | 16.7/17.3 | 16.7/17.1 | 16.7/17.1 | 16.7/16.9 |
+| pan | 16.6/19.4 | 16.7/21.1 | 29.1/36.7 | 62.4/104.9 |
+| zoom | 16.6/18.4 | 19.2/32.9 | 33.6/39.1 | 68.1/95.7 |
+| drag 1 | 16.7/18.8 | 16.7/22.0 | 18.1/23.5 | 34.2/64.1 |
+| drag all | 16.7/19.1 | 20.7/29.4 | 37.4/45.5 | 98.8/128.0 |
+| mark | 16.7/21.3 | 16.7/17.1 | 17.2/44.6 | 20.6/75.7 |
+| find | 16.7/25.7 | 16.9/40.1 | 19.8/61.7 | 25.3/109.7 |
 
 The `idle` row is the refresh interval this machine actually reached, and
 is the budget the rest are read against: a phase at 16.7ms is vsync-bound and

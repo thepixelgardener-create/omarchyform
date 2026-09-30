@@ -111,11 +111,14 @@ function measure(size) {
       return null
     }
     const rows = []
+    let window = '?'
     for (const line of output.split('\n')) {
       const m = line.match(/BENCH (\S[^\t]*)\t([\d.]+)\t([\d.]+)/)
       if (m) rows.push({ name: m[1], mean: Number(m[2]), p95: Number(m[3]) })
+      const w = line.match(/BENCH window (\d+)x(\d+)/)
+      if (w) window = `${w[1]}×${w[2]}`
     }
-    return rows
+    return { rows, window }
   } finally { fs.rmSync(dir, { recursive: true, force: true }) }
 }
 
@@ -131,10 +134,17 @@ process.stdout.write('\n')
 
 const table = []
 for (const size of plan) {
-  const rows = measure(size)
-  if (!rows) process.exit(1)
-  table.push({ size, rows })
+  const measured = measure(size)
+  if (!measured) process.exit(1)
+  table.push({ size, rows: measured.rows, window: measured.window })
 }
+// A tiled window is half the screen or all of it depending on what else is
+// open, and a wider one draws more of the board, so the same code measures
+// differently. Said once when every size had the same window, per size if not.
+const windows = [...new Set(table.map(t => t.window))]
+facts.push(['Window', (windows.length === 1 ? windows[0]
+  : table.map(t => `${t.window} at ${t.size}`).join(', ')) + ' logical px'])
+process.stdout.write(`Window  ${facts[facts.length - 1][1]}\n\n`)
 
 const names = table[0].rows.map(r => r.name)
 const width = Math.max(...names.map(n => n.length))
