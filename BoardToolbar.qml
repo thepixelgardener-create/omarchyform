@@ -49,7 +49,11 @@ Rectangle {
           // Keep failures visible even in a narrow window.
           visible: topRow.width > toolbar.theme.sp(520) || toolbar.ctl.saveError !== ""
           text: "· " + toolbar.ctl.boardState
-          opacity: toolbar.ctl.saveError !== "" ? 1 : 0.72
+          // Secondary text is the bar's own text held back, not the theme's
+          // muted token, which a theme may set almost to its background. Held
+          // back no further than 0.85 it clears 4.5:1 on every installed
+          // theme; at 0.72, rose-pine and catppuccin-latte fell to 3.5:1.
+          opacity: toolbar.ctl.saveError !== "" ? 1 : 0.85
           color: toolbar.ctl.saveError !== "" ? toolbar.theme.urgent : toolbar.theme.barForeground
           font.family: toolbar.theme.fontFamily
           font.pixelSize: toolbar.theme.fontBody
@@ -75,7 +79,7 @@ Rectangle {
             anchors.centerIn: parent
             text: Math.round(toolbar.ctl.zoom * 100) + "%"
             color: toolbar.theme.barForeground
-            opacity: 0.72
+            opacity: 0.85
             font.family: toolbar.theme.fontFamily
             font.pixelSize: toolbar.theme.fontBody
           }
