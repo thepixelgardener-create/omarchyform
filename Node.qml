@@ -151,6 +151,7 @@ Item {
   // hand, or a board copied to another machine without it. Say so rather than
   // leaving an empty box that looks like a bug.
   Text {
+    textFormat: Text.PlainText
     anchors.centerIn: parent
     width: parent.width - node.theme.sp(16)
     visible: node.isImage && picture.status === Image.Error
@@ -353,6 +354,7 @@ Item {
     color: node.theme.tintBorder(node.itint, true)
     radius: node.theme.cornerRadius > 0 ? node.theme.sp(3) : 0
     Text {
+      textFormat: Text.PlainText
       anchors.centerIn: parent
       text: "…"
       color: node.theme.canvasBackground

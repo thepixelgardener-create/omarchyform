@@ -53,6 +53,7 @@ Item {
   // chooses the font, and a list sized from a number picked here would crop its
   // own rows the moment that font grew.
   Text {
+    textFormat: Text.PlainText
     id: ruler
     visible: false
     text: "Ag"
@@ -84,6 +85,7 @@ Item {
       // the caret itself, so it follows the font and any padding the field
       // is given.
       Text {
+        textFormat: Text.PlainText
         objectName: "command-prompt"
         anchors.verticalCenter: parent.verticalCenter
         anchors.left: parent.left
@@ -200,6 +202,7 @@ Item {
           // The cursor is a mark as well as a colour, so which row is current
           // does not depend on seeing the tint behind it.
           Text {
+            textFormat: Text.PlainText
             id: marker
             anchors.verticalCenter: parent.verticalCenter
             anchors.left: parent.left
@@ -213,6 +216,7 @@ Item {
           // What the command does, drawn, as the menu gives every row a glyph.
           // A fixed width, so the names line up whether or not a glyph is wide.
           Text {
+            textFormat: Text.PlainText
             id: glyph
             anchors.verticalCenter: parent.verticalCenter
             anchors.left: marker.right
@@ -227,6 +231,7 @@ Item {
           }
 
           Text {
+            textFormat: Text.PlainText
             id: name
             anchors.verticalCenter: parent.verticalCenter
             anchors.left: glyph.right
@@ -248,6 +253,7 @@ Item {
           // to run it. A command that does nothing and says nothing teaches
           // the wrong thing about the command.
           Text {
+            textFormat: Text.PlainText
             id: excuse
             anchors.verticalCenter: parent.verticalCenter
             anchors.right: shortcut.left
@@ -265,6 +271,7 @@ Item {
           // 0.85, which is where it still clears 4.5:1 on every installed theme.
           // The accent is kept for the row the cursor is on.
           Text {
+            textFormat: Text.PlainText
             id: shortcut
             anchors.verticalCenter: parent.verticalCenter
             anchors.right: parent.right
@@ -286,6 +293,7 @@ Item {
         }
 
         Text {
+          textFormat: Text.PlainText
           anchors.centerIn: parent
           visible: list.count === 0
           color: panel.theme.panelText

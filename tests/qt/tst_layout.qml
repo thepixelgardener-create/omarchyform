@@ -124,6 +124,16 @@ TestCase {
   QtObject { id: keyboardless; function paletteKey(event) {} }
   Commands { id: commandList; ctl: ctl; board: keyboardless; y: 40; anchors.horizontalCenter: parent.horizontalCenter }
   Conflict { id: decision; ctl: ctl; y: 40; anchors.horizontalCenter: parent.horizontalCenter }
+  function test_untrustedTitleIsPlainText() {
+    const oldTitle = ctl.boardTitle
+    try {
+      ctl.boardTitle = '<b>private title</b><img src="file:///nonexistent/privacy-canary.png">'
+      const title = findChild(toolbar, "board-title")
+      compare(title.textFormat, Text.PlainText)
+      compare(title.text, ctl.boardTitle)
+    } finally { ctl.boardTitle = oldTitle }
+  }
+
   // The header is a bar, so it is painted in the theme's bar colours rather
   // than the canvas ones.
   //

@@ -660,6 +660,8 @@ the suite loads the very file the plugin loads — there is no copy to drift.
 ```bash
 ./tests/run     # everything available on this machine, skipping what is not installed
 npm test        # pure logic and controller regression tests, no dependencies
+npm run test:security # portable security/privacy screen and boundary regressions
+npm run test:security:full # also run Quickshell and Qt tests
 npm run mutate  # mutation testing
 npm run bench   # board marshalling cost at size
 npm run bench:scene # what a board costs to draw, at size; needs a compositor

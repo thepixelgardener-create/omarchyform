@@ -604,6 +604,7 @@ FocusScope {
     spacing: board.theme.sp(12)
     visible: board.ctl.boardLoaded && board.ctl.items.count === 0 && !board.ctl.browserVisible && !board.ctl.helpVisible
     Text {
+      textFormat: Text.PlainText
       anchors.horizontalCenter: parent.horizontalCenter
       text: "Start with a thought."
       color: board.theme.foreground
@@ -630,6 +631,7 @@ FocusScope {
     visible: board.ctl.showPinned
     color: board.theme.accent
     Text {
+      textFormat: Text.PlainText
       anchors.centerIn: parent
       // Names the mode only: the keys live on the line below, where they live
       // for every other mode. Saying them twice, differently, was worse than
@@ -727,6 +729,7 @@ FocusScope {
     height: implicitHeight
 
     Text {
+      textFormat: Text.PlainText
       id: findLabel
       text: "find: "
       color: board.theme.foreground

@@ -32,7 +32,9 @@ Rectangle {
         anchors.verticalCenter: parent.verticalCenter
         spacing: toolbar.theme.sp(10)
         Text {
+          textFormat: Text.PlainText
           id: title
+          objectName: "board-title"
           width: Math.min(implicitWidth, Math.max(0, topRow.width - actions.width
             - toolbar.theme.sp(36) - (saveState.visible ? saveState.width + identity.spacing : 0)))
           text: toolbar.ctl.boardTitle
@@ -47,6 +49,7 @@ Rectangle {
           MouseArea { anchors.fill: parent; onClicked: toolbar.ctl.renameBoard() }
         }
         Text {
+          textFormat: Text.PlainText
           id: saveState
           // Keep failures visible even in a narrow window.
           visible: topRow.width > toolbar.theme.sp(520) || toolbar.ctl.saveError !== ""
@@ -79,6 +82,7 @@ Rectangle {
           Accessible.name: "Fit board to window, zoom " + Math.round(toolbar.ctl.zoom * 100) + " percent"
           Accessible.onPressAction: toolbar.ctl.fitToItems()
           Text {
+            textFormat: Text.PlainText
             id: zoomLabel
             anchors.centerIn: parent
             text: Math.round(toolbar.ctl.zoom * 100) + "%"
@@ -151,6 +155,7 @@ Rectangle {
           border.width: toolbar.theme.borderWidth
           border.color: onIt ? toolbar.theme.cursorText : "transparent"
           Text {
+            textFormat: Text.PlainText
             id: label
             anchors.centerIn: parent
             text: modelData.id === "zoom" ? modelData.label + " " + Math.round(toolbar.ctl.zoom * 100) + "%" : modelData.label

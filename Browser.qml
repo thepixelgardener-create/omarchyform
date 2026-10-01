@@ -73,6 +73,7 @@ FocusScope {
         height: Math.max(line.implicitHeight, typed.implicitHeight)
 
         Text {
+          textFormat: Text.PlainText
           id: line
           width: parent.width
           visible: !browser.typing
@@ -86,6 +87,7 @@ FocusScope {
         }
 
         Text {
+          textFormat: Text.PlainText
           id: label
           visible: browser.typing
           text: browser.prompting ? browser.ctl.browserPrompt + " " : "/"
@@ -207,6 +209,7 @@ FocusScope {
             // The cursor is a mark as well as a tint, so which row it is on
             // does not depend on seeing the tint.
             Text {
+              textFormat: Text.PlainText
               id: cursor
               anchors.verticalCenter: parent.verticalCenter
               anchors.left: parent.left
@@ -218,6 +221,7 @@ FocusScope {
             }
 
             Text {
+              textFormat: Text.PlainText
               id: label
               anchors.verticalCenter: parent.verticalCenter
               anchors.left: cursor.right

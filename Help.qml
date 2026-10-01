@@ -64,6 +64,7 @@ Item {
       Repeater {
         model: Store.KEY_HELP
         Text {
+          textFormat: Text.PlainText
           required property var modelData
           text: modelData[0]
           font.family: help.theme.fontFamily
@@ -77,6 +78,7 @@ Item {
       width: content.width
       spacing: help.theme.sp(10)
       Text {
+        textFormat: Text.PlainText
         text: "Keyboard shortcuts"
         color: help.theme.panelText
         font.family: help.theme.fontFamily
@@ -126,6 +128,7 @@ Item {
               readonly property real keyColumn: Math.min(Math.ceil(keyRuler.implicitWidth),
                                                          (helpColumn.width - help.theme.sp(18)) * 0.5)
               Text {
+                textFormat: Text.PlainText
                 id: shortcut
                 width: row.keyColumn
                 horizontalAlignment: Text.AlignRight
@@ -136,6 +139,7 @@ Item {
                 font.pixelSize: help.theme.fontBody
               }
               Text {
+                textFormat: Text.PlainText
                 id: description
                 anchors.left: parent.left
                 anchors.leftMargin: row.keyColumn + help.theme.sp(18)

@@ -23,6 +23,7 @@ Item {
   ]
 
   Text {
+    textFormat: Text.PlainText
     id: ruler
     visible: false
     text: "Ag"
@@ -62,6 +63,7 @@ Item {
     spacing: decision.theme.sp(10)
 
     Text {
+      textFormat: Text.PlainText
       id: heading
       Accessible.role: Accessible.AlertMessage
       Accessible.name: decision.question
@@ -119,6 +121,7 @@ Item {
         // The cursor is a mark as well as a colour: a row that is only
         // highlighted is not distinguishable to everyone looking at it.
         Text {
+          textFormat: Text.PlainText
           id: marker
           anchors.verticalCenter: parent.verticalCenter
           anchors.left: parent.left
@@ -129,6 +132,7 @@ Item {
         }
 
         Text {
+          textFormat: Text.PlainText
           anchors.verticalCenter: parent.verticalCenter
           anchors.left: marker.right
           anchors.right: cost.left
@@ -142,6 +146,7 @@ Item {
         }
 
         Text {
+          textFormat: Text.PlainText
           id: cost
           visible: !decision.compact
           anchors.verticalCenter: parent.verticalCenter

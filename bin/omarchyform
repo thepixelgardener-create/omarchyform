@@ -349,7 +349,7 @@ function verbApply(args) {
   catch (error) { die("cannot read operations from " + source, error.code || String(error)) }
   let ops
   try { ops = JSON.parse(raw) }
-  catch (error) { die("the operations are not JSON", String(error.message)) }
+  catch (error) { die("the operations are not JSON") }
   if (!Array.isArray(ops)) die("the operations must be a list")
 
   const board = readBoard(file)

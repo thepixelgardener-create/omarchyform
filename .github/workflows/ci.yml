@@ -21,6 +21,9 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      - name: Security and privacy regression screen
+        run: node tests/security.js
+
       - name: Mutation testing
         run: npm run mutate
 

@@ -5,7 +5,17 @@ since older boards are migrated on load rather than rejected.
 
 ## Unreleased
 
+### Added
+
+- `npm run test:security` and `test:security:full`, with a release checklist
+  covering process metadata, rendering, filesystem boundaries and retention.
+  CI runs the portable security checks on every push and pull request.
+
 ### Fixed
+
+- Board titles and other labels explicitly use plain text so filenames cannot
+  become markup or cause inline image loads.
+- Invalid CLI operation JSON no longer echoes parser excerpts containing input.
 
 - Copied note text now travels through standard input to the clipboard helper
   and `wl-copy`, keeping it out of process command-line metadata.

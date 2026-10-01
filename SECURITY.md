@@ -35,9 +35,21 @@ things worth attacking are:
   a file it did not write. Overwriting or removing an unrelated file is a
   vulnerability.
 
+## Security and privacy screen
+
+Run `npm run test:security` for the portable regression screen, or
+`npm run test:security:full` on a machine with Quickshell and Qt test tools.
+Follow [the release review checklist](docs/security-review.md) as well; it
+records the data flows, intentional disclosures and limits of these checks.
+
+Copied note contents must not appear in process arguments, environment
+variables or diagnostics. User-controlled labels must render as plain text;
+formatted notes and status messages must escape user content before markup.
+
 ## What is not
 
-- The plugin makes no network requests, so there is no remote attack surface.
+- The plugin has no intentional network operations. Imported boards, images,
+  filenames and clipboard contents are still untrusted inputs.
 - Anyone who can already run code as your user can read your boards directly;
   the data directory has no protection beyond ordinary file permissions.
 - Omarchy loads plugin QML with the shell's own privileges. That is the Quattro
