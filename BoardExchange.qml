@@ -384,15 +384,25 @@ Item {
     }
     var text = Store.copyText(exchange.ctl.items, indices)
     if (text === "") { exchange.finished("nothing written on it to copy", ""); return }
-    copyProc.command = exchange.ctl.fileCommand("clipcopy", [text])
+    copyProc.command = exchange.ctl.fileCommand("clipcopy", [])
+    copyProc.contents = text
     copyProc.copied = indices.length
+    copyProc.stdinEnabled = true
     copyProc.running = true
   }
 
   Process {
     id: copyProc
     property int copied: 0
+    property string contents: ""
+    onStarted: {
+      // Note contents must never appear in process command-line metadata.
+      copyProc.write(copyProc.contents)
+      copyProc.contents = ""
+      copyProc.stdinEnabled = false
+    }
     onExited: function (code) {
+      copyProc.contents = ""
       if (code !== 0) exchange.failed("Could not reach the clipboard", "copy")
       else exchange.finished(copyProc.copied === 1 ? "Copied" : "Copied " + copyProc.copied + " items", "copy")
     }

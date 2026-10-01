@@ -3,6 +3,13 @@
 Notable changes, newest first. Board file versions are noted where they moved,
 since older boards are migrated on load rather than rejected.
 
+## Unreleased
+
+### Fixed
+
+- Copied note text now travels through standard input to the clipboard helper
+  and `wl-copy`, keeping it out of process command-line metadata.
+
 ## 0.4.0
 
 ### Added

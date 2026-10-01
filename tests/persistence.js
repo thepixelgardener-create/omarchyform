@@ -3,7 +3,7 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const { spawnSync } = require('child_process')
-for (const scenario of ['persistence', 'session', 'timeout', 'exchange']) {
+for (const scenario of ['persistence', 'session', 'timeout', 'exchange', 'clipboard']) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'omarchyform-persistence-'))
   try {
     fs.writeFileSync(path.join(dir, 'blocked.json'), 'original')
@@ -62,6 +62,16 @@ for (const scenario of ['persistence', 'session', 'timeout', 'exchange']) {
       fs.mkdirSync(path.join(dir, 'locked'))
       fs.writeFileSync(path.join(dir, 'locked/there.omarchyform.json'), 'not mine to replace')
       fs.chmodSync(path.join(dir, 'locked'), 0o500)
+    }
+    if (scenario === 'clipboard') {
+      fs.mkdirSync(path.join(dir, 'stubs'))
+      fs.writeFileSync(path.join(dir, 'stubs/wl-copy'), `#!/bin/bash
+printf '%s' "$#" > "$OMARCHYFORM_TEST_DIR/copy-argc"
+cat /proc/$$/cmdline > "$OMARCHYFORM_TEST_DIR/copy-argv"
+cat /proc/$PPID/cmdline >> "$OMARCHYFORM_TEST_DIR/copy-argv"
+cat > "$OMARCHYFORM_TEST_DIR/copied"
+[[ ! -e "$OMARCHYFORM_TEST_DIR/fail-copy" ]]
+`, {mode: 0o755})
     }
     if (scenario === 'timeout') {
       const fifo = spawnSync('mkfifo', [path.join(dir, 'slow.json')])

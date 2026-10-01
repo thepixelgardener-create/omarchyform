@@ -117,11 +117,14 @@ try {
   const copy=(...args)=>spawnSync('bash',[path.join(__dirname,'../BoardFiles.sh'),...args],
     {encoding:'utf8',env:{...process.env,PATH:stubs+':'+process.env.PATH,COPY_LOG:copyLog}})
 
-  assert.equal(copy('clipcopy','two\nlines').status,0)
-  assert.match(fs.readFileSync(copyLog,'utf8'),/two\nlines/,'the text reaches the clipboard intact')
-  // A note beginning with a dash is text, not an option.
-  assert.equal(copy('clipcopy','--help').status,0)
-  assert.match(fs.readFileSync(copyLog,'utf8'),/--help/)
+  const copyText=input=>spawnSync('bash',[path.join(__dirname,'../BoardFiles.sh'),'clipcopy'],
+    {encoding:'utf8',input,env:{...process.env,PATH:stubs+':'+process.env.PATH,COPY_LOG:copyLog}})
+  for (const text of ['two\nlines\n\n', '--help', '秘密 🔒 \"quoted\" $HOME', 'x'.repeat(262144), '']) {
+    assert.equal(copyText(text).status,0)
+    assert.equal(fs.readFileSync(copyLog,'utf8'),'\n'+text,
+      'wl-copy receives no arguments and exact text on stdin')
+  }
+  assert.equal(copy('clipcopy','legacy argument').status,2,'the argv interface is refused')
 
   const pixels=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP4z8AARAwQCgAf7gP9i18U1AAAAABJRU5ErkJggg==','base64')
   fs.writeFileSync(path.join(images,'copy-me.png'),pixels)

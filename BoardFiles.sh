@@ -213,7 +213,10 @@ case "$operation" in
     # wl-copy forks and keeps serving the clipboard for as long as it owns it,
     # so this is deliberately not wrapped in a timeout: killing it would take
     # the clipboard contents with it.
-    wl-copy -- "$1"
+    # Inherit the caller's stdin all the way to wl-copy. Neither process may
+    # carry private note contents in its command-line arguments.
+    (( $# == 0 )) || exit 2
+    wl-copy
     ;;
   clipcopyimage)
     # The name comes out of a board file, so it is validated the same way
