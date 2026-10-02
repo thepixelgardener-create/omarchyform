@@ -4,7 +4,7 @@
   "name": "Omarchyform",
   "version": "0.4.0",
   "author": "frueh",
-  "description": "A local, keyboard-first board for Omarchy: notes, shapes and connectors on an infinite canvas, saved as plain JSON.",
+  "description": "A local, keyboard-first whiteboard for Omarchy: notes, shapes and connectors on an infinite canvas, saved as plain JSON.",
   "kinds": [
     "overlay",
     "bar-widget"
