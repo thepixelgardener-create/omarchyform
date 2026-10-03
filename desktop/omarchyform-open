@@ -7,12 +7,12 @@
 #
 # It exists at all because the desktop entry specification forbids a field code
 # like %f inside a quoted argument, and the JSON payload a summon takes has to
-# be quoted. Doing it here also means a path containing a quote or a backslash
-# can be escaped properly rather than ending the payload early.
+# be quoted. Doing it here also means a path containing a quote, a backslash or
+# a control character can be escaped properly rather than breaking the payload.
 # This installer only ever replaces or removes a file carrying these two keys,
 # so a command another program put at this path is left alone.
 # X-Omarchyform-Managed=true
-# X-Omarchyform-Entry-Version=1
+# X-Omarchyform-Entry-Version=2
 set -euo pipefail
 
 plugin=thepixelgardener.omarchyform
@@ -30,12 +30,21 @@ fi
 
 board=$1
 [[ -f $board ]] || { printf 'No such board: %s\n' "$board" >&2; exit 1; }
-# Absolute, because the shell process has a working directory of its own.
-board=$(realpath -- "$board")
+# Absolute, because the shell process has a working directory of its own. The
+# x keeps a name that ends in a newline whole: $(...) drops trailing newlines.
+board=$(realpath -- "$board" && printf x)
+board=${board%$'\n'x}
 
-# JSON string escaping, which for a path is exactly backslash and quote: a
-# newline cannot reach here as an argument and the rest are literal.
-escaped=${board//\\/\\\\}
-escaped=${escaped//\"/\\\"}
+# JSON string escaping: backslash and quote, then every control character as
+# \u00XX. A file name may hold any byte but a slash and NUL, so a newline or a
+# tab can arrive here, and JSON allows neither raw inside a string. The
+# replacements are quoted so that bash reads nothing in them, & included.
+escaped=${board//\\/"\\\\"}
+escaped=${escaped//\"/"\\\""}
+for code in {1..31}; do
+  printf -v character "\\x$(printf %02x "$code")"
+  printf -v replacement '\\u%04x' "$code"
+  escaped=${escaped//"$character"/"$replacement"}
+done
 
 exec omarchy-shell shell summon "$plugin" "{\"action\":\"open\",\"path\":\"$escaped\"}"

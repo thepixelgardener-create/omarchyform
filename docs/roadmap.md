@@ -8,7 +8,7 @@ Updated 2026-10-03. This is the current release direction. The dated
 
 This release improves the canvas appearance and prepares the directory listing.
 
-- **Background choices — implemented on the release branch:** dots, square grid
+- **Background choices — shipped in 0.4.5:** dots, square grid
   and ruled lines, with a plain option. Patterns follow the theme and camera;
   **Menu → Background** remembers the choice. Dots remain the default.
 - **Directory discoverability — description prepared:** describe the plugin as
@@ -19,8 +19,8 @@ This release improves the canvas appearance and prepares the directory listing.
 
 - **PNG export readiness:** reproduce the delayed-image case and make capture
   wait for images and a rendered frame, with a bounded failure path.
-- **Maintenance:** correct the controller test's missing disk-read editing guard
-  and share connector geometry between the board and export rendering.
+- **Maintenance:** share connector geometry between the board and export
+  rendering.
 
 These maintenance items are planned. Completed changes are recorded in the changelog.
 

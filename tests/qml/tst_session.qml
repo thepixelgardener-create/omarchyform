@@ -176,12 +176,11 @@ ShellRoot {
         test.check(JSON.parse(test.read(test.dir + "/a.json")).items.length === 2,
                    "a board that took the disk version can be written to again")
         ctl.items.setProperty(0, "itext", "local after failed replacement")
-        session.raiseConflict(test.read(test.dir + "/a.json"))
+        session.raiseConflict()
         ctl.failBackup = true
         session.replaceDisk()
         test.stage = 13
       } else if (test.stage === 13 && session.conflict && !session.busy) {
-        test.check(session.conflictText !== "", "failed replacement retains its disk snapshot")
         test.check(ctl.items.get(0).itext === "local after failed replacement", "failed replacement keeps local edits")
         ctl.failBackup = false
         session.useDisk()

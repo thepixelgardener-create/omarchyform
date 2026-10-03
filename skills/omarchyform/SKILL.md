@@ -109,7 +109,12 @@ You cannot see the board. Say so rather than claiming it looks good.
 
 It cannot draw. A picture of a board needs the scene, and the scene needs the
 running shell — `ctrl+e` on an open board exports a PNG, and nothing here does.
-It does not touch the trash, the backups or the pictures beside a board, and it
-has no idea which board is open in the shell right now. If someone has a board
-open, a change made here appears when they next open it, and a save from the
-shell will write over it in the meantime: change boards that are not open.
+It does not touch the trash or the pictures beside a board. Every write keeps
+the version it replaced: in the library's `backups/` for a board in the
+library, and as `<file>.bak` beside one anywhere else.
+
+It has no idea which board is open in the shell right now. Nothing is lost if
+you change one that is: an open board with nothing unsaved reloads and shows
+your change at once, and one with unsaved edits stops saving and asks the
+person which version to keep. That question interrupts them, so prefer boards
+that are not open, and say so when you change one that is.

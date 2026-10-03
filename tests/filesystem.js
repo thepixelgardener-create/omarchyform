@@ -1,6 +1,9 @@
 const assert = require('assert/strict')
 const fs = require('fs'), os = require('os'), path = require('path')
-const {spawnSync} = require('child_process')
+const childProcess = require('child_process')
+// Every call is bounded: a helper that hangs fails the run with a timeout
+// instead of stalling it. A call may still pass a timeout of its own.
+const spawnSync=(command,args,options)=>childProcess.spawnSync(command,args,{timeout:30000,...options})
 const dir=fs.mkdtempSync(path.join(os.tmpdir(),'omarchyform-files-'))
 try {
   const boards=path.join(dir,'boards'),trash=path.join(dir,'trash'),outside=path.join(dir,'outside')
@@ -164,6 +167,11 @@ try {
   // The extension follows the content, not the name it arrived under.
   fs.copyFileSync(path.join(source,'shot.png'),path.join(source,'mislabelled.jpg'))
   assert.equal(drop('drop-4','mislabelled.jpg').stdout,'drop-4.png','content decides the extension')
+
+  // The name is the caller's, and still held to the names an image may carry.
+  for (const bad of ['../escape','a/b','.hidden','-dash'])
+    assert.notEqual(drop(bad,'shot.png').status,0,bad)
+  assert.equal(fs.existsSync(path.join(dir,'escape.png')),false,'nothing lands outside the folder')
 
   // Too large to sit on a board is refused before anything is copied.
   fs.writeFileSync(path.join(source,'huge.png'),Buffer.concat([pngBytes,Buffer.alloc(33554433-pngBytes.length)]))

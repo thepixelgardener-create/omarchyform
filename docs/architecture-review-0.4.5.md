@@ -201,3 +201,28 @@ the diagnostics discussed above. `npm run bench` completed.
 
 No new compositor interaction, delayed-image reproduction, slow-disk profile,
 mutation run, or security-specific suite was performed for this review.
+
+## Since this review
+
+Recorded 2026-10-03 against the housekeeping change that followed 0.4.5, so
+this section dates too.
+
+**Resolved:**
+
+- Finding 4: `conflictText` and `conflictBoard` are gone, and the tests that
+  asserted them now check that a failed replacement keeps the conflict and the
+  edits on screen. The format version is one constant, `FORMAT_VERSION` in
+  `BoardStore.js`, which the command line reads too.
+- Finding 5: the controller test's `canEdit` includes `!diskReading`, with a
+  check that editing waits while the disk version is read. The unused
+  `qs.Commons` import and the duplicate `label` id are fixed. The filesystem
+  tests bound every subprocess with a timeout.
+- Documentation: the agent guide and skill describe backups and open boards as
+  they behave, and name the command line's note size separately from the
+  board's. The compatibility notes say what shipped for input methods and
+  accessibility, and README names its remaining lint warnings instead of
+  counting them.
+
+**Still open:** one connector geometry for the board and export (finding 1),
+display-only nodes (2), extracting library operations from the controller
+(3), the docs index, CI's lint gate, and the `stackAfter` warnings.

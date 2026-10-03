@@ -88,7 +88,7 @@ FocusScope {
 
         Text {
           textFormat: Text.PlainText
-          id: label
+          id: promptLabel
           visible: browser.typing
           text: browser.prompting ? browser.ctl.browserPrompt + " " : "/"
           color: browser.theme.panelText
@@ -100,7 +100,7 @@ FocusScope {
           id: typed
           visible: browser.typing
           enabled: browser.typing
-          anchors.left: label.right
+          anchors.left: promptLabel.right
           anchors.right: parent.right
           clip: true
           color: browser.theme.panelText

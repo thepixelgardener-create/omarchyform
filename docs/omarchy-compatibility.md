@@ -127,8 +127,11 @@ editor, and exercise help/browser layout at 480×360 with a 24px body font.
   handling still need dedicated work. The existing one-generation backup is
   not conflict detection or version history. *(Conflict handling has since
   shipped — see "Since this review". Large boards now have measured frame
-  times in [performance.md](performance.md). IME and accessibility have not
-  been addressed.)*
+  times in [performance.md](performance.md). Typing now goes through real Qt
+  text fields — the note editor, find, the board browser and the command list —
+  which take input methods, and the toolbar, menus and panels carry accessible
+  names, roles and actions. Items on the canvas are not exposed to assistive
+  technology yet, and none of this has had a full accessibility audit.)*
 
 ## Reproduction
 
