@@ -3,18 +3,13 @@
 Notable changes, newest first. Board file versions are noted where they moved,
 since older boards are migrated on load rather than rejected.
 
-## Unreleased
-
-- Choose Dots, Grid, Ruled or Plain directly in **Menu → Background**. The
-  selection applies immediately and persists across bar and keyboard opening.
-
 ## 0.4.5 — 2026-10-03
 
 ### Added
 
-- Canvas patterns: choose dots, a square grid or ruled lines in the bar widget's
-  settings, or turn the pattern off for a plain background. Patterns follow the
-  theme and camera, and the choice is remembered for keyboard opening.
+- Canvas patterns: choose Dots, Grid, Ruled or Plain directly in
+  **Menu → Background**. Patterns follow the theme and camera. The selection
+  applies immediately and persists across bar and keyboard opening.
 
 - `npm run test:security` and `test:security:full`, with a release checklist
   covering process metadata, rendering, filesystem boundaries and retention.
