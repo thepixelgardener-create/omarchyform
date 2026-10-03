@@ -9,6 +9,7 @@ function controller() {
   const root = { currentBoard: 'a.json', items, links, nextId: 1, nextColor: 0, windowMode: false,
     undoStack: [], redoStack: [], selectedIndex: -1, editIndex: -1,
     camX: 0, camY: 0, zoom: 1, activeBoard: null, markedIds: [], showPinned: false, arranging: false,
+    showGrid: true, canvasPattern: 'Dots',
     finding: false, findQuery: '', findCount: 0, imageQueue: [],
     menuVisible: false, zoomMenuVisible: false, menuIndex: 0, helpVisible: false,
     // Declared on the controller and defaulted there; the harness needs them
@@ -61,6 +62,7 @@ function controller() {
     return lookup
   } })
   const writes = []
+  const states = []
   const persistence = { busy: false, contents: '',
     save(path, text, backup, root, backupRoot, lock, expected) {
       this.busy = true
@@ -82,7 +84,7 @@ function controller() {
   const scanProc = { running: false }
   const context = vm.createContext({ root, session, Store: loadStore(), itemModel: items, linkModel: links,
     persistence, exchange, trashIndexFile, scanProc,
-    statusTimer: {restart() {}}, failureTimer: {restart() {}}, saveTimer: { running: false, stop() {}, restart() {} }, stateFile: {setText() {}} })
+    statusTimer: {restart() {}}, failureTimer: {restart() {}}, saveTimer: { running: false, stop() {}, restart() {} }, stateFile: {setText(text) { states.push(text) }} })
   function loadFunctions(target, qml) {
     for (const match of qml.matchAll(/^  function (\w+)\((.*?)\) \{\n([\s\S]*?)^  }/gm))
       target[match[1]] = vm.runInContext(`(function(${match[2]}) {${match[3]}})`, context)
@@ -98,7 +100,7 @@ function controller() {
   session.requestDisk = resolve => session.acceptDisk(root.currentBoard,
     loadStore().writeFile(items, links, root.nextId), resolve, 'rev-fresh\n' + session.diskText)
   let revisions = 0
-  return { root, session, items, links, writes, persistence, exchange, store: context.Store, complete() {
+  return { root, session, items, links, writes, states, persistence, exchange, store: context.Store, complete() {
     const write = writes[writes.length - 1]
     persistence.busy = false
     session.savedBoard(write.path, write.text, 'rev-' + (++revisions))
@@ -1557,3 +1559,26 @@ console.log('ok — controller: what a picture is of, and what it is drawn in')
   assert.deepEqual([c.root.camX, c.root.camY], [24, 120 + 24])
 }
 console.log('ok — controller: a board opens clear of the header, and a reload stays put')
+
+{
+  const c = controller()
+  c.root.applyState('{"showGrid":false}')
+  assert.equal(c.root.showGrid, false, 'an existing plain background stays plain')
+  assert.equal(c.root.canvasPattern, 'Dots', 'old state keeps the default pattern')
+  for (const canvasPattern of ['Dots', 'Grid', 'Ruled']) {
+    c.root.applyPayload(JSON.stringify({settings: {showGrid: true, canvasPattern}}))
+    c.root.writeState()
+    const saved = c.states.at(-1)
+    assert.equal(JSON.parse(saved).canvasPattern, canvasPattern)
+    const reopened = controller()
+    reopened.root.applyState(saved)
+    assert.equal(reopened.root.canvasPattern, canvasPattern, 'keyboard opening retains the bar preference')
+    assert.equal(reopened.root.showGrid, true)
+  }
+  for (const canvasPattern of ['unknown', '', null, 42, {}]) {
+    c.root.applyPayload(JSON.stringify({settings: {canvasPattern}}))
+    c.root.applyState(JSON.stringify({canvasPattern}))
+    assert.equal(c.root.canvasPattern, 'Ruled', 'invalid settings preserve the last valid pattern')
+  }
+}
+console.log('ok — controller: canvas pattern settings, old state and persistence')

@@ -3,15 +3,22 @@
 Notable changes, newest first. Board file versions are noted where they moved,
 since older boards are migrated on load rather than rejected.
 
-## Unreleased
+## 0.4.5 — 2026-10-03
 
 ### Added
 
+- Canvas patterns: choose dots, a square grid or ruled lines in the bar widget's
+  settings, or turn the pattern off for a plain background. Patterns follow the
+  theme and camera, and the choice is remembered for keyboard opening.
+
 - `npm run test:security` and `test:security:full`, with a release checklist
   covering process metadata, rendering, filesystem boundaries and retention.
-  CI runs the portable security checks on every push and pull request.
+  CI runs the portable security checks on pushes to main and pull requests.
 
 ### Fixed
+
+- The plugin description names whiteboards, brainstorming, mind maps, diagrams,
+  sticky notes and images so the next marketplace snapshot can match those searches.
 
 - Board titles and other labels explicitly use plain text so filenames cannot
   become markup or cause inline image loads.
