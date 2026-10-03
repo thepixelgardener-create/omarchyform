@@ -10,7 +10,7 @@ This release improves the canvas appearance and prepares the directory listing.
 
 - **Background choices — implemented on the release branch:** dots, square grid
   and ruled lines, with a plain option. Patterns follow the theme and camera;
-  the bar settings remember the choice. Dots remain the default.
+  **Menu → Background** remembers the choice. Dots remain the default.
 - **Directory discoverability — description prepared:** describe the plugin as
   a whiteboard for brainstorming, mind maps and diagrams. Publish the updated
   marketplace snapshot with 0.4.5; see [listing notes](marketplace-listing.md).

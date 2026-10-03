@@ -376,6 +376,7 @@ Item {
   property int step: 40
   property bool showGrid: true
   property string canvasPattern: "Dots"
+  property bool canvasBackgroundChosen: false
   property bool startWindowed: false
   property bool windowMode: false
 
@@ -745,8 +746,7 @@ Item {
     root.removeAt(root.targets())
   }
 
-  // The commands in the menu all have keys of their own, so the menu is a
-  // reminder rather than the way in, and it costs no height until asked for.
+  // The menu exposes common actions without needing to know their keys.
   property bool menuVisible: false
   property bool zoomMenuVisible: false
   // Which item the keyboard is on. Opening starts at the first, so the menu can
@@ -802,6 +802,24 @@ Item {
   }
 
   function setZoom(level) { root.zoomCentre(level / root.zoom) }
+  function chooseCanvasBackground() {
+    root.beginPalette("all")
+    root.setPaletteQuery("Canvas background:")
+    var current = root.showGrid ? root.canvasPattern : "Plain"
+    for (var i = 0; i < root.paletteMatches.length; i++)
+      if (root.paletteMatches[i].arg === current) root.paletteIndex = i
+  }
+
+  function setCanvasBackground(pattern) {
+    if (pattern !== "Plain" && Store.CANVAS_PATTERNS.indexOf(pattern) < 0) return
+    root.showGrid = pattern !== "Plain"
+    if (root.showGrid) root.canvasPattern = pattern
+    // A deliberate choice in the board wins over the bar's opening defaults.
+    root.canvasBackgroundChosen = true
+    root.writeState()
+    root.flash("Canvas background: " + pattern)
+  }
+
   function showHelp() { root.helpVisible = true }
 
   function toggleHelp() { root.helpVisible = !root.helpVisible }
@@ -1729,6 +1747,7 @@ Item {
       step: root.step,
       showGrid: root.showGrid,
       canvasPattern: root.canvasPattern,
+      canvasBackgroundChosen: root.canvasBackgroundChosen,
       startWindowed: root.startWindowed
     }, null, 2) + "\n")
   }
@@ -1746,6 +1765,7 @@ Item {
       if (typeof st.step === "number") root.step = st.step
       if (typeof st.showGrid === "boolean") root.showGrid = st.showGrid
       if (Store.CANVAS_PATTERNS.indexOf(st.canvasPattern) >= 0) root.canvasPattern = st.canvasPattern
+      root.canvasBackgroundChosen = st.canvasBackgroundChosen === true
       if (typeof st.startWindowed === "boolean") root.startWindowed = st.startWindowed
       // With no board open yet, the bar's preference decides the surface.
       if (st.windowMode === undefined) root.windowMode = root.startWindowed
@@ -1779,8 +1799,10 @@ Item {
     var st = p.settings
     if (typeof st.autosaveMs === "number") root.autosaveMs = Math.max(100, Math.min(5000, st.autosaveMs))
     if (typeof st.step === "number") root.step = Math.max(5, Math.min(200, st.step))
-    if (typeof st.showGrid === "boolean") root.showGrid = st.showGrid
-    if (Store.CANVAS_PATTERNS.indexOf(st.canvasPattern) >= 0) root.canvasPattern = st.canvasPattern
+    if (!root.canvasBackgroundChosen) {
+      if (typeof st.showGrid === "boolean") root.showGrid = st.showGrid
+      if (Store.CANVAS_PATTERNS.indexOf(st.canvasPattern) >= 0) root.canvasPattern = st.canvasPattern
+    }
     if (typeof st.startWindowed === "boolean") root.startWindowed = st.startWindowed
     return true
   }

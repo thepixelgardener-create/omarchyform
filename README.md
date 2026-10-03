@@ -50,9 +50,11 @@ omarchy bar move thepixelgardener.omarchyform --section center
 ```
 
 The sticky-note icon opens and closes the board, and carries the accent colour while it is
-open. Its settings — autosave delay, keyboard step, canvas pattern, and whether the
+open. Its defaults — autosave delay, keyboard step, canvas pattern, and whether the
 board opens windowed — live on the bar entry and are handed to the board when
 it opens, then remembered, so opening from the keyboard uses the same values.
+Choose the canvas appearance inside the board with **Menu → Background**;
+that choice takes precedence over the bar's canvas defaults.
 
 For the keyboard route, bind a key in `~/.config/hypr/bindings.lua`:
 
@@ -582,12 +584,15 @@ that omits `mode` falls back to the background's Rec. 709 luminance.
 
 ### Canvas background
 
-Choose **Dots**, **Grid**, or **Ruled** under **Canvas pattern** in the bar
-widget's settings. Turn off **Show canvas pattern** for a plain background.
+Inside the board, click **Menu → Background**, then choose **Dots**, **Grid**,
+**Ruled**, or **Plain**. The current choice is highlighted. You can also press
+**Ctrl+P** outside a note and search for **background**, **texture**, or **pattern**.
 Dots are the default, and an existing preference for a plain canvas is preserved.
 
 Patterns use the theme's colours and stay attached to the board as you pan and
-zoom. The choice is remembered for keyboard opening too. It applies to the
+zoom. The choice applies immediately and is remembered for bar and keyboard
+opening. A choice made here takes precedence over the bar's initial canvas
+settings. It applies to the
 working canvas; PNG exports keep their plain background.
 
 ## Layout
