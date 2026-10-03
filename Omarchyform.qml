@@ -375,6 +375,7 @@ Item {
   property int autosaveMs: 700
   property int step: 40
   property bool showGrid: true
+  property string canvasPattern: "Dots"
   property bool startWindowed: false
   property bool windowMode: false
 
@@ -1727,6 +1728,7 @@ Item {
       autosaveMs: root.autosaveMs,
       step: root.step,
       showGrid: root.showGrid,
+      canvasPattern: root.canvasPattern,
       startWindowed: root.startWindowed
     }, null, 2) + "\n")
   }
@@ -1743,6 +1745,7 @@ Item {
       if (typeof st.autosaveMs === "number") root.autosaveMs = st.autosaveMs
       if (typeof st.step === "number") root.step = st.step
       if (typeof st.showGrid === "boolean") root.showGrid = st.showGrid
+      if (Store.CANVAS_PATTERNS.indexOf(st.canvasPattern) >= 0) root.canvasPattern = st.canvasPattern
       if (typeof st.startWindowed === "boolean") root.startWindowed = st.startWindowed
       // With no board open yet, the bar's preference decides the surface.
       if (st.windowMode === undefined) root.windowMode = root.startWindowed
@@ -1777,6 +1780,7 @@ Item {
     if (typeof st.autosaveMs === "number") root.autosaveMs = Math.max(100, Math.min(5000, st.autosaveMs))
     if (typeof st.step === "number") root.step = Math.max(5, Math.min(200, st.step))
     if (typeof st.showGrid === "boolean") root.showGrid = st.showGrid
+    if (Store.CANVAS_PATTERNS.indexOf(st.canvasPattern) >= 0) root.canvasPattern = st.canvasPattern
     if (typeof st.startWindowed === "boolean") root.startWindowed = st.startWindowed
     return true
   }

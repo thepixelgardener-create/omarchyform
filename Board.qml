@@ -89,17 +89,46 @@ FocusScope {
     color: board.theme.canvasBackground
   }
 
-  // Dots and connectors are drawn in screen space so they keep their weight
+  // Patterns and connectors are drawn in screen space so they keep their weight
   // however far you zoom out, rather than scaling into mush.
   Canvas {
     id: grid
     anchors.fill: parent
     visible: board.ctl.showGrid
+    readonly property string pattern: board.ctl.canvasPattern
+    onPatternChanged: requestPaint()
+    onVisibleChanged: if (visible) requestPaint()
     onPaint: {
       var ctx = getContext("2d")
       ctx.reset()
       var step = 40 * board.ctl.zoom
       if (step < 8) return
+      // The origin stays attached to the world, including when the camera
+      // crosses zero. Lines use one path and one stroke per repaint.
+      var startX = ((board.ctl.camX % step) + step) % step
+      var startY = ((board.ctl.camY % step) + step) % step
+      if (grid.pattern === "Grid" || grid.pattern === "Ruled") {
+        ctx.strokeStyle = board.theme.dotColor
+        ctx.lineWidth = 1
+        // A continuous line carries more ink than a dot; keep it behind the
+        // notes. Snap to pixels so a stationary line stays crisp.
+        ctx.globalAlpha = 0.65
+        ctx.beginPath()
+        if (grid.pattern === "Grid") {
+          for (var gx = startX; gx < width; gx += step) {
+            var px = Math.floor(gx) + 0.5
+            ctx.moveTo(px, 0)
+            ctx.lineTo(px, height)
+          }
+        }
+        for (var gy = startY; gy < height; gy += step) {
+          var py = Math.floor(gy) + 0.5
+          ctx.moveTo(0, py)
+          ctx.lineTo(width, py)
+        }
+        ctx.stroke()
+        return
+      }
       ctx.fillStyle = board.theme.dotColor
       var r = Math.max(1, 1.2 * board.ctl.zoom)
       for (var x = board.ctl.camX % step; x < width; x += step)

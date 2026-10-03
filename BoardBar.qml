@@ -28,6 +28,7 @@ BarWidget {
         autosaveMs: root.setting("autosaveMs", 700),
         step: root.setting("step", 40),
         showGrid: root.setting("showGrid", true),
+        canvasPattern: root.setting("canvasPattern", "Dots"),
         startWindowed: root.setting("startWindowed", false)
       }
     })

@@ -1,12 +1,14 @@
 # Omarchyform
 
-A local, keyboard-first board for arranging thoughts on Omarchy.
+A local whiteboard for brainstorming, mind maps and diagrams on Omarchy.
 
-An infinite canvas. Notes, shapes and connectors on a board you can pan and
+An infinite canvas. Sticky notes, images, shapes and connectors on a board you can pan and
 zoom, driven from the keyboard, stored as a plain JSON file on your own disk.
 
 Capture a thought, arrange it spatially, get back to work. It follows your
 Omarchy theme and keeps your boards on your own machine.
+
+Find it in the [Omarchy plugin directory](https://plugins.omarchy.org/?text=omarchyform).
 
 ![Omarchyform](preview.png)
 
@@ -48,7 +50,7 @@ omarchy bar move thepixelgardener.omarchyform --section center
 ```
 
 The sticky-note icon opens and closes the board, and carries the accent colour while it is
-open. Its settings — autosave delay, keyboard step, dot grid, and whether the
+open. Its settings — autosave delay, keyboard step, canvas pattern, and whether the
 board opens windowed — live on the bar entry and are handed to the board when
 it opens, then remembered, so opening from the keyboard uses the same values.
 
@@ -571,8 +573,18 @@ shell's panels are, and the header's controls are its soft-filled buttons.
 
 **Day and night** is not a setting here either. Omarchy themes declare
 `mode = "light"` or `mode = "dark"` in their `colors.toml`; the board reads
-that and adjusts the weight of its dot grid accordingly. A third-party theme
+that and adjusts the weight of its canvas pattern accordingly. A third-party theme
 that omits `mode` falls back to the background's Rec. 709 luminance.
+
+### Canvas background
+
+Choose **Dots**, **Grid**, or **Ruled** under **Canvas pattern** in the bar
+widget's settings. Turn off **Show canvas pattern** for a plain background.
+Dots are the default, and an existing preference for a plain canvas is preserved.
+
+Patterns use the theme's colours and stay attached to the board as you pan and
+zoom. The choice is remembered for keyboard opening too. It applies to the
+working canvas; PNG exports keep their plain background.
 
 ## Layout
 
@@ -933,25 +945,25 @@ Freehand drawing is outside the current scope.
 
 | | |
 |---|---|
-| Omarchy | `4.0.0.r2158.gd174d4a-1`, Quattro shell |
+| Omarchy | `omarchy-dev 4.0.0.r6713.ga85e29a-1`, Quattro shell |
 | Qt | 6.11.2 |
 | Compositor | Hyprland `0.56.2`, Wayland |
-| Display | single output, 1920×1080 at scale 1.6 |
+| Displays attached | 1920×1080 at scale 1.6 and 3840×2160 at scale 2 |
 | Clipboard | `wl-clipboard` 1:2.3.0 |
 
-That is the one configuration the automated and live checks have actually run
-on. Omarchy 4's plugin contract is still moving, so this claims nothing about
-other versions in either direction — it may well work on yours, but nobody has
-checked.
+The 0.4.5 automated and live smoke checks passed on this configuration on
+2026-10-03. Earlier releases were tested on Omarchy `4.0.0.r2158.gd174d4a-1`
+with a single 1920×1080 output at scale 1.6. Omarchy 4's plugin contract is
+still moving; these results do not establish compatibility with every version.
 
-Not tested: multiple monitors, mixed scaling across outputs, an unscaled
-display, and any compositor other than Hyprland. Everything here has run on one
-fractionally scaled screen, which makes 1x the configuration nobody has
-checked — the opposite of the usual gap. Portrait and small-window layout is
-covered by the Qt layout suite rather than by hand on hardware. If you run one of those, the thing
-most likely to be wrong is where the overlay places itself.
+The live checks do not exercise moving between monitors or every mixed-scale
+placement. An unscaled display and other compositors remain untested. Portrait
+and small-window layout is covered by the Qt layout suite rather than by hand
+on hardware. Overlay placement on those configurations needs further checking.
 
 ## Support
+
+Planned improvements and features are tracked in the [roadmap](docs/roadmap.md).
 
 Bugs and questions belong in
 [GitHub issues](https://github.com/thepixelgardener-create/omarchyform/issues).

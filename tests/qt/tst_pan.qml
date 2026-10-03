@@ -126,6 +126,7 @@ TestCase {
     property string dataDir: "/tmp"
     property string accentMarkup: "#00ffff"
     property bool showGrid: true
+    property string canvasPattern: "Dots"
     property bool showPinned: false
     property bool finding: false
     property string findQuery: ""
@@ -294,6 +295,9 @@ TestCase {
     ctl.camX = 0
     ctl.camY = 0
     ctl.zoom = 1
+    ctl.canvasPattern = "Dots"
+    ctl.showGrid = true
+    ctl.theme.dotColor = "#202020"
     ctl.selectedIndex = -1
     ctl.editIndex = -1
     ctl.showPinned = false
@@ -882,6 +886,54 @@ TestCase {
 
     compare(ctl.camX, 0, "the board stayed where it was under " + row.tag)
     compare(ctl.camY, 0)
+  }
+
+  // Pattern marks remain attached to world coordinates as the camera moves.
+  // Sampling between intersections distinguishes ruled lines from a grid and
+  // dots, so the test also waits until the requested pattern is really painted.
+  function test_canvasPatterns_data() {
+    var rows = []
+    for (var pattern of ["Dots", "Grid", "Ruled"])
+      for (var zoom of [0.5, 1, 2])
+        rows.push({ tag: pattern + "-" + zoom, pattern: pattern, zoom: zoom })
+    return rows
+  }
+
+  function test_canvasPatterns(row) {
+    itemModel.clear()
+    ctl.canvasPattern = row.pattern
+    ctl.zoom = row.zoom
+    var step = 40 * row.zoom
+    for (var camera of [-17, 13]) {
+      ctl.camX = camera
+      ctl.camY = camera + 5
+      surface.repaintGrid()
+      var x = ((ctl.camX % step) + step) % step
+      var y = ((ctl.camY % step) + step) % step
+      x += Math.ceil((340 - x) / step) * step
+      y += Math.ceil((320 - y) / step) * step
+      var background = ctl.theme.canvasBackground
+      tryVerify(function () {
+        var img = grabImage(surface)
+        return img.pixel(x, y) !== background
+          && (img.pixel(x + step / 2, y) !== background) === (row.pattern !== "Dots")
+          && (img.pixel(x, y + step / 2) !== background) === (row.pattern === "Grid")
+          && img.pixel(x + step / 2, y + step / 2) === background
+      }, 2000, "the pattern follows the camera at " + row.zoom + "x")
+    }
+  }
+
+  function test_patternVisibilityAndTheme() {
+    itemModel.clear()
+    ctl.showGrid = false
+    ctl.canvasPattern = "Grid"
+    tryVerify(function () { return grabImage(surface).pixel(360, 340) === ctl.theme.canvasBackground })
+    ctl.showGrid = true
+    tryVerify(function () { return grabImage(surface).pixel(360, 340) !== ctl.theme.canvasBackground })
+    var before = grabImage(surface).pixel(360, 340)
+    ctl.theme.dotColor = "#cccccc"
+    tryVerify(function () { return grabImage(surface).pixel(360, 340) !== before }, 2000,
+              "a theme change repaints the pattern")
   }
 
   // ------------------------------------------------------------------- layers

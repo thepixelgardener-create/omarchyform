@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "id": "thepixelgardener.omarchyform",
   "name": "Omarchyform",
-  "version": "0.4.0",
+  "version": "0.4.5",
   "author": "frueh",
-  "description": "A local, keyboard-first board for Omarchy: notes, shapes and connectors on an infinite canvas, saved as plain JSON.",
+  "description": "An offline whiteboard for brainstorming, mind maps and diagrams. Arrange sticky notes, images and shapes on an infinite canvas, with keyboard controls and Omarchy themes.",
   "kinds": [
     "overlay",
     "bar-widget"
@@ -18,7 +18,7 @@
   "homepage": "https://github.com/thepixelgardener-create/omarchyform",
   "barWidget": {
     "displayName": "Omarchyform",
-    "description": "Open the board: an infinite canvas for notes, shapes and connectors.",
+    "description": "Open your whiteboard: notes, images, shapes and connectors on an infinite canvas.",
     "category": "Productivity",
     "allowMultiple": false,
     "defaultSection": "right",
@@ -26,6 +26,7 @@
       "autosaveMs": 700,
       "step": 40,
       "showGrid": true,
+      "canvasPattern": "Dots",
       "startWindowed": false
     },
     "schema": [
@@ -52,8 +53,17 @@
       {
         "key": "showGrid",
         "type": "boolean",
-        "label": "Show the dot grid",
+        "label": "Show canvas pattern",
+        "description": "Turn off for a plain background.",
         "defaultValue": true
+      },
+      {
+        "key": "canvasPattern",
+        "type": "enum",
+        "label": "Canvas pattern",
+        "description": "Follows the theme and moves with the board.",
+        "options": ["Dots", "Grid", "Ruled"],
+        "defaultValue": "Dots"
       },
       {
         "key": "startWindowed",

@@ -5,6 +5,7 @@
 
 var MIN_SIZE = 60
 var KINDS = ["note", "rect", "ellipse", "diamond"]
+var CANVAS_PATTERNS = ["Dots", "Grid", "Ruled"]
 
 // Items carry a theme role, not a hex colour, so a board follows the desktop
 // theme instead of fighting it. The shell exposes these four.
