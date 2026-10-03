@@ -3,6 +3,11 @@
 Notable changes, newest first. Board file versions are noted where they moved,
 since older boards are migrated on load rather than rejected.
 
+## Unreleased
+
+- Choose Dots, Grid, Ruled or Plain directly in **Menu → Background**. The
+  selection applies immediately and persists across bar and keyboard opening.
+
 ## 0.4.5 — 2026-10-03
 
 ### Added
