@@ -246,6 +246,25 @@ function tests(S) {
     eq(links.count, 0, "cleared when absent")
   })
 
+  test("fillLinks only joins ends that are item ids", () => {
+    // The items are indexed in a plain object, and every plain object answers
+    // to names like these. A board using them as ends must not get a connector
+    // out of it — one the painters then cannot place, and the next save keeps.
+    const items = new FakeModel([item({ iid: 1 }), item({ iid: 2 }), item({ iid: 3 })])
+    const links = new FakeModel()
+    S.fillLinks(links, items, [
+      { from: "toString", to: "valueOf" },
+      { from: "constructor", to: 1 },
+      { from: 2, to: "hasOwnProperty" },
+      { from: "__proto__", to: 3 },
+      { from: "2", to: "3" },   // an id written as text is still that item
+      { from: 1, to: 2 }
+    ])
+    eq(links.rows, [{ lfrom: 2, lto: 3 }, { lfrom: 1, lto: 2 }], "only real ends survive, as numbers")
+    eq(JSON.parse(S.writeFile(items, links, 4)).links, [{ from: 2, to: 3 }, { from: 1, to: 2 }],
+       "and only those are saved")
+  })
+
   // ---------------------------------------------------------------- id lookup
   test("indexOfId finds and misses correctly", () => {
     const m = new FakeModel([item({ iid: 4 }), item({ iid: 7 })])
@@ -1157,6 +1176,27 @@ function tests(S) {
     eq(back.items[2].src, undefined, "an item that never had one is left alone")
     eq(back.links.length, 1, "the rest of the board is untouched")
     eq(S.withSharedImages("not json", {}), "not json", "and nothing it cannot read is rewritten")
+  })
+
+  test("a board that carries no pictures does not keep the names of them either", () => {
+    // Leaving the images key out is the way round the rewrite above, so an
+    // import that carried nothing goes through it with nothing landed.
+    const raw = JSON.stringify({
+      version: 5, nextId: 3,
+      items: [{ id: 1, kind: "image", src: "paste-1759500000000.png" }, { id: 2, kind: "note", text: "x" }],
+      links: [{ from: 1, to: 2 }]
+    })
+    const back = JSON.parse(S.withSharedImages(raw, {}))
+    eq(back.items[0].src, "", "a picture it did not bring addresses nothing here")
+    eq(back.items[1], { id: 2, kind: "note", text: "x" }, "an item that never had one is left alone")
+    eq(back.links, [{ from: 1, to: 2 }], "and the rest of the board arrives")
+    const loaded = new FakeModel()
+    S.fillItems(loaded, S.readFile(JSON.stringify(back)).items)
+    eq([loaded.get(0).kind, loaded.get(0).isrc], ["note", ""], "so it loads as an empty note")
+
+    // A board from before items had kinds keeps its notes under `notes`.
+    const legacy = JSON.parse(S.withSharedImages(JSON.stringify({ notes: [{ src: "pic.png", text: "y" }] }), {}))
+    eq(legacy.notes, [{ src: "", text: "y" }], "and so does one from before there were items")
   })
 
   test("an image keeps its file name and nothing else does", () => {

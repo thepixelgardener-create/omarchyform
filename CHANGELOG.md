@@ -3,6 +3,22 @@
 Notable changes, newest first. Board file versions are noted where they moved,
 since older boards are migrated on load rather than rejected.
 
+## Unreleased
+
+### Fixed
+
+- An imported board with no `images` key kept the picture names it carried, so
+  its picture items could show, and a later copy with its pictures could carry,
+  pictures from your own library that it named. Every import now clears picture
+  names it did not bring, as one carrying pictures already did.
+
+- A connector whose ends were names like `toString` or `constructor` was
+  accepted on load and saved back, though it joins no item. Connector ends are
+  now read as item ids, and an id written as `"3"` still means item 3.
+
+- `omarchyform apply` with an operation named after a built-in object method,
+  such as `toString`, crashed with a stack trace instead of answering in JSON.
+
 ## 0.4.5 — 2026-10-03
 
 ### Added

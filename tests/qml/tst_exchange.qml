@@ -106,9 +106,24 @@ ShellRoot {
         test.check(test.lastFailed && test.lastKind === "board", "reported as a board failure")
         test.check(test.importedBoard === "", "and nothing was imported")
 
+        // One that carries no pictures but names one this library has. It
+        // arrives, but the name does not: it would show this library's picture.
+        test.lastMessage = ""
+        test.stage = 31
+        exchange.importPath(test.dir + "/foreign.omarchyform.json")
+      } else if (test.stage === 31 && test.importedBoard !== "" && !exchange.busy) {
+        test.check(test.importedBoard === "foreign.json", "named after the file it came from: " + test.importedBoard)
+        var foreign = JSON.parse(test.read(ctl.boardsDir + "/" + test.importedBoard))
+        test.check(foreign.items.length === 1, "the board arrives")
+        test.check(foreign.items[0].src === "",
+                   "without the name of a picture it did not carry: " + foreign.items[0].src)
+        test.check(test.read(ctl.imagesDir + "/pic.png") === test.read(test.dir + "/raw-pixels"),
+                   "and the picture of that name here is untouched")
+
         // The whole one. Two pictures, one of them named twice, and one of
         // them under a name this library already gave to different bytes.
         test.lastMessage = ""
+        test.importedBoard = ""
         test.stage = 4
         exchange.importPath(test.dir + "/shared.omarchyform.json")
       } else if (test.stage === 4 && test.importedBoard !== "" && !exchange.busy) {

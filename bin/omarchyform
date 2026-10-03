@@ -356,7 +356,9 @@ function verbApply(args) {
   const results = []
   ops.forEach((entry, i) => {
     if (!entry || typeof entry.op !== "string") die(`operation ${i} has no op`)
-    const op = OPS[entry.op]
+    // Its own entries only: OPS is a plain object, so "toString" or
+    // "constructor" would otherwise find something that is not an operation.
+    const op = Object.prototype.hasOwnProperty.call(OPS, entry.op) ? OPS[entry.op] : null
     if (!op) die(`operation ${i}: there is no ${entry.op}`, Object.keys(OPS))
     results.push(Object.assign({ op: entry.op }, op.run(board, entry.args || [])))
   })

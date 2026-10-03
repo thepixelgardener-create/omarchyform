@@ -74,6 +74,18 @@ assert.match(exchange, /fileCommand\("clipcopy", \[\]\)/, 'QML copy helper has n
 assert.doesNotMatch(exchange, /fileCommand\("clipcopy", \[(?!\])/,
   'no additional copy call may pass content arguments')
 
+// A board from outside names pictures, and those names address this library.
+// Every import is staged through withSharedImages, which clears the ones it
+// did not carry — including when it carried none and has no images key at all.
+function unrewrittenImports(source) {
+  const calls = source.match(/\bexchange\.stage\([^\n]*/g) || []
+  if (calls.length === 0) return ['no imported board is staged']
+  return calls.filter(call => !call.startsWith('exchange.stage(Store.withSharedImages('))
+}
+assert.ok(unrewrittenImports('if (names.length === 0) { exchange.stage(raw, base, false); return }').length)
+assert.ok(unrewrittenImports('').length)
+assert.deepEqual(unrewrittenImports(exchange), [], 'an imported board keeps picture names it did not carry')
+
 const colors = {foreground:'#ffffff', accent:'#00ffff', urgent:'#ff0000', muted:'#888888'}
 for (const text of ['<img src="https://example.invalid/beacon">',
   '<img src="file:///private.png">', '<a href="https://example.invalid">click</a>',
