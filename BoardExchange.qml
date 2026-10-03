@@ -141,7 +141,10 @@ Item {
                     + " pictures this cannot accept; nothing was imported", "board")
       return
     }
-    if (names.length === 0) { exchange.stage(raw, base, false); return }
+    // Through the same rewrite even when nothing was carried: a board that
+    // leaves its pictures out still names them, and those names would address
+    // whatever this library happens to hold under them.
+    if (names.length === 0) { exchange.stage(Store.withSharedImages(raw, {}), base, false); return }
     busy = true
     exchange.sharing = { raw: raw, base: base, images: carried, names: names, at: 0, landed: {} }
     exchange.nextSharedImage()

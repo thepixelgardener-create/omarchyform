@@ -417,7 +417,11 @@ is refused whole: nothing is imported, the file you were given is untouched, and
 you are told which. Pictures that had already landed from that attempt stay in
 `images/` unreferenced, in the same way a picture whose item you deleted does.
 A board with no `images` key at all — every board written before this, and every
-board in your own library — imports exactly as it always did. `ctrl+e` renders the board to a PNG for
+copy saved without its pictures — imports the same way, as one that carried
+nothing: its notes, shapes and connectors arrive, and a picture item arrives as
+an empty note, because the name it carries means nothing here. That includes
+re-importing your own copy without its pictures on the machine that saved it.
+`ctrl+e` renders the board to a PNG for
 sharing. `ctrl+v` asks the clipboard for a picture first and drops it on the board at its
 own proportions; failing that, it turns the text into a note, however many lines
 it is.

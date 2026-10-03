@@ -49,6 +49,11 @@ for (const scenario of ['persistence', 'session', 'timeout', 'exchange', 'clipbo
         { 'pic.png': pixels.toString('base64'),
           'text.png': Buffer.from('not a picture at all').toString('base64') }))
 
+      // Carrying no pictures at all, while naming one this library has. The
+      // name must not survive the trip, or it addresses this library's picture.
+      fs.writeFileSync(path.join(dir, 'foreign.omarchyform.json'), board(
+        [item(1, 0, 'pic.png')], undefined))
+
       // Naming a picture no board would write: refused before anything is
       // decoded, because the name is what decides a path on disk.
       fs.writeFileSync(path.join(dir, 'rejected.omarchyform.json'), board(

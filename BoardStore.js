@@ -910,14 +910,19 @@ function fillLinks(links, items, rows) {
   var byId = idIndex(items)
   for (var i = 0; i < rows.length; i++) {
     var l = rows[i]
+    // Ends are item ids, which are numbers, so they are read as numbers: the
+    // index is a plain object, and a name like "toString" is one every plain
+    // object answers to. An id written as "3" still means item 3.
+    var from = num(l.from, 0)
+    var to = num(l.to, 0)
     // Both ends must exist, an item cannot be joined to itself, and the same
     // pair cannot appear twice; from/to retain its direction.
-    if (l.from === l.to) continue
-    if (byId[l.from] === undefined || byId[l.to] === undefined) continue
-    var key = Math.min(l.from, l.to) + ":" + Math.max(l.from, l.to)
+    if (from === to) continue
+    if (byId[from] === undefined || byId[to] === undefined) continue
+    var key = Math.min(from, to) + ":" + Math.max(from, to)
     if (seen[key]) continue
     seen[key] = true
-    links.append({ lfrom: l.from, lto: l.to })
+    links.append({ lfrom: from, lto: to })
   }
 }
 
@@ -1145,6 +1150,9 @@ function sharedImages(raw) {
 // machine has — and a name from someone else's board must never end up
 // addressing a file in this one's library. Cleared, the item loads as an empty
 // note, because "image" is not one of KINDS without a picture to be.
+//
+// Every import comes through here, including a board that carries no pictures
+// at all: leaving the `images` key out must not be a way to keep the names.
 function withSharedImages(raw, landed) {
   var parsed
   try { parsed = JSON.parse(raw) } catch (e) { return raw }

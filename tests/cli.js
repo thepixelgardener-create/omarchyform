@@ -136,18 +136,24 @@ try {
     // may be a program that only ever reads stdout.
     const file = path.join(dir, 'f.json')
     run('new', file, '--note', 'one')
+    const before = fs.readFileSync(file, 'utf8')
     for (const [ops, what] of [
       [[{ op: 'setText', args: [99, 'x'] }], 'an id that is not there'],
       [[{ op: 'nonsense', args: [] }], 'an op that does not exist'],
       [[{ args: [] }], 'an entry with no op'],
       [[{ op: 'add', args: ['hexagon', 0, 0] }], 'a kind that does not exist'],
-      [[{ op: 'link', args: [1, 1] }], 'an item pointing at itself']
+      [[{ op: 'link', args: [1, 1] }], 'an item pointing at itself'],
+      // Names every plain object answers to, which are not operations: each
+      // used to find a method on the table and crash with a stack trace.
+      ...['toString', 'constructor', '__proto__', 'hasOwnProperty', 'valueOf'].map(name =>
+        [[{ op: name, args: [] }], `an op called ${name}`])
     ]) {
       const failed = pipe(JSON.stringify(ops), 'apply', file, '-')
       assert.equal(failed.status, 1, what + ' exits 1')
-      assert.ok(failed.out && failed.out.ok === false, what + ' answers with JSON')
+      assert.ok(failed.out && failed.out.ok === false, what + ' answers with JSON: ' + failed.raw)
       assert.ok(typeof failed.out.error === 'string' && failed.out.error.length > 0, what + ' says why')
     }
+    assert.equal(fs.readFileSync(file, 'utf8'), before, 'and none of them changed the board')
     assert.equal(run('apply', file, path.join(dir, 'nope.json')).status, 1, 'missing ops file')
     assert.equal(pipe('not json', 'apply', file, '-').status, 1, 'ops that are not JSON')
     assert.equal(pipe('{"op":"add"}', 'apply', file, '-').status, 1, 'ops that are not a list')
