@@ -5,7 +5,6 @@ import Quickshell.Io
 import Quickshell.Hyprland
 import Quickshell.Wayland
 import QtQuick
-import qs.Commons
 import "BoardStore.js" as Store
 
 // Controller and plugin entry point. Owns the state, the file, and the two
@@ -229,8 +228,7 @@ Item {
   property string pngPalette: "theme"
 
   function choosePng(palette) {
-    root.pngPalette = Store.exportPalette(palette) === null && palette !== "theme"
-      ? "theme" : (palette === undefined ? "theme" : palette)
+    root.pngPalette = Store.EXPORT_PALETTE_NAMES.indexOf(palette) >= 0 ? palette : "theme"
     exchange.choose("png")
   }
   // Whether the last picture was framed around a marked set rather than the

@@ -897,8 +897,7 @@ The temporary import tree resolves Omarchy's `qs.Commons` namespace. The
 installed QML metadata still produces warnings about `PanelWindow`,
 `QProcess::ExitStatus`, the dynamic Style font object and the members of the
 shell's plugin API. qmllint also reports unqualified access inside the header
-menu's delegate and the export scene, the same `label` id in two of the
-browser's delegates, and two unused imports, so it exits non-zero. The live test
+menu's delegate and the export scene, so it exits non-zero. The live test
 checks that those types and properties work in the actual runtime. CI fails on
 one category only: a property overriding a final one, which is what makes a
 surface fail to load.

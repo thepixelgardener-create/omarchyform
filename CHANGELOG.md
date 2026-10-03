@@ -19,6 +19,16 @@ since older boards are migrated on load rather than rejected.
 - `omarchyform apply` with an operation named after a built-in object method,
   such as `toString`, crashed with a stack trace instead of answering in JSON.
 
+- Opening a board from the file manager did nothing when its file name held a
+  newline, a tab or another control character: the path broke the payload
+  handed to the shell. `omarchyform-open` now escapes them, and its entry
+  version moves to 2 so reinstalling replaces the old one.
+
+- The agent guide and skill said a save from the shell would write over a
+  change made to an open board, and that the command line keeps no backups.
+  Neither is true: an open board reloads or asks which version to keep, and
+  every command-line write keeps the version it replaced.
+
 ## 0.4.5 — 2026-10-03
 
 ### Added

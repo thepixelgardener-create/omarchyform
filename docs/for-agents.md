@@ -13,13 +13,15 @@ The short version, if you read nothing else:
 
 - Build with `bin/omarchyform`. Never hand-write a board file.
 - Items are placed by their **top-left corner**. `y` increases **downwards**.
-- A default note is **220 × 160**. Leave **60** between neighbours; step **280**
-  across and **220** down and they will not touch.
+- `add` makes a **220 × 160** note unless told otherwise. (A note made in the
+  board itself starts at 180 × 140, centred where it was asked for.) Leave
+  **60** between neighbours; step **280** across and **220** down and they will
+  not touch.
 - Keep a note under about **six short lines**. Past that it scrolls and shows a
   tab in the corner, which reads as an accident.
 - Tint the two or three items that carry the argument. Tinting everything is
   the same as tinting nothing.
-- Do not change a board that is open in the shell.
+- Prefer a board that is not open in the shell; see §8.
 
 ---
 
@@ -58,7 +60,9 @@ scene needs the running shell. If someone wants a PNG, tell them: open the
 board and press `ctrl+e`. See §7.
 
 It also does not know which board is open right now, and does not touch the
-trash, the backups or the pictures beside a board.
+trash or the pictures beside a board. It does keep backups: every write saves
+the version it replaced, in `backups/` for a board in the library and as
+`<file>.bak` beside one anywhere else.
 
 ---
 
@@ -347,8 +351,10 @@ Exporting is the shell's job, not this one's. Tell the person:
 - **Do not hand-write or patch a board file.** Use `apply`. The loader repairs
   what it must, and a file you edited by hand is a file whose repairs you did
   not see.
-- **Do not change a board that is open in the shell.** It autosaves, so it will
-  write over you. Ask which board is open, or work on a new one.
+- **Do not change a board that is open in the shell without saying so.**
+  Nothing is lost: the board reloads with your change, or, if the person has
+  unsaved edits, stops saving and asks them which version to keep. But that
+  question interrupts them. Ask which board is open, or work on a new one.
 - **Do not assume `link` behaves like pressing `x`.** From here it is
   idempotent and answers `already`; at the keyboard the second press removes
   the connector. `unlink` is how you remove one from here.

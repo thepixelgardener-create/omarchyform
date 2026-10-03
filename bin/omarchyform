@@ -88,24 +88,38 @@ function declaredVersion(text) {
   return null
 }
 
-function readBoard(file) {
-  let text
-  // The revision first: what is read is a version of the file, and a write
-  // later on has to be able to say which version it was working from.
-  const revision = revisionOf(file)
-  try { text = fs.readFileSync(file, "utf8") }
+function readText(file) {
+  try { return fs.readFileSync(file, "utf8") }
   catch (error) { die("cannot read " + file, error.code || String(error)) }
+}
+
+// A board's text, loaded the way the plugin loads it: readFile, then the two
+// models filled from what it found. Anything that is not a board this
+// understands ends the run with the reason.
+function loadBoard(file, text) {
   const version = declaredVersion(text)
   const data = S.readFile(text)
   if (!data) {
-    if (version !== null && version > 5)
-      die(file + ` is format ${version}, newer than this understands`, "the board itself would open it read-only")
+    // A board from a newer Omarchyform is not a broken one. The board itself
+    // opens it read-only rather than saving over what it cannot represent, and
+    // saying "not a board" here would invite someone to throw it away.
+    if (version !== null && version > S.FORMAT_VERSION)
+      die(file + ` is format ${version}, newer than this understands`,
+          "the board itself would open it read-only rather than losing anything")
     die(file + " is not a board this understands")
   }
   const items = new RowModel()
   const links = new RowModel()
   S.fillItems(items, data.items)
   S.fillLinks(links, items, data.links)
+  return { data, items, links, version }
+}
+
+function readBoard(file) {
+  // The revision first: what is read is a version of the file, and a write
+  // later on has to be able to say which version it was working from.
+  const revision = revisionOf(file)
+  const { data, items, links, version } = loadBoard(file, readText(file))
   return { items, links, nextId: S.nextFreeId(items, data.nextId), version, revision }
 }
 
@@ -152,8 +166,8 @@ const OPS = {
       const id = board.nextId++
       board.items.append({
         iid: id, kind: kind,
-        ix: num(a[1], 0), iy: num(a[2], 0),
-        iw: Math.max(S.MIN_SIZE, num(a[3], 220)), ih: Math.max(S.MIN_SIZE, num(a[4], 160)),
+        ix: S.num(a[1], 0), iy: S.num(a[2], 0),
+        iw: Math.max(S.MIN_SIZE, S.num(a[3], 220)), ih: Math.max(S.MIN_SIZE, S.num(a[4], 160)),
         itint: S.normalizeTint(a[6]), itext: a[5] === undefined ? "" : String(a[5]),
         ipinned: false, isrc: ""
       })
@@ -191,8 +205,8 @@ const OPS = {
     does: "put an item somewhere else",
     run(board, a) {
       const at = mustRow(board, a[0], "move")
-      board.items.setProperty(at, "ix", num(a[1], 0))
-      board.items.setProperty(at, "iy", num(a[2], 0))
+      board.items.setProperty(at, "ix", S.num(a[1], 0))
+      board.items.setProperty(at, "iy", S.num(a[2], 0))
       return { changed: Number(a[0]) }
     }
   },
@@ -201,8 +215,8 @@ const OPS = {
     does: "change an item's size, never below the minimum",
     run(board, a) {
       const at = mustRow(board, a[0], "resize")
-      board.items.setProperty(at, "iw", Math.max(S.MIN_SIZE, num(a[1], S.MIN_SIZE)))
-      board.items.setProperty(at, "ih", Math.max(S.MIN_SIZE, num(a[2], S.MIN_SIZE)))
+      board.items.setProperty(at, "iw", Math.max(S.MIN_SIZE, S.num(a[1], S.MIN_SIZE)))
+      board.items.setProperty(at, "ih", Math.max(S.MIN_SIZE, S.num(a[2], S.MIN_SIZE)))
       return { changed: Number(a[0]) }
     }
   },
@@ -267,11 +281,6 @@ const OPS = {
   }
 }
 
-function num(value, fallback) {
-  const n = typeof value === "number" ? value : parseFloat(value)
-  return isFinite(n) ? n : fallback
-}
-
 // ------------------------------------------------------------------ the verbs
 function verbNew(args) {
   const file = args.shift()
@@ -312,24 +321,7 @@ function verbInspect(args) {
 function verbValidate(args) {
   const file = args.shift()
   if (!file) die("validate: needs a board to read")
-  let text
-  try { text = fs.readFileSync(file, "utf8") }
-  catch (error) { die("cannot read " + file, error.code || String(error)) }
-  const version = declaredVersion(text)
-  const data = S.readFile(text)
-  if (!data) {
-    // A board from a newer Omarchyform is not a broken one. The board itself
-    // opens it read-only rather than saving over what it cannot represent, and
-    // saying "not a board" here would invite someone to throw it away.
-    if (version !== null && version > 5)
-      die(file + ` is format ${version}, newer than this understands`,
-          "the board itself would open it read-only rather than losing anything")
-    die(file + " is not a board this understands")
-  }
-  const items = new RowModel()
-  const links = new RowModel()
-  S.fillItems(items, data.items)
-  S.fillLinks(links, items, data.links)
+  const { data, items, links, version } = loadBoard(file, readText(file))
   // What loading had to repair. A board is hand-editable and shareable, so
   // this is the difference between what is on disk and what would be drawn.
   const repairs = []

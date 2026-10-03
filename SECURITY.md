@@ -27,13 +27,19 @@ things worth attacking are:
 - **The clipboard.** `ctrl+v` runs `wl-paste`. The clipboard chooses its own
   format and contents; the plugin chooses the destination name and directory.
   Clipboard contents steering where bytes land is a vulnerability.
-- **`BoardFiles.sh`.** Every path it is given is validated against a required
-  root before use, and paths are passed as arguments, never as shell source. A
-  path that escapes its root, or that is interpreted rather than used, is a
+- **`BoardFiles.sh`.** Paths are passed as arguments, never as shell source.
+  Every path a board file, the clipboard or the board browser can influence is
+  checked against its root before use: no `..`, no symlink below the root, no
+  control characters. The paths it takes without a root are ones the person
+  chose (a file dropped on the board or picked for import, and where an export
+  is saved, which must be outside the data folder), the two metadata lookups
+  (`revision` and `filesize`), and the command line's saves, which write the
+  file they were given. A path
+  that escapes its root, or that is interpreted rather than used, is a
   vulnerability.
-- **`desktop/install.sh`.** It writes one launcher entry and refuses to replace
-  a file it did not write. Overwriting or removing an unrelated file is a
-  vulnerability.
+- **`desktop/install.sh`.** It writes the launcher entry, the board file type
+  and the small command they call, and refuses to replace a file it did not
+  write. Overwriting or removing an unrelated file is a vulnerability.
 
 ## Security and privacy screen
 

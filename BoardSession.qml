@@ -28,10 +28,6 @@ Item {
   // decision: leaving the board, closing, renaming and the save timer all have
   // to leave both versions intact, because none of them is someone choosing.
   property bool conflict: false
-  // The disk snapshot that raised the conflict. Keep it through failed writes;
-  // choosing the disk version reads fresh bytes with their matching revision.
-  property string conflictText: ""
-  property string conflictBoard: ""
   // Which resolution is in flight, so a failed one can put the conflict back
   // rather than losing the edits it was trying to keep.
   property string resolving: ""
@@ -169,7 +165,7 @@ Item {
     // Not a version this session knows about: someone else wrote it, and only
     // a person can say which of the two survives.
     if (raw !== session.lastSavedText && raw !== persistence.contents && raw !== mine) {
-      session.raiseConflict(raw)
+      session.raiseConflict()
       return
     }
     // Ours after all — a revision read before the file had settled, or a write
@@ -181,19 +177,17 @@ Item {
     session.save(true)
   }
 
-  function raiseConflict(diskText) {
+  // Nothing of the disk version is kept: whichever way out is chosen reads the
+  // file again, with the revision that goes with what it reads.
+  function raiseConflict() {
     // A refused switch is cancelled; resolving stays on the current board.
     session.pendingBoard = null
     session.conflict = true
-    session.conflictText = diskText
-    session.conflictBoard = session.ctl.currentBoard
     session.ctl.flash("Board changed on disk · ctrl+s to choose which version to keep")
   }
 
   function clearConflict() {
     session.conflict = false
-    session.conflictText = ""
-    session.conflictBoard = ""
   }
 
   // The three ways out. Each one leaves the edits on screen until the thing it
@@ -242,7 +236,7 @@ Item {
     }
     var mine = Store.writeFile(session.ctl.items, session.ctl.links, session.ctl.nextId)
     if (mine !== localText || (!resolve && (session.conflict || mine !== session.lastSavedText))) {
-      session.raiseConflict(raw)
+      session.raiseConflict()
       return
     }
     session.pendingBoard = null
@@ -340,7 +334,7 @@ Item {
       session.requestDisk(false)
       return
     }
-    session.raiseConflict(raw)
+    session.raiseConflict()
   }
 
   FileView {

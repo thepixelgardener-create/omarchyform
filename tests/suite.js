@@ -84,6 +84,11 @@ function tests(S) {
     for (const raw of ['[]', 'true', '42', '{"version":99}', '{"items":{}}',
       '{"items":[null]}', '{"links":[[]]}', '{"notes":"bad"}'])
       eq(S.readFile(raw), null, raw)
+    // A version is a whole number from 1 up to the one this writes.
+    for (const version of [0, -1, 4.5, "5", true, null, [5]])
+      eq(S.readFile(JSON.stringify({ version, items: [] })), null, "version " + JSON.stringify(version))
+    eq(JSON.parse(S.writeFile(new FakeModel(), new FakeModel(), 1)).version, S.FORMAT_VERSION,
+       "and what it writes is the newest it reads")
   })
 
   test("ID repair reserves IDs used by later items", () => {
@@ -480,13 +485,11 @@ function tests(S) {
     eq(S.trashFile(two, "a.json", "S"), "S-a.json-3", "and a third")
   })
 
-  test("entries can be found and removed by file", () => {
+  test("entries can be removed by file", () => {
     const e = [
       { file: "f1", path: "a.json", dir: false, at: "1" },
       { file: "f2", path: "b.json", dir: false, at: "2" }
     ]
-    eq(S.trashEntry(e, "f2").path, "b.json", "found")
-    eq(S.trashEntry(e, "nope"), null, "absent")
     eq(S.withoutTrash(e, "f1").map(x => x.file), ["f2"], "removed")
     eq(S.withoutTrash(e, "nope").length, 2, "removing something absent changes nothing")
   })

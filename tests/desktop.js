@@ -141,6 +141,44 @@ try {
     assert.equal(contentType(plain), 'application/json', 'other JSON is left alone')
     run('--uninstall')
   }
+
+  // The opener hands the shell a JSON payload with the board's path in it. A
+  // file name may hold any byte but a slash and NUL, so the path has to come
+  // out of JSON.parse exactly as it went in, newlines and all.
+  {
+    const stubs = fs.mkdtempSync(path.join(os.tmpdir(), 'omarchyform-shell-'))
+    const record = path.join(stubs, 'summoned')
+    fs.writeFileSync(path.join(stubs, 'omarchy-shell'),
+      '#!/usr/bin/env bash\nprintf \'%s\\0\' "$@" > "$SUMMONED"\n', { mode: 0o755 })
+    const open = (...args) => {
+      fs.rmSync(record, { force: true })
+      const out = spawnSync('bash', [path.join(__dirname, '../desktop/omarchyform-open'), ...args], {
+        encoding: 'utf8', timeout: 10000,
+        env: { ...process.env, PATH: stubs + ':' + process.env.PATH, SUMMONED: record }
+      })
+      const argv = fs.existsSync(record) ? fs.readFileSync(record, 'utf8').split('\0').slice(0, -1) : []
+      return { status: out.status, argv }
+    }
+    try {
+      const bare = open()
+      assert.strictEqual(bare.status, 0)
+      assert.deepStrictEqual(bare.argv, ['shell', 'summon', 'thepixelgardener.omarchyform', '{}'], 'a bare summon')
+      for (const name of ['plain.json', 'say "hi".json', 'back\\slash.json', 'this & that.json',
+                          'two\nlines.json', 'tab\there.json', 'bell\x07.json', 'ends in a newline\n']) {
+        const file = path.join(stubs, name)
+        fs.writeFileSync(file, '{}')
+        const opened = open(file)
+        assert.strictEqual(opened.status, 0, JSON.stringify(name))
+        let payload = null
+        try { payload = JSON.parse(opened.argv[3]) } catch { /* reported below */ }
+        assert.deepStrictEqual(payload, { action: 'open', path: fs.realpathSync(file) },
+          `${JSON.stringify(name)} arrives whole: ${JSON.stringify(opened.argv[3])}`)
+      }
+      assert.strictEqual(open(path.join(stubs, 'missing.json')).status, 1, 'a board that is not there')
+    } finally {
+      fs.rmSync(stubs, { recursive: true, force: true })
+    }
+  }
 } finally {
   fs.rmSync(dir, { recursive: true, force: true })
   fs.rmSync(bin, { recursive: true, force: true })

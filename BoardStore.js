@@ -290,17 +290,14 @@ function boundsOfRows(rows) {
   return b
 }
 
-// The board's own colours are named too, so a command can offer all four and
-// the list reads as one choice rather than a default and three exceptions.
+// The board's own colours are named too, so the four read as one choice rather
+// than a default and three exceptions. Anything else asked for is the theme.
 var EXPORT_PALETTE_NAMES = ["theme", "light", "dark", "mono"]
 
 function exportPalette(name) {
   return EXPORT_PALETTES[name] === undefined ? null : EXPORT_PALETTES[name]
 }
 
-// Which tint role a colour is asked for, with anything unrecognised drawn the
-// way an untinted item is. Board files are hand-editable and come from other
-// machines, so a tint this version has never heard of must still draw.
 // What the board says after a picture is written. The two things that can vary
 // are the two worth confirming: what it was of, and what it was drawn in.
 function exportNote(name, cropped) {
@@ -309,13 +306,16 @@ function exportNote(name, cropped) {
   return what + ", without controls" + (p ? ", " + p.label : "")
 }
 
+// Which tint role a colour is asked for, with anything unrecognised drawn the
+// way an untinted item is. Board files are hand-editable and come from other
+// machines, so a tint this version has never heard of must still draw.
 function paletteTint(palette, group, tint) {
   var table = palette[group]
   return table[tint] === undefined ? table.foreground : table[tint]
 }
 
 // ----------------------------------------------------------- the status line
-// One line under the header, and five kinds of thing wanting it. Which one gets
+// One line under the header, and every tier listed below wanting it. Which one gets
 // it is decided here, once, because it used to be decided twice — the view drew
 // the line and the controller worked out separately whether a failure was on
 // screen, so that it could stop timing one that was not. The two disagreed
@@ -945,12 +945,23 @@ function nextFreeId(items, stored) {
   return id
 }
 
+// The format this writes, and the newest it reads. Every version from 1 up to
+// it still loads: older boards are migrated on the way in rather than refused.
+// The command line asks this too, to tell a board from a newer Omarchyform
+// apart from one that is broken.
+var FORMAT_VERSION = 5
+
+// A whole number from 1 to FORMAT_VERSION. "5" and 4.5 are not versions.
+function knownVersion(version) {
+  return version >= 1 && version <= FORMAT_VERSION && Math.floor(version) === version
+}
+
 // A v1 board stored a flat notes[] with no ids or kinds.
 function readFile(raw) {
   var parsed
   try { parsed = JSON.parse(raw) } catch (e) { return null }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null
-  if (parsed.version !== undefined && [1, 2, 3, 4, 5].indexOf(parsed.version) < 0) return null
+  if (parsed.version !== undefined && !knownVersion(parsed.version)) return null
   var fields = ["items", "notes", "links"]
   for (var f = 0; f < fields.length; f++) {
     var rows = parsed[fields[f]]
@@ -983,7 +994,7 @@ var FORMAT_MARKER = "omarchyform.board"
 function writeFile(items, links, nextId) {
   return JSON.stringify({
     kind: FORMAT_MARKER,
-    version: 5,
+    version: FORMAT_VERSION,
     nextId: nextId,
     items: itemRows(items),
     links: linkRows(links)
@@ -1349,11 +1360,6 @@ function trashFile(entries, relative, stamp) {
   var n = 2
   while (taken[candidate]) { candidate = base + "-" + n; n++ }
   return candidate
-}
-
-function trashEntry(entries, file) {
-  for (var i = 0; i < entries.length; i++) if (entries[i].file === file) return entries[i]
-  return null
 }
 
 function withoutTrash(entries, file) {

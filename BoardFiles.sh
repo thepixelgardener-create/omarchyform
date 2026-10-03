@@ -2,9 +2,6 @@
 # Local filesystem operations. Paths are data, never shell source.
 set -euo pipefail
 
-# Refuse traversal and symlink components below base, including dangling
-# symlinks. Base itself may be a symlink (e.g. a boards folder kept in a
-# dotfiles repo): it is where the user chose to keep their data.
 # Put a finished temporary file at its final name, and never over a name that
 # is already taken: callers generate unique ones, so a collision is worth
 # reporting. The check is explicit because mv -n's exit status for an existing
@@ -84,6 +81,13 @@ refuse_huge_pictures() {
   (( width * height <= max_image_pixels )) || exit 7
 }
 
+# A name for a picture about to be written, without its extension. The caller
+# picks it, and it is still held to the names an image item may carry: no
+# slash, no leading dot or dash, nothing a path could be built out of.
+plain_name() {
+  [[ $1 =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]
+}
+
 # The type comes from the bytes, never from the name: a dropped path and a
 # shared board are both somebody else's idea of what a file is called. Exit 4
 # is "not an image this can take", which every caller reports as such.
@@ -109,6 +113,9 @@ revision_of() {
   printf '%s' "$(stat -Lc '%s|%i|%y' -- "$1" | tr -d ' ')"
 }
 
+# Refuse traversal and symlink components below base, including dangling
+# symlinks. Base itself may be a symlink (e.g. a boards folder kept in a
+# dotfiles repo): it is where the user chose to keep their data.
 confined() {
   local base=$1 relative=$2 component current
   local -a components
@@ -171,7 +178,7 @@ case "$operation" in
     # nothing the clipboard says can steer where the bytes land. Exit 4 means
     # there is no image on it, which is the caller's cue to try text instead.
     images_root=$1 base_name=$2
-    [[ $base_name != */* && $base_name =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]
+    plain_name "$base_name"
     mime=$(timeout 5 wl-paste --list-types 2>/dev/null | grep -m1 -E '^image/(png|jpeg|webp|gif|bmp)$' || true)
     [[ -n $mime ]] || exit 4
     case "$mime" in
@@ -235,7 +242,7 @@ case "$operation" in
     # the name, and a file too big to sit on a board is refused before it is
     # copied. Exit 4 means "not an image this can take", 5 means "too large".
     images_root=$1 base_name=$2 source_path=$3
-    [[ $base_name != */* && $base_name =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]
+    plain_name "$base_name"
     [[ -f $source_path ]] || exit 4
     size=$(stat -Lc %s -- "$source_path") || exit 4
     (( size > 0 )) || exit 4
@@ -291,7 +298,7 @@ case "$operation" in
     # means the bytes are not a picture, 5 that they are too big for a board,
     # 7 that they decode to more pixels than a board will draw.
     images_root=$1 staged=$2 base_name=$3
-    [[ $base_name != */* && $base_name =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]
+    plain_name "$base_name"
     [[ -f $staged && ! -L $staged ]]
     temporary=$(mktemp -- "$images_root/.omarchyform-shared-XXXXXX")
     trap 'rm -f -- "$temporary" "$staged"' EXIT

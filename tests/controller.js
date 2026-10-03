@@ -23,10 +23,11 @@ function controller() {
     lastSavedCount: 0, lastSavedText: '', saveError: '',
     // The conflict state the QML declares, mirrored here: an undeclared
     // property reads as undefined, which is not what a string property does.
-    conflict: false, conflictText: '', conflictBoard: '', resolving: '',
+    conflict: false, resolving: '',
     revision: '', forceNextSave: false, diskReading: false }
+  // The binding BoardSession.qml declares, term for term.
   Object.defineProperty(session, 'canEdit', {
-    get: () => session.boardLoaded && !session.damaged && session.pendingBoard === null
+    get: () => session.boardLoaded && !session.damaged && session.pendingBoard === null && !session.diskReading
   })
   for (const key of ['boardLoaded', 'damaged', 'pendingBoard', 'saveError', 'canEdit'])
     Object.defineProperty(root, key, { get: () => session[key] })
@@ -190,6 +191,15 @@ function controller() {
   c.session.loadBoard('', true)
   assert.equal(c.root.canEdit, true)
   assert.equal(c.root.nextId, 1)
+  // While the disk version is being read, the board on screen takes nothing:
+  // that read is about to replace it.
+  c.session.diskReading = true
+  assert.equal(c.root.canEdit, false, 'reading the disk version holds edits')
+  c.root.addItem('note', 0, 0)
+  assert.equal(c.items.count, 0, 'so a new note waits')
+  c.session.diskReading = false
+  c.root.addItem('note', 0, 0)
+  assert.equal(c.items.count, 1, 'and arrives once the read is done')
 }
 
 {
@@ -1052,11 +1062,14 @@ console.log('ok — controller: the command palette and one dispatch for every c
   }
   {
     const c = dirty()
-    c.session.raiseConflict(c.session.diskText)
+    c.session.raiseConflict()
     c.session.replaceDisk()
     c.persistence.busy = false
     c.session.failedSave('disk full')
-    assert.equal(c.session.conflictText, c.session.diskText, 'failed replacement retains the disk snapshot')
+    // What a failed replacement has to keep is the choice and the edits it
+    // was about; the disk version is read again whichever way it goes.
+    assert.equal(c.session.conflict, true, 'a failed replacement leaves the choice standing')
+    assert.equal(c.items.get(0).itext, 'local', 'and the local edits on screen')
     c.session.useDisk()
     assert.equal(c.items.get(0).itext, 'external', 'use disk works after failed replacement')
     assert.equal(c.session.damaged, false)
@@ -1072,7 +1085,7 @@ console.log('ok — controller: the command palette and one dispatch for every c
   }
   {
     const c = dirty()
-    c.session.raiseConflict(c.session.diskText)
+    c.session.raiseConflict()
     c.session.diskText = disk('external updated again')
     c.session.useDisk()
     assert.equal(c.items.get(0).itext, 'external updated again', 'resolution reads the latest disk content')
@@ -1086,7 +1099,7 @@ console.log('ok — controller: the command palette and one dispatch for every c
   c.session.revision = 'original'
   c.session.acceptDisk('other.json', baseline, true, 'wrong\n' + baseline)
   assert.equal(c.session.revision, 'original', 'late reply cannot change another board revision')
-  c.session.raiseConflict(baseline)
+  c.session.raiseConflict()
   c.session.acceptDisk('a.json', baseline, true, 'bad\n{broken')
   assert.equal(c.session.conflict, true, 'invalid read keeps the conflict unresolved')
   assert.equal(c.session.damaged, false, 'invalid read does not replace local content')
@@ -1474,7 +1487,7 @@ console.log('ok — controller: a failure that arrives while you are somewhere e
 
   // A name nothing recognises draws the board as it looks rather than refusing
   // to draw it: a picture in the wrong colours beats no picture.
-  for (const nonsense of [undefined, '', 'chartreuse', 'Light'])
+  for (const nonsense of [undefined, '', 'chartreuse', 'Light', 'constructor'])
     { c.root.choosePng(nonsense); assert.equal(c.root.pngPalette, 'theme', String(nonsense)) }
   for (const name of S.EXPORT_PALETTE_NAMES)
     { c.root.choosePng(name); assert.equal(c.root.pngPalette, name, name) }
