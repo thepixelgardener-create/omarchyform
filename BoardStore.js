@@ -47,6 +47,7 @@ var MENU_COMMANDS = [
   { id: "export-png", label: "Export PNG", run: "choosePng" },
   { id: "help", label: "Help", run: "showHelp" },
   { id: "commands", label: "Commands", run: "beginPalette" },
+  { id: "background", label: "Background", run: "chooseCanvasBackground" },
   { id: "fit", label: "Fit", run: "fitToItems" },
   { id: "zoom", label: "Zoom", run: "openZoomMenu", keepOpen: true }
 ]
@@ -572,6 +573,10 @@ var COMMANDS = [
   { name: "Find in this board", key: "/", run: "beginFind", needs: "" },
   { name: "Fit the board on screen", key: "f", run: "fitToItems", needs: "" },
   { name: "Reset the view", key: "0", run: "resetView", needs: "" },
+  { name: "Canvas background: Dots", key: "", run: "setCanvasBackground", arg: "Dots", needs: "", also: ["texture", "pattern"] },
+  { name: "Canvas background: Grid", key: "", run: "setCanvasBackground", arg: "Grid", needs: "", also: ["texture", "pattern", "squares"] },
+  { name: "Canvas background: Ruled", key: "", run: "setCanvasBackground", arg: "Ruled", needs: "", also: ["texture", "pattern", "lines"] },
+  { name: "Canvas background: Plain", key: "", run: "setCanvasBackground", arg: "Plain", needs: "", also: ["texture", "pattern", "none"] },
   { name: "Zoom in", key: "+", run: "zoomCentre", arg: 1.2, needs: "" },
   { name: "Zoom out", key: "-", run: "zoomCentre", arg: 1 / 1.2, needs: "" },
   { name: "Fullscreen or windowed", key: "w", run: "toggleWindowMode", needs: "" },
@@ -713,6 +718,7 @@ var COMMAND_ICONS = {
   beginFind: "\uf002",
   fitToItems: "\uf065",
   resetView: "\uf015",
+  setCanvasBackground: "\uf03e",
   toggleWindowMode: "\uf2d0",
   openBrowser: "\uf07c",
   newBoard: "\uf016",

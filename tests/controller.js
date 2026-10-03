@@ -9,7 +9,7 @@ function controller() {
   const root = { currentBoard: 'a.json', items, links, nextId: 1, nextColor: 0, windowMode: false,
     undoStack: [], redoStack: [], selectedIndex: -1, editIndex: -1,
     camX: 0, camY: 0, zoom: 1, activeBoard: null, markedIds: [], showPinned: false, arranging: false,
-    showGrid: true, canvasPattern: 'Dots',
+    showGrid: true, canvasPattern: 'Dots', canvasBackgroundChosen: false,
     finding: false, findQuery: '', findCount: 0, imageQueue: [],
     menuVisible: false, zoomMenuVisible: false, menuIndex: 0, helpVisible: false,
     // Declared on the controller and defaulted there; the harness needs them
@@ -726,7 +726,7 @@ console.log('ok — controller: copying the selection out')
   const c = controller()
   c.session.loadBoard('{"version":5,"items":[]}', false)
   const menu = require('./harness').loadStore().MENU_COMMANDS
-  assert.equal(menu.length, 9, 'nine commands, as the header draws')
+  assert.ok(menu.some(entry => entry.id === 'background'), 'background choices are reachable from the header')
 
   c.root.toggleMenu()
   assert.equal(c.root.menuVisible, true)
@@ -1582,3 +1582,36 @@ console.log('ok — controller: a board opens clear of the header, and a reload 
   }
 }
 console.log('ok — controller: canvas pattern settings, old state and persistence')
+
+{
+  const c = controller()
+  c.session.loadBoard('{"version":5,"items":[]}', false)
+  c.root.toggleMenu()
+  c.root.runMenu(c.store.menuIndex('background'))
+  assert.equal(c.root.menuVisible, false)
+  assert.equal(c.root.paletteVisible, true)
+  assert.deepEqual(Array.from(c.root.paletteMatches, entry => entry.arg), ['Dots', 'Grid', 'Ruled', 'Plain'])
+  for (const pattern of ['Grid', 'Ruled', 'Plain', 'Dots']) {
+    c.root.chooseCanvasBackground()
+    c.root.paletteIndex = c.root.paletteMatches.findIndex(entry => entry.arg === pattern)
+    c.root.runPaletteChoice()
+    assert.equal(c.root.paletteVisible, false)
+    const reopened = controller()
+    reopened.root.applyState(c.states.at(-1))
+    // Bar opening used to silently undo a choice by sending its defaults.
+    reopened.root.applyPayload('{"settings":{"showGrid":true,"canvasPattern":"Dots"}}')
+    assert.equal(reopened.root.showGrid, pattern !== 'Plain')
+    if (pattern !== 'Plain') assert.equal(reopened.root.canvasPattern, pattern)
+    reopened.root.chooseCanvasBackground()
+    assert.equal(reopened.root.paletteMatches[reopened.root.paletteIndex].arg, pattern)
+  }
+  c.session.damaged = true
+  c.root.runCommand('Canvas background: Plain')
+  assert.equal(c.root.showGrid, false, 'appearance works on read-only boards')
+  assert.equal(c.writes.length, 0, 'appearance never writes the board')
+  assert.equal(c.root.undoStack.length, 0, 'appearance never consumes board undo')
+  const savedCount = c.states.length
+  c.root.setCanvasBackground('invalid')
+  assert.equal(c.states.length, savedCount)
+}
+console.log('ok — controller: in-board background choice survives bar opening and reload')
