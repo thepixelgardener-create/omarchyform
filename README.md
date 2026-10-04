@@ -607,12 +607,13 @@ working canvas; PNG exports keep their plain background.
 | `Node.qml` | One item: note, box, ellipse, diamond or picture. Shapes are `QtQuick.Shapes` geometry, so they stay sharp at any zoom |
 | `Commands.qml` | The command list on `:`, `ctrl+p` and `.` |
 | `Conflict.qml` | The question asked when a board has two versions |
-| `Browser.qml` | The board browser |
+| `Browser.qml` | The board browser: draws the library |
 | `BoardBar.qml` | The bar widget: the board's presence in the shell |
 | `Help.qml` | Scrollable keyboard help |
 | `ScrollHint.qml` | The mark that says a panel has more below |
 | `BoardStore.js` | Pure logic: parsing, marshalling, geometry. No QML |
 | `BoardSession.qml` | Loading, autosave state, and board-switch coordination |
+| `BoardLibrary.qml` | The boards folder: browsing, naming, folders and the trash, with no controller of its own |
 | `BoardPersistence.qml` | Serialized backup and atomic write, with completion/failure signals |
 | `BoardExchange.qml` | Saving a copy to share and opening one, apart from the open board's saves |
 | `BoardImage.qml` | The read-only scene a PNG export is drawn from: no grid, grips or selection |

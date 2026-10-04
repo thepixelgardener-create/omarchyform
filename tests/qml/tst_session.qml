@@ -55,8 +55,11 @@ ShellRoot {
     property int selectedIndex: -1
     property int editIndex: -1
     property int linkingFrom: -1
-    property bool browserVisible: false
-    property string browserMessage: ""
+    // The session asks whether the library is open, and leaves word there.
+    property QtObject library: QtObject {
+      property bool showing: false
+      property string message: ""
+    }
     ListModel { id: items }
     ListModel { id: links }
     function resetView() {}

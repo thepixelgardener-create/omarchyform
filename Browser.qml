@@ -10,21 +10,23 @@ FocusScope {
   id: browser
 
   required property var ctl
+  // What it draws. The controller is here for the theme and the accent only.
+  required property var library
   readonly property var theme: browser.ctl.theme
 
-  readonly property var rows: browser.ctl.browserRows
-  readonly property bool searching: browser.ctl.browserSearching
-  readonly property bool prompting: browser.ctl.browserPrompt !== ""
+  readonly property var rows: browser.library.rows
+  readonly property bool searching: browser.library.searching
+  readonly property bool prompting: browser.library.promptLabel !== ""
   readonly property bool typing: browser.prompting || browser.searching
 
   // The path line, in the shape a shell would print it.
-  readonly property string here: browser.ctl.browserTrash
+  readonly property string here: browser.library.inTrash
     ? "~/trash/   " + browser.rows.length + (browser.rows.length === 1 ? " item" : " items")
-    : "~/boards/" + (browser.ctl.browserDir ? browser.ctl.browserDir + "/" : "")
+    : "~/boards/" + (browser.library.dir ? browser.library.dir + "/" : "")
 
-  visible: browser.ctl.browserVisible
+  visible: browser.library.showing
   enabled: visible
-  focus: browser.ctl.browserVisible
+  focus: browser.library.showing
   onVisibleChanged: if (visible) Qt.callLater(function () { browser.forceActiveFocus() })
 
   anchors.fill: parent
@@ -42,7 +44,7 @@ FocusScope {
   MouseArea {
     anchors.fill: parent
     acceptedButtons: Qt.AllButtons
-    onClicked: function (mouse) { if (mouse.button === Qt.LeftButton) browser.ctl.closeBrowser() }
+    onClicked: function (mouse) { if (mouse.button === Qt.LeftButton) browser.library.hide() }
   }
 
   Surface {
@@ -81,8 +83,8 @@ FocusScope {
           color: browser.theme.panelText
           font.family: browser.theme.menuFontFamily
           font.pixelSize: browser.theme.fontHeading
-          text: browser.ctl.trashIndexError !== "" ? browser.ctl.trashIndexError
-            : browser.ctl.browserMessage !== "" ? browser.ctl.browserMessage
+          text: browser.library.trashIndexError !== "" ? browser.library.trashIndexError
+            : browser.library.message !== "" ? browser.library.message
             : browser.here
         }
 
@@ -90,7 +92,7 @@ FocusScope {
           textFormat: Text.PlainText
           id: promptLabel
           visible: browser.typing
-          text: browser.prompting ? browser.ctl.browserPrompt + " " : "/"
+          text: browser.prompting ? browser.library.promptLabel + " " : "/"
           color: browser.theme.panelText
           font.family: browser.theme.menuFontFamily
           font.pixelSize: browser.theme.fontHeading
@@ -110,12 +112,12 @@ FocusScope {
           font.family: browser.theme.menuFontFamily
           font.pixelSize: browser.theme.fontHeading
           Accessible.role: Accessible.EditableText
-          Accessible.name: browser.prompting ? browser.ctl.browserPrompt : "Search the boards"
+          Accessible.name: browser.prompting ? browser.library.promptLabel : "Search the boards"
 
           // Which field this is standing in for. Renaming opens it with the
           // current name in it and everything selected, so one keystroke
           // replaces it and an arrow key edits it instead.
-          readonly property string mode: browser.prompting ? "prompt " + browser.ctl.browserPrompt
+          readonly property string mode: browser.prompting ? "prompt " + browser.library.promptLabel
                                          : browser.searching ? "search" : ""
           // Deferred: opening a prompt sets the label and then the name, and
           // the second of those lands in this field on its own, cursor at the
@@ -125,25 +127,25 @@ FocusScope {
             if (typed.mode === "") { browser.forceActiveFocus(); return }
             Qt.callLater(function () {
               if (!browser.typing) return
-              typed.text = browser.prompting ? browser.ctl.browserInput : browser.ctl.browserQuery
+              typed.text = browser.prompting ? browser.library.input : browser.library.query
               typed.forceActiveFocus()
               typed.selectAll()
             })
           }
 
           onTextChanged: {
-            if (browser.prompting) browser.ctl.browserInput = typed.text
-            else if (browser.searching && typed.text !== browser.ctl.browserQuery) {
-              browser.ctl.browserQuery = typed.text
-              browser.ctl.browserIndex = 0
+            if (browser.prompting) browser.library.input = typed.text
+            else if (browser.searching && typed.text !== browser.library.query) {
+              browser.library.query = typed.text
+              browser.library.index = 0
             }
           }
 
           // And it follows a value set from anywhere else, so the field and the
           // controller cannot show different things. Both sides check before
           // writing, so neither can chase the other.
-          readonly property string held: browser.prompting ? browser.ctl.browserInput
-                                         : browser.searching ? browser.ctl.browserQuery : typed.text
+          readonly property string held: browser.prompting ? browser.library.input
+                                         : browser.searching ? browser.library.query : typed.text
           onHeldChanged: if (typed.held !== typed.text) typed.text = typed.held
 
           // The browser decides what these mean; everything else is typing, and
@@ -152,7 +154,7 @@ FocusScope {
           Keys.onPressed: function (event) {
             if (event.key === Qt.Key_Escape || event.key === Qt.Key_Return || event.key === Qt.Key_Enter
                 || event.key === Qt.Key_Up || event.key === Qt.Key_Down)
-              browser.ctl.browserKey(event)
+              browser.library.key(event)
           }
         }
       }
@@ -178,7 +180,7 @@ FocusScope {
           anchors.rightMargin: browser.theme.sp(10)
           clip: true
           model: browser.rows
-          currentIndex: browser.ctl.browserIndex
+          currentIndex: browser.library.index
           highlightMoveDuration: 0
           // Keep the cursor in view when it walks off the end of the list.
           onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
@@ -191,7 +193,7 @@ FocusScope {
             // The shell's menu rows, as the command list's are.
             height: Math.max(browser.theme.sp(50), label.implicitHeight + browser.theme.sp(24))
 
-            readonly property bool current: index === browser.ctl.browserIndex
+            readonly property bool current: index === browser.library.index
 
             Accessible.role: Accessible.ListItem
             Accessible.name: label.text
@@ -236,7 +238,7 @@ FocusScope {
               // A folder wears a trailing slash; the open board is marked.
               // In the trash an entry carries where it came from, since that is
               // what restoring it will put back.
-              text: browser.ctl.browserTrash
+              text: browser.library.inTrash
                 ? Store.baseName(parent.modelData.path).replace(/\.json$/, "")
                   + (parent.modelData.dir ? "/" : "")
                   + (Store.parentOf(parent.modelData.path)
@@ -245,15 +247,15 @@ FocusScope {
                                         : Store.displayName(parent.modelData))
                     + (browser.searching && Store.parentOf(parent.modelData.path)
                        ? "   " + Store.parentOf(parent.modelData.path) + "/" : "")
-                    + (!browser.ctl.browserTrash && parent.modelData.path === browser.ctl.currentBoard
+                    + (!browser.library.inTrash && parent.modelData.path === browser.library.currentBoard
                        ? "   ·open" : "")
             }
 
             MouseArea {
               anchors.fill: parent
               onClicked: {
-                browser.ctl.browserIndex = parent.index
-                browser.ctl.browserEnter()
+                browser.library.index = parent.index
+                browser.library.enter()
               }
             }
           }
@@ -266,7 +268,7 @@ FocusScope {
             font.family: browser.theme.menuFontFamily
             font.pixelSize: browser.theme.fontBody
             textFormat: Text.StyledText
-            text: browser.ctl.browserTrash ? "the trash is empty"
+            text: browser.library.inTrash ? "the trash is empty"
               : browser.searching ? "nothing matches"
               : "empty — " + Store.hintLine(Store.EMPTY_HINTS, browser.ctl.accentMarkup)
           }
@@ -298,11 +300,11 @@ FocusScope {
     font.pixelSize: browser.theme.fontBody
     textFormat: Text.StyledText
     text: Store.hintLine(browser.prompting ? Store.PROMPT_HINTS
-                         : browser.ctl.browserTrash ? Store.TRASH_HINTS : Store.BROWSER_HINTS,
+                         : browser.library.inTrash ? Store.TRASH_HINTS : Store.BROWSER_HINTS,
                          browser.ctl.accentMarkup, "  ·  ")
   }
 
   Keys.onPressed: function (event) {
-    browser.ctl.browserKey(event)
+    browser.library.key(event)
   }
 }

@@ -63,8 +63,8 @@ TestCase {
     // of BoardStore rather than deciding the line twice.
     function statusState() {
       return {
-        opened: true, helpVisible: ctl.helpVisible, browserVisible: ctl.browserVisible,
-        finding: ctl.finding, saveError: ctl.saveError, trashIndexError: ctl.trashIndexError,
+        opened: true, helpVisible: ctl.helpVisible, browserVisible: ctl.library.showing,
+        finding: ctl.finding, saveError: ctl.saveError, trashIndexError: ctl.library.trashIndexError,
         diskChanged: ctl.diskChanged, damaged: ctl.damaged, failureText: ctl.failureText,
         paletteVisible: ctl.paletteVisible, arranging: ctl.arranging,
         showPinned: ctl.showPinned, editing: ctl.editIndex >= 0,
@@ -119,7 +119,6 @@ TestCase {
     property bool diskChanged: false
     property string statusText: ""
     property string failureText: ""
-    property string trashIndexError: ""
     property string boardTitle: "notes"
     property string boardState: "Saved locally"
     property string currentBoard: "notes.json"
@@ -159,19 +158,25 @@ TestCase {
     function endConflictChoice() {}
     function moveConflict(step) {}
 
-    property bool browserVisible: false
-    property bool browserSearching: false
-    property string browserQuery: ""
-    property string browserPrompt: ""
-    property string browserInput: ""
-    property string browserMessage: ""
-    property string browserDir: ""
-    property var browserRows: []
-    property int browserIndex: 0
-    property bool browserTrash: false
-    function browserEnter() {}
-    function browserKey(event) {}
-    function closeBrowser() { ctl.browserVisible = false }
+    // Shaped like BoardLibrary.qml, for the browser the board carries.
+    property QtObject library: QtObject {
+      id: libraryStub
+      property bool showing: false
+      property bool searching: false
+      property string query: ""
+      property string promptLabel: ""
+      property string input: ""
+      property string trashIndexError: ""
+      property string message: ""
+      property string dir: ""
+      property string currentBoard: ""
+      property var rows: []
+      property int index: 0
+      property bool inTrash: false
+      function enter() {}
+      function key(event) {}
+      function hide() { libraryStub.showing = false }
+    }
     function openBrowser() {}
 
     // ---- everything a keystroke reaches, present and inert: this suite is
@@ -303,7 +308,7 @@ TestCase {
     ctl.showPinned = false
     ctl.helpVisible = false
     ctl.paletteVisible = false
-    ctl.browserVisible = false
+    ctl.library.showing = false
     ctl.menuVisible = false
     ctl.undoCount = 0
     ctl.saveCount = 0
@@ -316,7 +321,7 @@ TestCase {
     ctl.linkOutcome = "none"
     ctl.conflictVisible = false
     ctl.saveError = ""
-    ctl.trashIndexError = ""
+    ctl.library.trashIndexError = ""
     ctl.diskChanged = false
     ctl.damaged = false
     ctl.arranging = false
@@ -695,7 +700,7 @@ TestCase {
     ctl.arranging = true
     ctl.showPinned = true
     if (row.set === "saveError") ctl.saveError = "notes.json could not be written"
-    else if (row.set === "trashIndexError") ctl.trashIndexError = "the trash index could not be saved"
+    else if (row.set === "trashIndexError") ctl.library.trashIndexError = "the trash index could not be saved"
     else if (row.set === "diskChanged") ctl.diskChanged = true
     else ctl.damaged = true
     wait(0)
@@ -708,7 +713,7 @@ TestCase {
     verify(line.visible, "and it is on screen to be acted on")
 
     ctl.saveError = ""
-    ctl.trashIndexError = ""
+    ctl.library.trashIndexError = ""
     ctl.diskChanged = false
     ctl.damaged = false
     ctl.arranging = false
@@ -779,7 +784,7 @@ TestCase {
   function test_aBlockedSaveStillOutranksAFailure(row) {
     ctl.failureText = "Could not reach the clipboard"
     if (row.set === "saveError") ctl.saveError = "notes.json could not be written"
-    else if (row.set === "trashIndexError") ctl.trashIndexError = "the trash index could not be saved"
+    else if (row.set === "trashIndexError") ctl.library.trashIndexError = "the trash index could not be saved"
     else if (row.set === "diskChanged") ctl.diskChanged = true
     else ctl.damaged = true
     wait(0)
@@ -789,7 +794,7 @@ TestCase {
     verify(plain.indexOf("clipboard") < 0, "and not the failure underneath it: " + plain)
 
     ctl.saveError = ""
-    ctl.trashIndexError = ""
+    ctl.library.trashIndexError = ""
     ctl.diskChanged = false
     ctl.damaged = false
   }
@@ -867,7 +872,7 @@ TestCase {
   function test_chromeDoesNotPanTheBoard(row) {
     if (row.open === "palette") ctl.paletteVisible = true
     else if (row.open === "conflict") ctl.conflictVisible = true
-    else if (row.open === "browser") ctl.browserVisible = true
+    else if (row.open === "browser") ctl.library.showing = true
     else if (row.open === "help") ctl.helpVisible = true
     wait(0)
     // The panel has to actually be under the point the drag starts at, or this
