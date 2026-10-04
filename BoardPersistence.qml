@@ -66,7 +66,9 @@ Item {
     id: commit
     // Arguments are passed separately: filenames never become shell code.
     // The helper takes the lock, checks the revision, keeps the version it is
-    // about to replace, and renames the staged file into place.
+    // about to replace, and renames the staged file into place. The helper is
+    // found here rather than through the controller's fileCommand: this writer
+    // has no controller, and its tests run it without one.
     command: ["bash", decodeURIComponent(Qt.resolvedUrl("BoardFiles.sh").toString().replace(/^file:\/\//, "")),
       "commit", persistence.target, persistence.backupTarget,
       persistence.lockPath, persistence.expected, persistence.boardRoot, persistence.backupRoot]

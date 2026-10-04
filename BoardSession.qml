@@ -221,8 +221,8 @@ Item {
     diskRead.board = session.ctl.currentBoard
     diskRead.localText = Store.writeFile(session.ctl.items, session.ctl.links, session.ctl.nextId)
     diskRead.resolve = resolve
-    diskRead.command = ["bash", decodeURIComponent(Qt.resolvedUrl("BoardFiles.sh").toString().replace(/^file:\/\//, "")),
-      "snapshot", session.ctl.boardPath, session.ctl.lockPathFor(session.ctl.currentBoard), session.ctl.boardsDir]
+    diskRead.command = session.ctl.fileCommand("snapshot",
+      [session.ctl.boardPath, session.ctl.lockPathFor(session.ctl.currentBoard), session.ctl.boardsDir])
     diskRead.running = true
   }
 
@@ -369,8 +369,7 @@ Item {
   function checkPath() {
     if (session.wantedPath === "" || pathCheck.running) return
     pathCheck.checking = session.wantedPath
-    pathCheck.command = ["bash", decodeURIComponent(Qt.resolvedUrl("BoardFiles.sh").toString().replace(/^file:\/\//, "")),
-      "check", session.ctl.boardsDir, session.ctl.currentBoard]
+    pathCheck.command = session.ctl.fileCommand("check", [session.ctl.boardsDir, session.ctl.currentBoard])
     pathCheck.running = true
   }
 
