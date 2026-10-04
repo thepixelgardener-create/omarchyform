@@ -15,7 +15,12 @@ Item {
   property string exportColors: "theme"
   property var crop: []
   readonly property var chosen: Store.exportPalette(picture.exportColors)
-  signal finished(bool success)
+  // `reason` is empty unless there is something more useful to say than that
+  // the picture could not be made.
+  signal finished(bool success, string reason)
+  // Once, when the pictures are taking long enough that the board — read-only
+  // until the export is done — should say why it is not answering.
+  signal stillLoading()
   width: area ? Math.ceil((area.maxX - area.minX + 64) * ratio) : 1
   height: area ? Math.ceil((area.maxY - area.minY + 64) * ratio) : 1
   z: -100
@@ -28,11 +33,45 @@ Item {
     Store.fillItems(nodes, part.draw)
     Store.fillLinks(edges, nodes, Store.linkRows(picture.ctl.links))
     area = Store.boundsOfRows(part.frame)
-    if (!area) { finished(false); return }
+    if (!area) { finished(false, ""); return }
     ratio = Math.min(1, 4096 / (area.maxX-area.minX+64), 4096 / (area.maxY-area.minY+64))
     destination = path
+    linksPainted = false
+    toldLoading = false
+    lastPending = -1
+    asked = Date.now()
+    progressed = asked
     connectors.requestPaint()
     capture.restart()
+  }
+
+  // Pictures are decoded on a thread of their own, one after another, so when
+  // a board is ready to be photographed depends on how many it carries, how big
+  // they are and the machine. A fixed 80ms stood in for that: five phone-sized
+  // photos took 600ms to arrive offscreen and 2.3s on the desktop, and the
+  // export saved four or five empty frames and said it had worked. This looks
+  // instead, and gives up — saying so — rather than save a picture of a board
+  // that is not all there.
+  //
+  // It gives up when nothing has arrived for a while rather than after a while
+  // in all: a board of a hundred photos is slow, not stuck, and a total budget
+  // big enough for it is one a single stuck picture would sit out in silence.
+  property bool linksPainted: false
+  property bool toldLoading: false
+  property int lastPending: -1
+  property real asked: 0
+  property real progressed: 0
+  // How long before saying it is waiting, and how long without a picture
+  // arriving before giving up. Settable so a test can reach both at once.
+  property int quietMs: 1000
+  property int patienceMs: 15000
+  function pending() {
+    var count = 0
+    for (var i = 0; i < drawn.count; i++) {
+      var node = drawn.itemAt(i)
+      if (node && node.pictureLoading) count++
+    }
+    return count
   }
   ListModel { id: nodes }
   ListModel { id: edges }
@@ -136,6 +175,7 @@ Item {
       z: 1
       width: picture.width
       height: picture.height
+      onPainted: picture.linksPainted = true
       onPaint: {
         var c = getContext("2d")
         c.reset()
@@ -164,6 +204,7 @@ Item {
     }
     Item { id: foregrounds }
     Repeater {
+      id: drawn
       model: nodes
       delegate: Node {
         ctl: renderCtl
@@ -174,9 +215,31 @@ Item {
   }
   Timer {
     id: capture
-    interval: 80
+    interval: 25
+    repeat: true
     onTriggered: {
-      if (!picture.grabToImage(function(result) { picture.finished(result.saveToFile(picture.destination)) })) picture.finished(false)
+      var now = Date.now()
+      var pending = picture.pending()
+      if (pending !== picture.lastPending) {
+        picture.lastPending = pending
+        picture.progressed = now
+      }
+      if (pending === 0 && picture.linksPainted) {
+        capture.stop()
+        // Everything has arrived; the grab itself is taken on the next frame,
+        // after the scene has caught up with it.
+        if (!picture.grabToImage(function(result) { picture.finished(result.saveToFile(picture.destination), "") }))
+          picture.finished(false, "")
+        return
+      }
+      if (!picture.toldLoading && now - picture.asked >= picture.quietMs) {
+        picture.toldLoading = true
+        picture.stillLoading()
+      }
+      if (now - picture.progressed >= picture.patienceMs) {
+        capture.stop()
+        picture.finished(false, "Pictures took too long to load; PNG not saved")
+      }
     }
   }
 }

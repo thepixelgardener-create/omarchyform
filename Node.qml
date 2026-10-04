@@ -70,6 +70,11 @@ Item {
   readonly property string markup: shown.text
   readonly property bool isNote: node.kind === "note"
   readonly property bool isImage: node.kind === "image"
+  // A picture is decoded off the main thread and draws nothing until it is
+  // done. An export waits for this to clear on every item before it takes its
+  // picture; a picture that failed has finished loading too, and draws as the
+  // "missing image" line.
+  readonly property bool pictureLoading: node.isImage && picture.status === Image.Loading
   readonly property bool painted: node.kind === "ellipse" || node.kind === "diamond"
   readonly property bool foundMatch: node.live && node.ctl.matchesFind(node.itext)
   readonly property bool emphasised: node.selected || node.linkSource

@@ -12,6 +12,13 @@ since older boards are migrated on load rather than rejected.
   pictures from your own library that it named. Every import now clears picture
   names it did not bring, as one carrying pictures already did.
 
+- A PNG export of a board with pictures could save them as empty frames and
+  still say it had worked. It photographed the board a fixed 80ms after asking,
+  and phone-sized photos take far longer than that to load. It now waits until
+  every picture has loaded or failed to, says so when that takes a while, and
+  if no picture arrives for 15 seconds gives up with a message rather than
+  saving an incomplete picture.
+
 - A connector whose ends were names like `toString` or `constructor` was
   accepted on load and saved back, though it joins no item. Connector ends are
   now read as item ids, and an id written as `"3"` still means item 3.

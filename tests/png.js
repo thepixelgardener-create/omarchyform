@@ -138,4 +138,33 @@ function inked(image, rect, colour) {
   return total ? on / total : 0
 }
 
-module.exports = { read, canvasColour, paper, inked }
+// A picture of one flat colour, for a test that needs a big one without
+// keeping it in the repository. Flat rows compress to almost nothing — 4000 by
+// 3000 is 42KB on disk — and still cost their full size to decode, which is
+// what makes it a picture worth waiting for.
+function write(file, width, height, colour) {
+  const chunk = (type, data) => {
+    const body = Buffer.concat([Buffer.from(type, 'ascii'), data])
+    const length = Buffer.alloc(4), crc = Buffer.alloc(4)
+    length.writeUInt32BE(data.length)
+    crc.writeUInt32BE(zlib.crc32(body))
+    return Buffer.concat([length, body, crc])
+  }
+  const header = Buffer.alloc(13)
+  header.writeUInt32BE(width, 0)
+  header.writeUInt32BE(height, 4)
+  header[8] = 8
+  header[9] = 2
+  const row = Buffer.alloc(1 + width * 3)
+  for (let x = 0; x < width; x++) {
+    row[1 + x * 3] = colour >> 16 & 255
+    row[2 + x * 3] = colour >> 8 & 255
+    row[3 + x * 3] = colour & 255
+  }
+  const raw = Buffer.alloc(row.length * height)
+  for (let y = 0; y < height; y++) row.copy(raw, y * row.length)
+  fs.writeFileSync(file, Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', header), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]))
+}
+
+module.exports = { read, write, canvasColour, paper, inked }

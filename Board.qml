@@ -38,10 +38,11 @@ FocusScope {
   BoardImage {
     id: picture
     ctl: board.ctl
-    onFinished: function(success) {
+    onFinished: function(success, reason) {
       if (success) board.ctl.finishPng(board.exportDestination)
-      else { board.ctl.imageBusy = false; board.ctl.flash("Could not render PNG") }
+      else { board.ctl.imageBusy = false; board.ctl.flash(reason !== "" ? reason : "Could not render PNG") }
     }
+    onStillLoading: board.ctl.flash("Waiting for pictures to load…")
   }
 
   // A filled head at the target end, pointing the way the connector runs.
