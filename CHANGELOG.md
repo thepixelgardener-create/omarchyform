@@ -19,6 +19,15 @@ since older boards are migrated on load rather than rejected.
 - `omarchyform apply` with an operation named after a built-in object method,
   such as `toString`, crashed with a stack trace instead of answering in JSON.
 
+- While connecting, the dashed line to the selection ran between the two
+  items' centres, underneath them, so where its dashes fell had nothing to do
+  with the connector it was showing. It now runs edge to edge, where that
+  connector will, from the same geometry the board and PNG export draw with.
+
+- A PNG exported in the theme's own colours drew connectors heavier than the
+  board does, at 65% of the foreground against the board's 55%. Both now use
+  55%, so the picture looks like the board it is of.
+
 - Opening a board from the file manager did nothing when its file name held a
   newline, a tab or another control character: the path broke the payload
   handed to the shell. `omarchyform-open` now escapes them, and its entry
