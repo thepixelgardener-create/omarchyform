@@ -127,6 +127,27 @@ function controller() {
   assert.equal(c.root.canEdit, false)
 }
 {
+  // A note longer than a note can be is opened the way an unreadable board is:
+  // empty, so nothing waits on laying it out, and read-only, so nothing is
+  // written over it. The banner says which of the two it was.
+  const c = controller()
+  const note = (id, text) => ({ id, kind: 'note', x: 0, y: 0, w: 100, h: 100, text })
+  c.session.loadBoard(JSON.stringify({ version: 5, nextId: 3, links: [],
+    items: [note(1, 'fine'), note(2, 'x'.repeat(c.store.MAX_NOTE_LENGTH + 1))] }), false)
+  assert.equal(c.items.count, 0, 'none of it is laid out')
+  assert.equal(c.session.damaged, true)
+  assert.equal(c.session.damageReason, 'has a note longer than 1 MB')
+  assert.equal(c.root.canEdit, false)
+  c.root.addItem('note', 0, 0)
+  c.root.save(true)
+  assert.equal(c.writes.length, 0, 'and nothing is written over it')
+  c.session.loadBoard(JSON.stringify({ version: 5, nextId: 2, links: [],
+    items: [note(1, 'x'.repeat(c.store.MAX_NOTE_LENGTH))] }), false)
+  assert.equal(c.session.damaged, false, 'a note exactly at the limit opens')
+  assert.equal(c.session.damageReason, '')
+  assert.equal(c.items.count, 1)
+}
+{
   const c = controller()
   c.root.addItem('note', 0, 0)
   c.root.addItem('note', 100, 100)

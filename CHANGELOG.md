@@ -16,6 +16,23 @@ since older boards are migrated on load rather than rejected.
   accepted on load and saved back, though it joins no item. Connector ends are
   now read as item ids, and an id written as `"3"` still means item 3.
 
+- A note with a long stretch of text and no space in it — a pasted base64
+  blob, a minified file — froze the whole shell while it was laid out, for a
+  time growing with the square of its length: 64 KB was long enough for the
+  compositor to offer to kill it. Such a note now wraps anywhere, and opens
+  in milliseconds.
+
+- Every note laid its text out twice, once for an editor nobody had opened.
+  The editor now holds a note only while it is being edited: a board with a
+  1 MB note opens in 47ms rather than 870, and each edit to it takes 41ms
+  rather than 255.
+
+- A note can now be at most 1 MB, the same as the largest paste. A board with
+  a longer one opens read-only and says why, instead of holding the shell up,
+  and one is refused on import. The editor will not grow a note past it, and
+  `omarchyform add` and `setText` refuse text that long; `validate` lists a
+  board's over-long note under `warnings`.
+
 - `omarchyform apply` with an operation named after a built-in object method,
   such as `toString`, crashed with a stack trace instead of answering in JSON.
 

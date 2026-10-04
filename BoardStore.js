@@ -956,6 +956,41 @@ function knownVersion(version) {
   return version >= 1 && version <= FORMAT_VERSION && Math.floor(version) === version
 }
 
+// The longest a note can be. Text is laid out, marked up and written out on
+// the shell's own thread, so the bar and everything else in the shell wait
+// while it is, for a time that grows with the length: measured on 2026-10-04,
+// a 1 MB note held the shell for 47ms when its board loaded and 41ms on every
+// edit, and a shared board can carry thirty times that. A board is a file
+// anyone can write, so this is checked where text arrives rather than trusted
+// to have been checked where it was written. The same as the largest paste
+// (cliptext in BoardFiles.sh), so whatever can be pasted fits in a note.
+var MAX_NOTE_LENGTH = 1048576
+
+// How long a stretch of text with no space in it can be before a note stops
+// looking for a word boundary to break it at. Qt's ordinary wrap searches a
+// run for one before breaking it anywhere, and the search grows with the
+// square of the run: an unbroken 256 KB line — a pasted base64 blob, a
+// minified file — held a note's first frame for 9.5s offscreen, and 64 KB of
+// it froze the shell long enough on the desktop for the compositor to offer to
+// kill it. Wrapped anywhere it takes 53ms. A run this long already breaks
+// mid-word, so only the rest of such a note looks any different for it.
+var LONG_RUN = 256
+var LONG_RUN_PATTERN = new RegExp("\\S{" + LONG_RUN + "}")
+function hasLongRun(text) {
+  return typeof text === "string" && text.length >= LONG_RUN && LONG_RUN_PATTERN.test(text)
+}
+
+// Where in a board's rows the first item is whose text is longer than a note
+// can be, or -1. An index rather than an id: a version 1 board has no ids.
+function overlongNote(rows) {
+  if (!rows) return -1
+  for (var i = 0; i < rows.length; i++) {
+    var n = rows[i]
+    if (n && typeof n.text === "string" && n.text.length > MAX_NOTE_LENGTH) return i
+  }
+  return -1
+}
+
 // A v1 board stored a flat notes[] with no ids or kinds.
 function readFile(raw) {
   var parsed

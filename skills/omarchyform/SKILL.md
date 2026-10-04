@@ -92,6 +92,10 @@ could not be used, connectors pointing at nothing. Boards are hand-editable and
 syncable, so the file and what would be drawn can differ, and that difference
 is what this prints.
 
+Its `warnings` name what the board will not open: a note longer than 1048576
+characters makes the board open read-only, so `add` and `setText` refuse text
+that long. Shorten such a note with `setText`; the command line still reads it.
+
 A board reported as **newer than this understands** is not a broken one. It was
 written by a later Omarchyform and the board itself opens it read-only rather
 than losing what it cannot represent. Do not offer to repair or rewrite it; say

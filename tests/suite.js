@@ -91,6 +91,26 @@ function tests(S) {
        "and what it writes is the newest it reads")
   })
 
+  test("a note too long to lay out is found, wherever it is and however old the board", () => {
+    const at = S.MAX_NOTE_LENGTH
+    eq(S.overlongNote(null), -1)
+    eq(S.overlongNote([{ id: 1, text: "x".repeat(at) }]), -1, "exactly the limit is a note")
+    eq(S.overlongNote([{ id: 1, text: "a" }, null, { id: 7, text: "x".repeat(at + 1) }]), 2,
+       "where it is, past a row that is not an item")
+    eq(S.overlongNote([{ text: 5 }, { text: ["x".repeat(at + 1)] }]), -1, "only text that would be drawn as text")
+    // A version 1 board has no ids, which is why this answers with a place.
+    eq(S.overlongNote(S.readFile(JSON.stringify({ notes: [{ text: "x".repeat(at + 1) }] })).items), 0)
+  })
+
+  test("a long stretch with nowhere to break it is told apart from long text", () => {
+    eq(S.hasLongRun("x".repeat(S.LONG_RUN)), true)
+    eq(S.hasLongRun("x".repeat(S.LONG_RUN - 1)), false)
+    eq(S.hasLongRun("word ".repeat(10000)), false, "length alone is not it")
+    eq(S.hasLongRun("a few words, then " + "y".repeat(S.LONG_RUN) + " and more"), true, "anywhere in the note")
+    eq(S.hasLongRun("x".repeat(200) + "\n" + "x".repeat(200)), false, "a line break is somewhere to break")
+    eq(S.hasLongRun(undefined), false)
+  })
+
   test("ID repair reserves IDs used by later items", () => {
     const items = new FakeModel(), links = new FakeModel()
     S.fillItems(items, [{id:1}, {id:1}, {id:2}, {id:3}])

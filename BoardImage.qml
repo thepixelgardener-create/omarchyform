@@ -106,6 +106,7 @@ Item {
     function pushUndo() {}
     function beginTextPalette(editor) {}
     function stopEditing() {}
+    function flash(text) {}
     function newBoard() {}
     function removeItem(index) {}
     function pointerSelect(index, additive) {}

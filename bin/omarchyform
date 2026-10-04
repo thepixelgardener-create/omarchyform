@@ -152,6 +152,16 @@ function mustRow(board, id, what) {
   return at
 }
 
+// What a note may say. The board refuses to open one with a longer note, so
+// the command line will not write one; it still reads one, which is how such
+// a note gets shortened.
+function noteText(value, what) {
+  const text = value === undefined ? "" : String(value)
+  if (text.length > S.MAX_NOTE_LENGTH)
+    die(`${what}: the text is ${text.length} characters; a note holds at most ${S.MAX_NOTE_LENGTH}`)
+  return text
+}
+
 // ------------------------------------------------------------------ the ops
 // One table, so `ops` prints what `apply` accepts and the two cannot drift.
 // Each entry says what it needs and does it; none of them reaches outside the
@@ -168,7 +178,7 @@ const OPS = {
         iid: id, kind: kind,
         ix: S.num(a[1], 0), iy: S.num(a[2], 0),
         iw: Math.max(S.MIN_SIZE, S.num(a[3], 220)), ih: Math.max(S.MIN_SIZE, S.num(a[4], 160)),
-        itint: S.normalizeTint(a[6]), itext: a[5] === undefined ? "" : String(a[5]),
+        itint: S.normalizeTint(a[6]), itext: noteText(a[5], "add"),
         ipinned: false, isrc: ""
       })
       return { added: id }
@@ -178,7 +188,7 @@ const OPS = {
     args: "id, text",
     does: "replace what an item says",
     run(board, a) {
-      board.items.setProperty(mustRow(board, a[0], "setText"), "itext", String(a[1] === undefined ? "" : a[1]))
+      board.items.setProperty(mustRow(board, a[0], "setText"), "itext", noteText(a[1], "setText"))
       return { changed: Number(a[0]) }
     }
   },
@@ -329,7 +339,15 @@ function verbValidate(args) {
   if (rawItems !== items.count) repairs.push(`${rawItems - items.count} item(s) could not be used`)
   const rawLinks = Array.isArray(data.links) ? data.links.length : 0
   if (rawLinks !== links.count) repairs.push(`${rawLinks - links.count} connector(s) pointed at nothing`)
-  answer({ ok: true, file, version, items: items.count, links: links.count, repairs })
+  // Not a repair: nothing is changed. The board opens it read-only and empty.
+  const warnings = []
+  const overlong = S.overlongNote(data.items)
+  if (overlong >= 0) {
+    const row = data.items[overlong]
+    warnings.push(`${row.id === undefined ? "a note" : "item " + row.id} is longer than ${S.MAX_NOTE_LENGTH} characters; `
+      + "the board opens read-only until it is shorter")
+  }
+  answer({ ok: true, file, version, items: items.count, links: links.count, repairs, warnings })
 }
 
 function verbApply(args) {
