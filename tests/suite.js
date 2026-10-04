@@ -91,27 +91,6 @@ function tests(S) {
        "and what it writes is the newest it reads")
   })
 
-  test("a connector runs edge to edge, with its head at the far end", () => {
-    const box = (x, y, kind) => ({ ix: x, iy: y, iw: 100, ih: 100, kind: kind || "note" })
-    const g = S.connectorGeometry(box(0, 0), box(300, 0), 10)
-    eq([g.fromX, g.fromY], [100, 50], "it leaves from the near edge of the first")
-    eq([g.toX, g.toY], [300, 50], "and arrives at the near edge of the second")
-    // The head opens behind the point, either side of the line.
-    near(g.leftX, 300 - 10 * Math.cos(S.ARROW_SPREAD), "left corner x", 1e-9)
-    near(g.leftY, 50 + 10 * Math.sin(S.ARROW_SPREAD), "left corner y", 1e-9)
-    near(g.rightX, g.leftX, "right corner x", 1e-9)
-    near(g.rightY, 50 - 10 * Math.sin(S.ARROW_SPREAD), "right corner y", 1e-9)
-    // Reversed, it runs the other way between the same two edges.
-    const back = S.connectorGeometry(box(300, 0), box(0, 0), 10)
-    eq([back.fromX, back.fromY, back.toX, back.toY], [g.toX, g.toY, g.fromX, g.fromY])
-    ok(back.leftX > 100 && back.rightX > 100, "with its head pointing back at the first")
-    // A shape's edge is its own: an ellipse is met where its curve is.
-    const round = S.connectorGeometry(box(0, 0), box(300, 300, "ellipse"), 0)
-    const centre = 350, radius = 50
-    near(Math.hypot(round.toX - centre, round.toY - centre), radius, "on the curve", 1e-9)
-    eq([round.leftX, round.leftY], [round.toX, round.toY], "a head of nothing is the point itself")
-  })
-
   test("ID repair reserves IDs used by later items", () => {
     const items = new FakeModel(), links = new FakeModel()
     S.fillItems(items, [{id:1}, {id:1}, {id:2}, {id:3}])
@@ -1527,6 +1506,27 @@ function tests(S) {
     ])
     eq(S.bounds(m), { minX: -50, minY: 5, maxX: 110, maxY: 120 }, "bounds")
     eq(S.bounds(new FakeModel()), null, "empty board has no bounds")
+  })
+
+  test("a connector runs edge to edge, with its head at the far end", () => {
+    const box = (x, y, kind) => ({ ix: x, iy: y, iw: 100, ih: 100, kind: kind || "note" })
+    const g = S.connectorGeometry(box(0, 0), box(300, 0), 10)
+    eq([g.fromX, g.fromY], [100, 50], "it leaves from the near edge of the first")
+    eq([g.toX, g.toY], [300, 50], "and arrives at the near edge of the second")
+    // The head opens behind the point, either side of the line.
+    near(g.leftX, 300 - 10 * Math.cos(S.ARROW_SPREAD), "left corner x", 1e-9)
+    near(g.leftY, 50 + 10 * Math.sin(S.ARROW_SPREAD), "left corner y", 1e-9)
+    near(g.rightX, g.leftX, "right corner x", 1e-9)
+    near(g.rightY, 50 - 10 * Math.sin(S.ARROW_SPREAD), "right corner y", 1e-9)
+    // Reversed, it runs the other way between the same two edges.
+    const back = S.connectorGeometry(box(300, 0), box(0, 0), 10)
+    eq([back.fromX, back.fromY, back.toX, back.toY], [g.toX, g.toY, g.fromX, g.fromY])
+    ok(back.leftX > 100 && back.rightX > 100, "with its head pointing back at the first")
+    // A shape's edge is its own: an ellipse is met where its curve is.
+    const round = S.connectorGeometry(box(0, 0), box(300, 300, "ellipse"), 0)
+    const centre = 350, radius = 50
+    near(Math.hypot(round.toX - centre, round.toY - centre), radius, "on the curve", 1e-9)
+    eq([round.leftX, round.leftY], [round.toX, round.toY], "a head of nothing is the point itself")
   })
 
   test("edgePoint lands on the box edge, not the centre", () => {
