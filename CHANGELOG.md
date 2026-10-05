@@ -24,6 +24,10 @@ since older boards are migrated on load rather than rejected.
   if no picture arrives for 15 seconds gives up with a message rather than
   saving an incomplete picture.
 
+- Every PNG export logged a `QQuickItem::stackAfter` warning in the shell's log
+  for each item on the board. It now logs none for a board without
+  backgrounds, and one beside each background otherwise.
+
 - A connector whose ends were names like `toString` or `constructor` was
   accepted on load and saved back, though it joins no item. Connector ends are
   now read as item ids, and an id written as `"3"` still means item 3.

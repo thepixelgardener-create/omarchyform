@@ -202,14 +202,23 @@ Item {
         }
       }
     }
-    Item { id: foregrounds }
-    Repeater {
-      id: drawn
-      model: nodes
-      delegate: Node {
-        ctl: renderCtl
-        parent: ipinned ? backgrounds : foregrounds
-        enabled: false
+    // The repeater lives in the foreground layer, as the board's does, so it
+    // only fails to stand an item after the one before when one of the two is
+    // a background. Beside the layer, every item it made had moved away from
+    // it, and each one logged a QQuickItem::stackAfter warning: one per item
+    // on the board, on every export.
+    Item {
+      id: foregrounds
+      Repeater {
+        id: drawn
+        model: nodes
+        delegate: Node {
+          ctl: renderCtl
+          parent: ipinned ? backgrounds : foregrounds
+          // Stacked by place on the board, as the board stacks them.
+          z: index
+          enabled: false
+        }
       }
     }
   }

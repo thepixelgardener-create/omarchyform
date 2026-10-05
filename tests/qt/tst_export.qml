@@ -117,4 +117,21 @@ TestCase {
     readBack.source = Qt.resolvedUrl("generated/late.png")
     compare(readBack.status, Image.Error, "nothing was written")
   }
+
+  // Each item an export draws used to log a QQuickItem::stackAfter warning:
+  // the repeater sat beside the layer its items moved into, so it could stand
+  // none of them after the one before. On a board with no backgrounds there is
+  // nothing it cannot stand after now, so there is nothing to warn about.
+  function test_anExportStacksWithoutWarnings() {
+    failOnWarning(/stack(After|Before)/)
+    var rows = []
+    for (var i = 0; i < 12; i++)
+      rows.push({ id: i + 1, kind: "note", x: (i % 4) * 110, y: Math.floor(i / 4) * 85, w: 100, h: 75,
+                  tint: "foreground", text: "note " + i, pinned: false })
+    Store.fillItems(itemModel, rows)
+    linkModel.clear()
+    picture.save(test.file("quiet.png"))
+    tryVerify(function () { return test.outcome !== null }, 15000, "the export finishes")
+    verify(test.outcome.success, "the export succeeds: " + test.outcome.reason)
+  }
 }
