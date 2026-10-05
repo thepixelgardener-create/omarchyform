@@ -268,10 +268,16 @@ Item {
   // Only a confirmed missing file may become a new, writable empty board.
   function loadBoard(raw, missing) {
     var data = Store.readFile(raw)
+    // A note too long to lay out without holding the shell up. The board is
+    // opened the way an unreadable one is, empty and read-only, so nothing
+    // waits on the text and nothing saves over it; the command line can still
+    // read it and shorten the note.
+    var overlong = data !== null && Store.overlongNote(data.items) >= 0
+    if (overlong) data = null
     session.ctl.items.clear()
     session.ctl.links.clear()
     session.damaged = !data && !missing
-    session.damageReason = ""
+    session.damageReason = overlong ? "has a note longer than 1 MB" : ""
     session.saveError = ""
     session.ctl.nextId = 1
     session.ctl.nextColor = 0

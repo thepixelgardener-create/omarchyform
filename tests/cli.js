@@ -205,6 +205,41 @@ try {
   }
 
   {
+    // A note can only be so long: the board refuses to open a longer one, so
+    // the command line refuses to write one. Through stdin, because an
+    // argument this long is past what the kernel will pass to a program.
+    const file = path.join(dir, 'long.json')
+    run('new', file, '--note', 'short')
+    const before = fs.readFileSync(file, 'utf8')
+    const long = 'x'.repeat(S.MAX_NOTE_LENGTH + 1)
+    for (const [ops, what] of [
+      [[{ op: 'setText', args: [1, long] }], 'setText'],
+      [[{ op: 'add', args: ['note', 0, 0, 220, 160, long] }], 'add']
+    ]) {
+      const refused = pipe(JSON.stringify(ops), 'apply', file, '-')
+      assert.equal(refused.status, 1, `${what} past the limit exits 1`)
+      assert.match(refused.out.error, new RegExp(`^${what}: .*a note holds at most ${S.MAX_NOTE_LENGTH}$`))
+    }
+    assert.equal(fs.readFileSync(file, 'utf8'), before, 'and the board is untouched')
+    const exact = pipe(JSON.stringify([{ op: 'setText', args: [1, 'x'.repeat(S.MAX_NOTE_LENGTH)] }]), 'apply', file, '-')
+    assert.equal(exact.status, 0, 'a note exactly at the limit is written: ' + exact.raw.slice(0, 200))
+
+    // One written by something else still loads here, which is how it gets
+    // shortened, and validate says why the board will not open it.
+    const found = path.join(dir, 'found.json')
+    fs.writeFileSync(found, JSON.stringify({ version: 5, nextId: 2, links: [],
+      items: [{ id: 1, kind: 'note', x: 0, y: 0, w: 100, h: 100, text: long }] }))
+    const checked = run('validate', found)
+    assert.equal(checked.status, 0)
+    assert.deepEqual(checked.out.repairs, [], 'nothing about it is repaired')
+    assert.equal(checked.out.warnings.length, 1)
+    assert.match(checked.out.warnings[0], /^item 1 is longer than 1048576 characters; the board opens read-only/)
+    assert.equal(pipe(JSON.stringify([{ op: 'setText', args: [1, 'shorter'] }]), 'apply', found, '-').status, 0,
+      'and the note can be shortened')
+    assert.deepEqual(run('validate', found).out.warnings, [], 'after which there is nothing to say')
+  }
+
+  {
     // `ops` is the same table `apply` dispatches through, so the two cannot
     // drift: everything it lists has to actually run.
     const listed = run('ops')

@@ -1,6 +1,7 @@
 import QtQuick
 import QtTest
 import "../.."
+import "../../BoardStore.js" as Store
 
 TestCase {
   id: test
@@ -76,6 +77,8 @@ TestCase {
     property var paletteEditor: null
     function beginTextPalette(editor) { paletteEditor = editor }
     function stopEditing() { editIndex = -1 }
+    property string flashed: ""
+    function flash(text) { flashed = text }
     function removeItem(index) { model.remove(index) }
     ListModel {
       id: model
@@ -334,6 +337,63 @@ TestCase {
     compare(ctl.editIndex, 0, "now being typed in")
     compare(model.get(0).itext.indexOf("# Head"), 0, "the source still carries the marks")
     keyClick(Qt.Key_Escape)
+  }
+
+  // A paste into the editor arrives the way typing does, without the clipboard
+  // helper's limit. Past the longest a note can be, the change is not kept:
+  // the text goes back to what it was and the board says why. Up to the limit
+  // is an ordinary edit.
+  function test_aNoteStopsAtItsLimit() {
+    var start = Store.MAX_NOTE_LENGTH - 2
+    model.setProperty(0, "itext", "word ".repeat(start / 2).slice(0, start))
+    mouseDoubleClickSequence(test, 140, 140, Qt.LeftButton)
+    compare(ctl.editIndex, 0)
+    var editor = findChild(subject, "note-editor")
+    ctl.flashed = ""
+    var saves = ctl.saveCount
+    editor.insert(editor.length, "abc")
+    tryCompare(editor, "length", start, 5000, "the editor goes back to what fitted")
+    compare(model.get(0).itext.length, start, "the board never held the longer text")
+    compare(ctl.saveCount, saves, "and nothing asked to save it")
+    compare(ctl.flashed, "A note holds up to 1 MB of text")
+
+    editor.insert(editor.length, "ab")
+    compare(model.get(0).itext.length, Store.MAX_NOTE_LENGTH, "reaching the limit exactly is kept")
+    keyClick(Qt.Key_Escape)
+  }
+
+  // A long stretch with no space in it is wrapped anywhere, by the note and by
+  // its editor: looking for a word boundary in it took time growing with the
+  // square of its length, long enough on the desktop for the compositor to
+  // offer to kill the shell. Ordinary text still wraps at words.
+  function test_aLongUnbrokenStretchWrapsAnywhere() {
+    var shown = findChild(subject, "note-text"), editor = findChild(subject, "note-editor")
+    model.setProperty(0, "itext", "a few words")
+    compare(shown.wrapMode, Text.Wrap)
+    model.setProperty(0, "itext", "see " + "x".repeat(Store.LONG_RUN))
+    compare(shown.wrapMode, Text.WrapAnywhere)
+    mouseDoubleClickSequence(test, 140, 140, Qt.LeftButton)
+    compare(ctl.editIndex, 0)
+    compare(editor.wrapMode, TextEdit.WrapAnywhere, "and so does its editor")
+    keyClick(Qt.Key_Escape)
+  }
+
+  // The editor is handed the note when the caret arrives and lets go of it when
+  // the caret leaves, rather than every note on a board being laid out a second
+  // time for an editor nobody opened. Letting go must never read as an edit.
+  function test_theEditorHoldsTheNoteOnlyWhileEditing() {
+    model.setProperty(0, "itext", "from the board")
+    var editor = findChild(subject, "note-editor")
+    compare(editor.text, "", "an editor nobody has opened holds nothing")
+    mouseDoubleClickSequence(test, 140, 140, Qt.LeftButton)
+    compare(editor.text, "from the board", "it is handed the note when the caret arrives")
+    keyClick("!")
+    compare(model.get(0).itext, "from the board!")
+    var saves = ctl.saveCount
+    keyClick(Qt.Key_Escape)
+    compare(editor.text, "", "and lets go of it when the caret leaves")
+    compare(model.get(0).itext, "from the board!", "without the note losing what was typed")
+    compare(ctl.saveCount, saves, "or anything asking to save an empty note")
   }
 
   function test_textPaletteAndHeading() {

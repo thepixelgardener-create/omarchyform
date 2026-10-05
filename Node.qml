@@ -69,6 +69,10 @@ Item {
   // photograph it.
   readonly property string markup: shown.text
   readonly property bool isNote: node.kind === "note"
+  // Text with a long unbroken stretch in it is wrapped anywhere, by the note
+  // and by its editor: looking for word boundaries in it would hold the whole
+  // shell up. See LONG_RUN in BoardStore.js.
+  readonly property bool longRun: Store.hasLongRun(node.itext)
   readonly property bool isImage: node.kind === "image"
   // A picture is decoded off the main thread and draws nothing until it is
   // done. An export waits for this to clear on every item before it takes its
@@ -243,7 +247,7 @@ Item {
     color: node.theme.foreground
     font.family: node.theme.fontFamily
     font.pixelSize: node.theme.fontSubtitle
-    wrapMode: Text.Wrap
+    wrapMode: node.longRun ? Text.WrapAnywhere : Text.Wrap
     clip: true
     horizontalAlignment: node.isNote ? Text.AlignLeft : Text.AlignHCenter
     verticalAlignment: node.isNote ? Text.AlignTop : Text.AlignVCenter
@@ -255,11 +259,16 @@ Item {
     visible: node.editing
     width: textViewport.width
     height: Math.max(textViewport.height, contentHeight)
-    text: node.itext
+    // Not bound to `itext`: the editor is given the note's text when the caret
+    // arrives (wantsEdit, below), which it had to be anyway. Bound, every note
+    // on a board laid its text out a second time for an editor nobody had
+    // opened, synchronously and before its wrap mode had caught up with the
+    // new text — so a long unbroken line paid for a wrap it was not going to
+    // use, and held the shell up for it.
     color: node.theme.foreground
     font.family: node.theme.fontFamily
     font.pixelSize: node.theme.fontSubtitle
-    wrapMode: TextEdit.Wrap
+    wrapMode: node.longRun ? TextEdit.WrapAnywhere : TextEdit.Wrap
     clip: true
     // Pinned: board files are shareable, and RichText here would let someone
     // else's board inject markup into yours.
@@ -270,11 +279,24 @@ Item {
     persistentSelection: true
     readOnly: !node.ctl.canEdit || node.ipinned
     enabled: !node.ipinned && !node.ctl.showPinned
-    // Guarded so the model write cannot bounce back and reset the caret.
+    // Guarded so the model write cannot bounce back and reset the caret, and
+    // so emptying the editor when the caret leaves is never taken for an edit.
     onTextChanged: {
-      if (!node.ctl.canEdit || text === node.itext) return
+      if (!body.wantsEdit || !node.ctl.canEdit || text === node.itext) return
+      // A paste into the editor does not go through the clipboard helper's
+      // limit, and two pastes would make a note this board then refuses to
+      // open. The change is not kept, and is undone once the editor has
+      // finished making it.
+      if (text.length > Store.MAX_NOTE_LENGTH) { Qt.callLater(body.refuseOverlong); return }
       node.set("itext", text)
       node.ctl.scheduleSave()
+    }
+    function refuseOverlong() {
+      if (body.text.length <= Store.MAX_NOTE_LENGTH) return
+      var at = Math.min(body.cursorPosition, node.itext.length)
+      body.text = node.itext
+      body.cursorPosition = at
+      node.ctl.flash("A note holds up to 1 MB of text")
     }
     onActiveFocusChanged: if (!activeFocus) node.ctl.flushSave()
     Keys.onEscapePressed: node.ctl.stopEditing()
@@ -325,17 +347,20 @@ Item {
 
     readonly property bool wantsEdit: node.ctl.editIndex === node.index
     onWantsEditChanged: if (wantsEdit) {
-      // Typing into a TextEdit replaces the binding that filled it, and so does
-      // a chord putting a mark round the selection — after either, this holds
-      // its own copy rather than the board's. Anything that changed the item
-      // since is therefore invisible here: an undo restores the note on screen,
-      // which reads `itext` directly, and used to leave the editor showing what
-      // had just been undone. It takes the board's version back each time the
-      // caret arrives.
+      // The editor holds a copy of the note, not the note: it is handed the
+      // board's version each time the caret arrives, so whatever changed the
+      // item meanwhile — an undo restores the note on screen, which reads
+      // `itext` directly — is what it shows, rather than what was there when
+      // it was last open.
       if (body.text !== node.itext) body.text = node.itext
       forceActiveFocus()
       cursorPosition = length
-    } else textViewport.contentY = 0
+    } else {
+      textViewport.contentY = 0
+      // Let go of the copy: kept, it is laid out again whenever the note's
+      // wrap mode changes, as the text it no longer matches.
+      body.text = ""
+    }
     onCursorRectangleChanged: if (wantsEdit) {
       if (cursorRectangle.y < textViewport.contentY) textViewport.contentY = cursorRectangle.y
       else if (cursorRectangle.y + cursorRectangle.height > textViewport.contentY + textViewport.height)

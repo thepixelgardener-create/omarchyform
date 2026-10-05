@@ -124,7 +124,9 @@ Item {
     input.waitForJob()
     var raw = input.text()
     if (!raw) { exchange.fail("Could not read that board", "board"); return }
-    if (!Store.readFile(raw)) { exchange.fail("That file is not a supported board", "board"); return }
+    var data = Store.readFile(raw)
+    if (!data) { exchange.fail("That file is not a supported board", "board"); return }
+    if (Store.overlongNote(data.items) >= 0) { exchange.fail("That board has a note longer than 1 MB", "board"); return }
     var base = Store.baseName(path).replace(/(\.omarchyform)?\.json$/i, "")
     // A copy saved to share carries its pictures inside it. They have to be
     // written into this machine's own images folder, under names of its

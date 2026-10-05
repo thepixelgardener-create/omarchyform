@@ -63,6 +63,11 @@ for (const scenario of ['persistence', 'session', 'timeout', 'exchange', 'clipbo
       // Too large to read into memory at all.
       fs.writeFileSync(path.join(dir, 'enormous.omarchyform.json'), Buffer.alloc(33554433, 0x20))
 
+      // Small enough to read, with a note longer than a note can be: the board
+      // would only open it read-only, so it is not imported to be opened.
+      fs.writeFileSync(path.join(dir, 'overlong.omarchyform.json'), board(
+        [{ id: 1, kind: 'note', x: 0, y: 0, w: 220, h: 160, text: 'x'.repeat(1048577) }], undefined))
+
       // Somewhere an export cannot be published, with something already there.
       fs.mkdirSync(path.join(dir, 'locked'))
       fs.writeFileSync(path.join(dir, 'locked/there.omarchyform.json'), 'not mine to replace')

@@ -106,6 +106,17 @@ ShellRoot {
         test.check(test.lastFailed && test.lastKind === "board", "reported as a board failure")
         test.check(test.importedBoard === "", "and nothing was imported")
 
+        // One with a note the board would refuse to open. Refused here, with
+        // the reason, rather than imported to open read-only.
+        test.lastMessage = ""
+        test.stage = 30
+        exchange.importPath(test.dir + "/overlong.omarchyform.json")
+      } else if (test.stage === 30 && test.lastMessage !== "" && !exchange.busy) {
+        test.check(test.lastMessage === "That board has a note longer than 1 MB", test.lastMessage)
+        test.check(test.lastFailed && test.lastKind === "board", "reported as a board failure")
+        test.check(test.importedBoard === "", "and nothing was imported")
+        test.check(test.read(ctl.boardsDir + "/overlong.json") === "", "or published")
+
         // One that carries no pictures but names one this library has. It
         // arrives, but the name does not: it would show this library's picture.
         test.lastMessage = ""
