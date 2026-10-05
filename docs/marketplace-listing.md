@@ -1,13 +1,14 @@
 # Marketplace discoverability
 
 Checked 2026-10-03 against the [live catalog](https://plugins.omarchy.org/catalog.json)
-and the directory's [search code](https://plugins.omarchy.org/assets/js/search.js?v=20261002-03).
+and the directory's [search code](https://plugins.omarchy.org/assets/js/search.js?v=20261002-03),
+and again on 2026-10-05: see [What a push changes](#what-a-push-changes).
 
-## What needs improving
+## What needed improving
 
-The live Omarchyform listing uses snapshot
+On 2026-10-03 the live Omarchyform listing used snapshot
 `0d3d7e3380c4cf74f41344c44fc405d93148d4a4` and version 0.4.0. Its description
-calls it a “board” and omits common terms for its purpose. Searching by its name
+called it a “board” and omitted common terms for its purpose. Searching by its name
 works; searches for whiteboard, brainstorming, mind map, diagram, sticky notes
 and images do not match it.
 
@@ -45,19 +46,25 @@ This checks whether the entry matches. It does not measure ranking or traffic.
 
 ## Publish with the release
 
-The directory holds a reviewed snapshot. A local edit or a push alone does not
-replace that snapshot's listing text. After the 0.4.5 release commit is on the
-repository's default branch, use the marketplace's
+## What a push changes
+
+The section above expected the listing text to wait for a verified update. It
+does not. On 2026-10-05 the catalog entry showed the whiteboard description and
+version 0.4.5, read from `main` (`upstreamObservedCommit`), while its verified
+snapshot (`verificationCommit`) was still `0d3d7e3` and its coverage
+`update-unverified`. The directory re-reads each listing's default branch, and
+the install command always clones it.
+
+What verification adds is the **Verified** badge for one exact commit. To ask
+for it after a release, use the marketplace's
 [update process](https://github.com/omacom/omarchy-plugin-marketplace/blob/main/VERIFICATION.md#promoting-a-plugin-update):
 
 - Select **Verify and publish a newer upstream commit** in its verification form.
 - Use plugin ID `thepixelgardener.omarchyform`, repository
   `https://github.com/thepixelgardener-create/omarchyform`, and the full SHA of
-  that release commit.
-- After publication, repeat the searches above against the live directory.
-
-Submitting the update is a release step; a GitHub Release alone does not update
-the live catalog.
+  the release commit, which has to be the repository's current `HEAD`.
+- Every later push returns the badge to "Update unverified" until the next
+  request, so one request per release is enough.
 
 ## Directory taxonomy follow-up
 
