@@ -379,7 +379,7 @@ FocusScope {
     anchors.fill: parent
     // Focus moves between the canvas and the browser declaratively. Leaving
     // both claiming it strands the keyboard on whichever hid last.
-    focus: !board.ctl.browserVisible
+    focus: !board.ctl.library.showing
 
     // Printable keys are a table rather than a ladder of else-ifs: adding a
     // command is one line, and the cheat sheet is the only other place to
@@ -621,7 +621,7 @@ FocusScope {
     ctl: board.ctl
     anchors { top: parent.top; left: parent.left; right: parent.right; margins: board.theme.sp(16) }
     height: implicitHeight
-    visible: !board.ctl.browserVisible && !board.ctl.helpVisible
+    visible: !board.ctl.library.showing && !board.ctl.helpVisible
   }
 
   Column {
@@ -629,7 +629,7 @@ FocusScope {
     anchors.horizontalCenter: parent.horizontalCenter
     y: toolbar.y + toolbar.height + Math.max(24, (board.height-toolbar.height-height)/2 - 32)
     spacing: board.theme.sp(12)
-    visible: board.ctl.boardLoaded && board.ctl.items.count === 0 && !board.ctl.browserVisible && !board.ctl.helpVisible
+    visible: board.ctl.boardLoaded && board.ctl.items.count === 0 && !board.ctl.library.showing && !board.ctl.helpVisible
     Text {
       textFormat: Text.PlainText
       anchors.horizontalCenter: parent.horizontalCenter
@@ -697,6 +697,7 @@ FocusScope {
   Browser {
     anchors.fill: parent
     ctl: board.ctl
+    library: board.ctl.library
   }
 
   // Help consumes input so browsing shortcuts cannot edit the board behind it,
@@ -748,7 +749,7 @@ FocusScope {
   // an input method — and the board it searches can be written in one.
   Row {
     id: findLine
-    visible: board.ctl.finding && !board.ctl.helpVisible && !board.ctl.browserVisible
+    visible: board.ctl.finding && !board.ctl.helpVisible && !board.ctl.library.showing
     anchors.horizontalCenter: parent.horizontalCenter
     anchors.top: banner.visible ? banner.bottom : toolbar.bottom
     anchors.topMargin: board.theme.sp(8)
@@ -858,7 +859,7 @@ FocusScope {
     readonly property string tier: Store.statusTier(board.ctl.statusState())
     text:
       status.tier === "saveError" ? Store.escapeMarkup(board.ctl.saveError)
-      : status.tier === "trashIndexError" ? Store.escapeMarkup(board.ctl.trashIndexError)
+      : status.tier === "trashIndexError" ? Store.escapeMarkup(board.ctl.library.trashIndexError)
       : status.tier === "conflict"
       ? Store.escapeMarkup(board.ctl.boardTitle) + " changed on disk · "
         + Store.hintMarkup("ctrl+s", "choose which version to keep", board.ctl.accentMarkup)

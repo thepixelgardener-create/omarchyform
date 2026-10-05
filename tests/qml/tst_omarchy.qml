@@ -45,8 +45,8 @@ ShellRoot {
     return null
   }
   function pick(path) {
-    for (var i = 0; i < plugin.browserRows.length; i++) {
-      if (plugin.browserRows[i].path === path) { plugin.browserIndex = i; return true }
+    for (var i = 0; i < plugin.library.rows.length; i++) {
+      if (plugin.library.rows[i].path === path) { plugin.library.index = i; return true }
     }
     return false
   }
@@ -136,12 +136,12 @@ ShellRoot {
         plugin.fitToItems()
         plugin.openBrowser()
         test.stage = 2
-      } else if (test.stage === 2 && plugin.browserVisible) {
-        plugin.browserKey({key: Qt.Key_Slash, text: "/", modifiers: 0})
-        test.check(plugin.browserSearching, "browser search starts")
-        plugin.browserKey({key: Qt.Key_Escape, text: "", modifiers: 0})
-        test.check(!plugin.browserSearching, "browser search escapes")
-        plugin.closeBrowser()
+      } else if (test.stage === 2 && plugin.library.showing) {
+        plugin.library.key({key: Qt.Key_Slash, text: "/", modifiers: 0})
+        test.check(plugin.library.searching, "browser search starts")
+        plugin.library.key({key: Qt.Key_Escape, text: "", modifiers: 0})
+        test.check(!plugin.library.searching, "browser search escapes")
+        plugin.library.hide()
         plugin.editSelected()
         plugin.items.setProperty(0, "itext", "hide flushes pending typing")
         plugin.scheduleSave()
@@ -194,24 +194,24 @@ ShellRoot {
       } else if (test.stage === 44 && plugin.editIndex === -1) {
         test.key("b")
         test.stage = 45
-      } else if (test.stage === 45 && plugin.browserVisible) {
+      } else if (test.stage === 45 && plugin.library.showing) {
         // A name is typed into a real text field now. Only a real key can say
         // whether the keyboard reaches it: the harness calls functions, and a
         // field nothing has focused looks exactly the same from there.
-        plugin.prompt("rename", "new name:", "already-here")
+        plugin.library.ask("rename", "new name:", "already-here")
         test.stage = 451
-      } else if (test.stage === 451 && plugin.browserPrompt !== "") {
+      } else if (test.stage === 451 && plugin.library.promptLabel !== "") {
         test.key("z")
         test.stage = 452
-      } else if (test.stage === 452 && plugin.browserInput === "z") {
+      } else if (test.stage === 452 && plugin.library.input === "z") {
         test.check(true, "one keystroke replaces the name the field opens with")
-        plugin.browserKey({key: Qt.Key_Escape, text: "", modifiers: 0})
-        test.check(plugin.browserPrompt === "", "and the field lets go")
+        plugin.library.key({key: Qt.Key_Escape, text: "", modifiers: 0})
+        test.check(plugin.library.promptLabel === "", "and the field lets go")
         // Which the browser behind it has to notice: this closes it, so the
         // keyboard came back rather than staying in a field that is gone.
         test.key("Escape")
         test.stage = 46
-      } else if (test.stage === 46 && !plugin.browserVisible) {
+      } else if (test.stage === 46 && !plugin.library.showing) {
         plugin.selectOnly(2)
         plugin.removeItem(2)
         plugin.fitToItems()
@@ -313,14 +313,14 @@ ShellRoot {
         test.check(test.findItem(plugin.activeBoard, "board-item-1").parent.objectName === "foreground-world", "unpin restores foreground")
         plugin.openBrowser()
         test.stage = 615
-      } else if (test.stage === 615 && !plugin.browserBusy) {
-        plugin.prompt("folder", "new folder:", "test-folder")
-        plugin.commitPrompt()
+      } else if (test.stage === 615 && !plugin.library.busy) {
+        plugin.library.ask("folder", "new folder:", "test-folder")
+        plugin.library.commitPrompt()
         test.stage = 7
-      } else if (test.stage === 7 && !plugin.browserBusy && test.pick("test-folder")) {
-        plugin.browserEnter()
-        plugin.prompt("board", "new board:", "scratch")
-        plugin.commitPrompt()
+      } else if (test.stage === 7 && !plugin.library.busy && test.pick("test-folder")) {
+        plugin.library.enter()
+        plugin.library.ask("board", "new board:", "scratch")
+        plugin.library.commitPrompt()
         test.stage = 8
       } else if (test.stage === 8 && plugin.currentBoard === "test-folder/scratch.json" && plugin.boardLoaded) {
         plugin.addItem("note", 100, 100)
@@ -328,53 +328,53 @@ ShellRoot {
       } else if (test.stage === 9 && test.boardData(plugin.currentBoard) && test.boardData(plugin.currentBoard).items.length === 1) {
         plugin.openBrowser()
         test.stage = 10
-      } else if (test.stage === 10 && !plugin.browserBusy && test.pick("test-folder/scratch.json")) {
-        plugin.prompt("rename", "rename to:", "renamed")
-        plugin.commitPrompt()
+      } else if (test.stage === 10 && !plugin.library.busy && test.pick("test-folder/scratch.json")) {
+        plugin.library.ask("rename", "rename to:", "renamed")
+        plugin.library.commitPrompt()
         test.stage = 11
       } else if (test.stage === 11 && plugin.currentBoard === "test-folder/renamed.json") {
         test.check(plugin.items.count === 1, "rename preserves open model")
-        plugin.browserUp()
+        plugin.library.up()
         test.stage = 12
-      } else if (test.stage === 12 && !plugin.browserBusy && test.pick("test-folder")) {
-        plugin.deleteCurrent()
-        test.check(plugin.pendingDelete === "", "open board's folder cannot be deleted")
-        plugin.prompt("rename", "rename to:", "moved-folder")
-        plugin.commitPrompt()
+      } else if (test.stage === 12 && !plugin.library.busy && test.pick("test-folder")) {
+        plugin.library.deleteCurrent()
+        test.check(plugin.library.pendingDelete === "", "open board's folder cannot be deleted")
+        plugin.library.ask("rename", "rename to:", "moved-folder")
+        plugin.library.commitPrompt()
         test.stage = 13
       } else if (test.stage === 13 && plugin.currentBoard === "moved-folder/renamed.json") {
         test.check(test.boardData(plugin.currentBoard).items.length === 1, "folder rename follows open board")
         plugin.openBoard("board.json")
-        plugin.closeBrowser()
+        plugin.library.hide()
         test.stage = 14
       } else if (test.stage === 14 && plugin.currentBoard === "board.json" && plugin.boardLoaded) {
         test.check(plugin.items.count === 2, "original board survives browser operations")
         plugin.openBrowser()
         test.stage = 15
-      } else if (test.stage === 15 && !plugin.browserBusy && test.pick("moved-folder")) {
-        plugin.deleteCurrent()
-        test.check(plugin.pendingDelete === "moved-folder", "first delete arms confirmation")
-        plugin.browserKey({key: Qt.Key_J, text: "j", modifiers: 0})
-        test.check(plugin.pendingDelete === "", "navigation cancels deletion")
+      } else if (test.stage === 15 && !plugin.library.busy && test.pick("moved-folder")) {
+        plugin.library.deleteCurrent()
+        test.check(plugin.library.pendingDelete === "moved-folder", "first delete arms confirmation")
+        plugin.library.key({key: Qt.Key_J, text: "j", modifiers: 0})
+        test.check(plugin.library.pendingDelete === "", "navigation cancels deletion")
         test.check(test.pick("moved-folder"), "folder still exists")
-        plugin.deleteCurrent()
-        plugin.deleteCurrent()
+        plugin.library.deleteCurrent()
+        plugin.library.deleteCurrent()
         test.stage = 16
-      } else if (test.stage === 16 && !plugin.browserBusy && !test.pick("moved-folder")) {
-        plugin.toggleTrash()
+      } else if (test.stage === 16 && !plugin.library.busy && !test.pick("moved-folder")) {
+        plugin.library.toggleTrash()
         test.stage = 160
-      } else if (test.stage === 160 && plugin.browserRows.length > 0 && !plugin.browserBusy) {
-        plugin.browserIndex = 0
-        plugin.restoreCurrent()
+      } else if (test.stage === 160 && plugin.library.rows.length > 0 && !plugin.library.busy) {
+        plugin.library.index = 0
+        plugin.library.restoreCurrent()
         test.stage = 161
-      } else if (test.stage === 161 && !plugin.browserBusy && plugin.trashEntries.length === 0) {
+      } else if (test.stage === 161 && !plugin.library.busy && plugin.library.trashEntries.length === 0) {
         test.check(test.boardData("moved-folder/renamed.json").items.length === 1, "trash restore preserves board")
-        plugin.toggleTrash()
+        plugin.library.toggleTrash()
         test.stage = 162
-      } else if (test.stage === 162 && !plugin.browserBusy && test.pick("moved-folder")) {
-        plugin.deleteCurrent(); plugin.deleteCurrent()
+      } else if (test.stage === 162 && !plugin.library.busy && test.pick("moved-folder")) {
+        plugin.library.deleteCurrent(); plugin.library.deleteCurrent()
         test.stage = 163
-      } else if (test.stage === 163 && !plugin.browserBusy && !test.pick("moved-folder")) {
+      } else if (test.stage === 163 && !plugin.library.busy && !test.pick("moved-folder")) {
         if (Quickshell.screens.length > 1) {
           var other = Quickshell.screens[0] === plugin.boardScreen ? Quickshell.screens[1] : Quickshell.screens[0]
           plugin.close()

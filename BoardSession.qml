@@ -143,7 +143,7 @@ Item {
 
   function failedSave(message) {
     session.saveError = message + " — ctrl+s to retry"
-    if (session.ctl.browserVisible) session.ctl.browserMessage = message + " — esc, then ctrl+s to retry"
+    if (session.ctl.library.showing) session.ctl.library.message = message + " — esc, then ctrl+s to retry"
     session.pendingBoard = null
     // A resolution that failed is not a resolution. The edits are still on
     // screen and the other version is still on disk, so the choice stands.
@@ -310,7 +310,7 @@ Item {
     // Filling the model tears down every delegate and takes the keyboard with
     // it. The load lands after the browser has closed, so without this a board
     // switch leaves nothing listening.
-    if (!session.ctl.browserVisible) session.ctl.focusKeys()
+    if (!session.ctl.library.showing) session.ctl.focusKeys()
   }
 
   // The board is a file in a folder people are invited to hand-edit, and the

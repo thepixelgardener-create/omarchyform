@@ -65,19 +65,31 @@ TestCase {
       function tintFill(tint, strong) { return "#181818" }
       function tintBorder(tint, strong) { return "#cccccc" }
     }
-    property bool browserVisible: false
+    // What the browser draws, shaped like BoardLibrary.qml. tests/contract.js
+    // holds the two together.
+    property QtObject library: QtObject {
+      id: libraryStub
+      property bool showing: false
+      property bool searching: false
+      property string query: ""
+      property string promptLabel: ""
+      property string input: ""
+      property string trashIndexError: ""
+      property string message: ""
+      property string dir: ""
+      property string currentBoard: "board.json"
+      property var rows: []
+      property int index: 0
+      property bool inTrash: false
+      function enter() {}
+      function key(event) {}
+      function hide() { libraryStub.showing = false }
+    }
     property bool menuVisible: false
     property bool zoomMenuVisible: false
     property int menuIndex: 0
     function toggleMenu() { menuVisible = !menuVisible }
     function runMenu(index) { menuVisible = false }
-    property bool browserSearching: false
-    property string browserQuery: ""
-    property string browserPrompt: ""
-    property string browserInput: ""
-    property string trashIndexError: ""
-    property string browserMessage: ""
-    property string browserDir: ""
     property string boardTitle: "A long board name that should truncate gracefully"
     property string boardState: "Saved locally"
     property string saveError: ""
@@ -91,10 +103,6 @@ TestCase {
     function exportBoard() {}
     function choosePng() {}
     property string currentBoard: "board.json"
-    property var browserRows: []
-    property int browserIndex: 0
-    property bool browserTrash: false
-    function browserEnter() {}
     // The palette draws the real command table, so what this renders is what a
     // board renders — including how many of them there are.
     property string paletteScope: "all"
@@ -111,11 +119,9 @@ TestCase {
     property bool conflictVisible: true
     property int conflictIndex: 0
     function runConflictChoice() {}
-    function closeBrowser() { browserVisible = false }
-    function browserKey(event) {}
   }
   Help { id: help; ctl: ctl; anchors.centerIn: parent }
-  Browser { id: browser; ctl: ctl; anchors.fill: parent }
+  Browser { id: browser; ctl: ctl; library: ctl.library; anchors.fill: parent }
   BoardToolbar { id: toolbar; ctl: ctl; width: test.width - 32; height: implicitHeight; visible: false }
   // Where the board puts it: under the header, with the rest of the window
   // below it to fit into.
@@ -456,13 +462,13 @@ TestCase {
   }
 
   function test_searchModeWithoutQuery() {
-    ctl.browserSearching = true
+    ctl.library.searching = true
     compare(browser.searching, true)
-    ctl.browserSearching = false
+    ctl.library.searching = false
     compare(browser.searching, false)
   }
   function test_browserFooterWraps() {
-    ctl.browserVisible = true
+    ctl.library.showing = true
     const footer = findChild(browser, "browser-footer")
     const panel = findChild(browser, "browser-panel")
     verify(footer !== undefined)

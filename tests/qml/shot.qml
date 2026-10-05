@@ -182,17 +182,17 @@ ShellRoot {
       // name it opened on selected so a keystroke replaces it.
       name: "10a-naming",
       setup: function () {
-        plugin.prompt("rename", "new name:", "quarterly plan")
+        plugin.library.ask("rename", "new name:", "quarterly plan")
       }
     },
     {
       name: "10b-browser-scrolling",
       setup: function () {
-        plugin.cancelPrompt()
+        plugin.library.cancelPrompt()
         var rows = []
         for (var i = 1; i <= 30; i++) rows.push({ path: "board-" + i + ".json", dir: false })
-        plugin.browserEntries = rows
-        plugin.browserIndex = 12
+        plugin.library.entries = rows
+        plugin.library.index = 12
       }
     },
     {
@@ -200,7 +200,7 @@ ShellRoot {
       // a person actually sees them.
       name: "11-working-zoom",
       setup: function () {
-        plugin.closeBrowser()
+        plugin.library.hide()
         plugin.resetView()
         plugin.markedIds = [plugin.items.get(6).iid]
         plugin.selectedIndex = 5
@@ -295,7 +295,7 @@ ShellRoot {
     plugin.endPalette()
     plugin.conflictVisible = false
     plugin.helpVisible = false
-    plugin.closeBrowser()
+    plugin.library.hide()
     plugin.cancelArrange()
     plugin.statusText = ""
     plugin.markedIds = []

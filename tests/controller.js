@@ -15,7 +15,7 @@ function controller() {
     // Declared on the controller and defaulted there; the harness needs them
     // because a failure's time on screen is measured against what is covering
     // the line, and an undeclared name reads as undefined rather than as empty.
-    trashIndexError: '', browserVisible: false, opened: true,
+    opened: true,
     paletteVisible: false, paletteQuery: '', paletteIndex: 0, paletteRows: 9,
     conflictVisible: false, conflictIndex: 0, paletteScope: 'all',
     boardsDir: '/boards', backupsDir: '/backups', worldStep: 40, minItemSize: 60, viewW: 1000, viewH: 700 }
@@ -47,9 +47,9 @@ function controller() {
   // harness would otherwise not have. Same shape as the original, so a change
   // to one shows up as a difference from the other.
   Object.defineProperty(root, 'failureVisible', { get: () =>
-    root.opened && root.failureText !== '' && root.saveError === '' && root.trashIndexError === ''
+    root.opened && root.failureText !== '' && root.saveError === '' && root.library.trashIndexError === ''
     && !root.diskChanged && !root.damaged
-    && !root.helpVisible && !root.browserVisible && !root.finding })
+    && !root.helpVisible && !root.library.showing && !root.finding })
   Object.defineProperty(root, 'linkOutcome', { get: () => {
     if (root.linkingFrom < 0 || !root.canEdit) return 'none'
     if (root.selectedIndex < 0 || root.selectedIndex >= items.count) return 'none'
@@ -79,12 +79,37 @@ function controller() {
     importDropped(entries) { exchange.imported.push(...entries) },
     copyItems(indices) { exchange.copied.push(Array.from(indices)) },
     saveCopy(text, name) { exchange.copies.push({ text, name }); return true } }
-  // The browser reaches for the trash index and a directory listing; neither is
-  // the subject of these tests, so both are present and inert.
+  // The session's binding of the same name, which the library is told about.
+  Object.defineProperty(session, 'busy', { get: () => persistence.busy || session.diskReading })
+  // The library, run from BoardLibrary.qml the way the controller and the
+  // session are, and wired to the controller the way Omarchyform.qml wires it.
+  // What it is told and its two bindings are mirrored, like the controller's.
+  const library = { boardsDir: '/boards', trashDir: '/trash', trashIndexPath: '/trash/index.json',
+    helperScript: '/BoardFiles.sh', showing: false, dir: '', query: '', index: 0, entries: [],
+    searching: false, promptLabel: '', input: '', action: '', pendingDelete: '', message: '', inTrash: false,
+    trashEntries: [], trashIndexSaving: false, trashIndexLoading: true, trashIndexNeedsRead: true, trashIndexError: '' }
+  Object.defineProperty(library, 'currentBoard', { get: () => root.currentBoard })
+  Object.defineProperty(library, 'boardConflicted', { get: () => root.diskChanged })
+  Object.defineProperty(library, 'boardSettled', { get: () => !session.busy && root.saveError === '' })
+  // The listing, the trash index and the helper's runs; none of them is the
+  // subject of these tests, so each is present and inert.
   const trashIndexFile = { reload() {}, setText() {} }
-  const scanProc = { running: false }
-  const context = vm.createContext({ root, session, Store: loadStore(), itemModel: items, linkModel: links,
-    persistence, exchange, trashIndexFile, scanProc,
+  const inert = () => ({ running: false, command: [] })
+  const scanProc = inert(), mkdirProc = inert(), moveProc = inert()
+  const trashProc = inert(), restoreProc = inert(), purgeProc = inert()
+  Object.defineProperty(library, 'busy', { get: () => mkdirProc.running || moveProc.running || trashProc.running
+    || restoreProc.running || purgeProc.running || library.trashIndexSaving || library.trashIndexLoading })
+  Object.defineProperty(library, 'rows', { get: () => library.inTrash
+    ? context.Store.sortedTrash(library.trashEntries)
+    : context.Store.filterEntries(library.entries, library.dir, library.query) })
+  library.openRequested = (path, fresh) => root.openBoard(path, fresh)
+  library.currentMoved = path => { root.currentBoard = path; root.writeState() }
+  library.notice = message => root.flash(message)
+  library.closed = () => root.focusKeys()
+  library.aboutToRename = () => root.flushSave()
+  root.library = library
+  const context = vm.createContext({ root, session, library, Store: loadStore(), itemModel: items, linkModel: links,
+    persistence, exchange, trashIndexFile, scanProc, mkdirProc, moveProc, trashProc, restoreProc, purgeProc,
     statusTimer: {restart() {}}, failureTimer: {restart() {}}, saveTimer: { running: false, stop() {}, restart() {} }, stateFile: {setText(text) { states.push(text) }} })
   function loadFunctions(target, qml) {
     for (const match of qml.matchAll(/^  function (\w+)\((.*?)\) \{\n([\s\S]*?)^  }/gm))
@@ -94,6 +119,7 @@ function controller() {
   }
   loadFunctions(root, source)
   loadFunctions(session, fs.readFileSync(require('path').join(__dirname, '../BoardSession.qml'), 'utf8'))
+  loadFunctions(library, fs.readFileSync(require('path').join(__dirname, '../BoardLibrary.qml'), 'utf8'))
   // Two of the session's functions reach for a FileView and a Process. What
   // they fetch is what matters here, so they fetch it from the test instead.
   session.diskText = ''
@@ -101,7 +127,7 @@ function controller() {
   session.requestDisk = resolve => session.acceptDisk(root.currentBoard,
     loadStore().writeFile(items, links, root.nextId), resolve, 'rev-fresh\n' + session.diskText)
   let revisions = 0
-  return { root, session, items, links, writes, states, persistence, exchange, store: context.Store, complete() {
+  return { root, session, library, items, links, writes, states, persistence, exchange, store: context.Store, complete() {
     const write = writes[writes.length - 1]
     persistence.busy = false
     session.savedBoard(write.path, write.text, 'rev-' + (++revisions))
@@ -194,16 +220,49 @@ function controller() {
 {
   // A broken trash index must not stop the browser opening folders or boards.
   const c = controller()
-  Object.assign(c.root, { browserBusy: false, browserTrash: false, browserIndex: 0, browserMessage: '',
-    trashIndexError: 'trash index is invalid', closeBrowser() {},
-    browserRows: [{ path: 'b.json', dir: false }] })
+  Object.assign(c.library, { trashIndexLoading: false, inTrash: false, index: 0, message: '',
+    trashIndexError: 'trash index is invalid', entries: [{ path: 'b.json', dir: false }] })
   const opened = []
   c.root.openBoard = path => opened.push(path)
-  c.root.browserEnter()
+  c.library.enter()
   assert.deepEqual(opened, ['b.json'])
-  c.root.browserRows = [{ path: 'work', dir: true }]
-  c.root.browserEnter()
-  assert.equal(c.root.browserDir, 'work')
+  c.library.entries = [{ path: 'work', dir: true }]
+  c.library.enter()
+  assert.equal(c.library.dir, 'work')
+}
+{
+  // What the library asks the controller for, now that it holds no controller:
+  // a rename has the open board saved first and only then asks whether it is
+  // settled; it is refused while two versions of the board are outstanding;
+  // and the folder the open board lives in cannot go to the trash.
+  const rename = () => {
+    const c = controller()
+    c.library.trashIndexLoading = false
+    c.root.currentBoard = 'work/a.json'
+    c.library.entries = [{ path: 'work', dir: true }, { path: 'work/a.json', dir: false }]
+    c.library.ask('rename', 'rename to:', 'work')
+    c.library.input = 'play'
+    return c
+  }
+  let c = rename()
+  let flushed = 0
+  c.root.flushSave = () => { flushed++ }
+  c.library.commitPrompt()
+  assert.equal(flushed, 1, 'the open board is saved before the rename goes ahead')
+  assert.equal(c.library.busy, true, 'and the move is under way')
+  assert.equal(c.library.message, '')
+
+  c = rename()
+  c.session.conflict = true
+  c.library.commitPrompt()
+  assert.match(c.library.message, /two versions/)
+  assert.equal(c.library.busy, false, 'nothing was moved')
+
+  c = rename()
+  c.library.cancelPrompt()
+  c.library.deleteCurrent()
+  assert.match(c.library.message, /board you have open/)
+  assert.equal(c.library.pendingDelete, '', 'and no delete was armed')
 }
 {
   const c = controller()
@@ -391,18 +450,18 @@ console.log('ok — controller: board-local marks, pinning, backup names and his
 
 {
   const c = controller()
-  c.root.trashIndexSaving = false
-  c.root.trashIndexError = ''
-  c.root.trashIndexNeedsRead = true
-  c.root.acceptTrashIndex('{"version":1,"entries":[{"file":"saved","path":"work/a.json"}]}')
-  assert.equal(c.root.trashEntries.length,1)
-  c.root.acceptTrashIndex('{broken')
-  assert.equal(c.root.trashEntries.length,1,'invalid metadata must not replace remembered entries')
-  assert.match(c.root.trashIndexError,/invalid/)
-  c.root.acceptTrashIndex('{"entries":[{"file":"../boards","path":"a.json"}]}')
-  assert.match(c.root.trashIndexError,/invalid/)
-  c.root.acceptTrashIndex('{"version":1,"entries":[]}')
-  assert.equal(c.root.trashIndexError,'')
+  c.library.trashIndexSaving = false
+  c.library.trashIndexError = ''
+  c.library.trashIndexNeedsRead = true
+  c.library.acceptTrashIndex('{"version":1,"entries":[{"file":"saved","path":"work/a.json"}]}')
+  assert.equal(c.library.trashEntries.length,1)
+  c.library.acceptTrashIndex('{broken')
+  assert.equal(c.library.trashEntries.length,1,'invalid metadata must not replace remembered entries')
+  assert.match(c.library.trashIndexError,/invalid/)
+  c.library.acceptTrashIndex('{"entries":[{"file":"../boards","path":"a.json"}]}')
+  assert.match(c.library.trashIndexError,/invalid/)
+  c.library.acceptTrashIndex('{"version":1,"entries":[]}')
+  assert.equal(c.library.trashIndexError,'')
 }
 {
   // The marquee: what it catches, what it leaves, and the cursor it hands to
@@ -821,11 +880,11 @@ console.log('ok — controller: copying the selection out')
   c.root.helpVisible = false
   c.root.toggleMenu()
   c.root.runMenu(1)
-  assert.equal(c.root.browserVisible, true)
+  assert.equal(c.library.showing, true)
   assert.equal(c.root.menuVisible, false, 'picking always closes it')
 
   // Toggling shut resets the highlight rather than leaving it where it was.
-  c.root.closeBrowser()
+  c.library.hide()
   c.root.toggleMenu()
   c.root.moveMenu(3)
   c.root.toggleMenu()
@@ -1474,11 +1533,11 @@ console.log('ok — controller: what a connector gesture promises, and what it t
   for (const [set, unset] of [
     [() => { c.root.opened = false }, () => { c.root.opened = true }],
     [() => { c.session.saveError = 'notes.json could not be written' }, () => { c.session.saveError = '' }],
-    [() => { c.root.trashIndexError = 'x' }, () => { c.root.trashIndexError = '' }],
+    [() => { c.library.trashIndexError = 'x' }, () => { c.library.trashIndexError = '' }],
     [() => { c.session.conflict = true }, () => { c.session.conflict = false }],
     [() => { c.session.damaged = true }, () => { c.session.damaged = false }],
     [() => { c.root.helpVisible = true }, () => { c.root.helpVisible = false }],
-    [() => { c.root.browserVisible = true }, () => { c.root.browserVisible = false }],
+    [() => { c.library.showing = true }, () => { c.library.showing = false }],
     [() => { c.root.finding = true }, () => { c.root.finding = false }]
   ]) {
     set()

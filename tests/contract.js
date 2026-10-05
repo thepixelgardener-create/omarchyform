@@ -9,6 +9,7 @@
 //   - everything the session reads off ctl exists on the controller
 //   - the session test's stub carries the same members the session reads,
 //     so the stub cannot quietly fall behind the thing it stands in for
+// and the same of the library, which the views reach as a second object.
 
 const fs = require("fs")
 const path = require("path")
@@ -155,6 +156,25 @@ for (const file of ["Board.qml", "Node.qml", "BoardToolbar.qml", "Help.qml", "Br
   expect(referenced(read(file), "theme."), panTheme, "the tst_pan stub's theme", file)
 }
 
+// The board library is an object of its own, BoardLibrary.qml, and the
+// browser, the board, the session and the controller reach into it by name
+// the way the views reach into ctl. So the same checks: whatever is read off it
+// is declared on it, and on every stub that stands in for it.
+const libraryMembers = new Set([...declaredMembers(read("BoardLibrary.qml")), ...declaredSignals(read("BoardLibrary.qml"))])
+const libraryReads = {
+  "Browser.qml": referenced(read("Browser.qml"), "browser.library."),
+  "Board.qml": referenced(read("Board.qml"), "ctl.library."),
+  "BoardSession.qml": referenced(session, "session.ctl.library."),
+  "Omarchyform.qml": referenced(read("Omarchyform.qml"), "root.library.")
+}
+for (const [file, reads] of Object.entries(libraryReads)) expect(reads, libraryMembers, "BoardLibrary.qml", file)
+const libraryStub = source => membersAt(blockBody(source, "property QtObject library:"), 6)
+expect(libraryReads["Browser.qml"], libraryStub(layoutSource), "the tst_layout stub's library", "Browser.qml")
+for (const file of ["Browser.qml", "Board.qml"])
+  expect(libraryReads[file], libraryStub(panSource), "the tst_pan stub's library", file)
+expect(libraryReads["BoardSession.qml"], libraryStub(read("tests/qml/tst_session.qml")),
+  "the tst_session stub's library", "BoardSession.qml")
+
 const nodeReads = referenced(read("Node.qml"), "ctl.")
 expect(nodeReads, nestedMembers(read("tests/qt/tst_node.qml"), "ctl"),
   "the tst_node stub", "tests/qt/tst_node.qml")
@@ -187,7 +207,7 @@ function declaredSignals(source) {
 
 // BoardBar is left out: it extends the shell's own BarWidget, so setting() and
 // bar come from a type that is not in this repository.
-for (const file of ["Omarchyform.qml", "BoardSession.qml", "BoardPersistence.qml", "BoardExchange.qml",
+for (const file of ["Omarchyform.qml", "BoardSession.qml", "BoardPersistence.qml", "BoardExchange.qml", "BoardLibrary.qml",
                     "Board.qml", "Node.qml", "Browser.qml", "Help.qml", "BoardToolbar.qml",
                     "BoardImage.qml", "ScrollHint.qml", "Commands.qml", "Conflict.qml",
                     "Theme.qml", "Surface.qml"]) {

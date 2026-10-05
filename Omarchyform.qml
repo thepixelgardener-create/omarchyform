@@ -9,7 +9,8 @@ import "BoardStore.js" as Store
 
 // Controller and plugin entry point. Owns the state, the file, and the two
 // surfaces the board can live on. The drawing lives in Board.qml and Node.qml,
-// the pure logic in BoardStore.js.
+// the pure logic in BoardStore.js, and the boards folder — browsing, naming,
+// folders and the trash — in BoardLibrary.qml.
 Item {
   id: root
 
@@ -95,7 +96,7 @@ Item {
   }
 
   function newBoard() {
-    if (!root.stateReady || root.exchangeBusy || !root.filesystemReady()) return
+    if (!root.stateReady || root.exchangeBusy || !root.library.ready()) return
     root.stopEditing()
     exchange.newBoard()
   }
@@ -258,14 +259,14 @@ Item {
 
   function renameBoard() {
     root.openBrowser()
-    root.prompt("rename-current", "board name:", root.boardTitle)
+    root.library.ask("rename-current", "board name:", root.boardTitle)
   }
 
   Timer {
     interval: 20
     repeat: true
     running: root.launchNewBoard
-    onTriggered: if (root.stateReady && !root.browserBusy && !root.exchangeBusy) {
+    onTriggered: if (root.stateReady && !root.library.busy && !root.exchangeBusy) {
       root.launchNewBoard = false
       root.newBoard()
     }
@@ -285,7 +286,7 @@ Item {
     interval: 20
     repeat: true
     running: root.launchOpenPath !== ""
-    onTriggered: if (root.stateReady && !root.browserBusy && !root.exchangeBusy) {
+    onTriggered: if (root.stateReady && !root.library.busy && !root.exchangeBusy) {
       var path = root.launchOpenPath
       root.launchOpenPath = ""
       exchange.importPath(path)
@@ -298,13 +299,13 @@ Item {
     onCreated: function(path, editFirst) {
       if (editFirst) root.pendingFirstNote = path
       root.openBoard(path, false)
-      root.rescan()
+      root.library.rescan()
       root.flash(editFirst ? "New board · F2 to name it" : "Board imported" + exchange.createdNote, "board")
     }
     onFinished: function(message, kind) { root.flash(message, kind) }
     onFailed: function(message, kind) { root.report(message, kind) }
     onCopied: function(name) {
-      root.rescan()
+      root.library.rescan()
       session.keptAsCopy(name)
     }
   }
@@ -351,8 +352,8 @@ Item {
   function statusState() {
     return {
       opened: root.opened, helpVisible: root.helpVisible,
-      browserVisible: root.browserVisible, finding: root.finding,
-      saveError: root.saveError, trashIndexError: root.trashIndexError,
+      browserVisible: root.library.showing, finding: root.finding,
+      saveError: root.saveError, trashIndexError: root.library.trashIndexError,
       diskChanged: root.diskChanged, damaged: root.damaged,
       failureText: root.failureText,
       paletteVisible: root.paletteVisible, arranging: root.arranging,
@@ -438,73 +439,16 @@ Item {
   }
   readonly property bool saving: session.busy
   readonly property var pendingBoard: session.pendingBoard
-  readonly property bool canEdit: session.canEdit && !root.browserBusy && !root.imageBusy
+  readonly property bool canEdit: session.canEdit && !root.library.busy && !root.imageBusy
   property bool stateReady: false
 
   property var undoStack: []
   property var redoStack: []
 
-  // ------------------------------------------------------------------ browser
-  property bool browserVisible: false
-  property string browserDir: ""
-  property string browserQuery: ""
-  property int browserIndex: 0
-  property var browserEntries: []
-  // "" when navigating; otherwise the label of the line being typed into.
-  property bool browserSearching: false
-  property string browserPrompt: ""
-  property string browserInput: ""
-  property string browserAction: ""
-  // Armed by the first x, cleared by anything else.
-  property string pendingDelete: ""
-  // A line of feedback shown in place of the path, cleared by the next key.
-  property string browserMessage: ""
-  // The browser shows the trash instead of the boards while this is on.
-  property bool browserTrash: false
-  property var trashEntries: []
-  property bool trashIndexSaving: false
-  property bool trashIndexLoading: true
-  property bool trashIndexNeedsRead: true
-  property string trashIndexError: ""
-  readonly property bool browserBusy: mkdirProc.running || moveProc.running || trashProc.running
-    || restoreProc.running || purgeProc.running || root.trashIndexSaving || root.trashIndexLoading
-
-  function refreshTrashIndex() {
-    if (root.trashIndexSaving || (root.trashIndexError !== "" && !root.trashIndexNeedsRead)) return
-    root.trashIndexLoading = true
-    root.trashIndexNeedsRead = true
-    trashIndexFile.reload()
-  }
-
-  function acceptTrashIndex(raw) {
-    root.trashIndexLoading = false
-    if (root.trashIndexSaving || (root.trashIndexError !== "" && !root.trashIndexNeedsRead)) return
-    var parsed = null
-    try { parsed = JSON.parse(raw) } catch (e) {}
-    var entries = Store.readTrash(raw)
-    if (!parsed || (parsed.version !== undefined && parsed.version !== 1) || !Array.isArray(parsed.entries) || entries.length !== parsed.entries.length) {
-      root.trashIndexNeedsRead = true
-      root.trashIndexError = "trash index is invalid — repair index.json, then ctrl+s to reload"
-      return
-    }
-    root.trashEntries = entries
-    root.trashIndexNeedsRead = false
-    root.trashIndexError = ""
-  }
-
+  readonly property string helperScript: decodeURIComponent(Qt.resolvedUrl("BoardFiles.sh").toString().replace(/^file:\/\//, ""))
   function fileCommand(action, args) {
-    return ["bash", decodeURIComponent(Qt.resolvedUrl("BoardFiles.sh").toString().replace(/^file:\/\//, "")), action].concat(args)
+    return ["bash", root.helperScript, action].concat(args)
   }
-
-  function filesystemReady() {
-    if (root.browserBusy) { root.browserMessage = "finishing the previous operation…"; return false }
-    if (root.trashIndexError !== "") { root.browserMessage = root.trashIndexError; return false }
-    return true
-  }
-
-  readonly property var browserRows: root.browserTrash
-    ? Store.sortedTrash(root.trashEntries)
-    : Store.filterEntries(root.browserEntries, root.browserDir, root.browserQuery)
 
   property var activeBoard: null
   // Whether the view was last set with no surface to measure the header on.
@@ -673,7 +617,7 @@ Item {
     root.repaintLinks()
     // Rebuilding the model tears down every delegate, which drops keyboard
     // focus; without this a second undo never reaches the key handler.
-    if (!root.browserVisible) root.focusKeys()
+    if (!root.library.showing) root.focusKeys()
   }
 
   function undo() {
@@ -1110,7 +1054,7 @@ Item {
     root.save(true)
     root.repaintLinks()
     root.flash((indices.length === 1 ? "deleted" : indices.length + " deleted") + " · u to undo")
-    if (!root.browserVisible) root.focusKeys()
+    if (!root.library.showing) root.focusKeys()
   }
 
   // The cursor item decides the next value and the rest follow it, so a mixed
@@ -1447,289 +1391,44 @@ Item {
     else root.dismiss()
   }
 
-  // ------------------------------------------------------------------ browser
+  // ------------------------------------------------------------------ library
+  // Browsing, naming, folders and the trash, in BoardLibrary.qml. It is told
+  // where the library is and which board is open, and asks for the rest.
+  BoardLibrary {
+    id: boardLibrary
+    boardsDir: root.boardsDir
+    trashDir: root.trashDir
+    trashIndexPath: root.trashIndexPath
+    helperScript: root.helperScript
+    currentBoard: root.currentBoard
+    boardConflicted: root.diskChanged
+    boardSettled: !session.busy && root.saveError === ""
+    onOpenRequested: function (path, fresh) { root.openBoard(path, fresh) }
+    onCurrentMoved: function (path) {
+      root.currentBoard = path
+      root.writeState()
+    }
+    onNotice: function (message) { root.flash(message) }
+    onClosed: root.focusKeys()
+    onAboutToRename: root.flushSave()
+  }
+  readonly property BoardLibrary library: boardLibrary
+
+  // The two ways in that are commands, so the palette and the keys can name
+  // them: what is open is saved before the library is looked at.
   function openBrowser() {
     root.flushSave()
-    root.browserQuery = ""
-    root.browserSearching = false
-    root.browserPrompt = ""
-    root.browserInput = ""
-    root.browserMessage = ""
-    root.pendingDelete = ""
-    root.browserIndex = 0
-    root.browserDir = Store.parentOf(root.currentBoard)
-    root.browserTrash = false
-    root.browserVisible = true
-    root.refreshTrashIndex()
-    root.rescan()
-  }
-
-  function closeBrowser() {
-    root.browserVisible = false
-    root.browserPrompt = ""
-    root.browserQuery = ""
-    root.browserSearching = false
-    root.focusKeys()
-  }
-
-  function rescan() { scanProc.running = true }
-
-  function browserClamp() {
-    var n = root.browserRows.length
-    if (n === 0) root.browserIndex = 0
-    else if (root.browserIndex >= n) root.browserIndex = n - 1
-    else if (root.browserIndex < 0) root.browserIndex = 0
-  }
-
-  function browserCurrent() {
-    var rows = root.browserRows
-    if (root.browserIndex < 0 || root.browserIndex >= rows.length) return null
-    return rows[root.browserIndex]
-  }
-
-  // Enter descends into a folder or opens a board.
-  function browserEnter() {
-    // Opening a board or folder does not touch the trash, so a broken trash
-    // index must not block it; restoreCurrent() checks the index itself.
-    if (root.browserBusy) { root.browserMessage = "finishing the previous operation…"; return }
-    var e = root.browserCurrent()
-    if (!e) return
-    if (root.browserTrash) { root.restoreCurrent(); return }
-    if (e.dir) {
-      root.browserDir = e.path
-      root.browserQuery = ""
-      root.browserIndex = 0
-      return
-    }
-    root.openBoard(e.path)
-    root.closeBrowser()
-  }
-
-  function browserUp() {
-    if (root.browserSearching) { root.browserSearching = false; root.browserQuery = ""; root.browserIndex = 0; return }
-    if (root.browserDir === "") return
-    var leaving = root.browserDir
-    root.browserDir = Store.parentOf(leaving)
-    root.browserIndex = 0
-    // Land on the folder we just came out of, the way cd .. leaves you.
-    var rows = root.browserRows
-    for (var i = 0; i < rows.length; i++) if (rows[i].path === leaving) root.browserIndex = i
-  }
-
-  function prompt(action, label, initial) {
-    root.browserAction = action
-    root.browserPrompt = label
-    root.browserInput = initial || ""
-  }
-
-  function cancelPrompt() {
-    root.browserAction = ""
-    root.browserPrompt = ""
-    root.browserInput = ""
-  }
-
-  function commitPrompt() {
-    if (!root.filesystemReady()) return
-    var name = root.browserInput.trim()
-    var action = root.browserAction
-    root.browserPrompt = ""
-    root.browserInput = ""
-    root.browserAction = ""
-    if (!Store.nameIsValid(name)) { root.browserMessage = "use a name without slashes or control characters"; return }
-
-    if (action === "board") {
-      var path = Store.uniquePath(root.browserEntries, root.browserDir, name, false)
-      root.createBoard(path)
-    } else if (action === "folder") {
-      var dir = Store.uniquePath(root.browserEntries, root.browserDir, name, true)
-      mkdirProc.command = root.fileCommand("mkdir", [root.boardsDir, dir])
-      mkdirProc.running = true
-    } else if (action === "rename" || action === "rename-current") {
-      if (root.diskChanged) {
-        root.browserMessage = "two versions of this board exist — esc, then ctrl+s to choose"
-        return
-      }
-      root.flushSave()
-      if (session.busy || root.saveError !== "") {
-        root.browserMessage = "finish saving before renaming; try again"
-        return
-      }
-      var e = action === "rename-current" ? {path: root.currentBoard, dir: false} : root.browserCurrent()
-      if (!e) return
-      if (name === Store.displayName(e)) { root.closeBrowser(); return }
-      var target = Store.uniquePath(root.browserEntries, Store.parentOf(e.path), name, e.dir)
-      moveProc.command = root.fileCommand("move", [root.boardsDir, e.path, root.boardsDir, target])
-      moveProc.renamedFrom = e.path
-      moveProc.renamedTo = target
-      moveProc.running = true
-    }
-  }
-
-  // A new board is created by pointing at it and saving: the file appears with
-  // an empty board in it, which is also what makes it the open one.
-  function createBoard(path) {
-    root.openBoard(path, true)
-    root.closeBrowser()
-  }
-
-  // True when this entry is, or contains, the board that is open.
-  function holdsOpenBoard(e) {
-    if (!e.dir) return e.path === root.currentBoard
-    return root.currentBoard.indexOf(e.path + "/") === 0
-  }
-
-  function deleteCurrent() {
-    if (!root.filesystemReady()) return
-    var e = root.browserCurrent()
-    if (!e) return
-
-    if (root.browserTrash) {
-      // Inside the trash there is nowhere further to put something, so this
-      // one really does destroy it.
-      if (root.pendingDelete !== e.file) {
-        root.pendingDelete = e.file
-        root.browserMessage = "press x again to destroy " + Store.baseName(e.path) + " for good"
-        return
-      }
-      root.pendingDelete = ""
-      root.browserMessage = ""
-      purgeProc.entryFile = e.file
-      purgeProc.command = root.fileCommand("purge", [root.trashDir, e.file])
-      purgeProc.running = true
-      return
-    }
-
-    // Refuse to delete the open board, or the folder it lives in.
-    if (root.holdsOpenBoard(e)) {
-      root.browserMessage = "that is the board you have open — switch away first"
-      return
-    }
-    if (root.pendingDelete !== e.path) {
-      root.pendingDelete = e.path
-      root.browserMessage = "press x again to move " + Store.displayName(e)
-                            + (e.dir ? "/ and everything in it" : "") + " to the trash"
-      return
-    }
-    root.pendingDelete = ""
-    root.browserMessage = ""
-
-    var stamp = Qt.formatDateTime(new Date(), "yyyyMMdd-hhmmss")
-    var file = Store.trashFile(root.trashEntries, e.path, stamp)
-    trashProc.pending = { file: file, path: e.path, dir: e.dir, at: stamp }
-    trashProc.command = root.fileCommand("move", [root.boardsDir, e.path, root.trashDir, file])
-    trashProc.running = true
-  }
-
-  function restoreCurrent() {
-    if (!root.filesystemReady()) return
-    var e = root.browserCurrent()
-    if (!e || !root.browserTrash) return
-    restoreProc.entryFile = e.file
-    restoreProc.command = root.fileCommand("move", [root.trashDir, e.file, root.boardsDir, e.path])
-    restoreProc.running = true
-  }
-
-  function toggleTrash() {
-    root.browserTrash = !root.browserTrash
-    root.browserIndex = 0
-    root.browserQuery = ""
-    root.browserSearching = false
-    root.pendingDelete = ""
-    root.browserMessage = ""
-    if (root.browserTrash) root.refreshTrashIndex()
-  }
-
-  function saveTrashIndex(entries) {
-    root.trashEntries = entries
-    root.trashIndexSaving = true
-    root.trashIndexNeedsRead = false
-    root.trashIndexError = ""
-    trashIndexFile.setText(Store.writeTrash(entries))
-  }
-
-  function browserKey(event) {
-    if (event.key === Qt.Key_S && (event.modifiers & Qt.ControlModifier)) {
-      root.retryTrashIndex()
-      event.accepted = true
-      return
-    }
-    var text = event.text
-
-    // Arming a delete lasts exactly until the next keystroke.
-    if (text !== "x") {
-      root.pendingDelete = ""
-      root.browserMessage = ""
-    }
-
-    // While typing a name, every printable key is input.
-    if (root.browserPrompt !== "") {
-      if (event.key === Qt.Key_Escape) root.cancelPrompt()
-      else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) root.commitPrompt()
-      else if (event.key === Qt.Key_Backspace) root.browserInput = root.browserInput.slice(0, -1)
-      else if (text && text >= " ") root.browserInput += text
-      else return
-      event.accepted = true
-      return
-    }
-
-    // While searching, printable keys extend the query; the arrow keys and
-    // Enter still navigate the results.
-    if (root.browserSearching && text && text >= " ") {
-      root.browserQuery += text
-      root.browserIndex = 0
-      event.accepted = true
-      return
-    }
-
-    if (event.key === Qt.Key_Escape) {
-      if (root.browserTrash) { root.toggleTrash() }
-      else if (root.browserSearching) {
-        root.browserSearching = false
-        root.browserQuery = ""
-        root.browserIndex = 0
-      } else root.closeBrowser()
-    }
-    else if (event.key === Qt.Key_Down || text === "j") { root.browserIndex += 1; root.browserClamp() }
-    else if (event.key === Qt.Key_Up || text === "k") { root.browserIndex -= 1; root.browserClamp() }
-    else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || text === "l"
-             || event.key === Qt.Key_Right) root.browserEnter()
-    else if (event.key === Qt.Key_Left || text === "h") root.browserUp()
-    else if (event.key === Qt.Key_Backspace) {
-      if (root.browserSearching) {
-        root.browserQuery = root.browserQuery.slice(0, -1)
-        if (root.browserQuery === "") root.browserSearching = false
-        root.browserIndex = 0
-      } else root.browserUp()
-    }
-    else if (text === "/") { root.browserSearching = true; root.browserQuery = ""; root.browserIndex = 0 }
-    else if (root.browserTrash && ["a", "A", "r"].indexOf(text) >= 0) root.browserMessage = "enter: restore this item · t: return to boards"
-    else if (text === "a") root.prompt("board", "new board:", "")
-    else if (text === "A") root.prompt("folder", "new folder:", "")
-    else if (text === "r") {
-      var e = root.browserCurrent()
-      if (e) root.prompt("rename", "rename to:", Store.displayName(e))
-    }
-    else if (text === "x") root.deleteCurrent()
-    else if (text === "t") root.toggleTrash()
-    else if (text === "g") { root.browserIndex = 0 }
-    else if (text === "G") { root.browserIndex = root.browserRows.length - 1; root.browserClamp() }
-    else return
-    event.accepted = true
+    root.library.show()
   }
 
   // ------------------------------------------------------------------ storage
   BoardSession { id: session; ctl: root }
 
   function scheduleSave() { session.scheduleSave() }
-  function retryTrashIndex() {
-    if (root.trashIndexLoading || root.trashIndexSaving || root.trashIndexError === "") return
-    if (root.trashIndexNeedsRead) root.refreshTrashIndex()
-    else root.saveTrashIndex(root.trashEntries)
-  }
   // ctrl+s with a conflict outstanding is not a save: it is the moment someone
   // is asking about it, which is when the choices are worth putting on screen.
   function flushSave() {
-    root.retryTrashIndex()
+    root.library.retryTrashIndex()
     if (root.diskChanged) { root.decideConflict(); return }
     session.flushSave()
   }
@@ -1836,14 +1535,7 @@ Item {
     root.editIndex = -1
     root.linkingFrom = -1
     root.helpVisible = false
-    root.browserVisible = false
-    root.browserPrompt = ""
-    root.browserInput = ""
-    root.browserAction = ""
-    root.browserQuery = ""
-    root.browserSearching = false
-    root.browserMessage = ""
-    root.pendingDelete = ""
+    root.library.reset()
   }
 
   function dismiss() {
@@ -1933,114 +1625,6 @@ Item {
     id: migrateProc
     command: ["cp", "-n", root.legacyPath, root.boardsDir + "/board.json"]
     onExited: stateFile.reload()
-  }
-
-  Process {
-    id: scanProc
-    command: ["find", root.boardsDir, "-mindepth", "1", "-printf", "%y\\t%P\\n"]
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: {
-        root.browserEntries = Store.parseListing(text)
-        root.browserClamp()
-      }
-    }
-  }
-
-  Process {
-    id: mkdirProc
-    onExited: function(code) {
-      if (code !== 0) root.browserMessage = "could not create that folder"
-      root.rescan()
-    }
-  }
-
-  Process {
-    id: moveProc
-    property string renamedFrom: ""
-    property string renamedTo: ""
-    onExited: function (code) {
-      // Follow the open board, whether it was renamed itself or sits inside a
-      // folder that was.
-      if (code === 0) {
-        var from = moveProc.renamedFrom
-        if (root.currentBoard === from) {
-          root.currentBoard = moveProc.renamedTo
-          root.writeState()
-        } else if (root.currentBoard.indexOf(from + "/") === 0) {
-          root.currentBoard = moveProc.renamedTo + root.currentBoard.slice(from.length)
-          root.writeState()
-        }
-      }
-      if (code !== 0) root.browserMessage = "could not rename that; destination exists or path is unavailable"
-      root.rescan()
-    }
-  }
-
-  Process {
-    id: trashProc
-    property var pending: null
-    onExited: function (code) {
-      if (code === 0 && trashProc.pending) {
-        var next = root.trashEntries.slice()
-        next.push(trashProc.pending)
-        root.saveTrashIndex(next)
-        root.flash("moved to the trash · t in the browser to get it back")
-      } else if (code !== 0) {
-        root.browserMessage = "could not move that to the trash"
-      }
-      trashProc.pending = null
-      root.rescan()
-    }
-  }
-
-  Process {
-    id: restoreProc
-    property string entryFile: ""
-    onExited: function (code) {
-      if (code === 0) {
-        root.saveTrashIndex(Store.withoutTrash(root.trashEntries, restoreProc.entryFile))
-        root.browserMessage = "restored"
-      } else {
-        root.browserMessage = "could not restore that; something is in its place"
-      }
-      restoreProc.entryFile = ""
-      root.rescan()
-    }
-  }
-
-  Process {
-    id: purgeProc
-    property string entryFile: ""
-    onExited: function (code) {
-      if (code === 0) root.saveTrashIndex(Store.withoutTrash(root.trashEntries, purgeProc.entryFile))
-      else root.browserMessage = "could not remove that trash entry"
-      purgeProc.entryFile = ""
-    }
-  }
-
-  FileView {
-    id: trashIndexFile
-    path: root.trashIndexPath
-    watchChanges: false
-    atomicWrites: true
-    printErrors: false
-    onLoaded: root.acceptTrashIndex(text())
-    onLoadFailed: function(error) {
-      root.trashIndexLoading = false
-      if (root.trashIndexSaving || !root.trashIndexNeedsRead) return
-      if (error === FileViewError.FileNotFound) {
-        root.trashEntries = []
-        root.trashIndexNeedsRead = false
-        root.trashIndexError = ""
-      } else root.trashIndexError = "trash index could not be read — ctrl+s to retry"
-    }
-    onSaved: { root.trashIndexSaving = false; root.trashIndexError = "" }
-    onSaveFailed: {
-      root.trashIndexSaving = false
-      root.trashIndexError = "trash index could not be saved — ctrl+s to retry; keep the board open"
-      root.browserMessage = root.trashIndexError
-    }
   }
 
   FileView {
