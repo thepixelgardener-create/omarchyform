@@ -33,7 +33,7 @@ an external service.
 | Pasted text/images | `wl-paste` → staging → QML/library | Bound bytes before returning text; reject bad image types and excessive supported dimensions; remove staging on success/failure. Filesystem and security tests. |
 | Board JSON, titles, paths, errors | Models → Qt text | Explicit plain text for labels. Styled notes escape input first; status escapes variable messages. Source guards, hostile markup tests and Qt title test. |
 | Image names from boards | Local image URL, bundle/copy helper | Plain validated names, no URL or traversal; helper rejects symlink components. Logic/filesystem tests; manually inspect direct Qt loads. |
-| Notes and edits | Helper commit stdin → board/backup | Atomic replacement, revision check, lock, no content in diagnostics, private modes for newly committed files. Filesystem, CLI and QML persistence tests. |
+| Notes and edits | Helper commit stdin → board/backup | Atomic replacement, revision check, lock, no content in diagnostics, private modes for newly committed files and the folders made for them. Filesystem, CLI and QML persistence tests. |
 | Shared boards and PNG exports | Staging → chosen external destination | Explicit user action, refuse app-data overwrite, keep unrelated files on failure. Filesystem/exchange tests. |
 | CLI operations | stdin/file → model → helper | Parse as data, no evaluation. Invalid JSON must not echo content. CLI/security tests. |
 | Desktop install/open | Opt-in launcher files and summon payload | No automatic install hook; ownership/conflict checks, correct path encoding, no shell interpretation. Desktop tests and manual review. |
@@ -81,8 +81,10 @@ These are review obligations, not claims covered by a green test:
   supported. Direct Qt image reads need separate review from helper confinement.
 - Board files are plaintext. Existing files, QML staging/state files and
   user-chosen directories can have different permissions from helper-created
-  board files. The mode test covers new helper commits and their backups; it
-  does not certify all existing storage as private.
+  board files. The mode test covers new helper commits and their backups, and
+  the folders and locks the helper creates, under a umask of 000. The plugin
+  creates its own data folders 0700. Neither changes a folder or file that is
+  already there, so this does not certify all existing storage as private.
 - Ordinary deletion is not secure erasure. Backups, trash, image assets,
   exported copies and clipboard managers can retain content. Crashes can leave
   staging files; EXIT traps do not run after SIGKILL or power loss.

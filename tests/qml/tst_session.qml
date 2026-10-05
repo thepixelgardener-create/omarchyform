@@ -46,6 +46,9 @@ ShellRoot {
     property bool failBackup: false
     function backupPathFor(relative) { if (ctl.failBackup) return test.dir + "/linked/refused.bak"; return test.dir + "/bak__" + String(relative).replace(/\//g, "__") + ".bak" }
     function lockPathFor(relative) { return test.dir + "/lock__" + String(relative).replace(/\//g, "__") + ".lock" }
+    function fileCommand(action, args) {
+      return ["bash", test.dir + "/BoardFiles.sh", action].concat(args)
+    }
     property var undoStack: []
     property var redoStack: []
     property var markedIds: []

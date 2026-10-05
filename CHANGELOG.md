@@ -7,6 +7,11 @@ since older boards are migrated on load rather than rejected.
 
 ### Fixed
 
+- Folders and lock files that the plugin and `omarchyform` create are now
+  private, whatever umask the shell started with. Boards and backups already
+  were; under a umask of 000 a new boards folder was writable by any user who
+  could reach it. Folders that already exist keep the permissions they have.
+
 - An imported board with no `images` key kept the picture names it carried, so
   its picture items could show, and a later copy with its pictures could carry,
   pictures from your own library that it named. Every import now clears picture

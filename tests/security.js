@@ -149,6 +149,22 @@ cat > "$SCREEN_DIR/clipboard"
   assert.equal(fs.readFileSync(backup,'utf8'),secret)
   assert.deepEqual(fs.readdirSync(boards),['private.json'],'commit staging is cleaned')
 
+  // Those modes hold under any umask: the files start as mktemp's 0600. What a
+  // umask did reach is what the helper makes on the way — folders and locks —
+  // so they are checked under the loosest one there is.
+  const umask = process.umask(0)
+  try {
+    const nested = path.join(boards,'folder','nested.json'), nestedBackup = path.join(backups,'folder','nested.bak')
+    const lock = path.join(dir,'locks','nested.lock')
+    for (const text of [secret,secret+'changed'])
+      success(run(['commit',nested,nestedBackup,lock,'-',boards,backups],text))
+    success(run(['mkdir',boards,'made']))
+    for (const folder of [path.dirname(nested),path.dirname(nestedBackup),path.dirname(lock),path.join(boards,'made')])
+      assert.equal(fs.statSync(folder).mode & 0o777,0o700,`helper folder is private under umask 000: ${path.relative(dir,folder)}`)
+    for (const file of [nested,nestedBackup,lock])
+      assert.equal(fs.statSync(file).mode & 0o077,0,`helper file is private under umask 000: ${path.relative(dir,file)}`)
+  } finally { process.umask(umask) }
+
   const cli = spawnSync(process.execPath,[path.join(root,'bin/omarchyform'),'apply',board,'-'],
     {env,input:'CANARY-private-invalid-operations',encoding:'utf8',timeout:10000})
   assert.ifError(cli.error)

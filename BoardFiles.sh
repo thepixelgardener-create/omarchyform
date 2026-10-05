@@ -2,6 +2,12 @@
 # Local filesystem operations. Paths are data, never shell source.
 set -euo pipefail
 
+# Everything this creates is private, whatever umask the shell was started
+# with. Files already were — mktemp makes them 0600, and a backup copies that —
+# but folders and locks took the umask, and under 000 a new boards folder was
+# 0777: any user who could reach it could rename a board out of it or add one.
+umask 077
+
 # Put a finished temporary file at its final name, and never over a name that
 # is already taken: callers generate unique ones, so a collision is worth
 # reporting. The check is explicit because mv -n's exit status for an existing
