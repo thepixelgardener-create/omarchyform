@@ -231,6 +231,14 @@ this section dates too.
 
 **Still open:** one connector geometry for the board and export (finding 1),
 display-only nodes (2), extracting library operations from the controller
-(3), the docs index, CI's lint gate, and the `stackAfter` warnings. Those
-appear in the export scene too, where nothing is pinned, so they come from a
-delegate setting its own `parent` at all, not from pinning.
+(3), the docs index and CI's lint gate.
+
+**Measured and kept:** the board's `stackAfter` warnings (finding 8). They are
+the repeater failing to stand an item after one that has moved to the other
+layer; every item is in its layer with `z` its place on the board after load,
+a change of layer and a reorder, which `tst_pan.qml` now holds it to. Removing
+them cost a quarter more time switching a 3000-item board with an
+Instantiator (4.6s to 5.7s), because it deletes the old items later, and over
+twice as much with a holder item per node. The export's warnings, one per item
+on every export, came from its repeater sitting outside the layer its items
+moved into; it now sits in the foreground layer as the board's does.

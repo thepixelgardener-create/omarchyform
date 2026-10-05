@@ -967,4 +967,44 @@ TestCase {
     wait(0)
     verify(!pictureOnTop(), "brought forward again, it comes back over it")
   }
+
+  // A background lives in the layer under the connectors and everything else
+  // in the layer over them, and within each the order is the board's: z is the
+  // item's place in the model. The repeater cannot stand an item after one in
+  // the other layer and says so — a QQuickItem::stackAfter warning — but that
+  // changes nothing drawn, which is what this holds it to. Making the warning
+  // go away cost a quarter more time switching a 3000-item board (Instantiator)
+  // or over twice as much (a holder item per node), so it stays.
+  function test_eachItemSitsInItsLayerInBoardOrder_data() {
+    return [
+      { tag: "a background first", pins: [true, false, false, false] },
+      { tag: "a background in the middle", pins: [false, true, false, false] },
+      { tag: "two backgrounds apart", pins: [false, true, false, true] },
+      { tag: "no backgrounds", pins: [false, false, false, false] }
+    ]
+  }
+  function test_eachItemSitsInItsLayerInBoardOrder(row) {
+    function check(when) {
+      for (var i = 0; i < itemModel.count; i++) {
+        var item = itemModel.get(i)
+        var node = findChild(surface, "board-item-" + item.iid)
+        verify(node, when + ": item " + item.iid + " is drawn")
+        compare(node.parent.objectName, item.ipinned ? "background-world" : "foreground-world",
+                when + ": item " + item.iid + " is in its layer")
+        compare(node.z, i, when + ": item " + item.iid + " stands where the board puts it")
+      }
+    }
+    itemModel.clear()
+    for (var i = 0; i < row.pins.length; i++)
+      itemModel.append({ iid: i + 1, kind: "rect", ix: 60 + i * 30, iy: 200, iw: 100, ih: 100,
+                         itint: "foreground", itext: "", ipinned: row.pins[i], isrc: "" })
+    wait(0)
+    check("loaded")
+    itemModel.setProperty(2, "ipinned", !itemModel.get(2).ipinned)
+    wait(0)
+    check("after item 3 changed layer")
+    itemModel.move(0, 3, 1)
+    wait(0)
+    check("after the first moved to the top")
+  }
 }
