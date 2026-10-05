@@ -1,6 +1,6 @@
 {
   "name": "omarchyform",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "private": true,
   "description": "Tests for the pure board logic in BoardStore.js",
   "scripts": {

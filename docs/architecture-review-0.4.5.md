@@ -204,8 +204,8 @@ mutation run, or security-specific suite was performed for this review.
 
 ## Since this review
 
-Recorded 2026-10-03 against the housekeeping change that followed 0.4.5, so
-this section dates too.
+Recorded 2026-10-03 against the housekeeping change that followed 0.4.5, and
+updated 2026-10-05 for 0.4.6, so this section dates too.
 
 **Resolved:**
 
@@ -229,11 +229,23 @@ this section dates too.
   arrived for 15 seconds. `tests/qt/tst_export.qml` reads the file back, and
   fails against the old timer.
 
-**Still open:** one connector geometry for the board and export (finding 1),
-display-only nodes (2), extracting library operations from the controller
-(3), the docs index and CI's lint gate.
+- Finding 1, 0.4.6: the board and the export draw connectors from
+  `Store.connectorGeometry`, and the dashed line drawn while connecting uses it
+  too. Screenshots of every other state were pixel-identical before and after.
+- Finding 3, 0.4.6: browsing, naming, folders and the trash are
+  `BoardLibrary.qml`, told what it needs and asking for the rest through
+  signals; `Omarchyform.qml` went from 2105 lines to 1686.
+- The `waitForJob()` reads (optimization 3), 0.4.6: on a 3000-item board on a
+  local disk the read takes 1ms. What cost was around it: the watcher wrote the
+  whole board out again after every save to recognise its own write, 41ms; it
+  now compares the texts it already has first, 6ms.
 
-**Measured and kept:** the board's `stackAfter` warnings (finding 8). They are
+**Still open:** display-only nodes (2); the connector repaint cost
+(optimization 1), measured but not changed; reads from slow or network storage
+(3), which block for as long as they take and were not measurable here; the
+docs index and CI's lint gate.
+
+**Measured and kept:** the board's `stackAfter` warnings (finding 5). They are
 the repeater failing to stand an item after one that has moved to the other
 layer; every item is in its layer with `z` its place on the board after load,
 a change of layer and a reorder, which `tst_pan.qml` now holds it to. Removing

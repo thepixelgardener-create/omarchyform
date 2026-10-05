@@ -1,6 +1,6 @@
 # Roadmap
 
-Updated 2026-10-03. This is the current release direction. The dated
+Updated 2026-10-05. This is the current release direction. The dated
 [architecture review](architecture-review-0.4.5.md) and
 [competitor analysis](competitor-analysis-0.4.5.md) explain the findings behind it.
 
@@ -11,18 +11,34 @@ This release improves the canvas appearance and prepares the directory listing.
 - **Background choices — shipped in 0.4.5:** dots, square grid
   and ruled lines, with a plain option. Patterns follow the theme and camera;
   **Menu → Background** remembers the choice. Dots remain the default.
-- **Directory discoverability — description prepared:** describe the plugin as
-  a whiteboard for brainstorming, mind maps and diagrams. Publish the updated
-  marketplace snapshot with 0.4.5; see [listing notes](marketplace-listing.md).
+- **Directory discoverability — live:** the directory describes the plugin as
+  a whiteboard for brainstorming, mind maps and diagrams; see
+  [listing notes](marketplace-listing.md).
 
-## Next maintenance pass
+## 0.4.6 — Reliability, from the 0.4.5 review
 
-- **PNG export readiness:** reproduce the delayed-image case and make capture
-  wait for images and a rendered frame, with a bounded failure path.
-- **Maintenance:** share connector geometry between the board and export
-  rendering.
+Shipped. The follow-ups from the [architecture review](architecture-review-0.4.5.md)
+and a security pass; the [changelog](../CHANGELOG.md) has each one.
 
-These maintenance items are planned. Completed changes are recorded in the changelog.
+- PNG export waits for every picture instead of a fixed 80ms.
+- Long notes no longer hold the shell up; a note is at most 1 MB.
+- The board and the export draw connectors from one geometry.
+- The board library is its own component, `BoardLibrary.qml`.
+- New folders and locks are private under any umask; the launcher's
+  **New board** action is escaped as desktop entries require.
+
+## Maintenance still open
+
+- **Display-only nodes:** the PNG export draws `Node.qml` against a stand-in
+  controller with empty editing methods (review finding 2).
+- **Connector drawing cost:** cache the item index between repaints and skip
+  connectors that cannot cross the view; keep either only if `bench:scene`
+  improves.
+- **Reads from slow storage:** a board read blocks the shell for as long as the
+  read takes. 1ms on a local disk; network storage is unmeasured.
+- A docs index, and CI rejecting new lint diagnostics.
+
+These are planned. Completed changes are recorded in the changelog.
 
 ## 0.5 — Editable, labeled connectors
 
@@ -57,3 +73,9 @@ Revisit these after 0.5 and feedback from real use:
 - Persistent groups with explicit membership.
 - SVG export and zoom to selection.
 - Explicit URL/file links if source collection proves a stronger need.
+- A timeline: play a board back from its first note to now. Items are numbered
+  in the order they were made, so a first version needs no new storage; moves,
+  edits and deletions would need history kept in the file.
+- Split view. Open question: two boards side by side, or two views of one
+  board. Either needs the camera to belong to the view rather than the
+  controller.

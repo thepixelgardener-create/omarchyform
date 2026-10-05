@@ -3,7 +3,19 @@
 Notable changes, newest first. Board file versions are noted where they moved,
 since older boards are migrated on load rather than rejected.
 
-## Unreleased
+## 0.4.6 — 2026-10-05
+
+### Changed
+
+- A note can now be at most 1 MB, the same as the largest paste. A board with
+  a longer one opens read-only and says why, instead of holding the shell up,
+  and one is refused on import. The editor will not grow a note past it, and
+  `omarchyform add` and `setText` refuse text that long; `validate` lists a
+  board's over-long note under `warnings`.
+
+- A PNG exported in the theme's own colours drew connectors heavier than the
+  board does, at 65% of the foreground against the board's 55%. Both now use
+  55%, so the picture looks like the board it is of.
 
 ### Fixed
 
@@ -43,12 +55,6 @@ since older boards are migrated on load rather than rejected.
   1 MB note opens in 47ms rather than 870, and each edit to it takes 41ms
   rather than 255.
 
-- A note can now be at most 1 MB, the same as the largest paste. A board with
-  a longer one opens read-only and says why, instead of holding the shell up,
-  and one is refused on import. The editor will not grow a note past it, and
-  `omarchyform add` and `setText` refuse text that long; `validate` lists a
-  board's over-long note under `warnings`.
-
 - `omarchyform apply` with an operation named after a built-in object method,
   such as `toString`, crashed with a stack trace instead of answering in JSON.
 
@@ -56,10 +62,6 @@ since older boards are migrated on load rather than rejected.
   items' centres, underneath them, so where its dashes fell had nothing to do
   with the connector it was showing. It now runs edge to edge, where that
   connector will, from the same geometry the board and PNG export draw with.
-
-- A PNG exported in the theme's own colours drew connectors heavier than the
-  board does, at 65% of the foreground against the board's 55%. Both now use
-  55%, so the picture looks like the board it is of.
 
 - Opening a board from the file manager did nothing when its file name held a
   newline, a tab or another control character: the path broke the payload
