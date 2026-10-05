@@ -43,6 +43,56 @@ try {
   assert.ok(fs.statSync(path.join(__dirname, '../desktop/omarchyform-open')).mode & 0o111,
     'the opener ships executable')
 
+  // An Exec value is unescaped twice: as a string, where only \s \n \t \r and
+  // \\ mean anything, then as a command line, where a quoted argument escapes
+  // " ` $ and \ with a backslash. Read here the way the specification reads
+  // it, because the New board payload was once written a backslash short:
+  // Quickshell warned on every scan and guessed right, and GLib refused the
+  // line, so the action did nothing in any GTK launcher.
+  function execArgv(line) {
+    const strings = { s: ' ', n: '\n', t: '\t', r: '\r', '\\': '\\' }
+    let value = ''
+    for (let i = 0; i < line.length; i++) {
+      if (line[i] !== '\\') { value += line[i]; continue }
+      const next = line[++i]
+      if (!(next in strings)) throw new Error(`illegal string escape \\${next} in ${line}`)
+      value += strings[next]
+    }
+    const argv = []
+    let arg = null, quoted = false
+    for (let i = 0; i < value.length; i++) {
+      const c = value[i]
+      if (quoted) {
+        if (c === '\\') {
+          const next = value[++i]
+          if (!'"`$\\'.includes(next)) throw new Error(`illegal escape \\${next} in a quoted argument`)
+          arg += next
+        } else if (c === '"') quoted = false
+        else arg += c
+      } else if (c === ' ') {
+        if (arg !== null) { argv.push(arg); arg = null }
+      } else if (c === '"') { quoted = true; arg = arg ?? '' }
+      else arg = (arg ?? '') + c
+    }
+    if (quoted) throw new Error(`unterminated quote in ${line}`)
+    if (arg !== null) argv.push(arg)
+    return argv
+  }
+  const groups = {}
+  let group = null
+  for (const line of shipped.split('\n')) {
+    const header = line.match(/^\[(.+)\]$/)
+    if (header) { group = groups[header[1]] = {}; continue }
+    const pair = line.match(/^([A-Za-z0-9-]+)=(.*)$/)
+    if (pair && group) group[pair[1]] = pair[2]
+  }
+  assert.deepStrictEqual(execArgv(groups['Desktop Entry'].Exec), ['omarchyform-open', '%f'])
+  assert.deepStrictEqual(execArgv(groups['Desktop Action NewBoard'].Exec),
+    ['omarchy-shell', 'shell', 'summon', 'thepixelgardener.omarchyform', '{"action":"new"}'],
+    'New board summons the board with its payload, quotes and all')
+  assert.throws(() => execArgv('omarchy-shell shell summon thepixelgardener.omarchyform "{\\"action\\":\\"new\\"}"'),
+    /illegal string escape/, 'and the line it replaces is refused by the same reading')
+
   // Fresh install: all three land verbatim, the command executable.
   assert.equal(run().status, 0)
   for (const [name, where] of installed)

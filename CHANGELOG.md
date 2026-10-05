@@ -24,6 +24,12 @@ since older boards are migrated on load rather than rejected.
   handed to the shell. `omarchyform-open` now escapes them, and its entry
   version moves to 2 so reinstalling replaces the old one.
 
+- The launcher's **New board** action was written with escapes the desktop
+  entry format does not allow. The shell logged a warning about it every time
+  it read its applications, and GTK-based launchers could not read the action
+  at all. It is escaped as the format asks, and the entry version moves to 3,
+  so running `desktop/install.sh` again replaces the old entry.
+
 - The agent guide and skill said a save from the shell would write over a
   change made to an open board, and that the command line keeps no backups.
   Neither is true: an open board reloads or asks which version to keep, and

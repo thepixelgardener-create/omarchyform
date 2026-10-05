@@ -15,8 +15,12 @@ Actions=NewBoard;
 # This installer only ever replaces or removes an entry carrying these two
 # keys, so a file someone else put at this path is left alone.
 X-Omarchyform-Managed=true
-X-Omarchyform-Entry-Version=2
+X-Omarchyform-Entry-Version=3
 
 [Desktop Action NewBoard]
 Name=New board
-Exec=omarchy-shell shell summon thepixelgardener.omarchyform "{\"action\":\"new\"}"
+# A value is unescaped twice: as a string first, where only \s \n \t \r and \\
+# mean anything, then as an Exec line, where a quote inside a quoted argument is
+# \". So that quote is written \\" here. Written \" it is an illegal string
+# escape: Quickshell warned and guessed, and GLib refused the line outright.
+Exec=omarchy-shell shell summon thepixelgardener.omarchyform "{\\"action\\":\\"new\\"}"
