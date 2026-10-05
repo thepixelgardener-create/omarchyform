@@ -3,3 +3,6 @@
 
 # Agent skills installed for development; never part of the distributed plugin.
 .claude/
+
+# Pictures tests/ui.js makes for the Qt tests and removes afterwards.
+tests/qt/generated/

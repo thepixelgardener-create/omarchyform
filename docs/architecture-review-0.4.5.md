@@ -222,7 +222,15 @@ this section dates too.
   board's. The compatibility notes say what shipped for input methods and
   accessibility, and README names its remaining lint warnings instead of
   counting them.
+- Finding 2's export concern, 2026-10-04: reproduced, then fixed. Five
+  phone-sized photos came out four or five empty frames in an export that
+  reported success. The export now waits for every picture to load or fail and
+  for the connectors to paint, and gives up with a message when no picture has
+  arrived for 15 seconds. `tests/qt/tst_export.qml` reads the file back, and
+  fails against the old timer.
 
 **Still open:** one connector geometry for the board and export (finding 1),
 display-only nodes (2), extracting library operations from the controller
-(3), the docs index, CI's lint gate, and the `stackAfter` warnings.
+(3), the docs index, CI's lint gate, and the `stackAfter` warnings. Those
+appear in the export scene too, where nothing is pinned, so they come from a
+delegate setting its own `parent` at all, not from pinning.
