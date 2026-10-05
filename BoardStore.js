@@ -1678,6 +1678,36 @@ function edgePoint(it, cx, cy, tx, ty) {
   return { x: cx + dx * scale, y: cy + dy * scale }
 }
 
+// How far either side of its line a connector's head opens, in radians.
+var ARROW_SPREAD = 0.42
+
+// How far a connector drawn in the theme's foreground is held back: at full
+// strength it outweighs the items it joins. The board and a PNG export in the
+// theme's own colours both use it, so a picture looks like the board it is of.
+// A chosen export palette names a connector colour of its own instead.
+var CONNECTOR_ALPHA = 0.55
+
+// Where a connector from item a to item b runs, in board units: from the edge
+// of one (fromX, fromY) to the edge of the other (toX, toY), along the line
+// between their centres, with a filled head of length `head` whose back
+// corners are (leftX, leftY) and (rightX, rightY). The board and an exported
+// picture both draw from this, so the two cannot disagree about where a
+// connector is — which a label placed against it will depend on. How long the
+// head is, how heavy the line, in what colour and through which camera stays
+// with each of them.
+function connectorGeometry(a, b, head) {
+  var acx = a.ix + a.iw / 2, acy = a.iy + a.ih / 2
+  var bcx = b.ix + b.iw / 2, bcy = b.iy + b.ih / 2
+  var from = edgePoint(a, acx, acy, bcx, bcy)
+  var to = edgePoint(b, bcx, bcy, acx, acy)
+  var angle = Math.atan2(to.y - from.y, to.x - from.x)
+  return {
+    fromX: from.x, fromY: from.y, toX: to.x, toY: to.y,
+    leftX: to.x - head * Math.cos(angle - ARROW_SPREAD), leftY: to.y - head * Math.sin(angle - ARROW_SPREAD),
+    rightX: to.x - head * Math.cos(angle + ARROW_SPREAD), rightY: to.y - head * Math.sin(angle + ARROW_SPREAD)
+  }
+}
+
 function cycle(list, current) {
   var i = list.indexOf(current)
   return list[(i + 1) % list.length]

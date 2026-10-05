@@ -45,17 +45,23 @@ FocusScope {
     onStillLoading: board.ctl.flash("Waiting for pictures to load…")
   }
 
-  // A filled head at the target end, pointing the way the connector runs.
-  function arrowHead(ctx, fromX, fromY, toX, toY) {
-    var angle = Math.atan2(toY - fromY, toX - fromX)
-    var size = Math.max(7, 7 * board.ctl.zoom)
-    var spread = 0.42
+  // A connector as the board draws it: the line and head that
+  // Store.connectorGeometry worked out in board units, through the camera.
+  // The camera is passed in rather than asked for through ctl.toScreenX: this
+  // runs for every corner of every connector on every frame of a pan, and a
+  // call into the controller costs more than the arithmetic it does.
+  function strokeConnector(ctx, g, zoom, camX, camY) {
     ctx.beginPath()
-    ctx.moveTo(toX, toY)
-    ctx.lineTo(toX - size * Math.cos(angle - spread), toY - size * Math.sin(angle - spread))
-    ctx.lineTo(toX - size * Math.cos(angle + spread), toY - size * Math.sin(angle + spread))
+    ctx.moveTo(g.fromX * zoom + camX, g.fromY * zoom + camY)
+    ctx.lineTo(g.toX * zoom + camX, g.toY * zoom + camY)
+    ctx.stroke()
+  }
+  function fillArrowHead(ctx, g, zoom, camX, camY) {
+    ctx.beginPath()
+    ctx.moveTo(g.toX * zoom + camX, g.toY * zoom + camY)
+    ctx.lineTo(g.leftX * zoom + camX, g.leftY * zoom + camY)
+    ctx.lineTo(g.rightX * zoom + camX, g.rightY * zoom + camY)
     ctx.closePath()
-    ctx.fillStyle = board.theme.foreground
     ctx.fill()
   }
 
@@ -230,8 +236,12 @@ FocusScope {
       var ctx = getContext("2d")
       ctx.reset()
       ctx.strokeStyle = board.theme.foreground
+      ctx.fillStyle = board.theme.foreground
       ctx.lineWidth = Math.max(1, 1.5 * board.ctl.zoom)
-      ctx.globalAlpha = 0.55
+      ctx.globalAlpha = Store.CONNECTOR_ALPHA
+      var zoom = board.ctl.zoom, camX = board.ctl.camX, camY = board.ctl.camY
+      // Never smaller on screen than 7 pixels, however far out the view is.
+      var head = Math.max(7, 7 * zoom) / zoom
 
       var items = board.ctl.items
       var links = board.ctl.links
@@ -242,33 +252,20 @@ FocusScope {
         var ai = byId[l.lfrom]
         var bi = byId[l.lto]
         if (ai === undefined || bi === undefined) continue
-        var a = items.get(ai)
-        var b = items.get(bi)
-        var acx = a.ix + a.iw / 2, acy = a.iy + a.ih / 2
-        var bcx = b.ix + b.iw / 2, bcy = b.iy + b.ih / 2
-        var p = Store.edgePoint(a, acx, acy, bcx, bcy)
-        var q = Store.edgePoint(b, bcx, bcy, acx, acy)
-        var px = board.ctl.toScreenX(p.x), py = board.ctl.toScreenY(p.y)
-        var qx = board.ctl.toScreenX(q.x), qy = board.ctl.toScreenY(q.y)
-        ctx.beginPath()
-        ctx.moveTo(px, py)
-        ctx.lineTo(qx, qy)
-        ctx.stroke()
-        board.arrowHead(ctx, px, py, qx, qy)
+        var g = Store.connectorGeometry(items.get(ai), items.get(bi), head)
+        board.strokeConnector(ctx, g, zoom, camX, camY)
+        board.fillArrowHead(ctx, g, zoom, camX, camY)
       }
 
       // While picking the far end, trail a dashed line to the selection so it
-      // is obvious what is about to be joined.
+      // is obvious what is about to be joined: edge to edge, where the
+      // connector it would make is going to run.
       var si = byId[board.ctl.linkingFrom]
       if (si !== undefined && board.ctl.selectedIndex >= 0 && si !== board.ctl.selectedIndex) {
-        var s = items.get(si)
-        var t = items.get(board.ctl.selectedIndex)
         ctx.globalAlpha = 0.9
         ctx.setLineDash([6, 5])
-        ctx.beginPath()
-        ctx.moveTo(board.ctl.toScreenX(s.ix + s.iw / 2), board.ctl.toScreenY(s.iy + s.ih / 2))
-        ctx.lineTo(board.ctl.toScreenX(t.ix + t.iw / 2), board.ctl.toScreenY(t.iy + t.ih / 2))
-        ctx.stroke()
+        board.strokeConnector(ctx, Store.connectorGeometry(items.get(si), items.get(board.ctl.selectedIndex), 0),
+                              zoom, camX, camY)
         ctx.setLineDash([])
       }
     }

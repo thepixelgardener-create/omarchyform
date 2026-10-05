@@ -186,19 +186,16 @@ Item {
         c.fillStyle = c.strokeStyle
         // A chosen palette's connector colour is already the weight it wants
         // against its own background; the theme's foreground is not, and is
-        // held back here the way the board holds it back.
-        c.globalAlpha = picture.chosen ? 1 : 0.65
+        // held back here exactly as the board holds it back.
+        c.globalAlpha = picture.chosen ? 1 : Store.CONNECTOR_ALPHA
         c.lineWidth = 1.5
         var byId = Store.idIndex(nodes)
-        for (var i=0; i<edges.count; i++) {
-          var link = edges.get(i), a=nodes.get(byId[link.lfrom]), b=nodes.get(byId[link.lto])
-          var ax=a.ix+a.iw/2, ay=a.iy+a.ih/2, bx=b.ix+b.iw/2, by=b.iy+b.ih/2
-          var p=Store.edgePoint(a,ax,ay,bx,by), q=Store.edgePoint(b,bx,by,ax,ay)
-          c.beginPath(); c.moveTo(p.x,p.y); c.lineTo(q.x,q.y); c.stroke()
-          var angle=Math.atan2(q.y-p.y,q.x-p.x)
-          c.beginPath(); c.moveTo(q.x,q.y)
-          c.lineTo(q.x-7*Math.cos(angle-0.42),q.y-7*Math.sin(angle-0.42))
-          c.lineTo(q.x-7*Math.cos(angle+0.42),q.y-7*Math.sin(angle+0.42))
+        for (var i = 0; i < edges.count; i++) {
+          var link = edges.get(i)
+          // The head is 7 board units, scaled with the rest of the picture.
+          var g = Store.connectorGeometry(nodes.get(byId[link.lfrom]), nodes.get(byId[link.lto]), 7)
+          c.beginPath(); c.moveTo(g.fromX, g.fromY); c.lineTo(g.toX, g.toY); c.stroke()
+          c.beginPath(); c.moveTo(g.toX, g.toY); c.lineTo(g.leftX, g.leftY); c.lineTo(g.rightX, g.rightY)
           c.closePath(); c.fill()
         }
       }
