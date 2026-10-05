@@ -1131,6 +1131,39 @@ console.log('ok — controller: the command palette and one dispatch for every c
   }
 }
 {
+  // What the watcher does when the open board's file changes. Nearly always it
+  // is the save that just landed, recognised from the text already in hand
+  // rather than by writing the whole board out again to compare: that cost as
+  // much as the save itself, after every save. A version nobody here wrote is
+  // read in when nothing is unsaved, and asked about when something is.
+  const disk = text => JSON.stringify({version: 5, nextId: 2, items: [
+    {id: 1, kind: 'note', x: 0, y: 0, w: 180, h: 140, text}], links: []})
+  const c = controller()
+  c.session.loadBoard(disk('one'), false)
+  c.items.setProperty(0, 'itext', 'two')
+  c.root.save()
+  c.complete()
+  const writeFile = c.store.writeFile
+  let written = 0
+  c.store.writeFile = (...args) => { written++; return writeFile(...args) }
+  c.session.diskText = c.session.lastSavedText
+  c.session.externalWrite()
+  assert.equal(written, 0, 'our own save is recognised without writing the board out again')
+  assert.equal(c.session.conflict, false)
+  c.store.writeFile = writeFile
+
+  c.session.diskText = disk('theirs')
+  c.session.externalWrite()
+  assert.equal(c.items.get(0).itext, 'theirs', 'with nothing unsaved, their version is read in')
+  assert.equal(c.session.conflict, false)
+
+  c.items.setProperty(0, 'itext', 'mine, unsaved')
+  c.session.diskText = disk('theirs again')
+  c.session.externalWrite()
+  assert.equal(c.session.conflict, true, 'with something unsaved, it asks')
+  assert.equal(c.items.get(0).itext, 'mine, unsaved', 'and keeps what is on screen')
+}
+{
   const disk = text => JSON.stringify({version: 5, nextId: 2, items: [
     {id: 1, kind: 'note', x: 0, y: 0, w: 180, h: 140, text}], links: []})
   function dirty() {

@@ -77,6 +77,12 @@ since older boards are migrated on load rather than rejected.
   Neither is true: an open board reloads or asks which version to keep, and
   every command-line write keeps the version it replaced.
 
+- Every save was followed by a second pause, as long as the save's own: the
+  board noticed its file change, and wrote the whole board out again to see
+  whether the change was its own save. It now recognises its own save from
+  the text it already has. On a 3000-item board that check went from 41ms to
+  6ms after every save.
+
 ## 0.4.5 — 2026-10-03
 
 ### Added

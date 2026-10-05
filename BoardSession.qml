@@ -329,11 +329,17 @@ Item {
     if (!session.boardLoaded || session.pendingBoard !== null || session.conflict) return
     var raw = session.readDisk()
     if (raw === "") return
-    var mine = Store.writeFile(session.ctl.items, session.ctl.links, session.ctl.nextId)
     // Our own writes arrive here as well, and the content is what tells them
     // apart. Comparing text rather than watching the writer means a
     // notification that arrives late is still recognised as ours.
-    if (raw === mine || raw === session.lastSavedText || raw === persistence.contents) return
+    //
+    // The two texts already in hand are asked first. Nearly every notification
+    // is the save that just landed, and writing the board out again only to
+    // recognise it cost as much as the save had: 31ms on a 3000-item board,
+    // after every save, on the shell's thread.
+    if (raw === session.lastSavedText || raw === persistence.contents) return
+    var mine = Store.writeFile(session.ctl.items, session.ctl.links, session.ctl.nextId)
+    if (raw === mine) return
     if (mine === session.lastSavedText) {
       // Nothing unsaved on screen, so the newer version simply wins: a board
       // built by the command line appears instead of being overwritten.
