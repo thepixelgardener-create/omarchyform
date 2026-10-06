@@ -3,10 +3,18 @@ pragma ComponentBehavior: Bound
 import QtQuick
 
 // What either surface shows: one board, or two side by side or stacked, with a
-// hairline between them. Each pane keeps its own board for as long as it is on
-// screen, so moving the keyboard, swapping which one comes first or changing
-// the layout never builds a board again; only a pane leaving the screen does.
-FocusScope {
+// hairline between them. Both boards are built once, for as long as the
+// surface is up, so moving the keyboard, swapping which one comes first,
+// changing the layout or squeezing the window never builds one again: a pane
+// that is not on screen has its board hidden, not destroyed.
+//
+// The boards are this item's parent's children rather than its own. Every
+// item between a board and its window is paid for on every frame of a zoom —
+// on a 3000-item board two levels of plain Item cost 3ms a frame in
+// `npm run bench:scene`, and this wrapper with a Loader under it cost 4ms — so
+// the boards sit where a single board always sat, and this item holds only the
+// divider, above them.
+Item {
   id: split
 
   required property var workspace
@@ -30,7 +38,8 @@ FocusScope {
   readonly property real cut: !split.two ? split.span
     : Math.round(Math.max(split.minPane, Math.min(split.usable - split.minPane, split.usable * split.workspace.splitRatio)))
 
-  focus: true
+  // Above the boards, which are its siblings.
+  z: 1
 
   // The workspace is told, because the hint line in the pane says so. Put back
   // when this surface goes away.
@@ -47,29 +56,43 @@ FocusScope {
     return at === 0 || (at === 1 && split.two) ? at : -1
   }
 
-  Repeater {
-    model: split.workspace.paneSlots
+  function boardX(at) { return split.x + (at === 1 && split.across ? split.cut + split.gap : 0) }
+  function boardY(at) { return split.y + (at === 1 && !split.across ? split.cut + split.gap : 0) }
+  function boardWidth(at) {
+    return !split.across || !split.two ? split.width : at === 1 ? split.width - split.cut - split.gap : split.cut
+  }
+  function boardHeight(at) {
+    return split.across || !split.two ? split.height : at === 1 ? split.height - split.cut - split.gap : split.cut
+  }
 
-    delegate: Loader {
-      id: slot
-      required property var modelData
-      required property int index
-      objectName: "pane-slot-" + slot.index
-      readonly property int at: split.place(slot.modelData)
+  // Written out rather than repeated: a Repeater stacks what it makes beside
+  // itself, and these are not beside it.
+  Board {
+    id: firstBoard
+    readonly property int at: split.place(firstBoard.ctl)
+    parent: split.parent
+    objectName: "pane-slot-0"
+    ctl: split.workspace.paneSlots[0]
+    visible: firstBoard.at >= 0
+    focus: firstBoard.ctl === split.workspace.activePane
+    x: split.boardX(firstBoard.at)
+    y: split.boardY(firstBoard.at)
+    width: split.boardWidth(firstBoard.at)
+    height: split.boardHeight(firstBoard.at)
+  }
 
-      active: slot.at >= 0
-      focus: slot.modelData === split.workspace.activePane
-      x: slot.at === 1 && split.across ? split.cut + split.gap : 0
-      y: slot.at === 1 && !split.across ? split.cut + split.gap : 0
-      width: !split.across || !split.two ? split.width
-        : slot.at === 0 ? split.cut : split.width - split.cut - split.gap
-      height: split.across || !split.two ? split.height
-        : slot.at === 0 ? split.cut : split.height - split.cut - split.gap
-
-      sourceComponent: Component {
-        Board { ctl: slot.modelData }
-      }
-    }
+  Board {
+    id: secondBoard
+    readonly property int at: split.place(secondBoard.ctl)
+    parent: split.parent
+    objectName: "pane-slot-1"
+    ctl: split.workspace.paneSlots[1]
+    visible: secondBoard.at >= 0
+    focus: secondBoard.ctl === split.workspace.activePane
+    x: split.boardX(secondBoard.at)
+    y: split.boardY(secondBoard.at)
+    width: split.boardWidth(secondBoard.at)
+    height: split.boardHeight(secondBoard.at)
   }
 
   Rectangle {

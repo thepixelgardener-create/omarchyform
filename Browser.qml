@@ -126,10 +126,16 @@ FocusScope {
           // the second of those lands in this field on its own, cursor at the
           // end and nothing selected. Selecting after both have arrived is what
           // makes one keystroke replace the name rather than extend it.
+          //
+          // Only the browser on screen answers: the library is shared, and the
+          // other pane's board has a browser too, hidden, that hears the same
+          // change and would otherwise take the keyboard into a field no one
+          // can see.
           onModeChanged: {
+            if (!browser.shown) return
             if (typed.mode === "") { browser.forceActiveFocus(); return }
             Qt.callLater(function () {
-              if (!browser.typing) return
+              if (!browser.typing || !browser.shown) return
               typed.text = browser.prompting ? browser.library.input : browser.library.query
               typed.forceActiveFocus()
               typed.selectAll()

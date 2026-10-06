@@ -52,7 +52,8 @@ TestCase {
     height: test.height
   }
 
-  function slot(index) { return findChild(surface, "pane-slot-" + index) }
+  // The boards are the surface's siblings, so they are found from the test.
+  function slot(index) { return findChild(test, "pane-slot-" + index) }
 
   function init() {
     surface.width = test.width
@@ -71,17 +72,17 @@ TestCase {
   }
 
   function test_onePaneFillsTheSurface() {
-    compare(slot(0).active, true)
-    compare(slot(1).active, false, "the second pane builds no board while it is not shown")
+    compare(slot(0).visible, true)
+    compare(slot(1).visible, false, "the second pane's board is hidden while it is not shown")
     compare(slot(0).width, 800)
     compare(slot(0).height, 600)
     compare(findChild(surface, "split-divider").visible, false)
-    compare(findChild(slot(0).item, "active-pane").visible, false, "no outline with one pane")
+    compare(findChild(slot(0), "active-pane").visible, false, "no outline with one pane")
   }
 
   function test_sideBySideDividesTheWidth() {
     ws.layout = "side-by-side"
-    compare(slot(1).active, true)
+    compare(slot(1).visible, true)
     // 799 pixels either side of a one-pixel line, the first rounded to whole.
     compare(slot(0).x, 0)
     compare(slot(0).width, 400)
@@ -92,7 +93,8 @@ TestCase {
     compare(line.visible, true)
     compare(line.x, 400)
     compare(line.width, 1)
-    compare(slot(1).item.width, 399, "the board fills its pane")
+    compare(slot(1).width, 399, "the board fills its pane")
+    compare(slot(1).parent, surface.parent, "a sibling of the surface, at the depth one board always had")
   }
 
   // Tall enough for two panes of at least 320 each.
@@ -110,28 +112,29 @@ TestCase {
   }
 
   // A layout change moves a board; it does not build it again, which on a
-  // large board is the difference between a resize and a pause.
+  // large board is the difference between a resize and a pause. The second
+  // board is there from the start, hidden until it has a pane to show.
   function test_aBoardOutlivesLayoutChanges() {
-    var first = slot(0).item
+    var first = slot(0)
     ws.layout = "side-by-side"
-    compare(slot(0).item, first)
+    compare(slot(0), first)
     ws.layout = "stacked"
-    compare(slot(0).item, first)
-    var second = slot(1).item
+    compare(slot(0), first)
+    var second = slot(1)
     ws.panes = [right, left]
-    compare(slot(0).item, first, "swapping the order moves both")
-    compare(slot(1).item, second)
+    compare(slot(0), first, "swapping the order moves both")
+    compare(slot(1), second)
     compare(slot(1).x, 0, "the second pane is first now")
     ws.layout = "single"
-    compare(slot(0).active, false, "and alone, the pane that went first is the one shown")
-    compare(slot(1).active, true)
+    compare(slot(0).visible, false, "and alone, the pane that went first is the one shown")
+    compare(slot(1).visible, true)
     compare(slot(1).width, 800)
   }
 
   function test_theActivePaneWearsTheAccent() {
     ws.layout = "side-by-side"
-    compare(findChild(slot(0).item, "active-pane").visible, true)
-    compare(findChild(slot(1).item, "active-pane").visible, false)
+    compare(findChild(slot(0), "active-pane").visible, true)
+    compare(findChild(slot(1), "active-pane").visible, false)
   }
 
   // A press on the other pane moves the keyboard there and still does what a
@@ -141,12 +144,12 @@ TestCase {
     right.items.append({ iid: 1, kind: "note", ix: 100, iy: 200, iw: 160, ih: 120,
                          itint: "foreground", itext: "", ipinned: false, isrc: "" })
     waitForRendering(surface)
-    mouseClick(slot(1).item, 180, 260, Qt.LeftButton)
+    mouseClick(slot(1), 180, 260, Qt.LeftButton)
     compare(right.activations, 1)
     compare(ws.activePane, right)
     compare(right.selectedIndex, 0, "the press carried on to the note")
     // Once active, it takes nothing: a second press is only a press.
-    mouseClick(slot(1).item, 180, 260, Qt.LeftButton)
+    mouseClick(slot(1), 180, 260, Qt.LeftButton)
     compare(right.activations, 1)
     compare(left.activations, 0)
   }
@@ -185,18 +188,18 @@ TestCase {
     ws.layout = "side-by-side"
     surface.width = 600
     compare(ws.squeezed, true)
-    compare(slot(0).active, true)
-    compare(slot(1).active, false)
+    compare(slot(0).visible, true)
+    compare(slot(1).visible, false)
     compare(slot(0).width, 600)
     compare(findChild(surface, "split-divider").visible, false)
     ws.activePane = right
-    compare(slot(0).active, false)
-    compare(slot(1).active, true)
+    compare(slot(0).visible, false)
+    compare(slot(1).visible, true)
     compare(slot(1).x, 0)
     compare(slot(1).width, 600)
     surface.width = 800
     compare(ws.squeezed, false)
-    compare(slot(0).active, true)
+    compare(slot(0).visible, true)
     compare(slot(1).x, 401)
     // Stacked, it is the height that has to fit.
     ws.layout = "stacked"

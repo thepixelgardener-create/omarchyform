@@ -96,7 +96,11 @@ Item {
   readonly property bool dialogOpen: root.workspace.exchange.dialogOpen
   readonly property string boardState: root.damaged ? "Read only" : root.saveError !== "" ? "Save failed"
     : root.diskChanged ? "Changed on disk" : root.saving ? "Saving…" : "Saved locally"
-  onBoardLoadedChanged: if (root.boardLoaded && root.pendingFirstNote === root.currentBoard) {
+  // Only a board made to be typed into. A pane that has just been given a
+  // board can hear that it loaded before it hears which board it is, and an
+  // empty wish matched against a name not yet there is a match.
+  onBoardLoadedChanged: if (root.boardLoaded && root.pendingFirstNote !== ""
+                            && root.pendingFirstNote === root.currentBoard) {
     root.pendingFirstNote = ""
     Qt.callLater(function() {
       root.selectedIndex = 0

@@ -23,7 +23,7 @@ ShellRoot {
   property bool wrote: false
   function expectWrite() { test.writing = false; test.wrote = false }
   Connections {
-    target: plugin
+    target: plugin.activePane
     function onSavingChanged() {
       if (plugin.activePane.saving) test.writing = true
       else if (test.writing) { test.writing = false; test.wrote = true }
@@ -475,6 +475,87 @@ ShellRoot {
       } else if (test.stage === 29 && plugin.activePane.currentBoard === "sent-to-me.json" && plugin.activePane.boardLoaded) {
         test.check(plugin.activePane.items.count === 1, "a board handed over by path opens")
         test.check(plugin.activePane.items.get(0).itext === "from somebody else", "with what was in it")
+        // Split view, by the keys a person presses, in the window first and
+        // then fullscreen: that the keyboard reaches the pane it should is
+        // only something a real key can say.
+        test.key("v")
+        test.stage = 30
+      } else if (test.stage === 30 && plugin.layout === "side-by-side") {
+        test.check(plugin.activePane === plugin.panes[1], "v puts the keyboard in the new pane")
+        test.check(plugin.panes[1].doc === plugin.panes[0].doc, "which shows the same board")
+        test.switchedAt = test.ticks
+        test.stage = 31
+      } else if (test.stage === 31 && plugin.panes[1].activeBoard && test.ticks > test.switchedAt + 5) {
+        var left = plugin.panes[0].activeBoard, right = plugin.panes[1].activeBoard
+        test.check(plugin.squeezed || (left.visible && right.visible && right.x >= left.width),
+                   "the two boards sit side by side: " + left.width + " and " + right.width + " at " + right.x)
+        test.key("n")
+        test.stage = 32
+      } else if (test.stage === 32 && plugin.panes[1].editIndex === 1) {
+        test.check(plugin.panes[0].items.count === 2, "a note made in one pane is on the board the other shows")
+        test.check(plugin.panes[0].editIndex === -1, "and the other pane is not typing")
+        test.key("h")
+        test.stage = 33
+      } else if (test.stage === 33 && plugin.panes[1].items.get(1).itext === "h") {
+        test.key("i")
+        test.stage = 34
+      } else if (test.stage === 34 && plugin.panes[1].items.get(1).itext === "hi") {
+        test.key("Escape")
+        test.stage = 35
+      } else if (test.stage === 35 && plugin.panes[1].editIndex === -1) {
+        test.key("o")
+        test.stage = 36
+      } else if (test.stage === 36 && plugin.activePane === plugin.panes[0]) {
+        test.check(plugin.panes[0].items.get(1).itext === "hi", "the other pane shows what was typed")
+        test.key("v", "SHIFT")
+        test.stage = 37
+      } else if (test.stage === 37 && plugin.layout === "stacked") {
+        test.check(plugin.activePane === plugin.panes[0], "turning the split keeps the keyboard where it was")
+        test.key("w")
+        test.switchedAt = test.ticks
+        test.stage = 38
+      } else if (test.stage === 38 && !plugin.windowMode && plugin.panes[0].activeBoard
+                 && plugin.panes[1].activeBoard && test.ticks > test.switchedAt + 5) {
+        test.check(plugin.layout === "stacked", "fullscreen keeps the split")
+        var top = plugin.panes[0].activeBoard, bottom = plugin.panes[1].activeBoard
+        test.check(plugin.squeezed || (top.visible && bottom.visible && bottom.y >= top.height),
+                   "with one board over the other: " + top.height + " and " + bottom.height + " at " + bottom.y)
+        test.check(plugin.activePane === plugin.panes[0] && top.activeFocus, "and the keyboard where it was")
+        // Keys are sent to a window, and fullscreen is a layer rather than one,
+        // so the rest is done back in the window — closed and opened again, the
+        // way the stages before give a window the keyboard, which also asks
+        // whether the split survives being closed.
+        plugin.toggleWindowMode()
+        plugin.close()
+        test.stage = 381
+      } else if (test.stage === 381 && !plugin.panes[0].activeBoard) {
+        plugin.open("{}")
+        test.switchedAt = test.ticks
+        test.stage = 382
+      } else if (test.stage === 382 && plugin.windowMode && plugin.panes[0].activeBoard
+                 && plugin.panes[1].activeBoard && test.ticks > test.switchedAt + 5) {
+        test.check(plugin.layout === "stacked" && plugin.documents.length === 1, "closing and opening keeps the split")
+        test.key("o")
+        test.stage = 39
+      } else if (test.stage === 39 && plugin.activePane === plugin.panes[1]) {
+        test.key("b")
+        test.stage = 391
+      } else if (test.stage === 391 && plugin.library.showing && plugin.library.rows.length > 0) {
+        test.check(plugin.panes[1].browsing && !plugin.panes[0].browsing, "the browser opens over the pane that asked")
+        test.check(test.pick("from-cli.json"), "the board built from the command line is listed")
+        test.key("Return")
+        test.stage = 392
+      } else if (test.stage === 392 && plugin.panes[1].currentBoard === "from-cli.json" && plugin.panes[1].boardLoaded) {
+        test.check(plugin.panes[0].currentBoard === "sent-to-me.json", "opening a board in one pane leaves the other alone")
+        test.check(plugin.documents.length === 2, "two boards open")
+        test.key("v", "SHIFT")
+        test.stage = 393
+      } else if (test.stage === 393 && plugin.layout === "single") {
+        test.check(plugin.panes[0].currentBoard === "from-cli.json", "closing keeps the pane the keyboard is in")
+        test.check(plugin.documents.length === 1, "and closes the board only the other pane was showing")
+        var kept = test.boardData("sent-to-me.json")
+        test.check(kept !== null && kept.items.length === 2 && kept.items[1].text === "hi",
+                   "after saving what was typed into it")
         console.log("OMARCHY_TESTS_PASSED")
         Qt.quit()
       }

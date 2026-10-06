@@ -585,9 +585,9 @@ var COMMANDS = [
   // Two views, of one board or of two. The key that made a layout takes it
   // away again, so there is nothing to learn for closing.
   { name: "Split side by side", key: "v", run: "toggleSplit", arg: "side-by-side", needs: "",
-    also: ["two boards", "compare", "vertical split", "panes"] },
+    also: ["two boards", "vertical split", "panes"] },
   { name: "Split stacked", key: "V", run: "toggleSplit", arg: "stacked", needs: "",
-    also: ["two boards", "compare", "horizontal split", "panes"] },
+    also: ["two boards", "horizontal split", "panes"] },
   { name: "The other pane", key: "o", run: "otherPane", needs: "", also: ["switch pane", "focus"] },
   { name: "Even out the split", key: "", run: "evenSplit", needs: "", also: ["reset split", "half"] },
   { name: "Boards", key: "b", run: "openBrowser", needs: "" },
