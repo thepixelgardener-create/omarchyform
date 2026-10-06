@@ -263,6 +263,34 @@ ShellRoot {
       }
     },
     {
+      // Two views of one board: the whole of it on the left, the right
+      // looking closer at one corner, with the keyboard there.
+      name: "12b-split-side",
+      setup: function () {
+        shots.session().saveError = ""
+        var left = plugin.activePane
+        left.statusText = ""
+        left.linkingFrom = -1
+        left.markedIds = []
+        left.selectedIndex = -1
+        left.toggleSplit("side-by-side")
+        var right = plugin.activePane
+        right.statusText = ""
+        left.fitToItems()
+        right.zoom = 1.25
+        right.selectOnly(0)
+        right.centerOnSelected()
+      }
+    },
+    {
+      name: "12c-split-stacked",
+      setup: function () {
+        plugin.activePane.toggleSplit("stacked")
+        plugin.panes[0].fitToItems()
+        plugin.activePane.centerOnSelected()
+      }
+    },
+    {
       // The picture in the README. Composed rather than caught in use: it is
       // the first thing a reader sees, so it says what the board is for in the
       // items themselves. It lives here because the last one was arranged by
@@ -270,6 +298,7 @@ ShellRoot {
       // hint row that had both since moved.
       name: "13-preview",
       setup: function () {
+        if (plugin.split) plugin.activePane.toggleSplit(plugin.layout)
         shots.session().saveError = ""
         plugin.activePane.linkingFrom = -1
         plugin.activePane.statusText = ""
@@ -464,7 +493,9 @@ ShellRoot {
   function grab() {
     shots.grabbing = true
     shots.grabWanted = false
-    plugin.activePane.activeBoard.grabToImage(function (result) {
+    // Split, the picture is of the surface both boards are on, divider and all.
+    var board = plugin.activePane.activeBoard
+    ;(plugin.split ? board.parent : board).grabToImage(function (result) {
       if (!result.saveToFile(shots.dir + "/" + shots.scenes[shots.scene].name + ".png")) {
         shots.finish("failed", "could not save screenshot " + shots.scenes[shots.scene].name)
         return
