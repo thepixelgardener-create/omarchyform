@@ -1,6 +1,6 @@
 # Roadmap
 
-Updated 2026-10-05. This is the current release direction. The dated
+Updated 2026-10-06. This is the current release direction. The dated
 [architecture review](architecture-review-0.4.5.md) and
 [competitor analysis](competitor-analysis-0.4.5.md) explain the findings behind it.
 
@@ -73,9 +73,10 @@ Revisit these after 0.5 and feedback from real use:
 - Persistent groups with explicit membership.
 - SVG export and zoom to selection.
 - Explicit URL/file links if source collection proves a stronger need.
-- A timeline: play a board back from its first note to now. Items are numbered
-  in the order they were made, so a first version needs no new storage; moves,
-  edits and deletions would need history kept in the file.
-- Split view. Open question: two boards side by side, or two views of one
-  board. Either needs the camera to belong to the view rather than the
-  controller.
+- Timeline and split view: a [development plan](splitview-timeline-plan.md)
+  proposes two independently controlled panes, showing different boards or
+  different revisions of one board, side by side or stacked. Full edit
+  playback needs persistent history; item creation order cannot reconstruct
+  moves, text edits or deletions. The revised plan delivers split view first,
+  then gates history integration on storage, recovery and resource tests.
+  This is planned work, not a release commitment.
