@@ -22,7 +22,8 @@ the section has been updated.
 | 2b. `feat(split-view)` | Done in cfe2392. `tests/split.js` drives the switching table, shared edits, leaving rules, library guards and restored state; `tests/qt/tst_split.qml` checks placement and activation |
 | 2c. Divider and narrow windows | Done; drag, double-click reset, 320 px minimum, active-pane fallback |
 | Live checks for gate 2 | Done in ee50f9d and 520b8ce. `test:omarchy` drives split view with real keys in both host modes; `test:paste` passes; `shots` photographs both layouts; `bench:scene` at 3000 items matches `origin/main` after the boards were moved back to single-board depth |
-| 3–6. History | Not started |
+| 3. History storage and budgets | Done; see "Gate 3 results". Embedded storage passes with the conditions recorded there |
+| 4–6. History | Not started |
 
 A saved second board that no longer exists opens empty in its pane, the way a
 missing `lastBoard` always has, rather than restoring a single pane.
@@ -228,19 +229,22 @@ This avoids a two-file commit where the document and history can disagree.
 Bump the board format so older writers refuse to silently discard history.
 Preserve unknown/future history as read-only, with a clear reason.
 
-Production candidate: one baseline plus forward patches keyed by stable item
-IDs, with explicit link changes, paint order and `nextId`. Start with checkpoint
-spacing of 100 records, but budget additional persisted checkpoints to at most
-4 MiB within the history limit; increase spacing when necessary. Removing a
-redundant checkpoint must not remove any event. Benchmark the resulting longer
-replay distances, and cache only a bounded number of reconstructed states.
-Snapshots serve as the test oracle, not the production event representation.
+Production format (gate 3, `BoardHistory.js`): one baseline plus forward
+patches keyed by stable item IDs, with explicit link changes, paint order and
+`nextId`. IDs are values in lists, never object keys. Long text is recorded as
+the one stretch that changed. No checkpoints are persisted: the index a
+timeline seeks with is built in memory, 100 records apart, in slices between
+frames. Snapshots serve as the test oracle, not the production event
+representation.
 Validate schema, record IDs, ordering, references and the reconstructed head
 against the stored live state. Never silently repair a corrupt history into a
 writable document. Cap input size and record count before expensive replay.
 
-Initial candidate limits: 16 MiB serialized history or 10,000 records per
-lineage, whichever comes first. These are bounded-history defaults, not a
+Limits, settled by gate 3: 10,000 records or 16 MiB of serialized records per
+lineage, whichever comes first. The baseline is not counted: it is the board
+as it was, and a board of long notes would otherwise spend its whole budget
+before its first edit. Ordinary editing reaches the record limit first, at
+1.5–2.5 MiB. These are bounded-history defaults, not a
 promise to retain unlimited edits. At the limit, keep the existing history
 intact and offer **Continue in a new board**: write a current-state-only copy
 with a fresh baseline using the existing unique publish path, then switch
@@ -252,8 +256,59 @@ publish that snapshot as the new board's baseline. The original committed
 head and history remain saveable; canceling the continuation keeps the draft
 available, with an explicit discard option. CLI capacity failure leaves the
 original file untouched and explains how to copy the current board first.
-The limit counts checkpoints too. Validate these limits through gate 3 measurements and document
-any adjustments before integration. Image bytes have separate existing limits.
+Image bytes have separate existing limits.
+
+### Gate 3 results
+
+Measured 2026-10-06 by `npm run bench:history` (`tests/history-bench.js`, with
+`tests/qml/bench_history.qml` in the board's own engine) on the supported
+machine: AMD Ryzen 5 PRO 4650U, Qt 6.11.2, offscreen. Correctness is
+`tests/history.js`: about 12,000 generated edits, each played back through JSON
+against the state it came from, and a 2,500-edit history checked at every
+seek point against its snapshots.
+
+| Fixture | File | Parse | Check and index | Seek p95 | Record one edit |
+| --- | --- | --- | --- | --- | --- |
+| 1,315 items, 4,971 mixed records | 2.1 MiB | 48 ms | 212 + 234 ms, 17 ms slices | 6 ms | 6 ms |
+| 2,991 items, 10,000 move records | 2.5 MiB | 45 ms | 307 + 342 ms, 12 ms slices | 6 ms | 16 ms |
+| 357 items, 5,000 text records | 3.0 MiB | 37 ms | 97 + 29 ms | 1 ms | 2 ms |
+| 3,045 long notes, 3,000 text records | 26.1 MiB | 156 ms | 140 + 92 ms | 5 ms | 13 ms |
+
+Save through `BoardFiles.sh` with the backup copy, at 16 MiB: 98–113 ms p95,
+in the helper's process. Memory for one board's parsed history and index:
+35–61 MiB, two thirds of the 128 MiB budget for two such boards.
+
+What the measurements changed:
+
+- An object whose keys look like numbers is an array in the board's engine,
+  sized to the largest key. A history keyed by item id took 9 s to parse on a
+  3,000-item board. IDs are values. A `Map` was four times slower than plain
+  keys there; the working state is an array indexed by id.
+- Writing the history out again costs 80–160 ms. A save keeps it as text and
+  appends each record's JSON, which costs under 6 ms even at 26 MiB.
+- Parsing the whole file when a board opens costs up to 156 ms on the shell's
+  thread. The writer puts the history last, after a fixed marker. Opening
+  parses only the board in front of it, and hands the history text to a
+  `WorkerScript` that parses, checks and indexes it. The longest stall on the
+  shell's thread while it did was 11–13 ms. The worker loads `BoardHistory.js`
+  with `Qt.include`, which Qt marks deprecated but still ships.
+- Seeking through the worker is slower than seeking here. A 3,000-item state
+  takes up to 100 ms to arrive and stalls this thread up to 52 ms while it is
+  converted, against 6 ms to rebuild it here. The timeline parses the history
+  on the shell's thread when it is opened, 15–36 ms for the ordinary fixtures,
+  and seeks locally.
+- The long-notes board's 14 MiB history, most of it the baseline, still parses
+  in one step of 121 ms when the timeline is opened. That is accepted for an
+  explicit command with a "reading history" line. It is the one step over the
+  50 ms budget, and it comes from a board that already takes 83 ms to open.
+- The board alone is already over budget at that size, before any history: a
+  board of 3,000 long notes costs 85–126 ms to write out and 52 ms to compare
+  on every save. That is a maintenance item for the roadmap, not this branch.
+
+Embedded storage therefore passes the gate, and no journal is needed. These
+are the conditions on gate 4: records are appended as text, the shell's thread
+never parses a history at open, and the worker's check gates whether new
+records may extend it.
 
 Autosave persists all pending completed steps even when writes are coalesced.
 It serializes the immutable committed head, not transient dragging/typing

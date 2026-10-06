@@ -713,6 +713,7 @@ npm run test:security:full # also run Quickshell and Qt tests
 npm run mutate  # mutation testing
 npm run bench   # board marshalling cost at size
 npm run bench:scene # what a board costs to draw, at size; needs a compositor
+npm run bench:history # what keeping a board's edit history costs, in node and offscreen Qt
 npm run test:qml # headless persistence tests; requires installed Quickshell
 npm run test:paste # live canvas image paste test; uses an isolated clipboard stub and board library
 npm run test:ui  # Qt Quick pointer, theme, and layout tests
