@@ -276,7 +276,7 @@ function addNotes(c, pane, n) {
   const outside = controller()
   outside.workspace.applyState(JSON.stringify({ layout: 'stacked', otherBoard: '../away.json', splitRatio: 5 }))
   assert.equal(outside.workspace.layout, 'single', 'a board outside the library is not opened')
-  assert.equal(outside.workspace.splitRatio, 0.8, 'and a ratio that leaves no room is held to one that does')
+  assert.equal(outside.workspace.splitRatio, 0.9, 'and a ratio that leaves no room is held to one that does')
 
   const old = controller()
   old.workspace.applyState(JSON.stringify({ lastBoard: 'a.json', windowMode: true }))

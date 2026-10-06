@@ -102,6 +102,12 @@ const session = read("BoardSession.qml")
 const sessionReads = referenced(session, "session.ctl.")
 expect(sessionReads, documentMembers, "the document", "BoardSession.qml")
 
+// The split surface reads the workspace, and so does the stand-in for it that
+// tst_split mounts the surface against.
+const splitReads = referenced(read("BoardSplit.qml"), "split.workspace.")
+expect(splitReads, declaredMembers(read("Omarchyform.qml")), "the workspace", "BoardSplit.qml")
+expect(splitReads, nestedMembers(read("tests/qt/tst_split.qml"), "ws"), "the tst_split workspace", "BoardSplit.qml")
+
 // The pane, the document and the workspace reach into each other by name too,
 // through whichever handle each holds on the other. Every handle is listed:
 // a pane reached as `pane.` in one function and `root.panes[i].` in the next is

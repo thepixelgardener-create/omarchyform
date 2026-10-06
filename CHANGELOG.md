@@ -12,7 +12,9 @@ since older boards are migrated on load rather than rejected.
   selection and board; two panes on one board share it, and each keeps its
   cursor on its item when the other edits. `o` or a click moves between them.
   A board only one pane shows is saved before that pane leaves it, and two
-  versions or a failed save keep the pane open. The layout is remembered.
+  versions or a failed save keep the pane open. Drag the line between the
+  panes to resize them; a window too small for two shows the pane you are in.
+  The layout is remembered.
 
 ### Changed
 

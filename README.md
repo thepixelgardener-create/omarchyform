@@ -398,8 +398,13 @@ there, typing included.
 Pressing the layout's key again goes back to one pane, keeping the one you are
 in. A board only that pane was showing is saved first, and a board with two
 versions or a failed save keeps its pane open until you have dealt with it.
-The layout and both boards are remembered for next time. **Even out the
-split** in the command list puts the divider back in the middle.
+The layout and both boards are remembered for next time.
+
+Drag the line between the panes to resize them, and double-click it — or run
+**Even out the split** from the command list — to put it back in the middle.
+Neither pane goes below 320 pixels. In a window too small for two, the pane
+you are in has all of it and the line under its header offers `o` for the
+other; the split comes back when the room does.
 
 Deleting a board or a folder moves it to `~/.local/share/omarchyform/trash/`
 rather than destroying it, and records where it came from, so `t` and `enter`

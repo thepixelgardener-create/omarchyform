@@ -45,6 +45,10 @@ Item {
   readonly property bool split: root.layout !== "single"
   // The first pane's share of the width, side by side, or of the height.
   property real splitRatio: 0.5
+  // Two panes asked for and room for one: the surface shows the pane the
+  // keyboard is in, and keeps the layout for when the room comes back. Set by
+  // the surface, which is the only thing that knows how big it is.
+  property bool squeezed: false
   // One picture at a time: both panes render into the same file on the way out.
   readonly property bool imageBusy: firstPane.imageBusy || secondPane.imageBusy
 
@@ -117,6 +121,13 @@ Item {
   function evenSplit() {
     root.splitRatio = 0.5
     root.writeState()
+  }
+
+  // While the divider is dragged. It is written down when it is let go of, not
+  // on every pixel of the way.
+  function setSplitRatio(ratio) {
+    if (!(ratio > 0 && ratio < 1)) return
+    root.splitRatio = Math.max(0.1, Math.min(0.9, ratio))
   }
 
   // ---------------------------------------------------------------- documents
@@ -411,7 +422,7 @@ Item {
       root.layout = st.layout
     }
     if (st && typeof st.splitRatio === "number" && st.splitRatio === st.splitRatio)
-      root.splitRatio = Math.max(0.2, Math.min(0.8, st.splitRatio))
+      root.splitRatio = Math.max(0.1, Math.min(0.9, st.splitRatio))
     if (st) {
       root.windowMode = st.windowMode === true
       if (typeof st.autosaveMs === "number") root.autosaveMs = st.autosaveMs

@@ -22,6 +22,8 @@ Item {
   // Whether the keyboard is in this pane, and whether there is another one.
   readonly property bool active: root.workspace.activePane === root
   readonly property bool split: root.workspace.split
+  // Two panes asked for and room on screen for only this one.
+  readonly property bool squeezed: root.workspace.squeezed
   // The browser is drawn over the pane that opened it, which is the active one:
   // the workspace does not let the keyboard move while it is up.
   readonly property bool browsing: root.active && root.library.showing

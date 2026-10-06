@@ -24,19 +24,25 @@ TestCase {
     readonly property var paneSlots: [left, right]
     property var panes: [left, right]
     property var activePane: left
+    // Set by the surface through a Binding, which names it as a string.
+    property bool squeezed: false
+    property int writes: 0
+    function setSplitRatio(ratio) { ws.splitRatio = Math.max(0.1, Math.min(0.9, ratio)) }
+    function evenSplit() { ws.splitRatio = 0.5; ws.writes += 1 }
+    function writeState() { ws.writes += 1 }
   }
 
   PaneStub {
     id: left
     active: ws.activePane === left
     split: ws.split
-    onActivationsChanged: ws.activePane = left
+    onActivationsChanged: if (left.activations > 0) ws.activePane = left
   }
   PaneStub {
     id: right
     active: ws.activePane === right
     split: ws.split
-    onActivationsChanged: ws.activePane = right
+    onActivationsChanged: if (right.activations > 0) ws.activePane = right
   }
 
   BoardSplit {
@@ -49,12 +55,15 @@ TestCase {
   function slot(index) { return findChild(surface, "pane-slot-" + index) }
 
   function init() {
+    surface.width = test.width
+    surface.height = test.height
+    ws.writes = 0
     ws.layout = "single"
     ws.splitRatio = 0.5
-    ws.panes = [left, right]
-    ws.activePane = left
     left.activations = 0
     right.activations = 0
+    ws.panes = [left, right]
+    ws.activePane = left
     left.items.clear()
     right.items.clear()
     left.selectedIndex = -1
@@ -86,13 +95,18 @@ TestCase {
     compare(slot(1).item.width, 399, "the board fills its pane")
   }
 
+  // Tall enough for two panes of at least 320 each.
   function test_stackedDividesTheHeight() {
+    surface.height = 1001
     ws.layout = "stacked"
-    ws.splitRatio = 0.25
+    ws.splitRatio = 0.4
     compare(slot(0).width, 800)
-    compare(slot(0).height, Math.round(599 * 0.25))
-    compare(slot(1).y, Math.round(599 * 0.25) + 1)
-    compare(slot(1).height, 600 - Math.round(599 * 0.25) - 1)
+    compare(slot(0).height, 400)
+    compare(slot(1).y, 401)
+    compare(slot(1).height, 600)
+    // A ratio that would leave a pane too small to use is held to one that does.
+    ws.splitRatio = 0.1
+    compare(slot(0).height, 320)
   }
 
   // A layout change moves a board; it does not build it again, which on a
@@ -135,5 +149,58 @@ TestCase {
     mouseClick(slot(1).item, 180, 260, Qt.LeftButton)
     compare(right.activations, 1)
     compare(left.activations, 0)
+  }
+
+  // Dragged, the line moves and the place is written down once, when it is let
+  // go of. Neither pane is dragged smaller than it can be worked in.
+  function test_theDividerDrags() {
+    ws.layout = "side-by-side"
+    var handle = findChild(surface, "split-handle")
+    compare(handle.visible, true)
+    mousePress(handle, 3, 300)
+    mouseMove(handle, -47, 300)
+    compare(ws.writes, 0, "not written on every pixel of the way")
+    mouseRelease(handle, -47, 300)
+    compare(ws.writes, 1)
+    compare(slot(0).width, 350, "the first pane follows the pointer")
+    // As far as the pointer goes, but no further than leaves the other 320.
+    mousePress(handle, 3, 300)
+    mouseMove(handle, 600, 300)
+    mouseRelease(handle, 600, 300)
+    compare(slot(1).width, 320)
+    compare(slot(0).width, 800 - 1 - 320)
+  }
+
+  function test_aDoubleClickEvensItOut() {
+    ws.layout = "side-by-side"
+    ws.splitRatio = 0.3
+    mouseDoubleClickSequence(findChild(surface, "split-handle"), 3, 300)
+    compare(ws.splitRatio, 0.5)
+    compare(slot(0).width, 400)
+  }
+
+  // Too narrow for two: the pane the keyboard is in has all of it, and `o`
+  // changes which, until the room comes back.
+  function test_aSmallWindowShowsTheActivePane() {
+    ws.layout = "side-by-side"
+    surface.width = 600
+    compare(ws.squeezed, true)
+    compare(slot(0).active, true)
+    compare(slot(1).active, false)
+    compare(slot(0).width, 600)
+    compare(findChild(surface, "split-divider").visible, false)
+    ws.activePane = right
+    compare(slot(0).active, false)
+    compare(slot(1).active, true)
+    compare(slot(1).x, 0)
+    compare(slot(1).width, 600)
+    surface.width = 800
+    compare(ws.squeezed, false)
+    compare(slot(0).active, true)
+    compare(slot(1).x, 401)
+    // Stacked, it is the height that has to fit.
+    ws.layout = "stacked"
+    surface.height = 500
+    compare(ws.squeezed, true)
   }
 }

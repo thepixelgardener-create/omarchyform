@@ -13,6 +13,20 @@ keyboard-first chrome. Implementation starts with gate 2. Revision 3 changes
 the decisions in the table below. Where a later section disagrees with it,
 the section has been updated.
 
+## Progress
+
+| Gate | State on `dev` |
+| --- | --- |
+| 1. Inventory | Done; see the appendix |
+| 2a. `refactor(pane)` | Done in 3c18505. No visible change; every suite and a headless start of the real plugin pass |
+| 2b. `feat(split-view)` | Done in cfe2392. `tests/split.js` drives the switching table, shared edits, leaving rules, library guards and restored state; `tests/qt/tst_split.qml` checks placement and activation |
+| 2c. Divider and narrow windows | Done; drag, double-click reset, 320 px minimum, active-pane fallback |
+| Live checks for gate 2 | Not run yet: `npm run test:omarchy`, `test:paste`, `shots` and `bench:scene` open windows on the desktop |
+| 3–6. History | Not started |
+
+A saved second board that no longer exists opens empty in its pane, the way a
+missing `lastBoard` always has, rather than restoring a single pane.
+
 ## Revision 3 changes
 
 | Revision 2 said | Found in the code | Revision 3 decision |

@@ -85,10 +85,14 @@ FocusScope {
 
   // A real window hands focus to its content item, not to whatever is nested
   // inside it, so claim it explicitly on both surfaces.
-  // With two panes, only the one the keyboard is in takes it.
+  // With two panes, only the one the keyboard is in takes it. Later rather
+  // than now, and only if this board is still here by then: a window resized
+  // across the room for two panes builds and drops boards in one turn.
   Component.onCompleted: {
     board.ctl.activeBoard = board
-    Qt.callLater(function () { if (board.ctl.active) board.focusKeys() })
+    Qt.callLater(function () {
+      if (typeof board.focusKeys === "function" && board.ctl && board.ctl.active) board.focusKeys()
+    })
   }
   Component.onDestruction: if (board.ctl.activeBoard === board) board.ctl.activeBoard = null
 
@@ -893,7 +897,10 @@ FocusScope {
       : status.tier === "flash" ? Store.escapeMarkup(board.ctl.statusText)
       : status.tier === "switching" ? "saving before switching boards…"
       : status.tier === "saving" ? "saving…"
-      : Store.hintLine(Store.BOARD_HINTS, board.ctl.accentMarkup)
+      // The other pane is still there when the window is too small to show
+      // it, and the line says how to reach it rather than leave it forgotten.
+      : (board.ctl.squeezed ? Store.hintMarkup("o", "the other pane", board.ctl.accentMarkup) + " \u00b7 " : "")
+        + Store.hintLine(Store.BOARD_HINTS, board.ctl.accentMarkup)
   }
 
   // Which of two panes the keys go to: the accent round its edge, the way the

@@ -837,6 +837,7 @@ var KEY_HELP_SECTIONS = [
     ["shift+drag", "sweep, keeping what was already marked"],
     ["drag an item", "move it, and everything marked with it"],
     ["middle/right drag", "pan the canvas"],
+    ["drag the line between panes", "resize them; double-click it to even them out"],
     ["wheel", "zoom at the pointer"]
   ] }
 ]

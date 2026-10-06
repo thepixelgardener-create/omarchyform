@@ -44,6 +44,7 @@ Item {
   // ---- one pane of one, which is the board as it has always been
   property bool active: true
   property bool split: false
+  property bool squeezed: false
   readonly property bool browsing: ctl.active && ctl.library.showing
   property int activations: 0
   function activate() { ctl.activations += 1 }
