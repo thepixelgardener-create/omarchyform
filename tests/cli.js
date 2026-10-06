@@ -367,6 +367,65 @@ try {
   }
 
   console.log('ok — command line: boards built headlessly, loaded the way the plugin loads them')
+
+  {
+    // A run that changes a board is one edit in its history, which plays back
+    // to the board it wrote, read the way the plugin reads it.
+    const H = require('../bin/store').loadStore(fs.readFileSync(path.join(__dirname, '..', 'BoardHistory.js'), 'utf8'))
+    const file = path.join(dir, 'history.json')
+    assert.equal(run('new', file, '--note', 'start').status, 0)
+    assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).version, 5, 'a new board has no history yet')
+    const plays = () => {
+      const text = fs.readFileSync(file, 'utf8')
+      const board = JSON.parse(text)
+      const parts = S.splitHistory(text)
+      assert.ok(parts.history !== '', 'the history is where the plugin looks for it')
+      return { board, records: board.history.records,
+               problem: H.verify(board.history, { items: board.items, links: board.links, nextId: board.nextId }) }
+    }
+    let applied = pipe(JSON.stringify([{ op: 'add', args: ['note', 300, 0, 220, 160, 'second'] }]), 'apply', file)
+    assert.equal(applied.status, 0, applied.raw)
+    assert.equal(applied.out.history, 1)
+    let h = plays()
+    assert.equal(h.board.version, 6)
+    assert.deepEqual(h.records.map(r => r.a), ['Command line'])
+    assert.equal(h.board.history.base.items.length, 1, 'starting from the board as it was read')
+    assert.equal(h.problem, '')
+
+    applied = pipe(JSON.stringify([{ op: 'setTint', args: [1, 'accent'] }, { op: 'move', args: [1, 40, 40] }]), 'apply', file)
+    assert.equal(applied.status, 0, applied.raw)
+    h = plays()
+    assert.equal(h.records.length, 2, 'one run, one record, however many operations')
+    assert.equal(h.problem, '')
+
+    // Edited by hand: the difference is recorded, not lost and not invented.
+    const edited = JSON.parse(fs.readFileSync(file, 'utf8'))
+    edited.items[0].text = 'changed in an editor'
+    fs.writeFileSync(file, JSON.stringify(edited, null, 2) + '\n')
+    applied = pipe(JSON.stringify([{ op: 'setTint', args: [2, 'urgent'] }]), 'apply', file)
+    assert.equal(applied.status, 0, applied.raw)
+    h = plays()
+    assert.deepEqual(h.records.map(r => r.a), ['Command line', 'Command line', H.OUTSIDE, 'Command line'])
+    assert.equal(h.problem, '')
+    assert.deepEqual(run('validate', file).out.history, { records: 4, plays: true })
+
+    // One that cannot be played, or comes from a newer Omarchyform, is not
+    // added to: the file is left exactly as it was.
+    const broken = JSON.parse(fs.readFileSync(file, 'utf8'))
+    broken.history.records[0].p = { d: [99] }
+    const brokenText = JSON.stringify(broken, null, 2) + '\n'
+    fs.writeFileSync(file, brokenText)
+    let refused = pipe(JSON.stringify([{ op: 'setTint', args: [1, 'muted'] }]), 'apply', file)
+    assert.equal(refused.status, 1)
+    assert.match(refused.raw, /history cannot be read/)
+    assert.equal(fs.readFileSync(file, 'utf8'), brokenText)
+    assert.equal(run('validate', file).out.history.plays, false)
+    broken.history.v = 2
+    fs.writeFileSync(file, JSON.stringify(broken, null, 2) + '\n')
+    refused = pipe(JSON.stringify([{ op: 'setTint', args: [1, 'muted'] }]), 'apply', file)
+    assert.match(refused.raw, /newer Omarchyform/)
+    console.log('ok — command line: a run is one edit in the board\'s history')
+  }
 } finally {
   fs.rmSync(dir, { recursive: true, force: true })
 }

@@ -506,6 +506,31 @@ leaves the current board editable so you can switch again.
 
 Which board you had open is remembered in `state.json` and reopened next time.
 
+## History
+
+A board remembers its edits, in order, so a timeline can play it back: each
+command, each drag, each pause in typing and each undo is one step. The
+history is kept in the board's own file, after the board, and saved with it
+under the same lock and backup. It keeps the newest 10,000 steps; past that the
+oldest go, a tenth at a time, and the line says so the first time. Holding a
+key down, or typing without a pause, is one step until it stops — or five
+seconds of typing at most.
+
+Text you delete from a note stays in that history. **Forget this board's
+history**, in the command list, asks to be run twice and then starts again from
+the board as it is. A copy saved to share never includes it, and a board
+imported from one starts its own.
+
+A board with history is format version 6. Omarchyform 0.4.x opens one
+read-only, so it can never save over the board and lose the history; a board
+without history, and every copy made to share, is still version 5. If a board
+was edited by something that does not keep history — a text editor, say — the
+difference is recorded as one step, "Changed outside Omarchyform". A history
+that cannot be read is kept beside the board's backups, and a new one starts.
+The board is read in front of its history and the history is checked on a
+thread of its own, so a long one does not hold the shell up when the board
+opens.
+
 ## Where your board lives
 
 ```

@@ -33,6 +33,10 @@ function makeDocument(workspace, board, Store) {
   const items = new FakeModel(), links = new FakeModel()
   const doc = { workspace, items, links, nextId: 1, nextColor: 0, undoStack: [], redoStack: [],
     currentBoard: board, destroyed: false, editedBy: [],
+    // The history the QML declares, at the values it starts with.
+    historyHeader: '', historyRecords: '', historyCount: 0, historyBytes: 0, historyLast: 0, historyStart: 0,
+    historyAsLoaded: '', historyChecking: false, historyWaiting: [], historyTrimming: false, historyTrimmed: false,
+    historyToken: 0, head: null, loadedState: null, editLabel: '', editKey: '', changed: false, changedSince: 0,
     // Connections in the QML: every pane on this board but the one that
     // edited follows the edit.
     edited(by) {
@@ -66,7 +70,13 @@ function makeDocument(workspace, board, Store) {
   Object.defineProperty(doc, 'boardPath', { get: () => '/boards/' + doc.currentBoard })
   Object.defineProperty(doc, 'boardTitle', { get: () => Store.displayName({ path: doc.currentBoard, dir: false }) })
   forward(doc, () => workspace, ['autosaveMs', 'stateReady', 'boardsDir', 'backupsDir', 'library'])
-  const context = vm.createContext({ doc, session, persistence, Store,
+  // The history worker answers when the test says so: what the document
+  // asked it is kept, and `answer` plays the reply back the way onMessage does.
+  const historyWorker = { asked: [], sendMessage(m) { historyWorker.asked.push(m) } }
+  const aside = { path: '', written: [], setText(text) { aside.written.push({ path: aside.path, text }) } }
+  const History = loadStore(fs.readFileSync(path.join(__dirname, '..', 'BoardHistory.js'), 'utf8'))
+  const context = vm.createContext({ doc, session, persistence, Store, History, historyWorker, aside,
+    itemModel: items, linkModel: links, Date, Qt: { callLater(f) { f() } },
     saveTimer: { running: false, stop() {}, restart() {} } })
   loadFunctions(doc, sources.document, context)
   // A signal is a function to call in QML; the harness's own stands in for it.
@@ -77,9 +87,15 @@ function makeDocument(workspace, board, Store) {
   session.diskText = ''
   session.readDisk = () => session.diskText
   session.requestDisk = resolve => session.acceptDisk(doc.currentBoard,
-    Store.writeFile(items, links, doc.nextId), resolve, 'rev-fresh\n' + session.diskText)
+    doc.fileText(), resolve, 'rev-fresh\n' + session.diskText)
   let revisions = 0
-  return { doc, session, persistence, items, links, writes,
+  return { doc, session, persistence, items, links, writes, worker: historyWorker, aside,
+    // What the worker would say back, delivered the way onMessage delivers it.
+    answer(reply) {
+      if (reply.token !== doc.historyToken) return
+      if (reply.kind === 'checked') doc.checkedHistory(reply)
+      else if (reply.kind === 'trimmed') doc.trimmedHistory(reply)
+    },
     complete() {
       const write = writes[writes.length - 1]
       persistence.busy = false
@@ -103,7 +119,7 @@ function makePane(workspace, exchange, Store) {
     menuVisible: false, zoomMenuVisible: false, menuIndex: 0, helpVisible: false,
     paletteVisible: false, paletteQuery: '', paletteIndex: 0, paletteRows: 9,
     conflictVisible: false, conflictIndex: 0, paletteScope: 'all', imageBusy: false,
-    statusText: '', failureText: '', failureKind: '', pendingFirstNote: '',
+    statusText: '', failureText: '', failureKind: '', pendingFirstNote: '', forgetArmedAt: 0,
     worldStep: 40, minItemSize: 60, viewW: 1000, viewH: 700 }
   const empty = new FakeModel()
   // What the pane reads off its document and the workspace.
@@ -241,6 +257,7 @@ function controller() {
   return { root: first, second, doc: opened.doc, workspace, session: opened.session, library,
     items: opened.items, links: opened.links, writes: opened.writes, states, persistence: opened.persistence,
     exchange, store: Store, complete: opened.complete, refuse: opened.refuse,
+    worker: opened.worker, aside: opened.aside, answer: opened.answer,
     // The handles for any document the workspace has made since.
     of: doc => made.get(doc) }
 }

@@ -104,6 +104,8 @@ Item {
     root.pendingFirstNote = ""
     Qt.callLater(function() {
       root.selectedIndex = 0
+      // Typing into it is an edit like any other, and its record says so.
+      if (root.items.count > 0) root.doc.beginEdit("Typing", String(root.items.get(0).iid))
       root.editIndex = 0
       root.centerOnSelected()
     })
@@ -117,7 +119,7 @@ Item {
 
   function pasteText(text) {
     if (!root.canEdit || !text) return
-    root.addItem("note", root.toWorldX(root.viewW / 2), root.toWorldY(root.viewH / 2))
+    root.addItem("note", root.toWorldX(root.viewW / 2), root.toWorldY(root.viewH / 2), "Paste")
     root.items.setProperty(root.selectedIndex, "itext", text)
     root.items.setProperty(root.selectedIndex, "iw", 300)
     root.items.setProperty(root.selectedIndex, "ih", 200)
@@ -400,7 +402,8 @@ Item {
     if (!root.diskChanged || root.exchangeBusy) return
     root.conflictVisible = false
     var base = Store.baseName(root.currentBoard).replace(/\.json$/i, "")
-    root.workspace.saveConflictCopy(root.doc, Store.writeFile(root.items, root.links, root.nextId), base + "-mine")
+    // The copy keeps this version's history with it.
+    root.workspace.saveConflictCopy(root.doc, root.doc.fileText(), base + "-mine")
   }
   readonly property bool saving: root.doc !== null && root.doc.saving
   readonly property var pendingBoard: root.doc ? root.doc.pendingBoard : null
@@ -520,7 +523,7 @@ Item {
     var unpin = n && n.ipinned
     var t = unpin ? [root.selectedIndex] : root.targets()
     if (t.length === 0) return
-    root.pushUndo()
+    root.pushUndo(unpin ? "Unpin" : "Pin")
     for (var i = 0; i < t.length; i++) root.items.setProperty(t[i], "ipinned", !unpin)
     root.markedIds = []
     root.editIndex = -1
@@ -554,8 +557,12 @@ Item {
     return { items: Store.itemRows(root.items), links: Store.linkRows(root.links), nextId: root.nextId }
   }
 
-  function pushUndo() {
+  // An edit is starting, and this is what it is called: the label its record
+  // carries in the board's history. `key` says which typing session it is,
+  // so typing in another note is a record of its own.
+  function pushUndo(label, key) {
     if (!root.boardLoaded) return
+    root.doc.beginEdit(label || "Edit", key === undefined ? "" : String(key))
     var s = root.doc.undoStack.slice()
     s.push(root.snapshot())
     // A snapshot holds the whole board, so depth has to give way as boards
@@ -585,6 +592,8 @@ Item {
   function undo() {
     if (!root.canEdit) return
     if (root.doc.undoStack.length === 0) return
+    // An undo is an edit of its own in the history: the board went back.
+    root.doc.beginEdit("Undo", "")
     var from = root.doc.undoStack.slice()
     var to = root.doc.redoStack.slice()
     to.push(root.snapshot())
@@ -598,6 +607,7 @@ Item {
   function redo() {
     if (!root.canEdit) return
     if (root.doc.redoStack.length === 0) return
+    root.doc.beginEdit("Redo", "")
     var from = root.doc.redoStack.slice()
     var to = root.doc.undoStack.slice()
     to.push(root.snapshot())
@@ -609,11 +619,11 @@ Item {
   }
 
   // -------------------------------------------------------------------- items
-  function addItem(kind, wx, wy) {
+  function addItem(kind, wx, wy, label) {
     if (!root.canEdit) return
     root.showPinned = false
     root.markedIds = []
-    root.pushUndo()
+    root.pushUndo(label || Store.ADD_LABELS[kind] || "New item")
     var w = kind === "note" ? 180 : 160
     var h = kind === "note" ? 140 : 110
     root.items.append({
@@ -929,7 +939,7 @@ Item {
     if (!root.canEdit) return
     var moves = Store.alignMoves(root.items, root.targets(), edge)
     if (moves.length === 0) { root.flash("already aligned"); return }
-    root.applyMoves(moves)
+    root.applyMoves(moves, "Align")
     root.flash("aligned " + moves.length + (moves.length === 1 ? " item" : " items"))
   }
 
@@ -940,12 +950,12 @@ Item {
     if (t.length < 3) { root.flash("mark three or more items to spread them"); return }
     var moves = Store.spreadMoves(root.items, t, axis)
     if (moves.length === 0) { root.flash("already evenly spaced"); return }
-    root.applyMoves(moves)
+    root.applyMoves(moves, "Spread")
     root.flash("spread " + moves.length + (moves.length === 1 ? " item" : " items"))
   }
 
-  function applyMoves(moves) {
-    root.pushUndo()
+  function applyMoves(moves, label) {
+    root.pushUndo(label)
     for (var i = 0; i < moves.length; i++) {
       root.items.setProperty(moves[i].index, "ix", moves[i].x)
       root.items.setProperty(moves[i].index, "iy", moves[i].y)
@@ -964,7 +974,7 @@ Item {
     // targets() comes back descending; copying in board order keeps the copies
     // stacked the way the originals were.
     var ordered = t.slice().sort(function (a, b) { return a - b })
-    root.pushUndo()
+    root.pushUndo("Duplicate")
     var fresh = []
     var byOriginal = ({})
     for (var i = 0; i < ordered.length; i++) {
@@ -997,7 +1007,7 @@ Item {
   // Indices must arrive descending: removing one shifts every index after it.
   function removeAt(indices) {
     if (indices.length === 0) return
-    root.pushUndo()
+    root.pushUndo("Delete")
     for (var k = 0; k < indices.length; k++) {
       var id = root.items.get(indices[k]).iid
       root.items.remove(indices[k])
@@ -1035,7 +1045,7 @@ Item {
       root.flash(where === "front" || where === "forward" ? "already at the front" : "already at the back")
       return
     }
-    root.pushUndo()
+    root.pushUndo("Reorder")
     // The cursor follows its item rather than its position, which is about to
     // be somebody else's.
     var cursor = root.selectedIndex >= 0 ? root.items.get(root.selectedIndex).iid : -1
@@ -1050,7 +1060,7 @@ Item {
     var n = root.selected()
     var t = root.targets()
     if (!n || t.length === 0) return
-    root.pushUndo()
+    root.pushUndo("Colour")
     var next = Store.cycle(Store.TINTS, n.itint)
     for (var i = 0; i < t.length; i++) root.items.setProperty(t[i], "itint", next)
     root.save()
@@ -1064,7 +1074,7 @@ Item {
     // Turning an image into a box would drop the picture with no way back, so
     // it keeps its shape and takes the rest of the selection with it.
     if (n.kind === "image") { root.flash("an image keeps its shape"); return }
-    root.pushUndo()
+    root.pushUndo("Shape")
     var next = Store.cycle(Store.KINDS, n.kind)
     for (var i = 0; i < t.length; i++)
       if (root.items.get(t[i]).kind !== "image") root.items.setProperty(t[i], "kind", next)
@@ -1100,7 +1110,7 @@ Item {
     // what happens here is what the board said was about to happen.
     var found = Store.linkAt(root.links, a, b)
     if (found.outcome === "none") return
-    root.pushUndo()
+    root.pushUndo(found.outcome === "remove" ? "Remove connector" : found.outcome === "reverse" ? "Turn connector" : "Connect")
     if (found.outcome === "remove") {
       root.links.remove(found.at)
       root.save(true)
@@ -1129,7 +1139,7 @@ Item {
     for (var j = root.links.count - 1; j >= 0; j--) {
       var l = root.links.get(j)
       if (l.lfrom === n.iid || l.lto === n.iid) {
-        if (!removed) { root.pushUndo(); removed = true }
+        if (!removed) { root.pushUndo("Remove connectors"); removed = true }
         root.links.remove(j)
       }
     }
@@ -1216,10 +1226,11 @@ Item {
     if (!root.canEdit) return
     var t = root.targets()
     if (t.length === 0) return
-    root.pushUndo()
+    root.pushUndo("Move")
     root.moveTargets(dx * root.worldStep, dy * root.worldStep)
     root.centerOnSelected()
-    root.save()
+    // Scheduled rather than written: a held key is one move, and one record.
+    root.scheduleSave()
   }
 
   // Resize from the bottom-right, the same corner the mouse grip pulls, so the
@@ -1236,10 +1247,10 @@ Item {
       if (Math.max(root.minItemSize, n.ih + dy * root.worldStep) !== n.ih) { moved = true; break }
     }
     if (!moved) return
-    root.pushUndo()
+    root.pushUndo("Resize")
     root.resizeTargets(dx * root.worldStep, dy * root.worldStep)
     root.centerOnSelected()
-    root.save()
+    root.scheduleSave()
   }
 
   // Keep the selection visible without moving a comfortably framed view.
@@ -1319,7 +1330,7 @@ Item {
     if (root.selected() && root.selected().ipinned) return
     if (!root.canEdit) return
     if (root.selectedIndex < 0) return
-    root.pushUndo()
+    root.pushUndo("Typing", root.selected().iid)
     root.editIndex = root.selectedIndex
   }
 
@@ -1328,9 +1339,31 @@ Item {
     root.editIndex = -1
     root.focusKeys()
     root.save()
+    // Done typing is the end of that record, however soon the next one starts.
+    if (root.doc) root.doc.endEdit()
   }
 
   function toggleWindowMode() { root.workspace.toggleWindowMode() }
+
+  // Forgets every edit this board remembers and starts again from it as it
+  // is: text deleted from a note otherwise stays in its file's history. Asked
+  // for twice, because nothing brings it back.
+  property real forgetArmedAt: 0
+  function forgetHistory() {
+    if (!root.canEdit) return
+    if (root.doc.historyHeader === "" && !root.doc.historyChecking) {
+      root.flash("this board has no history to forget")
+      return
+    }
+    if (Date.now() - root.forgetArmedAt > 6000) {
+      root.forgetArmedAt = Date.now()
+      root.flash("Forget every edit this board remembers? Run it again to forget them")
+      return
+    }
+    root.forgetArmedAt = 0
+    root.doc.forgetHistory()
+    root.flash("History forgotten · it starts again from here")
+  }
 
   // Escape unwinds one layer at a time rather than closing outright.
   function back() {

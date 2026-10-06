@@ -119,6 +119,17 @@ from here; it takes the pair in either order.
 
 **`nextId`** is the next id to hand out. `apply` maintains it; do not set it.
 
+**`history`**, last in the file, is every edit the board remembers, so its
+timeline can play it back. A board that has one is `"version": 6`; one that
+does not is still 5. `apply` adds one record per run, labelled "Command line",
+however many operations it carries, and keeps the newest 10,000. Never edit
+the history by hand. If the board itself was edited by hand, the next `apply`
+records the difference as one record, "Changed outside Omarchyform". A history
+that cannot be played back makes `apply` refuse and leave the file as it was;
+`validate` reports it under `history` and `warnings`, and opening the board in
+Omarchyform keeps it aside and starts a new one. A copy made to share never
+carries a history.
+
 ### What a board tolerates
 
 Board files are hand-editable and get synced between machines, so everything

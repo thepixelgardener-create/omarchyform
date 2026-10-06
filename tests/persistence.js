@@ -89,7 +89,10 @@ cat > "$OMARCHYFORM_TEST_DIR/copied"
     }
     for (const file of ['BoardPersistence.qml', 'BoardSession.qml', 'BoardExchange.qml', 'BoardStore.js', 'BoardFiles.sh'])
       fs.copyFileSync(path.join(__dirname, '..', file), path.join(dir, file))
-    fs.writeFileSync(path.join(dir, 'shell.qml'), fs.readFileSync(path.join(__dirname, `qml/tst_${scenario}.qml`), 'utf8').replace('import "../.."', ''))
+    // The scenarios import the repository from two folders up; here it is the
+    // folder they run in.
+    fs.writeFileSync(path.join(dir, 'shell.qml'), fs.readFileSync(path.join(__dirname, `qml/tst_${scenario}.qml`), 'utf8')
+      .replace('import "../.."', '').replace('"../../BoardStore.js"', '"BoardStore.js"'))
     const result = spawnSync('qs', ['--no-color', '-p', path.join(dir, 'shell.qml')], {
       encoding: 'utf8', timeout: 15000,
       env: { ...process.env, QT_QPA_PLATFORM: 'offscreen', QT_QPA_PLATFORMTHEME: '',

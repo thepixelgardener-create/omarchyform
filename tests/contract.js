@@ -274,6 +274,18 @@ for (const [file, id] of [["Omarchyform.qml", "root"], ["BoardPane.qml", "root"]
     if (!own.has(name)) failures.push(`${file}: ${id} has no '${name}'`)
 }
 
+// A name declared twice on one object is two things QML cannot both have:
+// a document once had a historyTrimmed flag and a historyTrimmed() handler,
+// and the handler overwrote the flag in every test that ran it.
+for (const file of fs.readdirSync(root).filter(f => f.endsWith(".qml"))) {
+  const source = read(file)
+  const seen = new Map()
+  for (const m of source.matchAll(/^ {2}(?:readonly\s+|required\s+)?(?:property\s+(?:alias\s+)?[\w.<>]+|function|signal)\s+(\w+)/gm))
+    seen.set(m[1], (seen.get(m[1]) || 0) + 1)
+  for (const [name, count] of seen)
+    if (count > 1) failures.push(`${file}: ${name} is declared ${count} times`)
+}
+
 // The palette and the keyboard have to agree about which letter does what.
 // BoardStore's table carries the label the palette shows and the function it
 // dispatches; Board.qml carries what the key actually runs. A key that moved in

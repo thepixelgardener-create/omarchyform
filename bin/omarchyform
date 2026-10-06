@@ -60,6 +60,11 @@ function aside(file, kind) {
 }
 
 const S = loadStore()
+// The board's history, kept the way the board keeps it: every completed edit,
+// so a timeline can play the board back. A run of this is one edit, recorded
+// as "Command line"; see docs/splitview-timeline-plan.md.
+const H = loadStore(fs.readFileSync(path.join(__dirname, "..", "BoardHistory.js"), "utf8"))
+const COMMAND_LINE = "Command line"
 
 function die(message, detail) {
   answer({ ok: false, error: message, detail: detail === undefined ? null : detail })
@@ -98,7 +103,10 @@ function readText(file) {
 // understands ends the run with the reason.
 function loadBoard(file, text) {
   const version = declaredVersion(text)
-  const data = S.readFile(text)
+  // The board in front of its history; the history is read here whole, since
+  // nothing is kept waiting on this.
+  const parts = S.splitHistory(text)
+  const data = S.readFile(parts.board)
   if (!data) {
     // A board from a newer Omarchyform is not a broken one. The board itself
     // opens it read-only rather than saving over what it cannot represent, and
@@ -112,15 +120,44 @@ function loadBoard(file, text) {
   const links = new RowModel()
   S.fillItems(items, data.items)
   S.fillLinks(links, items, data.links)
-  return { data, items, links, version }
+  let history = data.history
+  if (parts.history !== "") {
+    try { history = JSON.parse(parts.history) }
+    catch { history = undefined }
+  }
+  return { data, items, links, version, history }
 }
+
+// A board's history, checked before anything is added to it. One that ends
+// somewhere else — the file was edited by something that keeps none — gets
+// the difference as one record. One that cannot be played is not added to:
+// the board itself keeps it aside and starts again, and should be the one to.
+function checkHistory(file, history, state) {
+  if (history === null || history === undefined) return null
+  const shape = H.checkShape(history)
+  if (shape !== "")
+    die(file + "'s history " + (history && history.v > H.HISTORY_VERSION
+      ? "is from a newer Omarchyform" : "cannot be read (" + shape + ")"),
+      "open it in Omarchyform, which keeps that history aside and starts a new one")
+  const wrong = H.verify(history, state)
+  if (wrong === "") return history
+  if (H.bridge(history, state, Date.now()) === null)
+    die(file + "'s history cannot be read (" + wrong + ")",
+        "open it in Omarchyform, which keeps that history aside and starts a new one")
+  return history
+}
+
+const stateOf = board => ({ items: S.itemRows(board.items), links: S.linkRows(board.links), nextId: board.nextId })
 
 function readBoard(file) {
   // The revision first: what is read is a version of the file, and a write
   // later on has to be able to say which version it was working from.
   const revision = revisionOf(file)
-  const { data, items, links, version } = loadBoard(file, readText(file))
-  return { items, links, nextId: S.nextFreeId(items, data.nextId), version, revision }
+  const { data, items, links, version, history } = loadBoard(file, readText(file))
+  const board = { items, links, nextId: S.nextFreeId(items, data.nextId), version, revision }
+  board.before = stateOf(board)
+  board.history = checkHistory(file, history, board.before)
+  return board
 }
 
 // The board may be open in the shell, which watches the file and reads it when
@@ -129,7 +166,22 @@ function readBoard(file) {
 // cannot both believe they are updating it. `expected` is "-" when the caller
 // has said outright to write over whatever is there.
 function writeBoard(board, file, expected) {
-  const text = S.writeFile(board.items, board.links, board.nextId)
+  // What this run changed is one record. A board without a history starts
+  // one, from the board as it was read; a new board has none until it is
+  // first changed.
+  let history = board.history || null
+  if (board.before) {
+    const after = stateOf(board)
+    const now = Date.now()
+    if (!history && H.diff(board.before, after) !== null) history = H.create(board.before, now, H.newLineage(now))
+    if (history) H.append(history, board.before, after, COMMAND_LINE, now)
+    if (history) {
+      const size = H.measure(history)
+      if (size.count > H.MAX_HISTORY_RECORDS || size.bytes > H.MAX_HISTORY_BYTES) H.trim(history)
+    }
+  }
+  board.recorded = history ? history.records.length : 0
+  const text = S.writeFile(board.items, board.links, board.nextId, history ? JSON.stringify(history) : "")
   const target = path.resolve(file)
   const written = helper("commit",
     [target, aside(target, "backup"), aside(target, "lock"), expected === undefined ? "-" : expected], text)
@@ -331,7 +383,7 @@ function verbInspect(args) {
 function verbValidate(args) {
   const file = args.shift()
   if (!file) die("validate: needs a board to read")
-  const { data, items, links, version } = loadBoard(file, readText(file))
+  const { data, items, links, version, history } = loadBoard(file, readText(file))
   // What loading had to repair. A board is hand-editable and shareable, so
   // this is the difference between what is on disk and what would be drawn.
   const repairs = []
@@ -347,7 +399,17 @@ function verbValidate(args) {
     warnings.push(`${row.id === undefined ? "a note" : "item " + row.id} is longer than ${S.MAX_NOTE_LENGTH} characters; `
       + "the board opens read-only until it is shorter")
   }
-  answer({ ok: true, file, version, items: items.count, links: links.count, repairs, warnings })
+  // The history is checked, not changed: how many edits it holds, and whether
+  // it plays back to this board.
+  let kept = null
+  if (history !== null && history !== undefined) {
+    const shape = H.checkShape(history)
+    const state = { items: S.itemRows(items), links: S.linkRows(links), nextId: S.nextFreeId(items, data.nextId) }
+    const problem = shape !== "" ? shape : H.verify(history, state)
+    kept = { records: Array.isArray(history.records) ? history.records.length : 0, plays: problem === "" }
+    if (problem !== "") warnings.push("its history " + problem)
+  }
+  answer({ ok: true, file, version, items: items.count, links: links.count, history: kept, repairs, warnings })
 }
 
 function verbApply(args) {
@@ -383,7 +445,8 @@ function verbApply(args) {
   const expected = path.resolve(out) === path.resolve(file) && !args.includes("--force")
     ? board.revision : "-"
   const bytes = writeBoard(board, out, expected)
-  answer({ ok: true, file: out, applied: results, items: board.items.count, links: board.links.count, bytes })
+  answer({ ok: true, file: out, applied: results, items: board.items.count, links: board.links.count, bytes,
+           history: board.recorded })
 }
 
 function verbOps() {

@@ -23,7 +23,8 @@ the section has been updated.
 | 2c. Divider and narrow windows | Done; drag, double-click reset, 320 px minimum, active-pane fallback |
 | Live checks for gate 2 | Done in ee50f9d and 520b8ce. `test:omarchy` drives split view with real keys in both host modes; `test:paste` passes; `shots` photographs both layouts; `bench:scene` at 3000 items matches `origin/main` after the boards were moved back to single-board depth |
 | 3. History storage and budgets | Done; see "Gate 3 results". Embedded storage passes with the conditions recorded there |
-| 4–6. History | Not started |
+| 4. Recording and migration | Done; `tests/recording.js`, the CLI suite, a headless run of the real worker, and the live suites, whose boards' histories all play back |
+| 5–6. Timeline and release review | Not started |
 
 A saved second board that no longer exists opens empty in its pane, the way a
 missing `lastBoard` always has, rather than restoring a single pane.
@@ -186,6 +187,19 @@ editing pauses everywhere while it renders.
 
 ## History contract and persistence
 
+Decided by the owner on 2026-10-06, after gate 3:
+
+- **At the limit, keep the newest edits.** The oldest records roll off and the
+  baseline moves forward to where they end. The line says so the first time a
+  board's history is trimmed. This replaces "Continue in a new board" and the
+  rule against automatic purges below.
+- **History is on for every board, with a forget command.** "Forget this
+  board's history" asks to be run twice, then starts a new history from the
+  board as it is. Text deleted from a note otherwise stays in its file's
+  history; shared copies never carry history.
+- **The format becomes version 6.** Released versions open a board with
+  history read-only, so they can never save over it and drop the history.
+
 History is an ordered record of accepted document changes, independent of
 undo/redo. Each record has a stable ID, monotonic sequence, timestamp, action,
 and the data needed to reconstruct the resulting state. Ordering uses the
@@ -208,6 +222,19 @@ silently change existing undo behavior.
 | Text | 750 ms idle, blur, explicit completion, or 5 s maximum chunk duration |
 | IME text | No boundary through uncommitted composition; commit the accepted text afterward |
 | CLI | One successful mutation/batch; failed or no-op commands add nothing |
+
+Gate 4 refinement: **every write completes the edit in progress first.** A
+file whose board is ahead of its history fails verification when it is next
+opened. And a write that holds back typing the history has not taken yet
+hides that typing from the session's conflict check, which compares what is
+on disk with what would be written: an outside change would reload the board
+over it. So the edit in progress is recorded before any write. What triggers
+writes stays editor-side: the autosave delay after the last change, a five
+second maximum for continuous typing, a discrete command, or leaving the
+board. Disk completion never cuts a record. Edits that should merge — typing
+in one note, a held move or resize key — schedule a write instead of making
+one, and a new edit of the same kind continues the record rather than
+starting one.
 
 Timer boundaries are deterministic editor events, independent of save
 completion. Continuous typing can therefore produce several labeled text
@@ -244,19 +271,20 @@ Limits, settled by gate 3: 10,000 records or 16 MiB of serialized records per
 lineage, whichever comes first. The baseline is not counted: it is the board
 as it was, and a board of long notes would otherwise spend its whole budget
 before its first edit. Ordinary editing reaches the record limit first, at
-1.5–2.5 MiB. These are bounded-history defaults, not a
-promise to retain unlimited edits. At the limit, keep the existing history
-intact and offer **Continue in a new board**: write a current-state-only copy
-with a fresh baseline using the existing unique publish path, then switch
-only after success. Failed copy leaves the original open. No automatic purge,
-silent recording pause or overwriting of history. Capacity checks happen
-before accepting a completed change. If the change crosses the limit, retain
-its working snapshot, stop further mutations in that document, and offer to
-publish that snapshot as the new board's baseline. The original committed
-head and history remain saveable; canceling the continuation keeps the draft
-available, with an explicit discard option. CLI capacity failure leaves the
-original file untouched and explains how to copy the current board first.
-Image bytes have separate existing limits.
+1.5–2.5 MiB. These are bounded-history defaults, not a promise to retain
+unlimited edits. Past a limit the oldest tenth is dropped at once and the
+baseline rebased onto where it ended, so trimming happens once per thousand
+edits rather than on every one. The trim runs in the history worker; records
+taken while it runs are kept and appended to what it returns. The command
+line trims the same way. Image bytes have separate existing limits.
+
+When a history does not end at the board as it is — the file was edited by
+hand, or by something that does not keep history — the worker records the
+difference as one record, "Changed outside Omarchyform". It does not invent
+the steps in between. A history that cannot be played at all is kept beside
+the board's backups, and a new one starts from the board as it is, with a
+line saying where the old one went. A history from a newer Omarchyform makes
+the board read-only, like any newer board.
 
 ### Gate 3 results
 

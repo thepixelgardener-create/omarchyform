@@ -39,6 +39,9 @@ function normalizeTint(value) {
 
 // Each entry owns its label and action, so reordering the menu cannot change
 // what a click or keyboard choice runs. Navigation entries keep the menu open.
+// What making each kind of item is called in a board's history.
+var ADD_LABELS = { note: "New note", rect: "New box", ellipse: "New ellipse", diamond: "New diamond", image: "Picture" }
+
 var MENU_COMMANDS = [
   { id: "new", label: "New", run: "newBoard" },
   { id: "boards", label: "Boards", run: "openBrowser" },
@@ -608,6 +611,9 @@ var COMMANDS = [
   { name: "Export a PNG in black and white", key: "", run: "choosePng", arg: "mono", needs: "",
     also: ["png mono", "monochrome", "greyscale", "grayscale", "print"] },
   { name: "Save now", key: "ctrl+s", run: "flushSave", needs: "" },
+  // Asked for twice: the first run says what the second will do.
+  { name: "Forget this board's history", key: "", run: "forgetHistory", needs: "edit",
+    also: ["clear history", "erase history", "privacy", "timeline"] },
   // Only offered while two versions of the open board exist. They have no keys
   // of their own: the panel that appears with the conflict numbers them, and
   // this is how they are found by name.
@@ -742,6 +748,7 @@ var COMMAND_ICONS = {
   exportBoardPlain: "\uf045",
   choosePng: "\uf03e",
   flushSave: "\uf0c7",
+  forgetHistory: "\uf12d",
   conflictUseDisk: "\uf0a0",
   conflictSaveCopy: "\uf0c5",
   conflictReplaceDisk: "\uf0c7",
@@ -962,11 +969,25 @@ function nextFreeId(items, stored) {
   return id
 }
 
-// The format this writes, and the newest it reads. Every version from 1 up to
-// it still loads: older boards are migrated on the way in rather than refused.
-// The command line asks this too, to tell a board from a newer Omarchyform
-// apart from one that is broken.
-var FORMAT_VERSION = 5
+// The newest format this reads. Every version from 1 up to it still loads:
+// older boards are migrated on the way in rather than refused. The command
+// line asks this too, to tell a board from a newer Omarchyform apart from one
+// that is broken.
+//
+// Version 6 is a board that carries its edit history. A board without one is
+// still written as version 5, so a copy made to share, and a board nobody has
+// edited since, open in every Omarchyform since 0.4 — and a board with history
+// opens in one older than this read-only, so it can never be saved over and
+// lose it.
+var FORMAT_VERSION = 6
+var PLAIN_VERSION = 5
+
+// Where a board's history starts in its file. Always the last key and always
+// at this indentation, because opening a board reads the board in front of it
+// and leaves the history as text: parsing a long history on the shell's own
+// thread stood it still for up to 156ms (tests/history-bench.js). A newline
+// cannot be inside a JSON string, so this cannot be found in a note.
+var HISTORY_MARKER = '\n  "history": '
 
 // A whole number from 1 to FORMAT_VERSION. "5" and 4.5 are not versions.
 function knownVersion(version) {
@@ -1025,8 +1046,31 @@ function readFile(raw) {
   return {
     items: parsed.items ? parsed.items : (parsed.notes ? parsed.notes : []),
     links: parsed.links ? parsed.links : [],
-    nextId: parsed.nextId ? parsed.nextId : 1
+    nextId: parsed.nextId ? parsed.nextId : 1,
+    // Only when the history was not split off first: a board someone has
+    // reformatted by hand still has one, just not where it is looked for.
+    history: parsed.history !== undefined ? parsed.history : null
   }
+}
+
+// A board file in two: the board in front, as a board of its own, and its
+// history after it as text, or "" when it has none or it is not where this
+// writer puts it. readFile on the first part reads the board without parsing
+// the history; see HISTORY_MARKER.
+function splitHistory(raw) {
+  var text = typeof raw === "string" ? raw : ""
+  var end = text.length
+  while (end > 0 && (text.charAt(end - 1) === "\n" || text.charAt(end - 1) === "\r" || text.charAt(end - 1) === " ")) end--
+  var at = text.lastIndexOf(HISTORY_MARKER)
+  if (at < 1 || text.charAt(at - 1) !== "," || text.charAt(end - 1) !== "}") return { board: text, history: "" }
+  var history = text.slice(at + HISTORY_MARKER.length, end - 1)
+  var last = history.length
+  while (last > 0 && /\s/.test(history.charAt(last - 1))) last--
+  return { board: text.slice(0, at - 1) + "\n}\n", history: history.slice(0, last) }
+}
+
+function joinHistory(boardText, historyText) {
+  return boardText.slice(0, -3) + "," + HISTORY_MARKER + historyText + "\n}\n"
 }
 
 // windowMode deliberately absent: which surface the board opens on is a
@@ -1043,14 +1087,18 @@ function readFile(raw) {
 // marker up the next time they are saved.
 var FORMAT_MARKER = "omarchyform.board"
 
-function writeFile(items, links, nextId) {
-  return JSON.stringify({
+// `historyText`, when there is one, is written after the board as it is held:
+// a history is appended to as text rather than written out again, which on a
+// long one cost 80-160ms a save.
+function writeFile(items, links, nextId, historyText) {
+  var board = JSON.stringify({
     kind: FORMAT_MARKER,
-    version: FORMAT_VERSION,
+    version: historyText ? FORMAT_VERSION : PLAIN_VERSION,
     nextId: nextId,
     items: itemRows(items),
     links: linkRows(links)
   }, null, 2) + "\n"
+  return historyText ? joinHistory(board, historyText) : board
 }
 
 // --------------------------------------------------------------- layer order

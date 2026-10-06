@@ -15,6 +15,12 @@ since older boards are migrated on load rather than rejected.
   versions or a failed save keep the pane open. Drag the line between the
   panes to resize them; a window too small for two shows the pane you are in.
   The layout is remembered.
+- Boards remember their edits: every command, drag, pause in typing and undo
+  is one step in a history kept in the board's file, newest 10,000 kept.
+  **Forget this board's history** clears it. A board with history is format
+  version 6, which Omarchyform 0.4.x opens read-only; boards without one and
+  copies made to share stay version 5. `bin/omarchyform apply` records each
+  run as one step. There is no timeline to play it back yet.
 
 ### Changed
 

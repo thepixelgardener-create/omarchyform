@@ -87,8 +87,12 @@ function tests(S) {
     // A version is a whole number from 1 up to the one this writes.
     for (const version of [0, -1, 4.5, "5", true, null, [5]])
       eq(S.readFile(JSON.stringify({ version, items: [] })), null, "version " + JSON.stringify(version))
-    eq(JSON.parse(S.writeFile(new FakeModel(), new FakeModel(), 1)).version, S.FORMAT_VERSION,
-       "and what it writes is the newest it reads")
+    // A board without history is written in the format every Omarchyform since
+    // 0.4 opens; one with history in the newest, which older ones open read-only.
+    eq(JSON.parse(S.writeFile(new FakeModel(), new FakeModel(), 1)).version, S.PLAIN_VERSION,
+       "a board without history is the plain format")
+    eq(JSON.parse(S.writeFile(new FakeModel(), new FakeModel(), 1, '{"v":1,"records":[]}')).version, S.FORMAT_VERSION,
+       "and one with history is the newest it reads")
   })
 
   test("a note too long to lay out is found, wherever it is and however old the board", () => {
@@ -1256,9 +1260,28 @@ function tests(S) {
   })
 
   test("boards from every version this has ever written still load", () => {
-    for (const v of [1, 2, 3, 4, 5])
+    for (const v of [1, 2, 3, 4, 5, 6])
       ok(S.readFile(JSON.stringify({ version: v, items: [] })) !== null, "version " + v)
-    eq(S.readFile(JSON.stringify({ version: 6, items: [] })), null, "and one from the future does not")
+    eq(S.readFile(JSON.stringify({ version: 7, items: [] })), null, "and one from the future does not")
+  })
+
+  test("a board's history is written last and read apart from it", () => {
+    const items = new FakeModel([item({ iid: 1, itext: 'with "quotes"\n  "history": in it' })])
+    const history = '{"v":1,"lineage":"x","start":0,"base":{"items":[],"links":[],"nextId":1},"records":[]}'
+    const text = S.writeFile(items, new FakeModel(), 2, history)
+    const parts = S.splitHistory(text)
+    eq(parts.history, history, "the history comes back as the text it was")
+    eq(JSON.parse(parts.board).history, undefined, "and the board in front of it is a board without one")
+    eq(S.readFile(parts.board).items[0].text, 'with "quotes"\n  "history": in it', "a note that names the marker is a note")
+    eq(JSON.parse(text).history.lineage, "x", "the whole file is still one JSON document")
+    eq(S.splitHistory(S.writeFile(items, new FakeModel(), 2)).history, "", "a board without one has none")
+    // Reformatted by hand, the marker is gone but the history is not: it is
+    // read with the board rather than lost.
+    const reformatted = JSON.stringify(JSON.parse(text))
+    eq(S.splitHistory(reformatted).history, "")
+    eq(S.readFile(reformatted).history.lineage, "x")
+    for (const odd of ["", "{}", "not json", text.slice(0, -5)])
+      ok(typeof S.splitHistory(odd).board === "string", "anything at all splits into something: " + odd.slice(0, 10))
   })
 
   test("copying out takes the text in board order, blanks left out", () => {

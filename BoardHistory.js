@@ -36,6 +36,11 @@ var HISTORY_VERSION = 1
 // see "History contract and persistence" in docs/splitview-timeline-plan.md.
 var MAX_HISTORY_BYTES = 16777216
 var MAX_HISTORY_RECORDS = 10000
+// Edits that continue the record in progress rather than starting one, when
+// the next one is the same: typing in one note, a held key moving or resizing.
+var MERGING = ["Typing", "Move", "Resize"]
+// The longest continuous typing goes without being written and recorded.
+var MAX_CHUNK_MS = 5000
 // Text at least this long is recorded as the stretch that changed. Typing into
 // a long note would otherwise store the whole note again with every pause.
 var TEXT_SPLICE_MIN = 64
@@ -359,7 +364,10 @@ function checkShape(h) {
   if (!h.base || !Array.isArray(h.base.items) || !Array.isArray(h.base.links) || typeof h.base.nextId !== "number")
     return "no state to start from"
   if (!Array.isArray(h.records)) return "no records"
-  if (h.records.length > MAX_HISTORY_RECORDS) return "more records than a history keeps"
+  // Twice the limit: a history is over it from the record that crosses it
+  // until the worker has trimmed it, and is written meanwhile. Far beyond it
+  // is not a history this wrote, and not worth playing to find out.
+  if (h.records.length > 2 * MAX_HISTORY_RECORDS) return "more records than a history keeps"
   var last = 0
   for (var i = 0; i < h.records.length; i++) {
     var r = h.records[i]
@@ -416,4 +424,102 @@ function stateAt(ix, h, count) {
   var w = copyWorking(c.w)
   for (var r = c.at; r < k; r++) apply(w, h.records[r].p)
   return stateOf(w)
+}
+
+// ------------------------------------------------------------ as text
+// The board holds its history as text and appends to it, rather than holding
+// it parsed and writing it out again: see HISTORY_MARKER in BoardStore.js. The
+// text is the history's JSON with its records last, so it splits in two at
+// where they begin — everything up to "records":[ and the records themselves,
+// joined by commas — and a new record is a comma and its own JSON.
+var RECORDS_KEY = '"records":['
+
+// A name for a new line of edits: when it began, and enough chance in it that
+// two boards started in the same millisecond are still told apart.
+function newLineage(now) {
+  return Math.round(now).toString(36) + "-" + Math.floor(Math.random() * 2176782336).toString(36)
+}
+
+// The text of a new, empty history, up to and including where its records go.
+function startText(state, now, lineage) {
+  var text = JSON.stringify(create(state, now, lineage))
+  return text.slice(0, -2)
+}
+
+function joinText(header, records) { return header + records + "]}" }
+
+// A history's text in its two parts, or null when it is not shaped the way
+// this writes one. Its records are the last thing in it, and a key cannot
+// appear inside a string, so the first match is the key.
+function splitText(text) {
+  if (typeof text !== "string" || text.slice(-2) !== "]}") return null
+  var at = text.indexOf(RECORDS_KEY)
+  if (at < 0) return null
+  return { header: text.slice(0, at + RECORDS_KEY.length), records: text.slice(at + RECORDS_KEY.length, -2) }
+}
+
+// What can be read off the front of a history without parsing its baseline:
+// its version, its lineage and when it began. Null when that is not there.
+function headerFacts(header) {
+  var at = header.indexOf(',"base":')
+  if (at < 0) return null
+  try {
+    var facts = JSON.parse(header.slice(0, at) + "}")
+    return facts && typeof facts === "object" ? facts : null
+  } catch (e) { return null }
+}
+
+// The number of the last record, read off the end of the records. Every
+// record is written starting {"i":, and nothing inside one can be: its keys
+// are the patch's and an item's, and text is escaped.
+function lastNumber(records) {
+  var at = records.lastIndexOf('{"i":')
+  if (at < 0) return 0
+  var n = parseInt(records.slice(at + 5, at + 25), 10)
+  return isFinite(n) && n > 0 ? n : 0
+}
+
+// --------------------------------------------------------- keeping it small
+// Past either limit, the oldest tenth goes at once and the baseline moves to
+// where it ended: trimming then happens once in a thousand edits rather than
+// on every one. Answers how many records went.
+function trim(h) {
+  var keepRecords = Math.floor(MAX_HISTORY_RECORDS * 0.9)
+  var keepBytes = Math.floor(MAX_HISTORY_BYTES * 0.9)
+  var sizes = []
+  var total = 0
+  for (var i = 0; i < h.records.length; i++) {
+    sizes.push(utf8Length(JSON.stringify(h.records[i])) + 1)
+    total += sizes[i]
+  }
+  var drop = 0
+  while (drop < h.records.length && (h.records.length - drop > keepRecords || total > keepBytes)) {
+    total -= sizes[drop]
+    drop++
+  }
+  if (drop === 0) return 0
+  var w = working(h.base)
+  for (var r = 0; r < drop; r++) apply(w, h.records[r].p)
+  h.base = copyState(stateOf(w))
+  h.records = h.records.slice(drop)
+  return drop
+}
+
+// The size of a history's records as they are written, and how many.
+function measure(h) {
+  var bytes = 0
+  for (var i = 0; i < h.records.length; i++) bytes += utf8Length(JSON.stringify(h.records[i])) + 1
+  return { count: h.records.length, bytes: bytes,
+           last: h.records.length > 0 ? h.records[h.records.length - 1].i : 0 }
+}
+
+// When a history ends somewhere other than the board as it is — the file was
+// edited by something that does not keep one — the difference becomes one
+// record, labelled for what it is. The steps in between are not invented.
+var OUTSIDE = "Changed outside Omarchyform"
+function bridge(h, live, now) {
+  var w = working(h.base)
+  for (var i = 0; i < h.records.length; i++)
+    if (apply(w, h.records[i].p) !== "") return null
+  return append(h, stateOf(w), live, OUTSIDE, now)
 }
