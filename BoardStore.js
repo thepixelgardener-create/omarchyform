@@ -163,6 +163,9 @@ var BOARD_HINTS = [["n", "note"], ["r", "rect"], ["e", "ellipse"], ["x", "connec
 var FIND_HINTS = [["enter", "next"], ["esc", "done"]]
 var ARRANGE_HINTS = [["hjkl", "edges"], ["c/m", "centres"], ["HJKL", "spread evenly"],
                      ["esc", "cancel"]]
+// While a pane looks back through a board's history.
+var TIMELINE_HINTS = [["h l", "step"], ["H L", "first / latest"], ["space", "play"], ["1-4", "speed"],
+                      ["esc", "back to now"]]
 var PINNED_HINTS = [["tab/hjkl or click", "select"], ["p", "unpin"], ["esc", "done"]]
 // `add board` rather than `board`, so the key leads the word and does not have
 // to be said in front of it. The capital on `Add folder` is the shift the key
@@ -346,7 +349,7 @@ function paletteTint(palette, group, tint) {
 //   saving
 //   hints           nothing in particular: the keys.
 var STATUS_TIERS = ["none", "saveError", "trashIndexError", "conflict", "damaged", "failure",
-                    "palette", "arrange", "backgrounds", "editing", "linking",
+                    "palette", "timeline", "arrange", "backgrounds", "editing", "linking",
                     "flash", "switching", "saving", "hints"]
 
 function statusTier(s) {
@@ -360,6 +363,7 @@ function statusTier(s) {
   if (s.damaged) return "damaged"
   if (s.failureText !== "") return "failure"
   if (s.paletteVisible) return "palette"
+  if (s.timeline) return "timeline"
   if (s.arranging) return "arrange"
   if (s.showPinned) return "backgrounds"
   if (s.editing) return "editing"
@@ -883,6 +887,35 @@ function linkRows(links) {
 function num(value, fallback) {
   var n = typeof value === "number" ? value : parseFloat(value)
   return isFinite(n) ? n : fallback
+}
+
+// Makes a model hold these rows, changing as little as it can: rows that are
+// still where they were have only their changed roles set, so the items a
+// pane already draws stay drawn. Everything after the first row that is not
+// where it was is taken out and put back. Rows are read as written by itemRows;
+// nothing here is checked the way fillItems checks a file, because these come
+// from a history this board wrote.
+function syncItems(items, rows) {
+  var same = 0
+  while (same < rows.length && same < items.count && items.get(same).iid === rows[same].id) same++
+  for (var i = 0; i < same; i++) {
+    var have = items.get(i), want = rows[i]
+    if (have.kind !== want.kind) items.setProperty(i, "kind", want.kind)
+    if (have.ix !== want.x) items.setProperty(i, "ix", want.x)
+    if (have.iy !== want.y) items.setProperty(i, "iy", want.y)
+    if (have.iw !== want.w) items.setProperty(i, "iw", want.w)
+    if (have.ih !== want.h) items.setProperty(i, "ih", want.h)
+    if (have.itint !== want.tint) items.setProperty(i, "itint", want.tint)
+    if (have.itext !== want.text) items.setProperty(i, "itext", want.text)
+    if (have.ipinned !== (want.pinned === true)) items.setProperty(i, "ipinned", want.pinned === true)
+    if (have.isrc !== want.src) items.setProperty(i, "isrc", want.src)
+  }
+  for (var r = items.count - 1; r >= same; r--) items.remove(r)
+  for (var a = same; a < rows.length; a++) {
+    var n = rows[a]
+    items.append({ iid: n.id, kind: n.kind, ix: n.x, iy: n.y, iw: n.w, ih: n.h, itint: n.tint,
+                   itext: n.text, ipinned: n.pinned === true, isrc: n.src })
+  }
 }
 
 function fillItems(items, rows) {

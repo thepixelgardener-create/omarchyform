@@ -848,6 +848,7 @@ function tests(S) {
       ["damaged", { damaged: true }],
       ["failure", { failureText: "Could not reach the clipboard" }],
       ["palette", { paletteVisible: true }],
+      ["timeline", { timeline: true }],
       ["arrange", { arranging: true }],
       ["backgrounds", { showPinned: true }],
       ["editing", { editing: true }],

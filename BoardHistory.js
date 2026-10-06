@@ -523,3 +523,29 @@ function bridge(h, live, now) {
     if (apply(w, h.records[i].p) !== "") return null
   return append(h, stateOf(w), live, OUTSIDE, now)
 }
+
+// More records arrived after the index was built: carry it on from where it
+// stopped rather than build it again. The caller goes on calling indexSome.
+function extendIndex(ix, h) {
+  if (ix.error !== "" || ix.at >= h.records.length) return
+  if (ix.w === null) {
+    var last = ix.checkpoints[ix.checkpoints.length - 1]
+    ix.w = copyWorking(last.w)
+    for (var r = last.at; r < ix.at; r++) apply(ix.w, h.records[r].p)
+  }
+  ix.done = false
+}
+
+// What a step on the timeline is called on the strip: its name, and when it
+// was made — the time alone today, the date as well before that.
+function stepLabel(record, start, now) {
+  if (!record) return "where the history starts"
+  var when = new Date(start + record.t * 1000)
+  var today = new Date(now)
+  var pad = function (n) { return n < 10 ? "0" + n : String(n) }
+  var time = pad(when.getHours()) + ":" + pad(when.getMinutes())
+  var sameDay = when.getFullYear() === today.getFullYear() && when.getMonth() === today.getMonth()
+    && when.getDate() === today.getDate()
+  return record.a + " · " + (sameDay ? time
+    : when.getFullYear() + "-" + pad(when.getMonth() + 1) + "-" + pad(when.getDate()) + " " + time)
+}
