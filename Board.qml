@@ -85,9 +85,10 @@ FocusScope {
 
   // A real window hands focus to its content item, not to whatever is nested
   // inside it, so claim it explicitly on both surfaces.
+  // With two panes, only the one the keyboard is in takes it.
   Component.onCompleted: {
     board.ctl.activeBoard = board
-    Qt.callLater(board.focusKeys)
+    Qt.callLater(function () { if (board.ctl.active) board.focusKeys() })
   }
   Component.onDestruction: if (board.ctl.activeBoard === board) board.ctl.activeBoard = null
 
@@ -379,7 +380,7 @@ FocusScope {
     anchors.fill: parent
     // Focus moves between the canvas and the browser declaratively. Leaving
     // both claiming it strands the keyboard on whichever hid last.
-    focus: !board.ctl.library.showing
+    focus: !board.ctl.browsing
 
     // Printable keys are a table rather than a ladder of else-ifs: adding a
     // command is one line, and the cheat sheet is the only other place to
@@ -399,6 +400,9 @@ FocusScope {
       "x": function () { board.ctl.toggleLinking() },
       "X": function () { board.ctl.unlinkSelected() },
       "w": function () { board.ctl.toggleWindowMode() },
+      "v": function () { board.ctl.toggleSplit("side-by-side") },
+      "V": function () { board.ctl.toggleSplit("stacked") },
+      "o": function () { board.ctl.otherPane() },
       "g": function () { board.ctl.beginArrange() },
       "/": function () { board.ctl.beginFind() },
       "m": function () { board.ctl.toggleMenu() },
@@ -621,7 +625,7 @@ FocusScope {
     ctl: board.ctl
     anchors { top: parent.top; left: parent.left; right: parent.right; margins: board.theme.sp(16) }
     height: implicitHeight
-    visible: !board.ctl.library.showing && !board.ctl.helpVisible
+    visible: !board.ctl.browsing && !board.ctl.helpVisible
   }
 
   Column {
@@ -629,7 +633,7 @@ FocusScope {
     anchors.horizontalCenter: parent.horizontalCenter
     y: toolbar.y + toolbar.height + Math.max(24, (board.height-toolbar.height-height)/2 - 32)
     spacing: board.theme.sp(12)
-    visible: board.ctl.boardLoaded && board.ctl.items.count === 0 && !board.ctl.library.showing && !board.ctl.helpVisible
+    visible: board.ctl.boardLoaded && board.ctl.items.count === 0 && !board.ctl.browsing && !board.ctl.helpVisible
     Text {
       textFormat: Text.PlainText
       anchors.horizontalCenter: parent.horizontalCenter
@@ -698,6 +702,7 @@ FocusScope {
     anchors.fill: parent
     ctl: board.ctl
     library: board.ctl.library
+    shown: board.ctl.browsing
   }
 
   // Help consumes input so browsing shortcuts cannot edit the board behind it,
@@ -749,7 +754,7 @@ FocusScope {
   // an input method — and the board it searches can be written in one.
   Row {
     id: findLine
-    visible: board.ctl.finding && !board.ctl.helpVisible && !board.ctl.library.showing
+    visible: board.ctl.finding && !board.ctl.helpVisible && !board.ctl.browsing
     anchors.horizontalCenter: parent.horizontalCenter
     anchors.top: banner.visible ? banner.bottom : toolbar.bottom
     anchors.topMargin: board.theme.sp(8)
@@ -889,5 +894,31 @@ FocusScope {
       : status.tier === "switching" ? "saving before switching boards…"
       : status.tier === "saving" ? "saving…"
       : Store.hintLine(Store.BOARD_HINTS, board.ctl.accentMarkup)
+  }
+
+  // Which of two panes the keys go to: the accent round its edge, the way the
+  // desktop marks the focused window. Nothing at all with one pane.
+  Rectangle {
+    objectName: "active-pane"
+    anchors.fill: parent
+    visible: board.ctl.split && board.ctl.active
+    color: "transparent"
+    border.width: board.theme.borderWidth * 2
+    border.color: board.theme.accent
+  }
+
+  // A press on the pane that is only being looked at moves the keyboard here,
+  // then carries on to whatever is under it, so the click that chooses a pane
+  // can also be the one that selects, drags or pans in it. It takes no
+  // buttons once the pane is active, and none at all with one pane.
+  MouseArea {
+    objectName: "pane-activation"
+    anchors.fill: parent
+    enabled: board.ctl.split && !board.ctl.active
+    acceptedButtons: Qt.AllButtons
+    onPressed: function (mouse) {
+      board.ctl.activate()
+      mouse.accepted = false
+    }
   }
 }

@@ -24,9 +24,12 @@ FocusScope {
     ? "~/trash/   " + browser.rows.length + (browser.rows.length === 1 ? " item" : " items")
     : "~/boards/" + (browser.library.dir ? browser.library.dir + "/" : "")
 
-  visible: browser.library.showing
+  // Whether this one is the browser on screen. With two panes there are two
+  // boards and one library, and it is drawn over the pane that opened it.
+  property bool shown: browser.library.showing
+  visible: browser.shown
   enabled: visible
-  focus: browser.library.showing
+  focus: browser.shown
   onVisibleChanged: if (visible) Qt.callLater(function () { browser.forceActiveFocus() })
 
   anchors.fill: parent

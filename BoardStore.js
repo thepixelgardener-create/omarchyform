@@ -364,7 +364,9 @@ function statusTier(s) {
   if (s.statusText !== "") return "flash"
   if (s.switching) return "switching"
   if (s.saving) return "saving"
-  return "hints"
+  // The keys are for the pane the keyboard is in. Beside it, a pane that is
+  // only being looked at says nothing until it has something to say.
+  return s.active === false ? "none" : "hints"
 }
 
 // ------------------------------------------------------------ connectors
@@ -580,6 +582,14 @@ var COMMANDS = [
   { name: "Zoom in", key: "+", run: "zoomCentre", arg: 1.2, needs: "" },
   { name: "Zoom out", key: "-", run: "zoomCentre", arg: 1 / 1.2, needs: "" },
   { name: "Fullscreen or windowed", key: "w", run: "toggleWindowMode", needs: "" },
+  // Two views, of one board or of two. The key that made a layout takes it
+  // away again, so there is nothing to learn for closing.
+  { name: "Split side by side", key: "v", run: "toggleSplit", arg: "side-by-side", needs: "",
+    also: ["two boards", "compare", "vertical split", "panes"] },
+  { name: "Split stacked", key: "V", run: "toggleSplit", arg: "stacked", needs: "",
+    also: ["two boards", "compare", "horizontal split", "panes"] },
+  { name: "The other pane", key: "o", run: "otherPane", needs: "", also: ["switch pane", "focus"] },
+  { name: "Even out the split", key: "", run: "evenSplit", needs: "", also: ["reset split", "half"] },
   { name: "Boards", key: "b", run: "openBrowser", needs: "" },
   { name: "New board", key: "ctrl+n", run: "newBoard", needs: "" },
   { name: "Name this board", key: "F2", run: "renameBoard", needs: "", also: ["rename"] },
@@ -720,6 +730,10 @@ var COMMAND_ICONS = {
   resetView: "\uf015",
   setCanvasBackground: "\uf03e",
   toggleWindowMode: "\uf2d0",
+  // Columns for side by side, a stack of boxes for stacked.
+  toggleSplit: { "side-by-side": "\uf0db", stacked: "\uf233" },
+  otherPane: "\uf0ec",
+  evenSplit: "\uf0b2",
   openBrowser: "\uf07c",
   newBoard: "\uf016",
   renameBoard: "\uf044",
@@ -805,6 +819,8 @@ var KEY_HELP_SECTIONS = [
     ["0", "reset the view"],
     ["+ / -", "zoom"],
     ["w", "fullscreen or windowed"],
+    ["v / V", "split side by side / stacked; the same key again for one pane"],
+    ["o", "the other pane; b there opens another board in it"],
     ["/", "find: type to search the notes, enter steps through matches"]
   ] },
   { title: "Find your way", rows: [

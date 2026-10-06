@@ -44,6 +44,12 @@ Item {
   readonly property var pendingBoard: session.pendingBoard
   readonly property bool canEdit: session.canEdit
 
+  // A pane changed what is on the board. Every edit ends in a save, so this is
+  // said there; the other pane showing this board looks its cursor up again,
+  // because a cursor is a row and rows move when someone else deletes one.
+  signal edited(var by)
+  function noteEdit(by) { doc.edited(by) }
+
   function save(allowEmpty) { session.save(allowEmpty) }
   function scheduleSave() { session.scheduleSave() }
   function flushSave() { session.flushSave() }
@@ -51,6 +57,12 @@ Item {
   function useDisk() { session.useDisk() }
   function replaceDisk() { session.replaceDisk() }
   function keptAsCopy(name) { session.keptAsCopy(name) }
+
+  // A new board opened straight into a pane: the file is made once it is
+  // confirmed missing, the way a board switched to in place is made. Set when
+  // the document is made, before its file has been looked for.
+  property bool fresh: false
+  Component.onCompleted: if (doc.fresh) session.createWhenLoaded = true
 
   // ------------------------------------------------ what the session reads
   readonly property int autosaveMs: doc.workspace.autosaveMs

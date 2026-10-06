@@ -16,6 +16,10 @@ Item {
   property string destination: ""
   property string error: ""
   property string pasteBoard: ""
+  // The pane that asked for the paste. Its answer goes there, and only while
+  // that pane still shows the board it was asked on: with two panes, the one
+  // the keyboard is in by then may be showing another board entirely.
+  property var pastePane: null
   // What else to say about a copy that was saved, or a board that arrived:
   // both are reported by the controller, which owns the status line.
   property string exportNote: ""
@@ -326,6 +330,7 @@ Item {
   // that was copied.
   function paste() {
     if (clipboard.running || imageGrab.running || !exchange.ctl.canEdit) return
+    pastePane = exchange.ctl
     pasteBoard = exchange.ctl.currentBoard
     imageGrab.command = exchange.ctl.fileCommand("clipimage", [exchange.ctl.imagesDir, "paste-" + Date.now()])
     imageGrab.running = true
@@ -432,7 +437,7 @@ Item {
     var queued = exchange.dropQueue.slice()
     for (var i = 0; i < entries.length; i++)
       queued.push({ path: entries[i].path, x: entries[i].x, y: entries[i].y,
-                    board: exchange.ctl.currentBoard })
+                    board: exchange.ctl.currentBoard, pane: exchange.ctl })
     exchange.dropQueue = queued
     if (!imageImport.running) exchange.nextDrop()
   }
@@ -440,7 +445,7 @@ Item {
   function nextDrop() {
     if (exchange.dropQueue.length === 0) return
     var next = exchange.dropQueue[0]
-    if (next.board !== exchange.ctl.currentBoard) {
+    if (next.board !== next.pane.currentBoard) {
       exchange.dropQueue = exchange.dropQueue.slice(1)
       exchange.nextDrop()
       return
@@ -461,9 +466,9 @@ Item {
       // can happen while it runs. A picture on the wrong board is worse than
       // one that has to be dropped again, so the copy is abandoned in the
       // pictures folder rather than placed anywhere.
-      if (code === 0 && importedName.text && done.board !== exchange.ctl.currentBoard)
+      if (code === 0 && importedName.text && done.board !== done.pane.currentBoard)
         exchange.failed("Board changed; drop that picture again", "picture")
-      else if (code === 0 && importedName.text) exchange.ctl.imageDropped(importedName.text, done.x, done.y)
+      else if (code === 0 && importedName.text) done.pane.imageDropped(importedName.text, done.x, done.y)
       // 5 is the helper's way of saying the file is too big to put on a board,
       // which is worth saying differently from "that is not a picture".
       else if (code === 5) exchange.failed("That file is too large to put on a board", "picture")
@@ -484,7 +489,7 @@ Item {
     id: imageGrab
     stdout: StdioCollector { id: grabbed; waitForEnd: true }
     onExited: function (code) {
-      if (exchange.pasteBoard !== exchange.ctl.currentBoard) { exchange.failed("Board changed; paste again", "paste"); return }
+      if (exchange.pasteBoard !== exchange.pastePane.currentBoard) { exchange.failed("Board changed; paste again", "paste"); return }
       // 4 is the script's way of saying the clipboard holds no picture, which
       // is not a failure: text is the other thing it could be holding.
       if (code === 4) { clipboard.running = true; return }
@@ -493,7 +498,7 @@ Item {
       if (code === 6) { exchange.failed("A picture of that name is already there", "paste"); return }
       if (code === 7) { exchange.failed("That picture has too many pixels to put on a board", "paste"); return }
       if (code !== 0 || !grabbed.text) { exchange.failed("Could not read the clipboard image", "paste"); return }
-      exchange.ctl.imagePasted(grabbed.text)
+      exchange.pastePane.imagePasted(grabbed.text)
     }
   }
   Process {
@@ -503,8 +508,8 @@ Item {
     onExited: function(code) {
       if (code === 5) { exchange.failed("Clipboard text exceeds 1 MiB", "paste"); return }
       if (code !== 0) { exchange.failed("Clipboard has no available text", "paste"); return }
-      if (exchange.pasteBoard !== exchange.ctl.currentBoard) { exchange.failed("Board changed; paste again", "paste"); return }
-      exchange.ctl.pasteText(pasted.text)
+      if (exchange.pasteBoard !== exchange.pastePane.currentBoard) { exchange.failed("Board changed; paste again", "paste"); return }
+      exchange.pastePane.pasteText(pasted.text)
     }
   }
   FileDialog {

@@ -216,6 +216,8 @@ colours apart, and the controls carry names and roles for a screen reader.
 | `c` | Cycle its theme role: foreground, accent, urgent, muted |
 | `b` | Boards: browse, open, create |
 | `w` | Switch between fullscreen and windowed |
+| `v` / `V` | Split side by side / stacked; the same key again goes back to one pane |
+| `o` | Move to the other pane |
 | `f` | Fit the whole board on screen |
 | `0` | Reset the view |
 | `+` / `-` | Zoom |
@@ -371,7 +373,7 @@ inside a background remain independent.
 | `a` | New board here |
 | `A` | New folder here |
 | `r` | Rename |
-| `x` twice | Delete (refuses the open board and folders containing it) |
+| `x` twice | Delete (refuses a board open in either pane, and folders containing one) |
 | `g` / `G` | First / last |
 | `esc` | Leave the search, then close the browser |
 
@@ -381,6 +383,23 @@ Escape first if you want `a`, `r` or `x`.
 
 The browser opens in the folder of the board you are on, and the board you are
 on is marked `·open`.
+
+### Two at once
+
+`v` splits the board side by side and `V` stacks it. The new pane starts as a
+second view of the same board, with its own camera, selection and modes, and
+the keyboard goes there; `b` in it opens another board in that pane alone.
+Both panes on one board share everything on it — an edit, an undo or a
+delete in one shows in the other, which keeps its cursor on the item it was
+on. `o` moves to the other pane, and so does a click; the pane the keys go to
+has the accent round its edge. Leaving a pane ends whatever was half done
+there, typing included.
+
+Pressing the layout's key again goes back to one pane, keeping the one you are
+in. A board only that pane was showing is saved first, and a board with two
+versions or a failed save keeps its pane open until you have dealt with it.
+The layout and both boards are remembered for next time. **Even out the
+split** in the command list puts the divider back in the middle.
 
 Deleting a board or a folder moves it to `~/.local/share/omarchyform/trash/`
 rather than destroying it, and records where it came from, so `t` and `enter`

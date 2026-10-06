@@ -5,6 +5,15 @@ since older boards are migrated on load rather than rejected.
 
 ## Unreleased
 
+### Added
+
+- Split view: `v` puts a second pane beside the board, `V` stacks it below, and
+  the same key again goes back to one pane. Each pane has its own camera,
+  selection and board; two panes on one board share it, and each keeps its
+  cursor on its item when the other edits. `o` or a click moves between them.
+  A board only one pane shows is saved before that pane leaves it, and two
+  versions or a failed save keep the pane open. The layout is remembered.
+
 ### Changed
 
 - The controller is split in three, ahead of split view: `BoardPane.qml` is

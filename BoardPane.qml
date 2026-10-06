@@ -19,6 +19,16 @@ Item {
   property var doc: null
   readonly property bool opened: root.workspace.opened
 
+  // Whether the keyboard is in this pane, and whether there is another one.
+  readonly property bool active: root.workspace.activePane === root
+  readonly property bool split: root.workspace.split
+  // The browser is drawn over the pane that opened it, which is the active one:
+  // the workspace does not let the keyboard move while it is up.
+  readonly property bool browsing: root.active && root.library.showing
+  // Waiting to leave a board nobody else is showing until its last write has
+  // landed. Editing stops meanwhile, as it does during a switch in place.
+  property bool leaving: false
+
   // --------------------------------------------------------------- appearance
   // What the board looks like is in Theme.qml, held by the workspace: one
   // object for every pane, and one object for a test to hold.
@@ -227,6 +237,9 @@ Item {
   property string pngPalette: "theme"
 
   function choosePng(palette) {
+    // Both panes render into the same file on the way out, so a second picture
+    // waits for the first rather than being drawn over it.
+    if (root.workspace.imageBusy) { root.flash("Finishing image export…"); return }
     root.pngPalette = Store.EXPORT_PALETTE_NAMES.indexOf(palette) >= 0 ? palette : "theme"
     root.workspace.exchange.choose("png")
   }
@@ -301,15 +314,15 @@ Item {
   // from one side and a failure timed out unseen.
   function statusState() {
     return {
-      opened: root.opened, helpVisible: root.helpVisible,
-      browserVisible: root.library.showing, finding: root.finding,
+      opened: root.opened, helpVisible: root.helpVisible, active: root.active,
+      browserVisible: root.browsing, finding: root.finding,
       saveError: root.saveError, trashIndexError: root.library.trashIndexError,
       diskChanged: root.diskChanged, damaged: root.damaged,
       failureText: root.failureText,
       paletteVisible: root.paletteVisible, arranging: root.arranging,
       showPinned: root.showPinned, editing: root.editIndex >= 0,
       linking: root.linkingFrom >= 0, statusText: root.statusText,
-      switching: root.pendingBoard !== null, saving: root.saving
+      switching: root.pendingBoard !== null || root.leaving, saving: root.saving
     }
   }
 
@@ -385,7 +398,10 @@ Item {
   }
   readonly property bool saving: root.doc !== null && root.doc.saving
   readonly property var pendingBoard: root.doc ? root.doc.pendingBoard : null
-  readonly property bool canEdit: root.doc !== null && root.doc.canEdit && !root.library.busy && !root.imageBusy
+  // One picture renders at a time across the workspace, and nothing changes
+  // under it while it does: a board shown twice is still one board.
+  readonly property bool canEdit: root.doc !== null && root.doc.canEdit && !root.library.busy
+    && !root.leaving && !root.workspace.imageBusy
   readonly property bool stateReady: root.workspace.stateReady
 
   function fileCommand(action, args) { return root.workspace.fileCommand(action, args) }
@@ -1342,13 +1358,77 @@ Item {
   // The document saves; the pane says when. ctrl+s with a conflict outstanding
   // is not a save: it is the moment someone is asking about it, which is when
   // the choices are worth putting on screen.
-  function scheduleSave() { if (root.doc) root.doc.scheduleSave() }
+  function scheduleSave() {
+    if (!root.doc) return
+    root.noteEdit()
+    root.doc.scheduleSave()
+  }
   function flushSave() {
     root.library.retryTrashIndex()
     if (root.diskChanged) { root.decideConflict(); return }
     if (root.doc) root.doc.flushSave()
   }
-  function save(allowEmpty) { if (root.doc) root.doc.save(allowEmpty) }
+  function save(allowEmpty) {
+    if (!root.doc) return
+    root.noteEdit()
+    root.doc.save(allowEmpty)
+  }
+
+  // ------------------------------------------------------------ two panes
+  // The cursor is a row, and a row is only an item until someone else deletes
+  // or reorders one. So the pane remembers which item its cursor is on, and
+  // when the other pane edits the board it finds that item again — or lets
+  // go, if it is gone. Marks are ids already; the ones that no longer name
+  // anything are dropped so the count they show is true.
+  property int cursorId: -1
+  onSelectedIndexChanged: root.cursorId = root.idAt(root.selectedIndex)
+  function idAt(index) {
+    return index >= 0 && index < root.items.count ? root.items.get(index).iid : -1
+  }
+
+  // Said at every save, which is where every edit ends. Its own cursor first:
+  // an edit here can have moved the row under it, and what it now points at is
+  // what it is on.
+  function noteEdit() {
+    root.cursorId = root.idAt(root.selectedIndex)
+    root.doc.noteEdit(root)
+  }
+
+  function followEdit() {
+    var at = root.cursorId < 0 ? -1 : Store.indexOfId(root.items, root.cursorId)
+    if (at !== root.selectedIndex) root.selectedIndex = at
+    if (root.markedIds.length > 0) {
+      var present = Store.idIndex(root.items)
+      var kept = root.markedIds.filter(function (id) { return present[id] !== undefined })
+      if (kept.length !== root.markedIds.length) root.markedIds = kept
+    }
+    if (root.linkingFrom >= 0 && Store.indexOfId(root.items, root.linkingFrom) < 0) root.linkingFrom = -1
+    root.repaintLinks()
+  }
+
+  Connections {
+    target: root.doc
+    function onEdited(by) { if (by !== root) root.followEdit() }
+  }
+
+  // The keyboard is going to the other pane. What was half done here ends the
+  // way Escape would end it, typing included, so two views of one board never
+  // both have an editor open; what is selected stays for when it comes back.
+  function deactivate() {
+    if (root.editIndex >= 0) root.stopEditing()
+    if (root.finding) root.endFind()
+    if (root.paletteVisible) root.endPalette()
+    root.closeMenu()
+    root.arranging = false
+    root.conflictVisible = false
+    root.helpVisible = false
+    if (root.linkingFrom >= 0) { root.linkingFrom = -1; root.repaintLinks() }
+  }
+
+  function activate() { root.workspace.activate(root) }
+  function toggleSplit(layout) { root.workspace.toggleSplit(layout) }
+  function otherPane() { root.workspace.focusOther() }
+  function evenSplit() { root.workspace.evenSplit() }
   // Which board this pane shows is the workspace's to change: another pane may
   // already have that board open, or still be showing this one.
   function openBoard(path, fresh) { root.workspace.openInPane(root, path, fresh) }

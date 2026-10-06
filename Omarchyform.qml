@@ -28,11 +28,96 @@ Item {
   readonly property Theme theme: themeTokens
 
   // -------------------------------------------------------------------- panes
+  // Two views, both always there: the second shows nothing while the layout is
+  // single. `panes` is their order on screen. The first is the one shown alone
+  // and the one whose board state.json remembers, so closing a split keeps the
+  // pane the keyboard was in by putting it first.
+  BoardPane { id: firstPane; workspace: root }
+  BoardPane { id: secondPane; workspace: root }
+  readonly property var paneSlots: [firstPane, secondPane]
+  property var panes: [firstPane, secondPane]
   // The view the keyboard is in. Commands from the keys, the palette, the
   // library and files arriving from outside go to it.
-  BoardPane { id: firstPane; workspace: root }
-  readonly property var panes: [firstPane]
   property BoardPane activePane: firstPane
+
+  // "single", "side-by-side" or "stacked".
+  property string layout: "single"
+  readonly property bool split: root.layout !== "single"
+  // The first pane's share of the width, side by side, or of the height.
+  property real splitRatio: 0.5
+  // One picture at a time: both panes render into the same file on the way out.
+  readonly property bool imageBusy: firstPane.imageBusy || secondPane.imageBusy
+
+  function otherOf(pane) {
+    if (!root.split) return null
+    return root.panes[0] === pane ? root.panes[1] : root.panes[0]
+  }
+
+  // The keyboard moves to a pane. Not while the browser or a file dialog is
+  // up: each belongs to the pane that opened it, and a click on the other one
+  // must not carry it off.
+  function activate(pane) {
+    if (!pane || pane === root.activePane || !pane.doc) return
+    if (root.library.showing || boardExchange.dialogOpen) return
+    root.activePane.deactivate()
+    root.activePane = pane
+    pane.focusKeys()
+  }
+
+  function focusOther() {
+    var other = root.otherOf(root.activePane)
+    if (!other) { root.activePane.flash("one pane · v or V splits it"); return }
+    root.activate(other)
+  }
+
+  // The key that made a layout takes it away again; the other key turns one
+  // split into the other.
+  function toggleSplit(layout) {
+    if (layout !== "side-by-side" && layout !== "stacked") return
+    var from = root.activePane
+    if (!from.doc) return
+    if (root.layout === layout) { root.closeSplit(); return }
+    if (root.split) {
+      root.layout = layout
+      root.writeState()
+      return
+    }
+    // A new split is a second view of the board that is open, where this one
+    // is looking, with the keyboard in it: b there opens another board.
+    var fresh = root.panes[1]
+    fresh.doc = from.doc
+    fresh.resetSelection(true)
+    fresh.camX = from.camX
+    fresh.camY = from.camY
+    fresh.zoom = from.zoom
+    from.deactivate()
+    root.layout = layout
+    root.activePane = fresh
+    root.writeState()
+    fresh.flash((layout === "stacked" ? "Stacked" : "Side by side") + " · b opens another board here · o switches")
+  }
+
+  // Back to one pane, the one the keyboard is in. The other one's board is
+  // left the way any board is left: saved first, and not at all while it has
+  // two versions or a failed save, which one pane would otherwise hide.
+  function closeSplit() {
+    var keep = root.activePane
+    var gone = root.otherOf(keep)
+    if (!gone) return
+    root.leavePane(gone, function () {
+      root.layout = "single"
+      root.panes = [keep, gone]
+      gone.doc = null
+      gone.resetSelection(true)
+      root.writeState()
+      keep.focusKeys()
+    })
+  }
+
+  function evenSplit() {
+    root.splitRatio = 0.5
+    root.writeState()
+  }
 
   // ---------------------------------------------------------------- documents
   // Every board that is open, each once, however many panes show it.
@@ -43,10 +128,17 @@ Item {
     BoardDocument { workspace: root }
   }
 
-  function createDocument(path) {
-    var doc = documentComponent.createObject(root, { currentBoard: path })
+  // `fresh` makes the file if it is not there yet, the way a new board is made.
+  function createDocument(path, fresh) {
+    var doc = documentComponent.createObject(root, { currentBoard: path, fresh: fresh === true })
     root.documents = root.documents.concat([doc])
     return doc
+  }
+
+  function documentAt(path) {
+    for (var i = 0; i < root.documents.length; i++)
+      if (root.documents[i].currentBoard === path) return root.documents[i]
+    return null
   }
 
   function panesViewing(doc) {
@@ -55,12 +147,95 @@ Item {
     return out
   }
 
-  // A pane asks for a board. With one pane and one document, that is the
-  // session's own switch: it saves what is open first, waits for a write in
-  // flight, and will not walk away from two versions of a board.
+  // A document nobody is showing is closed. Only ever after it has been left
+  // properly, so there is nothing in it that is not on disk.
+  function dropIfUnviewed(doc) {
+    if (!doc || root.panesViewing(doc).length > 0) return
+    root.documents = root.documents.filter(function (d) { return d !== doc })
+    doc.destroy()
+  }
+
+  function bind(pane, doc) {
+    pane.doc = doc
+    pane.resetSelection(true)
+    // A board that is already loaded is framed now; one still loading is
+    // framed by its session when it arrives.
+    if (doc.boardLoaded) pane.resetView()
+    root.writeState()
+  }
+
+  // A pane asks for a board. Which of four things that is depends on who else
+  // is showing what — see "Switching boards in a pane" in
+  // docs/splitview-timeline-plan.md.
   function openInPane(pane, path, fresh) {
-    if (!pane.doc) { pane.doc = root.createDocument(path); return }
-    pane.doc.openBoard(path, fresh)
+    if (!Store.safeRelative(path)) return
+    if (!pane.doc) { root.bind(pane, root.documentAt(path) || root.createDocument(path, fresh)); return }
+    var doc = pane.doc
+    if (path === doc.currentBoard && !fresh) return
+    var other = root.otherOf(pane)
+    var shared = other !== null && other.doc === doc
+    var open = root.documentAt(path)
+    if (open === doc) return
+    // Nobody else is showing this board and nobody has the other one open: the
+    // session's own switch, which saves first, waits for a write in flight and
+    // will not walk away from two versions of a board.
+    if (!shared && !open) { doc.openBoard(path, fresh); return }
+    root.leavePane(pane, function () { root.bind(pane, open || root.createDocument(path, fresh)) })
+  }
+
+  // Leaving a pane's board, then doing `then`. A board another pane is still
+  // showing can simply be left. One that nobody else is showing is saved
+  // first and not left at all while it has two versions or a failed save:
+  // the pane stays on it, saying why, the way switching boards always has.
+  property var pendingLeave: null
+  function leavePane(pane, then) {
+    var doc = pane.doc
+    var other = root.otherOf(pane)
+    if (!doc || (other !== null && other.doc === doc)) { then(); return }
+    if (root.pendingLeave !== null || !root.mayLeave(pane)) return
+    doc.flushSave()
+    if (doc.saving) {
+      pane.leaving = true
+      root.pendingLeave = { pane: pane, doc: doc, then: then }
+      return
+    }
+    if (!root.mayLeave(pane)) return
+    then()
+    root.dropIfUnviewed(doc)
+  }
+
+  function mayLeave(pane) {
+    var doc = pane.doc
+    if (doc.diskChanged) {
+      root.activate(pane)
+      pane.flash("Two versions of this board exist · ctrl+s to choose which to keep")
+      pane.decideConflict()
+      return false
+    }
+    if (doc.saveError !== "") {
+      // The line already says what failed and how to retry it.
+      root.activate(pane)
+      return false
+    }
+    return true
+  }
+
+  // A slow write only delays leaving; a failed one cancels it, and the pane
+  // stays where it is with the failure on its line.
+  function retryLeave() {
+    var p = root.pendingLeave
+    if (!p || p.doc.saving) return
+    root.pendingLeave = null
+    p.pane.leaving = false
+    if (p.pane.doc !== p.doc || !root.mayLeave(p.pane)) return
+    p.then()
+    root.dropIfUnviewed(p.doc)
+  }
+  Timer {
+    interval: 20
+    repeat: true
+    running: root.pendingLeave !== null
+    onTriggered: root.retryLeave()
   }
 
   property bool launchNewBoard: false
@@ -95,18 +270,26 @@ Item {
     }
   }
 
+  // The pane the exchange works for. It follows the keyboard while nothing is
+  // in flight, and stays with the pane that started an import, an export or a
+  // file dialog until that has finished, so the answer lands where it was asked.
+  property BoardPane exchangePane: firstPane
+  readonly property bool exchangeIdle: !boardExchange.busy && !boardExchange.dialogOpen
+  onActivePaneChanged: if (root.exchangeIdle) root.exchangePane = root.activePane
+  onExchangeIdleChanged: if (root.exchangeIdle) root.exchangePane = root.activePane
+
   BoardExchange {
     id: boardExchange
-    ctl: root.activePane
+    ctl: root.exchangePane
     onCreated: function(path, editFirst) {
-      var pane = root.activePane
+      var pane = root.exchangePane
       if (editFirst) pane.pendingFirstNote = path
       pane.openBoard(path, false)
       root.library.rescan()
       pane.flash(editFirst ? "New board · F2 to name it" : "Board imported" + boardExchange.createdNote, "board")
     }
-    onFinished: function(message, kind) { root.activePane.flash(message, kind) }
-    onFailed: function(message, kind) { root.activePane.report(message, kind) }
+    onFinished: function(message, kind) { root.exchangePane.flash(message, kind) }
+    onFailed: function(message, kind) { root.exchangePane.report(message, kind) }
     onCopied: function(name) {
       root.library.rescan()
       var doc = root.copyingFor
@@ -171,16 +354,23 @@ Item {
     trashIndexPath: root.trashIndexPath
     helperScript: root.helperScript
     currentBoard: root.activePane.currentBoard
-    boardConflicted: root.activePane.diskChanged
-    boardSettled: !root.activePane.saving && root.activePane.saveError === ""
+    openBoards: root.documents.map(function (d) { return d.currentBoard })
+    boardConflicted: root.documents.some(function (d) { return d.diskChanged })
+    boardSettled: root.documents.every(function (d) { return !d.saving && d.saveError === "" })
     onOpenRequested: function (path, fresh) { root.activePane.openBoard(path, fresh) }
-    onCurrentMoved: function (path) {
-      if (root.activePane.doc) root.activePane.doc.currentBoard = path
+    onOpenBoardMoved: function (from, to) {
+      var doc = root.documentAt(from)
+      if (doc) doc.currentBoard = to
       root.writeState()
     }
     onNotice: function (message) { root.activePane.flash(message) }
     onClosed: root.activePane.focusKeys()
-    onAboutToRename: root.activePane.flushSave()
+    // A rename can move any open board, so every one of them is saved first.
+    onAboutToRename: {
+      root.activePane.flushSave()
+      for (var i = 0; i < root.documents.length; i++)
+        if (root.documents[i] !== root.activePane.doc) root.documents[i].flushSave()
+    }
   }
   readonly property BoardLibrary library: boardLibrary
 
@@ -188,6 +378,9 @@ Item {
     stateFile.setText(JSON.stringify({
       version: 1,
       lastBoard: root.panes[0].doc ? root.panes[0].doc.currentBoard : "board.json",
+      layout: root.layout,
+      splitRatio: root.splitRatio,
+      otherBoard: root.split && root.panes[1].doc ? root.panes[1].doc.currentBoard : "",
       windowMode: root.windowMode,
       autosaveMs: root.autosaveMs,
       step: root.step,
@@ -210,6 +403,15 @@ Item {
     var first = root.panes[0]
     if (!first.doc) first.doc = root.createDocument(board !== "" ? board : "board.json")
     else if (board !== "") first.doc.currentBoard = board
+    // The second pane comes back with the board it had, or the same one again.
+    var second = root.panes[1]
+    if (st && (st.layout === "side-by-side" || st.layout === "stacked") && Store.safeRelative(st.otherBoard)
+        && !root.split && !second.doc) {
+      second.doc = root.documentAt(st.otherBoard) || root.createDocument(st.otherBoard)
+      root.layout = st.layout
+    }
+    if (st && typeof st.splitRatio === "number" && st.splitRatio === st.splitRatio)
+      root.splitRatio = Math.max(0.2, Math.min(0.8, st.splitRatio))
     if (st) {
       root.windowMode = st.windowMode === true
       if (typeof st.autosaveMs === "number") root.autosaveMs = st.autosaveMs
@@ -389,9 +591,9 @@ Item {
         exclusionMode: ExclusionMode.Ignore
         anchors { top: true; bottom: true; left: true; right: true }
 
-        Board {
+        BoardSplit {
           anchors.fill: parent
-          ctl: root.activePane
+          workspace: root
         }
       }
     }
@@ -416,7 +618,7 @@ Item {
       focus: true
       active: boardWindow.visible
       sourceComponent: Component {
-        Board { ctl: root.activePane }
+        BoardSplit { workspace: root }
       }
     }
   }

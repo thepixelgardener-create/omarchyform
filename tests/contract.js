@@ -120,7 +120,9 @@ expect(referenced(documentSource, "doc.workspace."), workspaceMembers, "the work
 expect(referencedBy(documentSource, "\\b(?:pane|panes\\[\\w+\\])"), controller, "the pane", "BoardDocument.qml")
 expect(referencedBy(workspace, "(?:root\\.activePane|root\\.panes\\[\\w+\\]|\\bpane|\\bfirst)"), controller,
   "the pane", "Omarchyform.qml")
-expect(referencedBy(workspace, "(?:root\\.documents\\[\\w+\\]|\\.doc|\\bdoc)"), documentMembers,
+// destroy() is every object's own, and the one thing the workspace does to a
+// document that is not declared on it.
+expect(referencedBy(workspace, "(?:root\\.documents\\[\\w+\\]|\\.doc|\\bdoc)"), new Set([...documentMembers, "destroy"]),
   "the document", "Omarchyform.qml")
 
 // And the stub that stands in for it during the QML session test.
@@ -173,9 +175,11 @@ for (const reads of [helpReads, read("Surface.qml")])
 // header and every panel it hosts — against one stub, so that stub stands in
 // for the controller in front of more of the tree than any other. Same reason
 // as above: an undefined read there is silent on one Qt and fatal on another.
-const panSource = read("tests/qt/tst_pan.qml")
-const panStub = nestedMembers(panSource, "ctl")
-const panTheme = membersAt(blockBody(panSource, "property QtObject theme:"), 6)
+// It lives in a file of its own, so the split suite can mount two boards
+// against two of it.
+const panSource = read("tests/qt/PaneStub.qml")
+const panStub = declaredMembers(panSource)
+const panTheme = membersAt(blockBody(panSource, "property QtObject theme:"), 4)
 for (const file of ["Board.qml", "Node.qml", "BoardToolbar.qml", "Help.qml", "Browser.qml",
                     "ScrollHint.qml", "Commands.qml", "Conflict.qml", "BoardImage.qml", "Surface.qml"]) {
   expect(referenced(read(file), "ctl."), panStub, "the tst_pan stub", file)
@@ -198,7 +202,8 @@ for (const [file, reads] of Object.entries(libraryReads)) expect(reads, libraryM
 const libraryStub = source => membersAt(blockBody(source, "property QtObject library:"), 6)
 expect(libraryReads["Browser.qml"], libraryStub(layoutSource), "the tst_layout stub's library", "Browser.qml")
 for (const file of ["Browser.qml", "Board.qml"])
-  expect(libraryReads[file], libraryStub(panSource), "the tst_pan stub's library", file)
+  expect(libraryReads[file], membersAt(blockBody(panSource, "property QtObject library:"), 4),
+    "the tst_pan stub's library", file)
 expect(libraryReads["BoardSession.qml"], libraryStub(read("tests/qml/tst_session.qml")),
   "the tst_session stub's library", "BoardSession.qml")
 
