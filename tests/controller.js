@@ -1,26 +1,35 @@
-// Exercise the real controller functions with delayed I/O completions.
+// Exercise the real controller functions with delayed I/O completions. The
+// controller every view reads is a pane, BoardPane.qml; what is on the board is
+// its document, BoardDocument.qml; settings and files are the workspace's,
+// Omarchyform.qml. Each is loaded from its own source, and the members one
+// forwards from another are getters here, as they are bindings there.
 const fs = require('fs')
 const vm = require('vm')
 const assert = require('assert/strict')
 const { loadStore, FakeModel } = require('./harness')
-const source = fs.readFileSync(require('path').join(__dirname, '../Omarchyform.qml'), 'utf8')
+const read = name => fs.readFileSync(require('path').join(__dirname, '..', name), 'utf8')
+const source = read('BoardPane.qml')
 function controller() {
   const items = new FakeModel(), links = new FakeModel()
-  const root = { currentBoard: 'a.json', items, links, nextId: 1, nextColor: 0, windowMode: false,
-    undoStack: [], redoStack: [], selectedIndex: -1, editIndex: -1,
+  const workspace = { opened: true, stateReady: true, windowMode: false, autosaveMs: 700, step: 40,
+    showGrid: true, canvasPattern: 'Dots', canvasBackgroundChosen: false, startWindowed: false,
+    boardsDir: '/boards', backupsDir: '/backups', dataDir: '/data', imagesDir: '/data/images',
+    locksDir: '/data/locks', helperScript: '/BoardFiles.sh', launchNewBoard: false, launchOpenPath: '',
+    copyingFor: null, documents: [], panes: [] }
+  const doc = { workspace, items, links, nextId: 1, nextColor: 0, undoStack: [], redoStack: [],
+    currentBoard: 'a.json' }
+  const root = { workspace, doc, selectedIndex: -1, editIndex: -1,
     camX: 0, camY: 0, zoom: 1, activeBoard: null, markedIds: [], showPinned: false, arranging: false,
-    showGrid: true, canvasPattern: 'Dots', canvasBackgroundChosen: false,
     finding: false, findQuery: '', findCount: 0, imageQueue: [],
     menuVisible: false, zoomMenuVisible: false, menuIndex: 0, helpVisible: false,
-    // Declared on the controller and defaulted there; the harness needs them
-    // because a failure's time on screen is measured against what is covering
-    // the line, and an undeclared name reads as undefined rather than as empty.
-    opened: true,
     paletteVisible: false, paletteQuery: '', paletteIndex: 0, paletteRows: 9,
-    conflictVisible: false, conflictIndex: 0, paletteScope: 'all',
-    boardsDir: '/boards', backupsDir: '/backups', worldStep: 40, minItemSize: 60, viewW: 1000, viewH: 700 }
-  const session = { ctl: root, boardLoaded: true, damaged: false, pendingBoard: null,
-    lastSavedCount: 0, lastSavedText: '', saveError: '',
+    conflictVisible: false, conflictIndex: 0, paletteScope: 'all', imageBusy: false,
+    worldStep: 40, minItemSize: 60, viewW: 1000, viewH: 700 }
+  workspace.panes = [root]
+  workspace.activePane = root
+  workspace.documents = [doc]
+  const session = { ctl: doc, boardLoaded: true, damaged: false, pendingBoard: null,
+    lastSavedCount: 0, lastSavedText: '', saveError: '', damageReason: '',
     // The conflict state the QML declares, mirrored here: an undeclared
     // property reads as undefined, which is not what a string property does.
     conflict: false, resolving: '',
@@ -29,20 +38,27 @@ function controller() {
   Object.defineProperty(session, 'canEdit', {
     get: () => session.boardLoaded && !session.damaged && session.pendingBoard === null && !session.diskReading
   })
-  for (const key of ['boardLoaded', 'damaged', 'pendingBoard', 'saveError', 'canEdit'])
-    Object.defineProperty(root, key, { get: () => session[key] })
-  Object.defineProperty(root, 'diskChanged', { get: () => session.conflict })
-  Object.defineProperty(root, 'boardPath', { get: () => '/boards/' + root.currentBoard })
+  const forward = (target, from, keys) => {
+    for (const key of keys) Object.defineProperty(target, key, { get: () => from()[key] })
+  }
+  // What the document reads off its session, and off the workspace for it.
+  forward(doc, () => session, ['boardLoaded', 'damaged', 'damageReason', 'saveError', 'pendingBoard', 'canEdit'])
+  Object.defineProperty(doc, 'diskChanged', { get: () => session.conflict })
+  Object.defineProperty(doc, 'saving', { get: () => session.busy })
+  Object.defineProperty(doc, 'boardPath', { get: () => '/boards/' + doc.currentBoard })
+  forward(doc, () => workspace, ['autosaveMs', 'stateReady', 'boardsDir', 'backupsDir', 'library'])
+  // What the pane reads off its document and the workspace.
+  forward(root, () => root.doc, ['items', 'links', 'nextId', 'boardLoaded', 'damaged', 'damageReason',
+    'saveError', 'diskChanged', 'saving', 'pendingBoard', 'canEdit', 'currentBoard', 'boardPath'])
+  forward(root, () => workspace, ['opened', 'stateReady', 'step', 'showGrid', 'canvasPattern', 'library',
+    'dataDir', 'boardsDir', 'imagesDir'])
   // Mirrors the QML binding of the same name: the harness loads functions, not
   // bindings, so a derived property has to be declared here.
   Object.defineProperty(root, 'findDimming', { get: () => root.finding && root.findQuery !== '' })
   Object.defineProperty(root, 'findNeedle', { get: () => root.findQuery.toLowerCase() })
   Object.defineProperty(root, 'paletteMatches', { get: () =>
     root.paletteVisible ? loadStore().matchCommands(root.paletteQuery, root.paletteScope) : [] })
-  // The binding the status line reads while a connector is being drawn, which
-  // the QML declares and this harness would otherwise not have. Kept as close
-  // to the original as a getter can be, so a change to one is visible as a
-  // difference from the other.
+  Object.defineProperty(root, 'exchangeBusy', { get: () => !!exchange.busy })
   // The binding the failure timer runs on, which the QML declares and this
   // harness would otherwise not have. Same shape as the original, so a change
   // to one shows up as a difference from the other.
@@ -50,6 +66,10 @@ function controller() {
     root.opened && root.failureText !== '' && root.saveError === '' && root.library.trashIndexError === ''
     && !root.diskChanged && !root.damaged
     && !root.helpVisible && !root.library.showing && !root.finding })
+  // The binding the status line reads while a connector is being drawn, which
+  // the QML declares and this harness would otherwise not have. Kept as close
+  // to the original as a getter can be, so a change to one is visible as a
+  // difference from the other.
   Object.defineProperty(root, 'linkOutcome', { get: () => {
     if (root.linkingFrom < 0 || !root.canEdit) return 'none'
     if (root.selectedIndex < 0 || root.selectedIndex >= items.count) return 'none'
@@ -72,13 +92,14 @@ function controller() {
     } }
   // Stands in for BoardExchange: the controller hands it filtered paths and
   // never learns what happens to them.
-  const exchange = { imported: [], copied: [], copies: [], chosen: [],
+  const exchange = { imported: [], copied: [], copies: [], chosen: [], busy: false,
     // The file dialog belongs to the desktop; what the controller does with it
     // is ask for one, which is the part worth watching here.
     choose(action) { exchange.chosen.push(action) },
     importDropped(entries) { exchange.imported.push(...entries) },
     copyItems(indices) { exchange.copied.push(Array.from(indices)) },
     saveCopy(text, name) { exchange.copies.push({ text, name }); return true } }
+  workspace.exchange = exchange
   // The session's binding of the same name, which the library is told about.
   Object.defineProperty(session, 'busy', { get: () => persistence.busy || session.diskReading })
   // The library, run from BoardLibrary.qml the way the controller and the
@@ -88,9 +109,10 @@ function controller() {
     helperScript: '/BoardFiles.sh', showing: false, dir: '', query: '', index: 0, entries: [],
     searching: false, promptLabel: '', input: '', action: '', pendingDelete: '', message: '', inTrash: false,
     trashEntries: [], trashIndexSaving: false, trashIndexLoading: true, trashIndexNeedsRead: true, trashIndexError: '' }
-  Object.defineProperty(library, 'currentBoard', { get: () => root.currentBoard })
-  Object.defineProperty(library, 'boardConflicted', { get: () => root.diskChanged })
-  Object.defineProperty(library, 'boardSettled', { get: () => !session.busy && root.saveError === '' })
+  Object.defineProperty(library, 'currentBoard', { get: () => workspace.activePane.currentBoard })
+  Object.defineProperty(library, 'boardConflicted', { get: () => workspace.activePane.diskChanged })
+  Object.defineProperty(library, 'boardSettled', { get: () =>
+    !workspace.activePane.saving && workspace.activePane.saveError === '' })
   // The listing, the trash index and the helper's runs; none of them is the
   // subject of these tests, so each is present and inert.
   const trashIndexFile = { reload() {}, setText() {} }
@@ -100,34 +122,41 @@ function controller() {
   Object.defineProperty(library, 'busy', { get: () => mkdirProc.running || moveProc.running || trashProc.running
     || restoreProc.running || purgeProc.running || library.trashIndexSaving || library.trashIndexLoading })
   Object.defineProperty(library, 'rows', { get: () => library.inTrash
-    ? context.Store.sortedTrash(library.trashEntries)
-    : context.Store.filterEntries(library.entries, library.dir, library.query) })
-  library.openRequested = (path, fresh) => root.openBoard(path, fresh)
-  library.currentMoved = path => { root.currentBoard = path; root.writeState() }
-  library.notice = message => root.flash(message)
-  library.closed = () => root.focusKeys()
-  library.aboutToRename = () => root.flushSave()
-  root.library = library
-  const context = vm.createContext({ root, session, library, Store: loadStore(), itemModel: items, linkModel: links,
-    persistence, exchange, trashIndexFile, scanProc, mkdirProc, moveProc, trashProc, restoreProc, purgeProc,
-    statusTimer: {restart() {}}, failureTimer: {restart() {}}, saveTimer: { running: false, stop() {}, restart() {} }, stateFile: {setText(text) { states.push(text) }} })
-  function loadFunctions(target, qml) {
+    ? paneContext.Store.sortedTrash(library.trashEntries)
+    : paneContext.Store.filterEntries(library.entries, library.dir, library.query) })
+  library.openRequested = (path, fresh) => workspace.activePane.openBoard(path, fresh)
+  library.currentMoved = path => { workspace.activePane.doc.currentBoard = path; workspace.writeState() }
+  library.notice = message => workspace.activePane.flash(message)
+  library.closed = () => workspace.activePane.focusKeys()
+  library.aboutToRename = () => workspace.activePane.flushSave()
+  workspace.library = library
+  const shared = { session, library, doc, Store: loadStore(), persistence, trashIndexFile,
+    scanProc, mkdirProc, moveProc, trashProc, restoreProc, purgeProc,
+    statusTimer: {restart() {}}, failureTimer: {restart() {}}, saveTimer: { running: false, stop() {}, restart() {} } }
+  // Each file names itself root, so each is compiled where root is itself.
+  const paneContext = vm.createContext({ ...shared, root })
+  const workspaceContext = vm.createContext({ ...shared, root: workspace, boardExchange: exchange,
+    stateFile: { setText(text) { states.push(text) } } })
+  function loadFunctions(target, qml, context) {
     for (const match of qml.matchAll(/^  function (\w+)\((.*?)\) \{\n([\s\S]*?)^  }/gm))
       target[match[1]] = vm.runInContext(`(function(${match[2]}) {${match[3]}})`, context)
     for (const match of qml.matchAll(/^  function (\w+)\((.*?)\) \{ (.*?) }$/gm))
       target[match[1]] = vm.runInContext(`(function(${match[2]}) {${match[3]}})`, context)
   }
-  loadFunctions(root, source)
-  loadFunctions(session, fs.readFileSync(require('path').join(__dirname, '../BoardSession.qml'), 'utf8'))
-  loadFunctions(library, fs.readFileSync(require('path').join(__dirname, '../BoardLibrary.qml'), 'utf8'))
+  loadFunctions(root, source, paneContext)
+  loadFunctions(workspace, read('Omarchyform.qml'), workspaceContext)
+  loadFunctions(doc, read('BoardDocument.qml'), paneContext)
+  loadFunctions(session, read('BoardSession.qml'), paneContext)
+  loadFunctions(library, read('BoardLibrary.qml'), paneContext)
   // Two of the session's functions reach for a FileView and a Process. What
   // they fetch is what matters here, so they fetch it from the test instead.
   session.diskText = ''
   session.readDisk = () => session.diskText
-  session.requestDisk = resolve => session.acceptDisk(root.currentBoard,
-    loadStore().writeFile(items, links, root.nextId), resolve, 'rev-fresh\n' + session.diskText)
+  session.requestDisk = resolve => session.acceptDisk(doc.currentBoard,
+    loadStore().writeFile(items, links, doc.nextId), resolve, 'rev-fresh\n' + session.diskText)
   let revisions = 0
-  return { root, session, library, items, links, writes, states, persistence, exchange, store: context.Store, complete() {
+  return { root, doc, workspace, session, library, items, links, writes, states, persistence, exchange,
+    store: paneContext.Store, complete() {
     const write = writes[writes.length - 1]
     persistence.busy = false
     session.savedBoard(write.path, write.text, 'rev-' + (++revisions))
@@ -238,7 +267,7 @@ function controller() {
   const rename = () => {
     const c = controller()
     c.library.trashIndexLoading = false
-    c.root.currentBoard = 'work/a.json'
+    c.doc.currentBoard = 'work/a.json'
     c.library.entries = [{ path: 'work', dir: true }, { path: 'work/a.json', dir: false }]
     c.library.ask('rename', 'rename to:', 'work')
     c.library.input = 'play'
@@ -294,7 +323,7 @@ function controller() {
 
   // Switch away before that write reports back, the way openBoard does.
   c.session.boardLoaded = false
-  c.root.currentBoard = 'b.json'
+  c.doc.currentBoard = 'b.json'
   c.session.loadBoard('', true)          // a board that does not exist yet
   const beforeBaseline = c.session.lastSavedText
 
@@ -393,8 +422,8 @@ console.log('ok — controller: damaged boards, delayed saves, switching, failur
   assert.deepEqual(Array.from(c.root.markedIds), [])
   assert.equal(c.root.showPinned, false)
   assert.deepEqual(Array.from(c.root.targets()), [])
-  assert.notEqual(c.root.backupPathFor('work/a.json'), c.root.backupPathFor('work__a.json'))
-  c.root.applyState('{"lastBoard":"../outside.json"}')
+  assert.notEqual(c.workspace.backupPathFor('work/a.json'), c.workspace.backupPathFor('work__a.json'))
+  c.workspace.applyState('{"lastBoard":"../outside.json"}')
   assert.equal(c.root.currentBoard, 'a.json')
 }
 {
@@ -427,7 +456,7 @@ console.log('ok — controller: damaged boards, delayed saves, switching, failur
   c.root.redo()
   assert.equal(c.items.get(0).ipinned, false)
   for (let i=0;i<130;i++) c.root.pushUndo()
-  assert.equal(c.root.undoStack.length, 100)
+  assert.equal(c.doc.undoStack.length, 100)
 }
 console.log('ok — controller: board-local marks, pinning, backup names and history cap')
 
@@ -605,9 +634,9 @@ console.log('ok — controller: duplicating items, their connectors and their pi
   // Aligning twice: the second time there is nothing to do and no undo entry.
   c.root.markedIds = ids.slice(0, 2)
   c.root.alignTargets('top')
-  const depth = c.root.undoStack.length
+  const depth = c.doc.undoStack.length
   c.root.alignTargets('top')
-  assert.equal(c.root.undoStack.length, depth, 'an alignment that changes nothing is not history')
+  assert.equal(c.doc.undoStack.length, depth, 'an alignment that changes nothing is not history')
 
   // Spreading needs three.
   c.root.markedIds = ids.slice(0, 2)
@@ -758,7 +787,7 @@ console.log('ok — controller: finding, stepping through matches and dimming th
   const switched = controller()
   switched.root.activeBoard = { probeImage() {}, repaintLinks() {}, focusKeys() {} }
   switched.root.imageDropped('late.png', 40, 50)
-  switched.root.currentBoard = 'b.json'
+  switched.doc.currentBoard = 'b.json'
   switched.root.pasteImage('late.png', 200, 100)
   assert.equal(switched.items.count, 0, 'the late picture does not land on the board that is open now')
   assert.equal(switched.root.imageQueue.length, 0, 'and it stops waiting')
@@ -771,7 +800,7 @@ console.log('ok — controller: finding, stepping through matches and dimming th
   mixed.root.activeBoard = { probeImage(name) { seen.push(name) }, repaintLinks() {}, focusKeys() {} }
   mixed.root.imageDropped('a-1.png', 0, 0)
   mixed.root.imageDropped('a-2.png', 0, 0)
-  mixed.root.currentBoard = 'b.json'
+  mixed.doc.currentBoard = 'b.json'
   mixed.root.imageDropped('b-1.png', 0, 0)
   mixed.root.pasteImage('a-1.png', 100, 100)
   assert.equal(mixed.items.count, 0, 'nothing meant for the closed board is placed')
@@ -1065,7 +1094,7 @@ console.log('ok — controller: the command palette and one dispatch for every c
     // so the question is still there when it comes back.
     c.root.endConflictChoice()
     const closed = c.writes.length
-    c.root.close()
+    c.workspace.close()
     assert.equal(c.writes.length, closed, 'closing writes nothing over the other version')
     assert.equal(c.session.conflict, true, 'and leaves the question standing')
     assert.equal(c.items.count, 2, 'with the edits still in hand')
@@ -1424,7 +1453,7 @@ console.log('ok — controller: a first board built only from names in the list'
 
   // Escape while choosing changes nothing and leaves nothing half-made.
   const before = JSON.stringify(S.linkRows(c.links))
-  const undos = c.root.undoStack.length
+  const undos = c.doc.undoStack.length
   c.root.selectOnly(2)
   c.root.toggleLinking()
   c.root.selectedIndex = 0
@@ -1433,7 +1462,7 @@ console.log('ok — controller: a first board built only from names in the list'
   assert.equal(c.root.linkingFrom, -1, 'escape ends the gesture')
   assert.equal(c.root.linkOutcome, 'none', 'and promises nothing')
   assert.equal(JSON.stringify(S.linkRows(c.links)), before, 'the board is untouched')
-  assert.equal(c.root.undoStack.length, undos, 'and nothing was pushed to undo')
+  assert.equal(c.doc.undoStack.length, undos, 'and nothing was pushed to undo')
 
   // An end that cannot take one promises nothing, and pressing x there is not
   // taken as an answer to a question that was never asked.
@@ -1564,7 +1593,7 @@ console.log('ok — controller: what a connector gesture promises, and what it t
   c.root.report('Could not read the clipboard image', 'paste')
   assert.ok(c.root.failureVisible)
   for (const [set, unset] of [
-    [() => { c.root.opened = false }, () => { c.root.opened = true }],
+    [() => { c.workspace.opened = false }, () => { c.workspace.opened = true }],
     [() => { c.session.saveError = 'notes.json could not be written' }, () => { c.session.saveError = '' }],
     [() => { c.library.trashIndexError = 'x' }, () => { c.library.trashIndexError = '' }],
     [() => { c.session.conflict = true }, () => { c.session.conflict = false }],
@@ -1688,22 +1717,22 @@ console.log('ok — controller: a board opens clear of the header, and a reload 
 
 {
   const c = controller()
-  c.root.applyState('{"showGrid":false}')
+  c.workspace.applyState('{"showGrid":false}')
   assert.equal(c.root.showGrid, false, 'an existing plain background stays plain')
   assert.equal(c.root.canvasPattern, 'Dots', 'old state keeps the default pattern')
   for (const canvasPattern of ['Dots', 'Grid', 'Ruled']) {
-    c.root.applyPayload(JSON.stringify({settings: {showGrid: true, canvasPattern}}))
-    c.root.writeState()
+    c.workspace.applyPayload(JSON.stringify({settings: {showGrid: true, canvasPattern}}))
+    c.workspace.writeState()
     const saved = c.states.at(-1)
     assert.equal(JSON.parse(saved).canvasPattern, canvasPattern)
     const reopened = controller()
-    reopened.root.applyState(saved)
+    reopened.workspace.applyState(saved)
     assert.equal(reopened.root.canvasPattern, canvasPattern, 'keyboard opening retains the bar preference')
     assert.equal(reopened.root.showGrid, true)
   }
   for (const canvasPattern of ['unknown', '', null, 42, {}]) {
-    c.root.applyPayload(JSON.stringify({settings: {canvasPattern}}))
-    c.root.applyState(JSON.stringify({canvasPattern}))
+    c.workspace.applyPayload(JSON.stringify({settings: {canvasPattern}}))
+    c.workspace.applyState(JSON.stringify({canvasPattern}))
     assert.equal(c.root.canvasPattern, 'Ruled', 'invalid settings preserve the last valid pattern')
   }
 }
@@ -1723,9 +1752,9 @@ console.log('ok — controller: canvas pattern settings, old state and persisten
     c.root.runPaletteChoice()
     assert.equal(c.root.paletteVisible, false)
     const reopened = controller()
-    reopened.root.applyState(c.states.at(-1))
+    reopened.workspace.applyState(c.states.at(-1))
     // Bar opening used to silently undo a choice by sending its defaults.
-    reopened.root.applyPayload('{"settings":{"showGrid":true,"canvasPattern":"Dots"}}')
+    reopened.workspace.applyPayload('{"settings":{"showGrid":true,"canvasPattern":"Dots"}}')
     assert.equal(reopened.root.showGrid, pattern !== 'Plain')
     if (pattern !== 'Plain') assert.equal(reopened.root.canvasPattern, pattern)
     reopened.root.chooseCanvasBackground()
@@ -1735,7 +1764,7 @@ console.log('ok — controller: canvas pattern settings, old state and persisten
   c.root.runCommand('Canvas background: Plain')
   assert.equal(c.root.showGrid, false, 'appearance works on read-only boards')
   assert.equal(c.writes.length, 0, 'appearance never writes the board')
-  assert.equal(c.root.undoStack.length, 0, 'appearance never consumes board undo')
+  assert.equal(c.doc.undoStack.length, 0, 'appearance never consumes board undo')
   const savedCount = c.states.length
   c.root.setCanvasBackground('invalid')
   assert.equal(c.states.length, savedCount)

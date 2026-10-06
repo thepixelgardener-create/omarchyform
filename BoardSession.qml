@@ -2,8 +2,9 @@ import QtQuick
 import Quickshell.Io
 import "BoardStore.js" as Store
 
-// Owns loading, autosave, and the transition between boards. The controller
-// supplies the document models and presentation state; BoardPersistence owns I/O.
+// Owns loading, autosave, and the transition between boards. Its controller is
+// the document, which holds the models and passes what the session asks of the
+// view on to the panes showing it; BoardPersistence owns I/O.
 Item {
   id: session
   required property var ctl
@@ -84,11 +85,7 @@ Item {
     session.lastSavedCount = -1
     session.ctl.undoStack = []
     session.ctl.redoStack = []
-    session.ctl.markedIds = []
-    session.ctl.showPinned = false
-    session.ctl.selectedIndex = -1
-    session.ctl.editIndex = -1
-    session.ctl.linkingFrom = -1
+    session.ctl.resetSelection(true)
     session.ctl.currentBoard = path
     session.ctl.resetView()
     // Again once it has loaded: the view frames what is on the board, and until
@@ -287,9 +284,7 @@ Item {
       session.ctl.nextId = Store.nextFreeId(session.ctl.items, data.nextId)
       session.ctl.nextColor = session.ctl.items.count
     }
-    session.ctl.markedIds = []
-    session.ctl.showPinned = false
-    session.ctl.selectedIndex = -1
+    session.ctl.resetSelection(false)
     session.ctl.undoStack = []
     session.ctl.redoStack = []
     // Only for a board being opened. A reload because the file changed under an

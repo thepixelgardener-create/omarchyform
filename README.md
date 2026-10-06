@@ -599,7 +599,9 @@ working canvas; PNG exports keep their plain background.
 
 | File | Holds |
 |------|-------|
-| `Omarchyform.qml` | Controller: editing, navigation, and the two surfaces |
+| `Omarchyform.qml` | The workspace: settings and state, the library and file exchange, the open boards, and the two surfaces |
+| `BoardPane.qml` | One view of a board and the controller its views read: camera, selection, modes and every command |
+| `BoardDocument.qml` | One open board: its items and connectors, ids, undo history and the session saving it |
 | `Board.qml` | The canvas surface — grid, connectors, keys, cheat sheet |
 | `BoardToolbar.qml` | The header: the board's name and save state, the zoom, and the menu |
 | `Theme.qml` | Colours, fonts, sizes and weights, all read from the shell's theme with fallbacks |

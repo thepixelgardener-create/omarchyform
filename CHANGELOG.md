@@ -3,6 +3,15 @@
 Notable changes, newest first. Board file versions are noted where they moved,
 since older boards are migrated on load rather than rejected.
 
+## Unreleased
+
+### Changed
+
+- The controller is split in three, ahead of split view: `BoardPane.qml` is
+  one view of a board and the controller its views read, `BoardDocument.qml`
+  is one open board with its undo history and session, and `Omarchyform.qml`
+  is the workspace around them. Nothing changes on screen.
+
 ## 0.4.6 — 2026-10-05
 
 ### Changed
