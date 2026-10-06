@@ -21,11 +21,17 @@ the section has been updated.
 | 2a. `refactor(pane)` | Done in 3c18505. No visible change; every suite and a headless start of the real plugin pass |
 | 2b. `feat(split-view)` | Done in cfe2392. `tests/split.js` drives the switching table, shared edits, leaving rules, library guards and restored state; `tests/qt/tst_split.qml` checks placement and activation |
 | 2c. Divider and narrow windows | Done; drag, double-click reset, 320 px minimum, active-pane fallback |
-| Live checks for gate 2 | Not run yet: `npm run test:omarchy`, `test:paste`, `shots` and `bench:scene` open windows on the desktop |
+| Live checks for gate 2 | Done in ee50f9d and 520b8ce. `test:omarchy` drives split view with real keys in both host modes; `test:paste` passes; `shots` photographs both layouts; `bench:scene` at 3000 items matches `origin/main` after the boards were moved back to single-board depth |
 | 3–6. History | Not started |
 
 A saved second board that no longer exists opens empty in its pane, the way a
 missing `lastBoard` always has, rather than restoring a single pane.
+
+Measured on the way: every item level between a board and its window costs
+about 1.5ms a frame when zooming a 3000-item board, so `BoardSplit.qml`
+parents both boards where a single board sat. Fullscreen is a layer surface,
+which the live suite cannot send keys to, so its split stages check fullscreen
+by geometry and press keys in the window.
 
 ## Revision 3 changes
 
