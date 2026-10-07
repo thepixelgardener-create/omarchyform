@@ -131,6 +131,11 @@ expect(referencedBy(workspace, "(?:root\\.activePane|root\\.panes\\[\\w+\\]|\\bp
 expect(referencedBy(workspace, "(?:root\\.documents\\[\\w+\\]|\\.doc|\\bdoc)"), new Set([...documentMembers, "destroy"]),
   "the document", "Omarchyform.qml")
 
+// What the exchange reads off the pane a picture was dropped or pasted on,
+// which it is handed rather than finding it as `ctl`.
+expect(referencedBy(read("BoardExchange.qml"), "(?:\\.pane|\\bpane|pastePane)"), controller, "the pane",
+  "BoardExchange.qml")
+
 // And the stub that stands in for it during the QML session test.
 const stub = nestedMembers(read("tests/qml/tst_session.qml"), "ctl")
 expect(sessionReads, stub, "the tst_session stub", "tests/qml/tst_session.qml")

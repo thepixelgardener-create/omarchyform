@@ -298,3 +298,196 @@ function addNotes(c, pane, n) {
   assert.deepEqual(c.exchange.chosen, ['png'])
   console.log('ok — split: one picture at a time')
 }
+
+// A picture dropped on a pane, as its board's DropArea hands it over: the
+// point it was let go of, worked out in that pane's world.
+const dropOn = (pane, sx, sy, ...files) =>
+  pane.dropFiles(files.map(f => 'file:///shots/' + f), pane.toWorldX(sx), pane.toWorldY(sy))
+function pictures(pane) {
+  const out = []
+  for (let i = 0; i < pane.items.count; i++) if (pane.items.get(i).kind === 'image') out.push(pane.items.get(i))
+  return out
+}
+const centre = p => [p.ix + p.iw / 2, p.iy + p.ih / 2]
+// Two panes on two boards, looking at them differently, keyboard in the first.
+function twoBoards() {
+  const c = controller()
+  const a = c.root, b = c.second
+  a.toggleSplit('side-by-side')
+  b.openBoard('b.json')
+  b.camX = -400
+  b.camY = 120
+  b.zoom = 2
+  c.workspace.activate(a)
+  return Object.assign(c, { a, b })
+}
+// Closing the pane the keyboard is not in, once its board's last write lands.
+function closeOther(c) {
+  const gone = c.of(c.workspace.otherOf(c.workspace.activePane).doc)
+  c.workspace.closeSplit()
+  while (gone.persistence.busy) gone.complete()
+  c.workspace.retryLeave()
+}
+
+{
+  // The pane a file is let go on is the one it lands on, wherever the
+  // keyboard is, and at that pane's point.
+  const c = twoBoards()
+  const { a, b } = c
+  dropOn(b, 300, 200, 'one.png')
+  c.finishDrop(0, 'drop-1.png')
+  assert.equal(pictures(a).length, 0, 'nothing on the board the keyboard is in')
+  assert.deepEqual(pictures(b).map(p => p.isrc), ['drop-1.png'], 'the picture is on the board it was dropped on')
+  assert.deepEqual(centre(pictures(b)[0]), [b.toWorldX(300), b.toWorldY(200)], 'where it was let go of, in that view')
+  assert.equal(c.workspace.activePane, a, 'and the keyboard stays where it was')
+
+  // And the other way round.
+  c.workspace.activate(b)
+  dropOn(a, 300, 200, 'two.png')
+  c.finishDrop(0, 'drop-2.png')
+  assert.deepEqual(pictures(a).map(p => p.isrc), ['drop-2.png'])
+  assert.deepEqual(centre(pictures(a)[0]), [300, 200], 'the first pane looks at its board unmoved')
+  assert.equal(pictures(b).length, 1)
+  assert.equal(c.workspace.activePane, b)
+
+  // One board in both panes: the point is the receiving view's, not the
+  // other's.
+  const d = controller()
+  d.root.toggleSplit('side-by-side')
+  d.second.camX = 250
+  d.second.zoom = 0.5
+  d.workspace.activate(d.root)
+  dropOn(d.second, 100, 100, 'three.png')
+  d.finishDrop(0, 'drop-3.png')
+  assert.deepEqual(centre(pictures(d.root)[0]), [d.second.toWorldX(100), d.second.toWorldY(100)])
+  assert.notDeepEqual(centre(pictures(d.root)[0]), [d.root.toWorldX(100), d.root.toWorldY(100)])
+  console.log('ok — split: a dropped picture lands on the pane it was dropped on')
+}
+
+{
+  // The keyboard moving while the file is copied changes nothing; the pane
+  // closing or showing another board means it is not placed anywhere.
+  const c = twoBoards()
+  const { a, b } = c
+  dropOn(b, 300, 200, 'one.png')
+  c.workspace.activate(b)
+  c.workspace.activate(a)
+  c.finishDrop(0, 'drop-1.png')
+  assert.equal(pictures(b).length, 1, 'a focus change on the way does not move it')
+  assert.equal(pictures(a).length, 0)
+
+  dropOn(b, 300, 200, 'two.png')
+  const left = c.of(b.doc)
+  b.openBoard('a.json')
+  // Leaving waits for the first picture's write, as any switch does.
+  while (left.persistence.busy) left.complete()
+  c.workspace.retryLeave()
+  assert.equal(b.currentBoard, 'a.json')
+  c.finishDrop(0, 'drop-2.png')
+  assert.equal(pictures(a).length, 0, 'not on the board the pane shows now')
+  assert.equal(left.items.count, 1, 'nor on the one it was dropped on, which it has left')
+  assert.match(b.failureText, /Board changed/, 'and the pane says so')
+
+  const e = twoBoards()
+  dropOn(e.b, 300, 200, 'three.png')
+  closeOther(e)
+  assert.equal(e.workspace.layout, 'single')
+  e.finishDrop(0, 'drop-3.png')
+  assert.equal(pictures(e.a).length, 0, 'a closed pane hands nothing to the one left')
+  assert.match(e.a.failureText, /not added/, 'which says it was not added')
+
+  // Closed and opened again on its board while the copy ran: still not the
+  // view it was let go on.
+  const f = twoBoards()
+  dropOn(f.b, 300, 200, 'four.png')
+  closeOther(f)
+  assert.equal(f.workspace.layout, 'single')
+  f.a.toggleSplit('side-by-side')
+  f.b.openBoard('b.json')
+  f.workspace.activate(f.a)
+  f.finishDrop(0, 'drop-4.png')
+  assert.equal(pictures(f.b).length + pictures(f.a).length, 0, 'a reopened pane is not the one it was dropped on')
+  console.log('ok — split: a dropped picture follows its pane, not the keyboard, or is not placed')
+}
+
+{
+  // Several drops in flight, each to its own pane.
+  const c = twoBoards()
+  const { a, b } = c
+  dropOn(b, 300, 200, 'one.png', 'two.png')
+  dropOn(a, 100, 100, 'three.png')
+  c.workspace.activate(b)
+  c.finishDrop(0, 'drop-1.png')
+  c.workspace.activate(a)
+  c.finishDrop(0, 'drop-2.png')
+  c.finishDrop(0, 'drop-3.png')
+  assert.deepEqual(pictures(b).map(p => p.isrc), ['drop-1.png', 'drop-2.png'])
+  assert.deepEqual(pictures(a).map(p => p.isrc), ['drop-3.png'])
+  assert.equal(c.imageImport.running, false, 'and the queue is empty')
+
+  // Queued for a pane that has since switched boards: refused when its turn
+  // comes, and said, without holding up the next.
+  dropOn(b, 300, 200, 'four.png', 'five.png')
+  dropOn(a, 100, 100, 'six.png')
+  const left = c.of(b.doc)
+  b.openBoard('a.json')
+  while (left.persistence.busy) left.complete()
+  c.workspace.retryLeave()
+  assert.equal(b.currentBoard, 'a.json')
+  c.finishDrop(0, 'drop-4.png')
+  assert.equal(b.failureText, 'Board changed; 2 pictures were not added', 'both of that drop, said once')
+  c.finishDrop(0, 'drop-6.png')
+  assert.deepEqual(pictures(a).map(p => p.isrc), ['drop-3.png', 'drop-6.png'], 'the next one still lands')
+  assert.equal(c.imageImport.running, false)
+
+  // The helper failing says so on the pane it was dropped on.
+  dropOn(b, 0, 0, 'big.png')
+  c.finishDrop(5, '')
+  assert.match(b.failureText, /too large/)
+  assert.doesNotMatch(a.failureText, /too large/)
+  console.log('ok — split: queued drops keep their own panes')
+}
+
+{
+  // A pane that cannot take the picture by the time it arrives: looking back
+  // through its history, or reading it again.
+  const c = twoBoards()
+  const { a, b } = c
+  const scene = { probeImage() {}, repaintLinks() {}, focusKeys() { c.focused = 'b' } }
+  b.activeBoard = scene
+  dropOn(b, 300, 200, 'one.png')
+  c.of(b.doc).doc.historyChecking = true
+  c.finishDrop(0, 'drop-1.png')
+  assert.equal(pictures(b).length, 0, 'not while its history is checked')
+  assert.match(b.failureText, /not added/)
+  assert.equal(pictures(a).length, 0, 'nor on the other board')
+  c.of(b.doc).doc.historyChecking = false
+
+  // Copied while it could, measured once it no longer could.
+  b.failureText = ''
+  dropOn(b, 300, 200, 'two.png')
+  c.finishDrop(0, 'drop-2.png')
+  assert.equal(b.imageQueue.length, 1, 'being measured')
+  c.of(b.doc).doc.historyChecking = true
+  b.pasteImage('drop-2.png', 200, 100)
+  assert.equal(pictures(b).length, 0)
+  assert.match(b.failureText, /not added/, 'and it is said, not dropped silently')
+  c.of(b.doc).doc.historyChecking = false
+
+  // Measured and placed with the keyboard elsewhere: it does not take it.
+  dropOn(b, 300, 200, 'three.png')
+  c.finishDrop(0, 'drop-3.png')
+  b.pasteImage('drop-3.png', 200, 100)
+  assert.equal(pictures(b).length, 1)
+  assert.equal(c.focused, undefined, 'the keys stay with the pane they were in')
+
+  // An earlier version on screen takes nothing either.
+  b.timeline = true
+  b.timelineLive = false
+  b.failureText = ''
+  b.statusText = ''
+  dropOn(b, 300, 200, 'four.png')
+  assert.equal(c.imageImport.running, false, 'nothing is copied')
+  assert.match(b.statusText, /earlier version/)
+  console.log('ok — split: a drop on a pane that cannot take it is refused, and said')
+}

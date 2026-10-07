@@ -5,6 +5,7 @@
 // Omarchyform.qml. Each object's functions are compiled where its own id names
 // it, and the members one forwards from another are getters here, as they are
 // bindings there.
+const assert = require('assert/strict')
 const fs = require('fs')
 const vm = require('vm')
 const path = require('path')
@@ -13,7 +14,7 @@ const { loadStore, FakeModel } = require('./harness')
 const read = name => fs.readFileSync(path.join(__dirname, '..', name), 'utf8')
 const sources = {
   pane: read('BoardPane.qml'), workspace: read('Omarchyform.qml'), document: read('BoardDocument.qml'),
-  session: read('BoardSession.qml'), library: read('BoardLibrary.qml')
+  session: read('BoardSession.qml'), library: read('BoardLibrary.qml'), exchange: read('BoardExchange.qml')
 }
 
 function loadFunctions(target, qml, context) {
@@ -134,7 +135,7 @@ function makePane(workspace, exchange, Store) {
     conflictVisible: false, conflictIndex: 0, paletteScope: 'all', imageBusy: false,
     statusText: '', failureText: '', failureKind: '', pendingFirstNote: '', forgetArmedAt: 0,
     timeline: false, timelineLive: true, timelineRecord: 0, replayDoc: null, playing: false, playSpeed: 1,
-    playEnd: 0, scrubWanted: 0, compareArmedAt: 0,
+    playEnd: 0, scrubWanted: 0, compareArmedAt: 0, docSerial: 0,
     worldStep: 40, minItemSize: 60, viewW: 1000, viewH: 700 }
   const empty = new FakeModel()
   // Its own models for an earlier board, which the QML declares as ids.
@@ -157,7 +158,12 @@ function makePane(workspace, exchange, Store) {
   let shown = null
   Object.defineProperty(root, 'doc', {
     get: () => shown,
-    set: value => { shown = value; if (root.timeline && root.replayDoc !== value) root.leaveTimeline() }
+    set: value => {
+      if (value === shown) return
+      shown = value
+      root.docSerial += 1
+      if (root.timeline && root.replayDoc !== value) root.leaveTimeline()
+    }
   })
   Object.defineProperty(root, 'nextId', { get: () => root.doc ? root.doc.nextId : 1 })
   for (const key of ['boardLoaded', 'damaged', 'diskChanged', 'saving'])
@@ -225,16 +231,37 @@ function controller() {
   Object.defineProperty(workspace, 'split', { get: () => workspace.layout !== 'single' })
   Object.defineProperty(workspace, 'imageBusy', { get: () => workspace.paneSlots.some(p => p.imageBusy) })
   const states = []
-  // Stands in for BoardExchange: the controller hands it filtered paths and
-  // never learns what happens to them.
+  // Stands in for BoardExchange, but for dropped files, which run from its
+  // source: which board a picture lands on is decided in its queue. What the
+  // controller hands it is kept as well, and the helper's copy of each file
+  // waits until the test finishes it.
   const exchange = { imported: [], copied: [], copies: [], chosen: [], busy: false, dialogOpen: false,
+    dropQueue: [], dropSeq: 0,
     // The file dialog belongs to the desktop; what the controller does with it
     // is ask for one, which is the part worth watching here.
     choose(action) { exchange.chosen.push(action) },
-    importDropped(entries) { exchange.imported.push(...entries) },
     copyItems(indices) { exchange.copied.push(Array.from(indices)) },
-    saveCopy(text, name) { exchange.copies.push({ text, name }); return true } }
+    saveCopy(text, name) { exchange.copies.push({ text, name }); return true },
+    // Its signals, as Omarchyform.qml answers them.
+    finished(message, kind) { workspace.activePane.flash(message, kind) },
+    failed(message, kind) { workspace.activePane.report(message, kind) } }
+  // `ctl: root.exchangePane`, which is the pane the keyboard is in whenever
+  // nothing else is under way: no drop sets it.
+  Object.defineProperty(exchange, 'ctl', { get: () => workspace.activePane })
   workspace.exchange = exchange
+  const imageImport = { running: false, command: [] }, importedName = { text: '' }
+  const exchangeContext = vm.createContext({ exchange, imageImport, importedName, Store, Date })
+  const exchangeSource = {}
+  loadFunctions(exchangeSource, sources.exchange, exchangeContext)
+  for (const name of Object.keys(exchangeSource)) if (/drop/i.test(name)) exchange[name] = exchangeSource[name]
+  const queueDrops = exchange.importDropped
+  exchange.importDropped = function (entries, ...rest) {
+    exchange.imported.push(...entries)
+    return queueDrops.call(exchange, entries, ...rest)
+  }
+  // imageImport's onExited, the handler a finished copy runs.
+  const exited = sources.exchange.match(/id: imageImport\n[\s\S]*?onExited: function \(code\) \{\n([\s\S]*?)^    }$/m)
+  const importExited = vm.runInContext(`(function(code) {${exited[1]}})`, exchangeContext)
   const first = makePane(workspace, exchange, Store), second = makePane(workspace, exchange, Store)
   workspace.paneSlots = [first, second]
   workspace.panes = [first, second]
@@ -294,6 +321,15 @@ function controller() {
   return { root: first, second, doc: opened.doc, workspace, session: opened.session, library,
     items: opened.items, links: opened.links, writes: opened.writes, states, persistence: opened.persistence,
     exchange, store: Store, complete: opened.complete, refuse: opened.refuse,
+    // The helper finishing the dropped file it is copying: its exit code, and
+    // the name it printed for the copy.
+    imageImport,
+    finishDrop(code, name) {
+      assert.equal(imageImport.running, true, 'a dropped file is being copied')
+      imageImport.running = false
+      importedName.text = name || ''
+      importExited(code)
+    },
     worker: opened.worker, aside: opened.aside, answer: opened.answer, index: opened.index,
     // The handles for any document the workspace has made since.
     of: doc => made.get(doc) }

@@ -148,7 +148,7 @@ Item {
 
   function enqueueImage(name, wx, wy, atPoint) {
     var q = root.imageQueue.slice()
-    q.push({ name: name, x: wx, y: wy, atPoint: atPoint, board: root.currentBoard })
+    q.push({ name: name, x: wx, y: wy, atPoint: atPoint, board: root.currentBoard, shown: root.docSerial })
     root.imageQueue = q
     if (q.length === 1) root.pumpImages()
   }
@@ -160,7 +160,7 @@ Item {
   function pumpImages() {
     var waiting = root.imageQueue
     var stale = 0
-    while (waiting.length > stale && waiting[stale].board !== root.currentBoard) stale += 1
+    while (waiting.length > stale && !root.stillShows(waiting[stale].board, waiting[stale].shown)) stale += 1
     if (stale > 0) {
       root.imageQueue = waiting.slice(stale)
       root.report(stale === 1 ? "Board changed; that picture was not added"
@@ -176,7 +176,7 @@ Item {
   // paths are filtered to plain local ones, and the helper decides whether each
   // is really a picture and what it is called once it is ours.
   function dropFiles(urls, wx, wy) {
-    if (!root.canEdit) { root.flash("this board is read-only"); return }
+    if (!root.canEdit) { root.flash(root.commandExcuse("")); return }
     var entries = []
     for (var i = 0; i < urls.length; i++) {
       var dropped = Store.localPath(String(urls[i]))
@@ -187,7 +187,9 @@ Item {
                      y: wy + entries.length * Store.DUPLICATE_OFFSET })
     }
     if (entries.length === 0) { root.flash("drop an image file from your files"); return }
-    root.workspace.exchange.importDropped(entries)
+    // This pane, named: the keyboard can be in the other one, and is not what
+    // decides where a picture goes.
+    root.workspace.exchange.importDropped(entries, root)
   }
 
   function pasteImage(name, naturalWidth, naturalHeight) {
@@ -198,13 +200,20 @@ Item {
     if (placing) root.imageQueue = root.imageQueue.slice(1)
     // The size arrived after a board switch. The point this was meant for
     // belongs to a board that is no longer open, so the picture is not placed.
-    if (placing && placing.board !== root.currentBoard) {
+    if (placing && !root.stillShows(placing.board, placing.shown)) {
       root.report("Board changed; that picture was not added",
                   placing.atPoint ? "picture" : "paste")
       root.pumpImages()
       return
     }
-    if (!root.canEdit || !Store.imageIsValid(name)) { root.pumpImages(); return }
+    if (!Store.imageIsValid(name)) { root.pumpImages(); return }
+    // Read-only by the time it was measured: an earlier version on screen, or
+    // the board's history being read again. Said, not dropped without a word.
+    if (!root.canEdit) {
+      root.report("Picture not added · " + root.commandExcuse(""), placing && placing.atPoint ? "picture" : "paste")
+      root.pumpImages()
+      return
+    }
     var w = naturalWidth > 0 ? naturalWidth : 320
     var h = naturalHeight > 0 ? naturalHeight : 240
     // Big enough to see, small enough that a phone screenshot does not arrive
@@ -228,7 +237,8 @@ Item {
     // also which operation it recovers: the file manager or the clipboard.
     root.flash(naturalWidth > 0 ? "Image added" : "Image added · it could not be read, so the size is a guess",
                placing && placing.atPoint ? "picture" : "paste")
-    root.focusKeys()
+    // A picture dropped on the pane the keyboard is not in leaves it there.
+    if (root.active) root.focusKeys()
     root.pumpImages()
   }
 
@@ -1701,7 +1711,15 @@ Item {
     target: root.replayDoc
     function onReplayRevisionChanged() { root.followReplay() }
   }
-  onDocChanged: if (root.timeline && root.replayDoc !== root.doc) root.leaveTimeline()
+  // How many boards this pane has been given, closing it included. Something
+  // on its way here, a dropped picture, checks it as well as the board's name:
+  // a pane closed and opened again on that board is not where it was dropped.
+  property int docSerial: 0
+  function stillShows(board, shown) { return board === root.currentBoard && shown === root.docSerial }
+  onDocChanged: {
+    root.docSerial += 1
+    if (root.timeline && root.replayDoc !== root.doc) root.leaveTimeline()
+  }
 
   // What the strip says, and where along it the step is. Both name what they
   // follow, so they are worked out again when it changes.

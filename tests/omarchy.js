@@ -24,10 +24,12 @@ try {
   fs.mkdirSync(path.join(dir, 'services'))
   fs.copyFileSync(path.join(omarchy, 'shell/services/PluginShellApi.qml'), path.join(dir, 'services/PluginShellApi.qml'))
   fs.copyFileSync(path.join(__dirname, paste ? 'qml/tst_paste.qml' : 'qml/tst_omarchy.qml'), path.join(dir, 'shell.qml'))
+  // A picture: what the clipboard stub hands over, and what the main run
+  // drops on a pane.
+  fs.writeFileSync(path.join(dir, 'pixels.png'), Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP4z8AARAwQCgAf7gP9i18U1AAAAABJRU5ErkJggg==', 'base64'))
   if (paste) {
     fs.mkdirSync(path.join(dir, 'stubs'))
-    fs.writeFileSync(path.join(dir, 'pixels.png'), Buffer.from(
-      'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP4z8AARAwQCgAf7gP9i18U1AAAAABJRU5ErkJggg==', 'base64'))
     // The last stage asks what happens when the clipboard does not answer, so
     // the stub refuses once the test drops a marker beside it. A failure the
     // board only hears about through a real non-zero exit is the one worth

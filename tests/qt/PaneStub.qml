@@ -204,7 +204,14 @@ Item {
   function choosePng() {}
   function copySelection() {}
   function cycleKind() {}
-  function dropFiles(urls, x, y) {}
+  // What arrived through the board's DropArea, and at which world point. The
+  // addresses are read now, as BoardPane reads them: they go with the event.
+  property var dropped: []
+  function dropFiles(urls, x, y) {
+    var read = []
+    for (var i = 0; i < urls.length; i++) read.push(String(urls[i]))
+    ctl.dropped = ctl.dropped.concat([{ urls: read, x: x, y: y }])
+  }
   function duplicateTargets() {}
   function exportBoard() {}
   function finishPng(path) {}

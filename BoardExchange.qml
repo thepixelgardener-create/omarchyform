@@ -428,31 +428,60 @@ Item {
 
   // Dropped files are copied one at a time: a Process is a single slot, and a
   // drop of five screenshots should not race itself. Each entry remembers the
-  // board it was meant for, so a switch part-way through does not scatter
-  // pictures onto the wrong one.
+  // pane it was let go on, which is not always the one the keyboard is in, and
+  // what that pane was showing. A picture lands there or nowhere: a switch or
+  // a closed pane part-way through does not scatter pictures onto other boards.
   property var dropQueue: []
   property int dropSeq: 0
 
-  function importDropped(entries) {
+  function importDropped(entries, pane) {
     var queued = exchange.dropQueue.slice()
     for (var i = 0; i < entries.length; i++)
       queued.push({ path: entries[i].path, x: entries[i].x, y: entries[i].y,
-                    board: exchange.ctl.currentBoard, pane: exchange.ctl })
+                    pane: pane, board: pane.currentBoard, shown: pane.docSerial })
     exchange.dropQueue = queued
     if (!imageImport.running) exchange.nextDrop()
   }
 
-  function nextDrop() {
+  // What to say about `count` dropped pictures that can no longer go where
+  // they were let go of, or "" when this one still can.
+  function dropRefusal(entry, count) {
+    var these = count > 1 ? count + " pictures were" : "that picture was"
+    if (!entry.pane.doc) return "Pane closed; " + these + " not added"
+    if (!entry.pane.stillShows(entry.board, entry.shown)) return "Board changed; " + these + " not added"
+    if (!entry.pane.canEdit)
+      return (count > 1 ? count + " pictures" : "Picture") + " not added · " + entry.pane.commandExcuse("")
+    return ""
+  }
+
+  // Said on the pane it was dropped on, or where the keyboard is once that
+  // has closed. Only ever the news: the picture itself never goes there.
+  function dropReport(entry, message) {
+    var pane = entry.pane.doc ? entry.pane : exchange.ctl
+    pane.report(message, "picture")
+  }
+
+  // The next copy, past any that can no longer land. Those are said, a pane's
+  // run of them at once; `turnedAway` is one the last copy already refused.
+  function nextDrop(turnedAway) {
+    var away = turnedAway ? [turnedAway] : []
+    for (;;) {
+      var head = exchange.dropQueue.length > 0 ? exchange.dropQueue[0] : null
+      var refused = head !== null && exchange.dropRefusal(head, 1) !== ""
+      if (refused && (away.length === 0 || head.pane === away[0].pane)) {
+        away.push(head)
+        exchange.dropQueue = exchange.dropQueue.slice(1)
+        continue
+      }
+      if (away.length > 0) exchange.dropReport(away[0], exchange.dropRefusal(away[0], away.length))
+      away = []
+      if (!refused) break
+    }
     if (exchange.dropQueue.length === 0) return
     var next = exchange.dropQueue[0]
-    if (next.board !== next.pane.currentBoard) {
-      exchange.dropQueue = exchange.dropQueue.slice(1)
-      exchange.nextDrop()
-      return
-    }
     exchange.dropSeq += 1
-    imageImport.command = exchange.ctl.fileCommand("importimage",
-      [exchange.ctl.imagesDir, "drop-" + Date.now() + "-" + exchange.dropSeq, next.path])
+    imageImport.command = next.pane.fileCommand("importimage",
+      [next.pane.imagesDir, "drop-" + Date.now() + "-" + exchange.dropSeq, next.path])
     imageImport.running = true
   }
 
@@ -462,25 +491,25 @@ Item {
     onExited: function (code) {
       var done = exchange.dropQueue[0]
       exchange.dropQueue = exchange.dropQueue.slice(1)
-      // Checking the board before starting the copy is not enough: the switch
-      // can happen while it runs. A picture on the wrong board is worse than
-      // one that has to be dropped again, so the copy is abandoned in the
-      // pictures folder rather than placed anywhere.
-      if (code === 0 && importedName.text && done.board !== done.pane.currentBoard)
-        exchange.failed("Board changed; drop that picture again", "picture")
-      else if (code === 0 && importedName.text) done.pane.imageDropped(importedName.text, done.x, done.y)
+      // Checking the pane before starting the copy is not enough: it can close,
+      // show another board or become read-only while the copy runs. A picture
+      // on the wrong board is worse than one that has to be dropped again, so
+      // the copy is abandoned in the pictures folder rather than placed
+      // anywhere, least of all wherever the keyboard is now.
+      if (code === 0 && importedName.text && exchange.dropRefusal(done, 1) !== "") { exchange.nextDrop(done); return }
+      if (code === 0 && importedName.text) done.pane.imageDropped(importedName.text, done.x, done.y)
       // 5 is the helper's way of saying the file is too big to put on a board,
       // which is worth saying differently from "that is not a picture".
-      else if (code === 5) exchange.failed("That file is too large to put on a board", "picture")
+      else if (code === 5) exchange.dropReport(done, "That file is too large to put on a board")
       // Its own answer, because the file can be tiny: what is too big is what
       // it decodes to, and "too large" over a hundred-kilobyte file reads as a
       // bug rather than as a limit.
       else if (code === 7)
-        exchange.failed("That picture has too many pixels to put on a board", "picture")
+        exchange.dropReport(done, "That picture has too many pixels to put on a board")
       // 6 needs two pictures to arrive in the same millisecond, but saying the
       // wrong thing about it would be worse than the line it costs.
-      else if (code === 6) exchange.failed("A picture of that name is already there", "picture")
-      else exchange.failed("That is not an image this can read", "picture")
+      else if (code === 6) exchange.dropReport(done, "A picture of that name is already there")
+      else exchange.dropReport(done, "That is not an image this can read")
       exchange.nextDrop()
     }
   }

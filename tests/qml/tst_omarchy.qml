@@ -32,6 +32,8 @@ ShellRoot {
   property int ticks: 0
   property int hides: 0
   property int switchedAt: 0
+  property real dropX: 0
+  property real dropY: 0
   property string newPath: ""
   property var exchangeApi: null
   property var closedWindow: null
@@ -548,14 +550,32 @@ ShellRoot {
       } else if (test.stage === 392 && plugin.panes[1].currentBoard === "from-cli.json" && plugin.panes[1].boardLoaded) {
         test.check(plugin.panes[0].currentBoard === "sent-to-me.json", "opening a board in one pane leaves the other alone")
         test.check(plugin.documents.length === 2, "two boards open")
+        // A picture let go on the pane the keyboard is not in: it goes to that
+        // pane's board, at that pane's point, through the real copy and the
+        // real measuring, and the keyboard stays where it is.
+        var other = plugin.panes[0]
+        test.dropX = other.toWorldX(120)
+        test.dropY = other.toWorldY(90)
+        other.dropFiles(["file://" + Quickshell.env("OMARCHYFORM_TEST_DIR") + "/pixels.png"], test.dropX, test.dropY)
+        test.stage = 3921
+      } else if (test.stage === 3921 && plugin.panes[0].items.count === 3) {
+        var placed = plugin.panes[0].items.get(2)
+        test.check(placed.kind === "image" && placed.isrc !== "", "the dropped file is a picture on the pane it was dropped on")
+        test.check(Math.abs(placed.ix + placed.iw / 2 - test.dropX) < 0.01
+                   && Math.abs(placed.iy + placed.ih / 2 - test.dropY) < 0.01, "where it was let go of")
+        var beside = plugin.panes[1].items
+        for (var b = 0; b < beside.count; b++)
+          test.check(beside.get(b).kind !== "image", "and nothing on the board the keyboard is in")
+        test.check(plugin.activePane === plugin.panes[1], "which keeps the keyboard")
         test.key("v", "SHIFT")
         test.stage = 393
       } else if (test.stage === 393 && plugin.layout === "single") {
         test.check(plugin.panes[0].currentBoard === "from-cli.json", "closing keeps the pane the keyboard is in")
         test.check(plugin.documents.length === 1, "and closes the board only the other pane was showing")
         var kept = test.boardData("sent-to-me.json")
-        test.check(kept !== null && kept.items.length === 2 && kept.items[1].text === "hi",
+        test.check(kept !== null && kept.items.length === 3 && kept.items[1].text === "hi",
                    "after saving what was typed into it")
+        test.check(kept.items[2].kind === "image", "and the picture dropped on it")
         console.log("OMARCHY_TESTS_PASSED")
         Qt.quit()
       }
