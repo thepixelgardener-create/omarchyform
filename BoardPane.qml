@@ -100,6 +100,7 @@ Item {
   readonly property bool exchangeBusy: root.workspace.exchange.busy
   readonly property bool dialogOpen: root.workspace.exchange.dialogOpen
   readonly property string boardState: root.lookingBack ? "Earlier version · read only"
+    : root.doc && root.doc.historyChecking ? "Checking history…"
     : root.damaged ? "Read only" : root.saveError !== "" ? "Save failed"
     : root.diskChanged ? "Changed on disk" : root.saving ? "Saving…" : "Saved locally"
   // Only a board made to be typed into. A pane that has just been given a
@@ -846,6 +847,7 @@ Item {
   function commandExcuse(needs) {
     if (needs === "conflict") return "this board has not changed underneath you"
     if (root.lookingBack) return "this is an earlier version · esc returns to now"
+    if (root.doc && root.doc.historyChecking) return "checking this board's history · a moment"
     if (!root.canEdit) return root.damaged ? "this board is read-only" : "the board is not ready yet"
     if (needs === "typing") return "start editing a note"
     if (needs === "group") return "mark two or more"

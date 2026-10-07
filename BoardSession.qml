@@ -96,6 +96,11 @@ Item {
 
   function save(allowEmpty) {
     if (!session.boardLoaded || session.diskReading) return
+    // Nothing is written while the board's history is being read: what the
+    // file holds is not known to be something this may write over. Nothing can
+    // have changed meanwhile — the board is not editable until then — so a
+    // switch or a close that asks for a save here loses nothing by going on.
+    if (session.ctl.historyChecking) return
     // Something else wrote this board and the screen disagrees with it. Waiting
     // is the only safe answer: a debounced keystroke must not be what decides
     // whose version survives.
@@ -262,6 +267,15 @@ Item {
       if (code !== 0) session.diskReadFailed(diskRead.board)
       else session.acceptDisk(diskRead.board, diskRead.localText, diskRead.resolve, diskContents.text)
     }
+  }
+
+  // The board turned out to be one this must not write: shown, read-only, and
+  // its file left as it is.
+  function refuse(reason) {
+    if (saveTimer.running) saveTimer.stop()
+    session.damaged = true
+    session.damageReason = reason
+    session.boardLoaded = false
   }
 
   // Only a confirmed missing file may become a new, writable empty board.

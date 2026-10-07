@@ -30,6 +30,14 @@ TestCase {
   }
 
   property var reply: null
+  property var checked: null
+  // The board's own worker, as a board opening asks it: how long the board
+  // waits, read-only, before it can be edited.
+  WorkerScript {
+    id: boardWorker
+    source: "BoardHistoryWorker.js"
+    onMessage: function (message) { bench.checked = message }
+  }
   WorkerScript {
     id: worker
     source: "history_worker.js"
@@ -240,5 +248,22 @@ TestCase {
       + " checkpoints " + (indexed - parsed) + ", + one earlier board " + (seen - indexed)
       + " = " + (seen - boardOnly) + " MiB more")
     if (shown.items.length < 0) console.log("")
+  }
+
+  function test_checking() {
+    if ("@MEMORY@" === "yes") return
+    var seeds = "@SEEDS@".split(",")
+    for (var f = 0; f < seeds.length; f++) {
+      var text = bench.read("@DIR@/" + seeds[f] + ".json")
+      var read = Store.readBoardFile(text)
+      bench.checked = null
+      var t0 = Date.now()
+      boardWorker.sendMessage({ check: true, token: f + 1, history: read.history, board: read.board,
+                                raw: read.split ? text : "", now: Date.now(), normalize: false })
+      tryVerify(function () { return bench.checked !== null }, 60000)
+      console.log("BENCH checking, " + read.data.items.length + " items, " + (text.length / 1048576).toFixed(2)
+        + " MiB file: read-only for " + (Date.now() - t0) + " ms while the worker reads it"
+        + (bench.checked.error !== "" ? " (" + bench.checked.error + ")" : ""))
+    }
   }
 }

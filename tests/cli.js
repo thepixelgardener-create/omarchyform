@@ -448,6 +448,23 @@ try {
     assert.deepEqual(after.history.records.map(r => r.a), ['Command line', 'Command line'], 'no change from outside invented')
     assert.equal(H.verify(after.history, { items: after.items, links: after.links, nextId: after.nextId }), '')
     console.log('ok — command line: a board with its keys in another order loses nothing')
+
+    // A history from a newer Omarchyform, pretty-printed or moved: refused,
+    // and the file left exactly as it was.
+    const newer = JSON.parse(fs.readFileSync(file, 'utf8'))
+    newer.history.v = 2
+    const forms = [JSON.stringify(newer, null, 2) + '\n']
+    const reordered = {}
+    for (const key of ['kind', 'version', 'history', 'nextId', 'items', 'links']) reordered[key] = newer[key]
+    forms.push(JSON.stringify(reordered, null, 4) + '\n')
+    for (const text of forms) {
+      fs.writeFileSync(file, text)
+      const refused = pipe(JSON.stringify([{ op: 'setText', args: [1, 'no'] }]), 'apply', file)
+      assert.equal(refused.status, 1)
+      assert.match(refused.raw, /newer Omarchyform/)
+      assert.equal(fs.readFileSync(file, 'utf8'), text, 'the file is untouched')
+    }
+    console.log('ok — command line: a newer history is refused, however it is laid out')
   }
 } finally {
   fs.rmSync(dir, { recursive: true, force: true })

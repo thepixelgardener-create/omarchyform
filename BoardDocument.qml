@@ -44,7 +44,9 @@ Item {
   readonly property bool diskChanged: session.conflict
   readonly property bool saving: session.busy
   readonly property var pendingBoard: session.pendingBoard
-  readonly property bool canEdit: session.canEdit
+  // Not while the worker reads the board's history: until it has said what the
+  // history is, an edit could be recorded onto one this cannot add to.
+  readonly property bool canEdit: session.canEdit && !doc.historyChecking
 
   // A pane changed what is on the board. Every edit ends in a save, so this is
   // said there; the other pane showing this board looks its cursor up again,
@@ -284,6 +286,13 @@ Item {
     // One answer per reading; a second is not news.
     if (!doc.historyChecking) return
     doc.historyChecking = false
+    // From a newer Omarchyform, however it was laid out: read-only, and the
+    // file left exactly as it is. Not kept aside, not added to, not written.
+    if (answer.newer) {
+      doc.historyRaw = ""
+      session.refuse("has history from a newer Omarchyform")
+      return
+    }
     // The board read in front of the history is not the board the file holds,
     // or the file is not JSON at all: read it again, whole. Nothing has been
     // written meanwhile, and nothing is recovered from what was misread.
@@ -360,6 +369,7 @@ Item {
   // Forgets every edit, and starts again from the board as it is. Written
   // straight away, as a board with no history.
   function forgetHistory() {
+    if (doc.historyChecking || !session.canEdit) return
     doc.endEdit()
     doc.historyToken += 1
     doc.dropReplay()

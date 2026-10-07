@@ -3,7 +3,7 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const { spawnSync } = require('child_process')
-for (const scenario of ['persistence', 'session', 'timeout', 'exchange', 'clipboard']) {
+for (const scenario of ['persistence', 'session', 'timeout', 'exchange', 'clipboard', 'history']) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'omarchyform-persistence-'))
   try {
     fs.writeFileSync(path.join(dir, 'blocked.json'), 'original')
@@ -73,6 +73,26 @@ for (const scenario of ['persistence', 'session', 'timeout', 'exchange', 'clipbo
       fs.writeFileSync(path.join(dir, 'locked/there.omarchyform.json'), 'not mine to replace')
       fs.chmodSync(path.join(dir, 'locked'), 0o500)
     }
+    if (scenario === 'history') {
+      // Two boards with histories, both pretty-printed, so the shell cannot
+      // read either history's version off its front: one from a newer
+      // Omarchyform, one this reads.
+      const { loadStore } = require('../bin/store')
+      const H = loadStore(fs.readFileSync(path.join(__dirname, '..', 'BoardHistory.js'), 'utf8'))
+      const before = { items: [{ id: 1, kind: 'note', x: 0, y: 0, w: 220, h: 160, tint: 'foreground', text: 'one',
+                                 pinned: false, src: '' }], links: [], nextId: 2 }
+      const after = JSON.parse(JSON.stringify(before))
+      after.items[0].tint = 'accent'
+      const write = (name, v) => {
+        const h = H.create(before, Date.now() - 60000, name)
+        H.append(h, before, after, 'Colour', Date.now())
+        h.v = v
+        fs.writeFileSync(path.join(dir, name + '.json'), JSON.stringify({ kind: 'omarchyform.board', version: 6,
+          nextId: 2, items: after.items, links: [], history: h }, null, 2) + '\n')
+      }
+      write('newer', 2)
+      write('known', 1)
+    }
     if (scenario === 'clipboard') {
       fs.mkdirSync(path.join(dir, 'stubs'))
       fs.writeFileSync(path.join(dir, 'stubs/wl-copy'), `#!/bin/bash
@@ -87,12 +107,13 @@ cat > "$OMARCHYFORM_TEST_DIR/copied"
       const fifo = spawnSync('mkfifo', [path.join(dir, 'slow.json')])
       if (fifo.status !== 0) throw new Error('could not create delayed-backup fixture')
     }
-    for (const file of ['BoardPersistence.qml', 'BoardSession.qml', 'BoardExchange.qml', 'BoardStore.js', 'BoardFiles.sh'])
+    for (const file of ['BoardPersistence.qml', 'BoardSession.qml', 'BoardExchange.qml', 'BoardStore.js', 'BoardFiles.sh',
+                        'BoardDocument.qml', 'BoardHistory.js', 'BoardHistoryWorker.js'])
       fs.copyFileSync(path.join(__dirname, '..', file), path.join(dir, file))
     // The scenarios import the repository from two folders up; here it is the
     // folder they run in.
     fs.writeFileSync(path.join(dir, 'shell.qml'), fs.readFileSync(path.join(__dirname, `qml/tst_${scenario}.qml`), 'utf8')
-      .replace('import "../.."', '').replace('"../../BoardStore.js"', '"BoardStore.js"'))
+      .replace('import "../.."', '').replace(/"\.\.\/\.\.\/(\w+\.js)"/g, '"$1"'))
     const result = spawnSync('qs', ['--no-color', '-p', path.join(dir, 'shell.qml')], {
       encoding: 'utf8', timeout: 15000,
       env: { ...process.env, QT_QPA_PLATFORM: 'offscreen', QT_QPA_PLATFORMTHEME: '',

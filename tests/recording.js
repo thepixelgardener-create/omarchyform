@@ -143,7 +143,7 @@ const plain = (n) => JSON.stringify({ kind: 'omarchyform.board', version: 5, nex
 
 {
   // A board opened with a history: until the worker has read it, nothing is
-  // numbered onto it, and what is written carries it exactly as it was.
+  // edited and nothing is written; then edits go on, numbered after it.
   const first = opened(plain(2))
   first.root.selectOnly(0)
   first.root.recolorItem()
@@ -156,18 +156,18 @@ const plain = (n) => JSON.stringify({ kind: 'omarchyform.board', version: 5, nex
   c.root.selectOnly(1)
   c.root.cycleKind()
   c.land()
-  const meanwhile = written(c)
-  assert.equal(meanwhile.records.length, 1, 'the history goes out as it came in')
-  assert.equal(meanwhile.file.items[1].kind, 'rect', 'with the board as it is now in front of it')
+  assert.equal(c.items.get(1).kind, 'note', 'no edit while it is read')
+  assert.equal(c.writes.length, 0, 'and nothing written')
 
   const reply = W.check(asked)
   assert.equal(reply.error, '')
   assert.equal(reply.bridge, '', 'it ends at the board it was opened with')
   c.answer(reply)
+  c.root.cycleKind()
   c.land()
   const w = written(c)
   assert.deepEqual(w.records.map(r => [r.i, r.a]), [[1, 'Colour'], [2, 'Shape']],
-    'the edit made while it was read follows, numbered after it')
+    'the first edit after it was read follows, numbered after it')
   assert.equal(H.verify(w.history, live(w.file)), '')
   // The same answer twice is not news, and one about a history that has since
   // been replaced is not about this one.
@@ -175,11 +175,10 @@ const plain = (n) => JSON.stringify({ kind: 'omarchyform.board', version: 5, nex
   assert.notEqual(c.doc.historyCount, 999, 'a second answer changes nothing')
   const again = opened(saved)
   const stale = W.check(again.worker.asked[again.worker.asked.length - 1])
-  again.root.forgetHistory()
-  again.root.forgetHistory()
-  again.doc.historyChecking = true
+  again.session.loadBoard(saved, false)
   again.answer(Object.assign({}, stale, { count: 999 }))
-  assert.notEqual(again.doc.historyCount, 999, 'an answer about a forgotten history is dropped')
+  assert.notEqual(again.doc.historyCount, 999, 'an answer about a history read since is dropped')
+  assert.equal(again.doc.historyChecking, true, 'and the reading it is waiting for still is')
   console.log('ok — recording: a history opened is read aside, and only then added to')
 }
 
@@ -195,9 +194,9 @@ const plain = (n) => JSON.stringify({ kind: 'omarchyform.board', version: 5, nex
   const handEdited = JSON.stringify(file, null, 2) + '\n'
 
   const c = opened(handEdited)
+  c.answer(W.check(c.worker.asked[c.worker.asked.length - 1]))
   c.root.selectOnly(0)
   c.root.recolorItem()
-  c.answer(W.check(c.worker.asked[c.worker.asked.length - 1]))
   c.land()
   const w = written(c)
   assert.deepEqual(w.records.map(r => r.a), ['Colour', H.OUTSIDE, 'Colour'])
@@ -314,6 +313,83 @@ const plain = (n) => JSON.stringify({ kind: 'omarchyform.board', version: 5, nex
   assert.equal(f.items.count, 1, 'read again whole, it is what the file says')
   assert.equal(f.writes.length, 0)
   console.log('ok — recording: the order of a board\'s keys never changes what is read')
+}
+
+{
+  // A history from a newer Omarchyform, however it is laid out: until the
+  // worker has read it nothing is edited or written, whichever way a write is
+  // asked for; once it has, the board is read-only and the file as it was.
+  const first = opened(plain(2))
+  first.root.selectOnly(0)
+  first.root.recolorItem()
+  first.land()
+  const file = JSON.parse(written(first).text)
+  file.history.v = 2
+  const pretty = JSON.stringify(file, null, 2) + '\n'
+  const moved = {}
+  for (const key of ['kind', 'version', 'history', 'nextId', 'items', 'links']) moved[key] = file[key]
+  for (const [layout, text] of [['pretty-printed', pretty], ['pretty and moved', JSON.stringify(moved, null, 2) + '\n']]) {
+    // Pretty-printed, it waits for the worker; moved, it is read whole, its
+    // history comes out compact and the header already says it is newer.
+    const c = opened(text)
+    assert.equal(c.doc.historyChecking || c.session.damaged, true, layout + ': held or refused at once')
+    assert.equal(c.root.canEdit, false, layout + ': not editable either way')
+    assert.match(c.root.boardState, c.doc.historyChecking ? /Checking history/ : /Read only/)
+    const ask = c.doc.historyChecking ? c.worker.asked[c.worker.asked.length - 1] : null
+    // Every way a write is asked for, with the answer held back.
+    c.root.selectOnly(0)
+    c.root.recolorItem()
+    c.items.setProperty(0, 'itext', 'typed anyway')
+    c.doc.noteEdit(c.root)
+    c.root.save(true)
+    c.session.flushSave()
+    c.root.flushSave()
+    c.root.forgetHistory()
+    c.root.forgetHistory()
+    c.workspace.close()
+    c.land()
+    assert.equal(c.writes.length, 0, layout + ': nothing is written while it is read')
+    // Leaving it does not wait for a save that will never start.
+    c.workspace.opened = true
+    c.root.openBoard('elsewhere.json')
+    assert.equal(c.root.currentBoard, 'elsewhere.json', layout + ': and leaving it is not held up')
+    // Read it again, and this time let the worker answer.
+    const d = opened(text)
+    if (d.doc.historyChecking) d.answer(W.check(d.worker.asked[d.worker.asked.length - 1]))
+    d.land()
+    assert.equal(d.root.canEdit, false, layout + ': read-only')
+    assert.match(d.session.damageReason, /newer Omarchyform/)
+    assert.equal(d.aside.written.length, 0, layout + ': not kept aside as unreadable')
+    d.root.selectOnly(0)
+    d.root.recolorItem()
+    d.root.save(true)
+    d.session.flushSave()
+    d.land()
+    assert.equal(d.writes.length, 0, layout + ': and never written')
+    assert.equal(d.items.get(0).itint, 'accent', layout + ': the board shown as it is')
+    assert.ok(ask || layout === 'pretty and moved', layout + ': the worker was asked')
+  }
+
+  // A history this reads: the same wait, then edits as usual.
+  const ok = opened(written(first).text)
+  ok.root.selectOnly(1)
+  ok.root.cycleKind()
+  assert.equal(ok.items.get(1).kind, 'note', 'not while it is read')
+  ok.answer(W.check(ok.worker.asked[ok.worker.asked.length - 1]))
+  assert.equal(ok.root.canEdit, true)
+  ok.root.cycleKind()
+  ok.land()
+  assert.deepEqual(labels(ok), ['Colour', 'Shape'])
+
+  // An answer about a board since read again, or replaced, is not about this
+  // one: a late "newer" cannot make the board on screen read-only.
+  const late = opened(pretty)
+  const stale = W.check(late.worker.asked[late.worker.asked.length - 1])
+  late.session.loadBoard(plain(2), false)
+  late.answer(stale)
+  assert.equal(late.root.canEdit, true, 'a late answer locks nothing')
+  assert.equal(late.session.damaged, false)
+  console.log('ok — recording: a newer history is never written over, however it is laid out')
 }
 
 {

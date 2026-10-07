@@ -143,6 +143,9 @@ try {
     fs.writeFileSync(qml, fill(fs.readFileSync(path.join(__dirname, 'qml', 'bench_history.qml'), 'utf8')))
     fs.writeFileSync(path.join(scratch, 'history_worker.js'),
       fill(fs.readFileSync(path.join(__dirname, 'qml', 'history_worker.js'), 'utf8')))
+    // The board's own worker, beside the codec it includes.
+    for (const name of ['BoardHistoryWorker.js', 'BoardHistory.js'])
+      fs.copyFileSync(path.join(repo, name), path.join(scratch, name))
     const run = spawnSync('/usr/lib/qt6/bin/qmltestrunner', ['-input', qml], {
       encoding: 'utf8', timeout: 600000,
       env: { ...process.env, QT_QPA_PLATFORM: 'offscreen', QML_XHR_ALLOW_FILE_READ: '1' }

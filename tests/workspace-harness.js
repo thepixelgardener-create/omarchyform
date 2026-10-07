@@ -65,7 +65,9 @@ function makeDocument(workspace, board, Store) {
   // The session's binding of the same name.
   Object.defineProperty(session, 'busy', { get: () => persistence.busy || session.diskReading })
   // What the document reads off its session, and off the workspace for it.
-  forward(doc, () => session, ['boardLoaded', 'damaged', 'damageReason', 'saveError', 'pendingBoard', 'canEdit'])
+  forward(doc, () => session, ['boardLoaded', 'damaged', 'damageReason', 'saveError', 'pendingBoard'])
+  // The binding BoardDocument.qml declares: not while its history is read.
+  Object.defineProperty(doc, 'canEdit', { get: () => session.canEdit && !doc.historyChecking })
   Object.defineProperty(doc, 'diskChanged', { get: () => session.conflict })
   Object.defineProperty(doc, 'saving', { get: () => session.busy })
   Object.defineProperty(doc, 'boardPath', { get: () => '/boards/' + doc.currentBoard })
@@ -138,6 +140,11 @@ function makePane(workspace, exchange, Store) {
   // Its own models for an earlier board, which the QML declares as ids.
   const pastItems = new FakeModel(), pastLinks = new FakeModel()
   Object.defineProperty(root, 'lookingBack', { get: () => root.timeline && !root.timelineLive })
+  // What the header says the board is: a binding in the QML, term for term.
+  Object.defineProperty(root, 'boardState', { get: () => root.lookingBack ? 'Earlier version · read only'
+    : root.doc && root.doc.historyChecking ? 'Checking history…'
+    : root.damaged ? 'Read only' : root.saveError !== '' ? 'Save failed'
+    : root.diskChanged ? 'Changed on disk' : root.saving ? 'Saving…' : 'Saved locally' })
   // What the strip says and where its marker is: bindings in the QML.
   Object.defineProperty(root, 'timelineSays', { get: () => root.timeline
     ? root.timelineText(root.timelineRecord, root.timelineLive, root.playing, root.playSpeed, 0) : '' })
