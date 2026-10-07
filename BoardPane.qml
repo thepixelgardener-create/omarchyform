@@ -1601,6 +1601,13 @@ Item {
     var at = Math.max(first, Math.min(last, Math.round(n)))
     var state = root.replayDoc.replayState(at - first)
     if (!state) return
+    // The live board refuses a note too long to lay out without holding the
+    // shell up; an earlier one is held to the same, whatever its file says.
+    if (Store.overlongNote(state.items) >= 0) {
+      root.stopPlaying()
+      root.flash("a note at step " + (at - first) + " is too long to show")
+      return
+    }
     if (!root.lookingBack) root.resetSelection(true)
     root.timelineRecord = at
     root.timelineLive = false

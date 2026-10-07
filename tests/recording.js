@@ -232,6 +232,11 @@ const plain = (n) => JSON.stringify({ kind: 'omarchyform.board', version: 5, nex
   assert.notEqual(w.history.lineage, file.history.lineage, 'a new line of edits')
   assert.equal(H.verify(w.history, live(w.file)), '')
 
+  // Text far past the limit is not parsed to find out.
+  const huge = W.check({ token: 1, history: ' '.repeat(H.MAX_HISTORY_TEXT + 1), board: '{}', now: 0 })
+  assert.equal(huge.unreadable, true)
+  assert.match(huge.error, /larger than a history can be/)
+
   file.history.v = 2
   const newer = opened(JSON.stringify(Object.assign({}, file, { history: undefined }), null, 2).slice(0, -2)
     + ',\n  "history": ' + JSON.stringify(file.history) + '\n}\n')

@@ -82,7 +82,7 @@ TestCase {
       if (shape !== "" || wrong !== "") { console.error("FAIL: " + seeds[f] + " " + (shape || wrong)); continue }
 
       var h = parsed.history
-      var ix = History.newIndex(h, 100)
+      var ix = History.newIndex(h)
       var slices = []
       t0 = Date.now()
       while (true) {
@@ -227,7 +227,7 @@ TestCase {
     var h = JSON.parse(historyText)
     gc(); gc()
     var parsed = bench.memory().rss
-    var ix = History.newIndex(h, 100)
+    var ix = History.newIndex(h)
     while (!History.indexSome(ix, h, 500)) {}
     gc(); gc()
     var indexed = bench.memory().rss

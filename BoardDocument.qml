@@ -394,7 +394,7 @@ Item {
     var h
     try { h = JSON.parse(History.joinText(doc.historyHeader, doc.historyRecords)) } catch (e) { h = null }
     if (!h || History.checkShape(h) !== "") { doc.dropReplay(); return false }
-    doc.replay = { h: h, ix: History.newIndex(h, 100) }
+    doc.replay = { h: h, ix: History.newIndex(h) }
     indexer.start()
     doc.replayRevision += 1
     return true

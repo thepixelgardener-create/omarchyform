@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import qs.Commons
 import "BoardStore.js" as Store
+import "BoardHistory.js" as History
 import "services" as Host
 
 // What the board costs to *draw*, which tests/bench.js does not measure and
@@ -46,6 +47,41 @@ ShellRoot {
     plugin.activePane.doc.nextId = bench.size + 1
     plugin.activePane.selectOnly(0)
     plugin.activePane.resetView()
+    bench.buildHistory()
+  }
+
+  // A history for the timeline phases, as the board would have recorded it:
+  // moves, the edit there is most of — 5,000 on a smaller board and 10,000 on
+  // one of 3,000 items, the fixtures docs/splitview-timeline-plan.md names.
+  // Each is made on the board as well, so the history ends where the board
+  // is, and the real worker reads and checks it like any board's.
+  function buildHistory() {
+    var p = plugin.activePane
+    var start = { items: Store.itemRows(p.items), links: Store.linkRows(p.links), nextId: p.doc.nextId }
+    var header = History.startText(start, Date.now() - 3600000, "bench")
+    var records = []
+    var seed = 1
+    var edits = bench.size >= 3000 ? 10000 : 5000
+    for (var i = 0; i < edits; i++) {
+      seed = (seed * 1103515245 + 12345) % 2147483648
+      var at = seed % bench.size
+      var row = p.items.get(at)
+      var x = row.ix + (seed >> 8) % 41 - 20, y = row.iy + (seed >> 4) % 41 - 20
+      p.items.setProperty(at, "ix", x)
+      p.items.setProperty(at, "iy", y)
+      records.push(JSON.stringify({ i: i + 1, t: i, a: "Move", p: { s: [[row.iid, { x: x, y: y }]] } }))
+    }
+    var board = JSON.stringify({ items: Store.itemRows(p.items), links: Store.linkRows(p.links), nextId: p.doc.nextId })
+    p.doc.adoptHistory(History.joinText(header, records.join(",")), board)
+  }
+
+  // A random step each frame: what scrubbing costs from being asked for a step
+  // to that step being drawn. The index is built before the clock starts.
+  function scrubbing() {
+    var p = plugin.activePane
+    var seed = (bench.seen * 7919 + 13) % 1000
+    p.scrubTo(seed / 1000)
+    p.scrubNow()
   }
 
   // Each phase leaves the board the way the next one wants it, then is
@@ -93,6 +129,33 @@ ShellRoot {
         var q = ["n", "no", "not", "note"][Math.floor(Math.max(0, bench.seen) / 8) % 4]
         if (plugin.activePane.findQuery !== q) { plugin.activePane.endFind(); plugin.activePane.beginFind(); plugin.activePane.setFindQuery(q) }
       }
+    },
+    {
+      name: "scrub",
+      enter: function () {
+        var p = plugin.activePane
+        p.endFind()
+        p.resetView()
+        p.toggleTimeline()
+        while (p.doc.replay && !p.doc.replay.ix.done) p.doc.indexReplay()
+      },
+      step: function () { bench.scrubbing() }
+    },
+    {
+      name: "scrub, two panes",
+      enter: function () {
+        var p = plugin.activePane
+        p.leaveTimeline()
+        p.compareWithCurrent()
+        while (p.doc.replay && !p.doc.replay.ix.done) p.doc.indexReplay()
+      },
+      step: function () { bench.scrubbing() }
+    },
+    {
+      name: "play",
+      enter: function () { plugin.activePane.timelineFirst() },
+      // A step forward every frame, as playing at any speed is one step at a time.
+      step: function () { plugin.activePane.showRecord(plugin.activePane.timelineRecord + 1) }
     }
   ]
 

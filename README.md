@@ -104,6 +104,13 @@ they live outside the plugin directory, in `~/.local/share/omarchyform/`. A
 board written by a newer version than the one you are running opens read-only
 rather than losing what it does not understand, so downgrading is safe too.
 
+From the version with a timeline on, a board starts keeping its history the
+first time you edit it, and is then written as format 6 (see
+[History](#history)). Boards you only look at stay as they were. A version
+before that opens a format 6 board read-only. To take a board back to one,
+save a copy to share (`ctrl+shift+s`), which never carries history, or run
+**Forget this board's history** first.
+
 If you installed the desktop entry, re-run its installer,
 `desktop/install.sh` in the plugin's folder, after an update to pick up any
 change to it. It replaces only an entry it installed itself and leaves your

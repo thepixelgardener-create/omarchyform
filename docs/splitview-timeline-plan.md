@@ -25,7 +25,7 @@ the section has been updated.
 | 3. History storage and budgets | Done; see "Gate 3 results". Embedded storage passes with the conditions recorded there |
 | 4. Recording and migration | Done; `tests/recording.js`, the CLI suite, a headless run of the real worker, and the live suites, whose boards' histories all play back |
 | 5. Timeline | Done; `tests/timeline.js` checks every step shown against a snapshot, `tst_split.qml` the strip, a headless run the real plugin, and `npm run shots` photographs it (`12d-timeline`) |
-| 6. Release review | Not started |
+| 6. Release review | Done on `dev`; see "Gate 6 results". What is left is the owner's call to release |
 
 A saved second board that no longer exists opens empty in its pane, the way a
 missing `lastBoard` always has, rather than restoring a single pane.
@@ -487,6 +487,47 @@ Suggested commit groups: `refactor(pane)` → `feat(split-view)` →
 `feat(history-codec)` → `feat(history-recording)` → `feat(timeline)`.
 Keep tests with the behavior they protect. The feature branch stays usable
 between groups; experimental storage fixtures must not rewrite users' boards.
+
+## Gate 6 results
+
+Measured 2026-10-07 on the same machine, the live desktop for drawing and
+offscreen for memory.
+
+| Gate | Target | Measured |
+| --- | --- | --- |
+| Scrub to a drawn step, 1,000 items, 5,000 moves | p95 ≤100 ms | 38 ms; 31 ms with two panes (`bench:scene`) |
+| Same, 3,000 items, 10,000 moves | p95 ≤200 ms | 106 ms; 174 ms with two panes |
+| Playing a step a frame, 3,000 items | — | 80 ms p95 |
+| Main-thread history work | ≤50 ms a task | Recording an edit ≤17 ms; index slices ≤13 ms; opening the timeline parses 15–49 ms, and 148 ms for the 26 MiB long-notes board, as recorded under gate 3 |
+| Save with backup at 16 MiB | p95 ≤250 ms | 98–113 ms, in the helper's process |
+| Two panes with history | ≤128 MiB more | 35–52 MiB a board with its index, so at most about 104 MiB for two |
+
+The two-pane scrub at 3,000 items averages 108 ms a frame. The plan asked for
+loading feedback beyond 100 ms. The frame is the answer, though, so there is
+nothing to wait on that a "loading" line could cover; none was added.
+
+What the review changed:
+
+- The index spaces its checkpoints by board size, a fifteenth of the items
+  and at least 100 records. On the 3,000-item board that took its index from
+  31 to 22 MiB, and seeking from 6 to 12 ms p95.
+- A step whose notes break the 1 MiB rule is not shown, because only a
+  hand-made history can hold one. History text past 64 MiB is not parsed.
+- The security review covers history as input, and deleted text kept in
+  history as retention.
+- The plugin validator stays `VALID`, review-required. It has one new
+  advisory, `qml-network` in `tests/qml/bench_history.qml`: the benchmark
+  reads its fixtures and `/proc/self/status`. Nothing that ships does.
+
+Known and accepted:
+
+- Any `WorkerScript` under Quickshell logs "QObject::connect … invalid nullptr
+  parameter" once, even an empty one. It comes from Quickshell, not this code.
+- If the shell stops within the worker's first reading of a history, a board
+  edited in that window was written with the history it was opened with. The
+  next open then records the difference as "Changed outside Omarchyform".
+- `qt-ui` CI runs Qt 6.4 and does not exercise the history worker. It was
+  checked on Qt 6.11 here.
 
 ## Resource gates
 

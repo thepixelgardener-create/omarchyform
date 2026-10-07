@@ -73,6 +73,17 @@ function edited() {
   assert.deepEqual(rows(a.items), c.snaps[3], 'six tenths along five steps is the third')
   assert.equal(a.timelineFraction, 0.6)
 
+  // A note too long to lay out, which only a hand-made history can hold, is
+  // not shown: the step is refused, as the live board refuses such a note.
+  const long = c.doc.replay.h.records[1]
+  const kept = JSON.stringify(long.p)
+  long.p = { s: [[2, { text: 'x'.repeat(S.MAX_NOTE_LENGTH + 1) }]] }
+  a.showRecord(a.firstRecord() + 2)
+  assert.match(a.statusText, /too long to show/)
+  assert.deepEqual(rows(a.items), c.snaps[3], 'and the step on screen stays')
+  long.p = JSON.parse(kept)
+  a.statusText = ''
+
   // Read-only: the commands refuse, nothing is recorded, nothing goes out.
   a.selectOnly(0)
   a.recolorItem()

@@ -73,10 +73,8 @@ Revisit these after 0.5 and feedback from real use:
 - Persistent groups with explicit membership.
 - SVG export and zoom to selection.
 - Explicit URL/file links if source collection proves a stronger need.
-- Timeline and split view: a [development plan](splitview-timeline-plan.md)
-  proposes two independently controlled panes, showing different boards or
-  different revisions of one board, side by side or stacked. Full edit
-  playback needs persistent history; item creation order cannot reconstruct
-  moves, text edits or deletions. The revised plan delivers split view first,
-  then gates history integration on storage, recovery and resource tests.
-  This is planned work, not a release commitment.
+- Timeline and split view: built on the `dev` branch, following the
+  [development plan](splitview-timeline-plan.md). Two panes side by side or
+  stacked, a history every board keeps, and a timeline to step and play
+  through it. Not released; its release review is the plan's gate 6, and the
+  history makes boards format 6.

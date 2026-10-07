@@ -14,6 +14,11 @@ Qt.include("BoardHistory.js")
 function check(message) {
   var answer = { kind: "checked", token: message.token, error: "", unreadable: false, newer: false,
                  bridge: "", count: 0, bytes: 0, last: 0, text: "" }
+  if (message.history.length > MAX_HISTORY_TEXT) {
+    answer.error = "larger than a history can be"
+    answer.unreadable = true
+    return answer
+  }
   var h
   try { h = JSON.parse(message.history) } catch (e) { h = null }
   var shape = checkShape(h)

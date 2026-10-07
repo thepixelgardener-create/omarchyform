@@ -36,6 +36,10 @@ var HISTORY_VERSION = 1
 // see "History contract and persistence" in docs/splitview-timeline-plan.md.
 var MAX_HISTORY_BYTES = 16777216
 var MAX_HISTORY_RECORDS = 10000
+// Text past this is not read at all: a history this writes is trimmed long
+// before it, and parsing one far larger is memory the shell does not have to
+// spend to find out it is not one.
+var MAX_HISTORY_TEXT = 4 * 16777216
 // Edits that continue the record in progress rather than starting one, when
 // the next one is the same: typing in one note, a held key moving or resizing.
 var MERGING = ["Typing", "Move", "Resize"]
@@ -397,8 +401,15 @@ function verify(h, live) {
 // working state every `every` records, sharing the rows it did not change.
 // Built a slice at a time, so a long history is indexed between frames rather
 // than in one stop: call until it answers true.
+// The spacing grows with the board: a checkpoint of a 3000-item board holds
+// arrays of that length, and a hundred of them were 31 MiB (gate 3). Seeking
+// replays at most `every` records, a few milliseconds either way.
+function spacing(h) {
+  return Math.max(100, Math.ceil(h.base.items.length / 15))
+}
+
 function newIndex(h, every) {
-  return { every: Math.max(1, every || 100), checkpoints: [{ at: 0, w: working(h.base) }],
+  return { every: Math.max(1, every || spacing(h)), checkpoints: [{ at: 0, w: working(h.base) }],
            w: null, at: 0, done: h.records.length === 0, error: "" }
 }
 
