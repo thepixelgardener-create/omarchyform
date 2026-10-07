@@ -597,6 +597,11 @@ var COMMANDS = [
     also: ["two boards", "horizontal split", "panes"] },
   { name: "The other pane", key: "o", run: "otherPane", needs: "", also: ["switch pane", "focus"] },
   { name: "Even out the split", key: "", run: "evenSplit", needs: "", also: ["reset split", "half"] },
+  // The board's history, a step at a time, in the pane; and an earlier step
+  // beside the board as it is.
+  { name: "Timeline", key: "t", run: "toggleTimeline", needs: "", also: ["history", "replay", "play back", "earlier"] },
+  { name: "Compare with now", key: "T", run: "compareWithCurrent", needs: "",
+    also: ["history", "earlier version", "before and after"] },
   { name: "Boards", key: "b", run: "openBrowser", needs: "" },
   { name: "New board", key: "ctrl+n", run: "newBoard", needs: "" },
   { name: "Name this board", key: "F2", run: "renameBoard", needs: "", also: ["rename"] },
@@ -753,6 +758,8 @@ var COMMAND_ICONS = {
   choosePng: "\uf03e",
   flushSave: "\uf0c7",
   forgetHistory: "\uf12d",
+  toggleTimeline: "\uf1da",
+  compareWithCurrent: "\uf24d",
   conflictUseDisk: "\uf0a0",
   conflictSaveCopy: "\uf0c5",
   conflictReplaceDisk: "\uf0c7",
@@ -832,6 +839,8 @@ var KEY_HELP_SECTIONS = [
     ["w", "fullscreen or windowed"],
     ["v / V", "split side by side / stacked; the same key again for one pane"],
     ["o", "the other pane; b there opens another board in it"],
+    ["t", "timeline: h l step through what this board was, space plays, esc back to now"],
+    ["T", "an earlier version beside the board as it is now"],
     ["/", "find: type to search the notes, enter steps through matches"]
   ] },
   { title: "Find your way", rows: [

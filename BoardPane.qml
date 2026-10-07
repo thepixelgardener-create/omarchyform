@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import Quickshell.Io
 import QtQuick
 import "BoardStore.js" as Store
+import "BoardHistory.js" as History
 
 // One view of a board, and the controller every view reads as `ctl`: where the
 // camera is, what is selected, which mode the keys are in, what the line under
@@ -46,8 +47,12 @@ Item {
   // -------------------------------------------------------------------- state
   // The board's contents, as the views read them. A pane with no board yet
   // reads as an empty one rather than as null.
-  readonly property ListModel items: root.doc ? root.doc.items : noItems
-  readonly property ListModel links: root.doc ? root.doc.links : noLinks
+  // Looking back, they are the board as it was: models of the pane's own,
+  // which nothing edits and nothing saves.
+  readonly property ListModel items: root.lookingBack ? pastItems : root.doc ? root.doc.items : noItems
+  readonly property ListModel links: root.lookingBack ? pastLinks : root.doc ? root.doc.links : noLinks
+  ListModel { id: pastItems }
+  ListModel { id: pastLinks }
   ListModel { id: noItems }
   ListModel { id: noLinks }
 
@@ -94,7 +99,8 @@ Item {
   property bool imageBusy: false
   readonly property bool exchangeBusy: root.workspace.exchange.busy
   readonly property bool dialogOpen: root.workspace.exchange.dialogOpen
-  readonly property string boardState: root.damaged ? "Read only" : root.saveError !== "" ? "Save failed"
+  readonly property string boardState: root.lookingBack ? "Earlier version · read only"
+    : root.damaged ? "Read only" : root.saveError !== "" ? "Save failed"
     : root.diskChanged ? "Changed on disk" : root.saving ? "Saving…" : "Saved locally"
   // Only a board made to be typed into. A pane that has just been given a
   // board can hear that it loaded before it hears which board it is, and an
@@ -233,11 +239,18 @@ Item {
 
   function pasteClipboard() { root.workspace.exchange.paste() }
   function importBoard() { root.workspace.exchange.choose("import") }
-  function exportBoard() { root.workspace.exchange.choose("json") }
+  // What goes out is the board as it is. Sending an earlier version out is
+  // not something this does yet, so looking back it says so.
+  function exportsNow() {
+    if (!root.lookingBack) return true
+    root.flash("this is an earlier version · esc returns to now, which is what goes out")
+    return false
+  }
+  function exportBoard() { if (root.exportsNow()) root.workspace.exchange.choose("json") }
   // The copy that deliberately leaves the pictures behind. Asking for it is a
   // separate thing with a name of its own, because a copy that quietly arrives
   // without them is what this used to do by accident.
-  function exportBoardPlain() { root.workspace.exchange.choose("plain") }
+  function exportBoardPlain() { if (root.exportsNow()) root.workspace.exchange.choose("plain") }
   // Which colours the next picture is drawn in. Set by the command that asked
   // for it and read by the board when it renders, rather than carried through
   // the file dialog: choosing where to put a picture and choosing what it looks
@@ -248,6 +261,7 @@ Item {
     // Both panes render into the same file on the way out, so a second picture
     // waits for the first rather than being drawn over it.
     if (root.workspace.imageBusy) { root.flash("Finishing image export…"); return }
+    if (!root.exportsNow()) return
     root.pngPalette = Store.EXPORT_PALETTE_NAMES.indexOf(palette) >= 0 ? palette : "theme"
     root.workspace.exchange.choose("png")
   }
@@ -330,7 +344,7 @@ Item {
       paletteVisible: root.paletteVisible, arranging: root.arranging,
       showPinned: root.showPinned, editing: root.editIndex >= 0,
       linking: root.linkingFrom >= 0, statusText: root.statusText,
-      switching: root.pendingBoard !== null || root.leaving, saving: root.saving
+      switching: root.pendingBoard !== null || root.leaving, saving: root.saving, timeline: root.timeline
     }
   }
 
@@ -409,8 +423,9 @@ Item {
   readonly property var pendingBoard: root.doc ? root.doc.pendingBoard : null
   // One picture renders at a time across the workspace, and nothing changes
   // under it while it does: a board shown twice is still one board.
+  // An earlier version is to look at: nothing in this pane changes it.
   readonly property bool canEdit: root.doc !== null && root.doc.canEdit && !root.library.busy
-    && !root.leaving && !root.workspace.imageBusy
+    && !root.leaving && !root.workspace.imageBusy && !root.lookingBack
   readonly property bool stateReady: root.workspace.stateReady
 
   function fileCommand(action, args) { return root.workspace.fileCommand(action, args) }
@@ -830,6 +845,7 @@ Item {
 
   function commandExcuse(needs) {
     if (needs === "conflict") return "this board has not changed underneath you"
+    if (root.lookingBack) return "this is an earlier version · esc returns to now"
     if (!root.canEdit) return root.damaged ? "this board is read-only" : "the board is not ready yet"
     if (needs === "typing") return "start editing a note"
     if (needs === "group") return "mark two or more"
@@ -1487,6 +1503,7 @@ Item {
   // The surface is going away. What was half done on it ends; the board and
   // the camera stay where they were for when it comes back.
   function closeView() {
+    root.stopPlaying()
     root.markedIds = []
     root.showPinned = false
     root.selectedIndex = -1
@@ -1496,6 +1513,241 @@ Item {
   }
 
   function dismiss() { root.workspace.dismiss() }
+
+  // ------------------------------------------------------------ the timeline
+  // `t`: the board's history, a step at a time. The pane keeps which step it
+  // shows as that record's number rather than a place in a list, so edits
+  // arriving and the oldest leaving do not move it. Live is a state of its
+  // own: following the board as it is, rather than the latest step taken.
+  property bool timeline: false
+  property bool timelineLive: true
+  property int timelineRecord: 0
+  readonly property bool lookingBack: root.timeline && !root.timelineLive
+  // The document whose replay this pane holds, so leaving lets go of that one
+  // even when the pane has already moved to another board.
+  property var replayDoc: null
+  property bool playing: false
+  property real playSpeed: 1
+  property int playEnd: 0
+  property int scrubWanted: 0
+
+  // The first and last steps there are: the number of the record before the
+  // first, which is where the history starts, and of the last.
+  function firstRecord() {
+    var r = root.replayDoc && root.replayDoc.replay ? root.replayDoc.replay.h.records : []
+    return r.length > 0 ? r[0].i - 1 : root.replayDoc ? root.replayDoc.historyLast : 0
+  }
+  function lastRecord() {
+    var r = root.replayDoc && root.replayDoc.replay ? root.replayDoc.replay.h.records : []
+    return r.length > 0 ? r[r.length - 1].i : root.firstRecord()
+  }
+
+  function toggleTimeline() {
+    if (root.timeline) root.leaveTimeline()
+    else root.enterTimeline()
+  }
+
+  function enterTimeline() {
+    if (!root.doc || root.timeline) return
+    if (root.editIndex >= 0) root.stopEditing()
+    root.endFind()
+    root.arranging = false
+    root.linkingFrom = -1
+    var why = root.doc.openReplay()
+    if (why !== "") { root.flash(why); return }
+    root.replayDoc = root.doc
+    root.timeline = true
+    root.timelineLive = true
+    root.timelineRecord = root.lastRecord()
+    root.statusText = ""
+  }
+
+  function leaveTimeline() {
+    if (!root.timeline) return
+    root.stopPlaying()
+    var wasBack = root.lookingBack
+    root.timeline = false
+    root.timelineLive = true
+    if (root.replayDoc) root.replayDoc.closeReplay()
+    root.replayDoc = null
+    pastItems.clear()
+    pastLinks.clear()
+    // The cursor and the marks were rows of the earlier board.
+    if (wasBack) root.resetSelection(true)
+    root.repaintLinks()
+  }
+
+  // Back to the board as it is, still in the timeline. Escape again leaves it.
+  function timelineNow() {
+    root.stopPlaying()
+    if (!root.lookingBack) return
+    root.timelineLive = true
+    root.timelineRecord = root.lastRecord()
+    root.resetSelection(true)
+    root.repaintLinks()
+  }
+
+  function timelineBack() {
+    if (root.lookingBack) root.timelineNow()
+    else root.leaveTimeline()
+  }
+
+  // Shows the board as it was after record `n`, held within the steps there
+  // are. The first step back from the board as it is clears what was selected
+  // on it: those were rows of a board that is not the one on screen.
+  function showRecord(n) {
+    if (!root.timeline || !root.replayDoc || !root.replayDoc.replay) return
+    var first = root.firstRecord(), last = root.lastRecord()
+    var at = Math.max(first, Math.min(last, Math.round(n)))
+    var state = root.replayDoc.replayState(at - first)
+    if (!state) return
+    if (!root.lookingBack) root.resetSelection(true)
+    root.timelineRecord = at
+    root.timelineLive = false
+    Store.syncItems(pastItems, state.items)
+    pastLinks.clear()
+    for (var i = 0; i < state.links.length; i++) pastLinks.append({ lfrom: state.links[i].from, lto: state.links[i].to })
+    if (root.selectedIndex >= pastItems.count) root.selectedIndex = -1
+    root.repaintLinks()
+  }
+
+  // From the board as it is, a step back is the board before the latest edit:
+  // the latest edit is what is on screen already.
+  function timelineStep(by) {
+    root.stopPlaying()
+    if (root.lookingBack) { root.showRecord(root.timelineRecord + by); return }
+    if (by > 0) { root.flash("this is the board as it is now"); return }
+    if (root.lastRecord() === root.firstRecord()) { root.flash("nothing to step back to yet"); return }
+    root.showRecord(root.lastRecord() + by)
+  }
+
+  function timelineFirst() { root.stopPlaying(); root.showRecord(root.firstRecord()) }
+  function timelineLatest() { root.stopPlaying(); root.showRecord(root.lastRecord()) }
+
+  // Plays forward a step at a time, one a second at 1x however long the edits
+  // took. From the board as it is, or from the last step, it starts again at
+  // the beginning; either way it stops at the step that was last when it
+  // started, so edits arriving meanwhile do not keep it going.
+  function togglePlay() {
+    if (!root.timeline) return
+    if (root.playing) { root.stopPlaying(); return }
+    var first = root.firstRecord(), last = root.lastRecord()
+    if (last === first) { root.flash("nothing to play yet"); return }
+    if (!root.lookingBack || root.timelineRecord >= last) root.showRecord(first)
+    root.playEnd = last
+    root.playing = true
+  }
+
+  function stopPlaying() { root.playing = false }
+
+  function playStep() {
+    if (!root.playing) return
+    if (root.timelineRecord >= root.playEnd || !root.lookingBack) { root.stopPlaying(); return }
+    root.showRecord(root.timelineRecord + 1)
+    if (root.timelineRecord >= root.playEnd) root.stopPlaying()
+  }
+
+  function setPlaySpeed(speed) {
+    if ([0.5, 1, 2, 4].indexOf(speed) < 0) return
+    root.playSpeed = speed
+    root.flash("playing at " + speed + "x")
+  }
+
+  Timer {
+    id: player
+    interval: 1000 / root.playSpeed
+    repeat: true
+    running: root.playing
+    onTriggered: root.playStep()
+  }
+
+  // A pointer on the strip: where along it, from 0 to 1. Asked for as often as
+  // the pointer moves and shown at most once a frame, the latest asked for.
+  function scrubTo(fraction) {
+    if (!root.timeline) return
+    root.stopPlaying()
+    var first = root.firstRecord(), last = root.lastRecord()
+    root.scrubWanted = Math.round(first + Math.max(0, Math.min(1, fraction)) * (last - first))
+    if (!scrubber.running) scrubber.start()
+  }
+  function scrubNow() { root.showRecord(root.scrubWanted) }
+  Timer { id: scrubber; interval: 16; repeat: false; onTriggered: root.scrubNow() }
+
+  // The replay changed under the pane: edits arrived, the oldest were trimmed,
+  // or the history was replaced. Where it was is kept if it is still there.
+  function followReplay() {
+    if (!root.timeline) return
+    if (!root.replayDoc || !root.replayDoc.replay) {
+      root.leaveTimeline()
+      root.flash("this board's history was replaced · the timeline closed")
+      return
+    }
+    if (!root.lookingBack) { root.timelineRecord = root.lastRecord(); return }
+    if (root.timelineRecord < root.firstRecord()) {
+      root.flash("that step was among the oldest, which have left the history")
+      root.showRecord(root.firstRecord())
+    } else root.showRecord(root.timelineRecord)
+  }
+  Connections {
+    target: root.replayDoc
+    function onReplayRevisionChanged() { root.followReplay() }
+  }
+  onDocChanged: if (root.timeline && root.replayDoc !== root.doc) root.leaveTimeline()
+
+  // What the strip says, and where along it the step is. Both name what they
+  // follow, so they are worked out again when it changes.
+  readonly property string timelineSays: root.timeline
+    ? root.timelineText(root.timelineRecord, root.timelineLive, root.playing, root.playSpeed,
+                        root.replayDoc ? root.replayDoc.replayRevision : 0) : ""
+  readonly property real timelineFraction: root.timeline
+    ? root.timelinePlace(root.timelineRecord, root.timelineLive,
+                         root.replayDoc ? root.replayDoc.replayRevision : 0) : 0
+
+  function timelineText(record, live, playing, speed, revision) {
+    if (!root.replayDoc || !root.replayDoc.replay) return ""
+    var first = root.firstRecord(), last = root.lastRecord()
+    var steps = last - first
+    if (live) return "now · " + steps + (steps === 1 ? " step" : " steps") + " back to where the history starts"
+    var h = root.replayDoc.replay.h
+    var shown = record > first ? h.records[record - first - 1] : null
+    return "step " + (record - first) + " of " + steps + " · " + History.stepLabel(shown, h.start, Date.now())
+      + (playing ? " · playing " + speed + "x" : "")
+  }
+
+  function timelinePlace(record, live, revision) {
+    if (live) return 1
+    var first = root.firstRecord(), last = root.lastRecord()
+    return last > first ? (record - first) / (last - first) : 1
+  }
+
+  // `T`: an earlier version beside the board as it is now. The other pane
+  // shows this board live; this one steps back one edit, or stays where it
+  // is if it is already looking back. Another board in the other pane is
+  // replaced only when asked twice, because that is a pane someone chose.
+  property real compareArmedAt: 0
+  function compareWithCurrent() {
+    if (!root.doc) return
+    var other = root.workspace.otherOf(root)
+    if (other && other.doc !== root.doc) {
+      if (Date.now() - root.compareArmedAt > 6000) {
+        root.compareArmedAt = Date.now()
+        root.flash("the other pane shows " + other.boardTitle + " · run it again to put this board there instead")
+        return
+      }
+      root.compareArmedAt = 0
+      other.openBoard(root.currentBoard, false)
+    }
+    if (!other) {
+      root.workspace.toggleSplit("side-by-side")
+      root.workspace.activate(root)
+      other = root.workspace.otherOf(root)
+    }
+    if (other && other.timeline) other.leaveTimeline()
+    if (!root.timeline) root.enterTimeline()
+    if (!root.timeline) return
+    if (!root.lookingBack) root.showRecord(root.lastRecord() - 1)
+    root.flash("an earlier version here, the board as it is now in the other pane")
+  }
 
   // ------------------------------------------------------- the workspace's
   readonly property string dataDir: root.workspace.dataDir

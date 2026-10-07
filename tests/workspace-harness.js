@@ -37,6 +37,7 @@ function makeDocument(workspace, board, Store) {
     historyHeader: '', historyRecords: '', historyCount: 0, historyBytes: 0, historyLast: 0, historyStart: 0,
     historyAsLoaded: '', historyChecking: false, historyWaiting: [], historyTrimming: false, historyTrimmed: false,
     historyToken: 0, head: null, loadedState: null, editLabel: '', editKey: '', changed: false, changedSince: 0,
+    replay: null, replayUsers: 0,
     // Connections in the QML: every pane on this board but the one that
     // edited follows the edit.
     edited(by) {
@@ -75,7 +76,15 @@ function makeDocument(workspace, board, Store) {
   const historyWorker = { asked: [], sendMessage(m) { historyWorker.asked.push(m) } }
   const aside = { path: '', written: [], setText(text) { aside.written.push({ path: aside.path, text }) } }
   const History = loadStore(fs.readFileSync(path.join(__dirname, '..', 'BoardHistory.js'), 'utf8'))
-  const context = vm.createContext({ doc, session, persistence, Store, History, historyWorker, aside,
+  // The index is built a slice per timer tick; here, all at once when asked.
+  const indexer = { running: false, start() { indexer.running = true }, stop() { indexer.running = false } }
+  // Connections in the QML: a pane looking back follows the replay's changes.
+  let revision = 0
+  Object.defineProperty(doc, 'replayRevision', {
+    get: () => revision,
+    set: value => { revision = value; for (const pane of workspace.paneSlots || []) if (pane.replayDoc === doc) pane.followReplay() }
+  })
+  const context = vm.createContext({ doc, session, persistence, Store, History, historyWorker, aside, indexer,
     itemModel: items, linkModel: links, Date, Qt: { callLater(f) { f() } },
     saveTimer: { running: false, stop() {}, restart() {} } })
   loadFunctions(doc, sources.document, context)
@@ -89,7 +98,9 @@ function makeDocument(workspace, board, Store) {
   session.requestDisk = resolve => session.acceptDisk(doc.currentBoard,
     doc.fileText(), resolve, 'rev-fresh\n' + session.diskText)
   let revisions = 0
-  return { doc, session, persistence, items, links, writes, worker: historyWorker, aside,
+  return { doc, session, persistence, items, links, writes, worker: historyWorker, aside, indexer,
+    // What the indexing timer does between frames, done now.
+    index() { while (indexer.running) doc.indexReplay() },
     // What the worker would say back, delivered the way onMessage delivers it.
     answer(reply) {
       if (reply.token !== doc.historyToken) return
@@ -120,11 +131,27 @@ function makePane(workspace, exchange, Store) {
     paletteVisible: false, paletteQuery: '', paletteIndex: 0, paletteRows: 9,
     conflictVisible: false, conflictIndex: 0, paletteScope: 'all', imageBusy: false,
     statusText: '', failureText: '', failureKind: '', pendingFirstNote: '', forgetArmedAt: 0,
+    timeline: false, timelineLive: true, timelineRecord: 0, replayDoc: null, playing: false, playSpeed: 1,
+    playEnd: 0, scrubWanted: 0, compareArmedAt: 0,
     worldStep: 40, minItemSize: 60, viewW: 1000, viewH: 700 }
   const empty = new FakeModel()
+  // Its own models for an earlier board, which the QML declares as ids.
+  const pastItems = new FakeModel(), pastLinks = new FakeModel()
+  Object.defineProperty(root, 'lookingBack', { get: () => root.timeline && !root.timelineLive })
+  // What the strip says and where its marker is: bindings in the QML.
+  Object.defineProperty(root, 'timelineSays', { get: () => root.timeline
+    ? root.timelineText(root.timelineRecord, root.timelineLive, root.playing, root.playSpeed, 0) : '' })
+  Object.defineProperty(root, 'timelineFraction', { get: () => root.timeline
+    ? root.timelinePlace(root.timelineRecord, root.timelineLive, 0) : 0 })
   // What the pane reads off its document and the workspace.
-  for (const key of ['items', 'links'])
-    Object.defineProperty(root, key, { get: () => root.doc ? root.doc[key] : empty })
+  Object.defineProperty(root, 'items', { get: () => root.lookingBack ? pastItems : root.doc ? root.doc.items : empty })
+  Object.defineProperty(root, 'links', { get: () => root.lookingBack ? pastLinks : root.doc ? root.doc.links : empty })
+  // onDocChanged in the QML.
+  let shown = null
+  Object.defineProperty(root, 'doc', {
+    get: () => shown,
+    set: value => { shown = value; if (root.timeline && root.replayDoc !== value) root.leaveTimeline() }
+  })
   Object.defineProperty(root, 'nextId', { get: () => root.doc ? root.doc.nextId : 1 })
   for (const key of ['boardLoaded', 'damaged', 'diskChanged', 'saving'])
     Object.defineProperty(root, key, { get: () => !!root.doc && root.doc[key] })
@@ -134,7 +161,7 @@ function makePane(workspace, exchange, Store) {
   Object.defineProperty(root, 'boardPath', { get: () => root.doc ? root.doc.boardPath : '' })
   // The harness has always read canEdit as the session's own answer: the
   // library and an export pausing it are tested where they happen.
-  Object.defineProperty(root, 'canEdit', { get: () => !!root.doc && root.doc.canEdit && !root.leaving })
+  Object.defineProperty(root, 'canEdit', { get: () => !!root.doc && root.doc.canEdit && !root.leaving && !root.lookingBack })
   forward(root, () => workspace, ['opened', 'stateReady', 'step', 'showGrid', 'canvasPattern', 'library',
     'dataDir', 'boardsDir', 'imagesDir', 'split'])
   Object.defineProperty(root, 'active', { get: () => workspace.activePane === root })
@@ -170,7 +197,10 @@ function makePane(workspace, exchange, Store) {
     get: () => selected,
     set: value => { if (value === selected) return; selected = value; root.cursorId = root.idAt(value) }
   })
-  const context = vm.createContext({ root, Store,
+  const timer = () => ({ running: false, start() { this.running = true }, stop() { this.running = false } })
+  const History = loadStore(fs.readFileSync(path.join(__dirname, '..', 'BoardHistory.js'), 'utf8'))
+  const context = vm.createContext({ root, Store, History, pastItems, pastLinks, Date,
+    player: timer(), scrubber: timer(),
     statusTimer: { restart() {} }, failureTimer: { restart() {} } })
   loadFunctions(root, sources.pane, context)
   return root
@@ -257,7 +287,7 @@ function controller() {
   return { root: first, second, doc: opened.doc, workspace, session: opened.session, library,
     items: opened.items, links: opened.links, writes: opened.writes, states, persistence: opened.persistence,
     exchange, store: Store, complete: opened.complete, refuse: opened.refuse,
-    worker: opened.worker, aside: opened.aside, answer: opened.answer,
+    worker: opened.worker, aside: opened.aside, answer: opened.answer, index: opened.index,
     // The handles for any document the workspace has made since.
     of: doc => made.get(doc) }
 }

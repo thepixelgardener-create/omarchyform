@@ -1266,6 +1266,23 @@ function tests(S) {
     eq(S.readFile(JSON.stringify({ version: 7, items: [] })), null, "and one from the future does not")
   })
 
+  test("a model is brought to a state touching only what differs", () => {
+    const row = (id, over) => Object.assign({ id, kind: "note", x: id, y: 0, w: 100, h: 100, tint: "muted",
+                                              text: "t" + id, pinned: false, src: "" }, over)
+    const model = new FakeModel()
+    S.syncItems(model, [row(1), row(2), row(3)])
+    eq(model.count, 3)
+    const kept = model.rows[0]
+    S.syncItems(model, [row(1, { x: 50, text: "moved" }), row(2), row(3)])
+    ok(model.rows[0] === kept, "a row still in its place is changed in place, not replaced")
+    eq([model.get(0).ix, model.get(0).itext], [50, "moved"])
+    S.syncItems(model, [row(1, { x: 50, text: "moved" }), row(3), row(4, { pinned: true })])
+    eq(S.itemRows(model).map(r => r.id), [1, 3, 4], "from the first row out of place, the rest is put back")
+    eq(model.get(2).ipinned, true)
+    S.syncItems(model, [])
+    eq(model.count, 0)
+  })
+
   test("a board's history is written last and read apart from it", () => {
     const items = new FakeModel([item({ iid: 1, itext: 'with "quotes"\n  "history": in it' })])
     const history = '{"v":1,"lineage":"x","start":0,"base":{"items":[],"links":[],"nextId":1},"records":[]}'

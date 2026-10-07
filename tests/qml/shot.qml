@@ -291,6 +291,20 @@ ShellRoot {
       }
     },
     {
+      // Looking back: the board two steps ago, read-only, with the strip
+      // along the bottom saying which step it is.
+      name: "12d-timeline",
+      setup: function () {
+        if (plugin.split) plugin.activePane.toggleSplit(plugin.layout)
+        var p = plugin.activePane
+        p.statusText = ""
+        p.toggleTimeline()
+        p.timelineStep(-1)
+        p.timelineStep(-1)
+        p.statusText = ""
+      }
+    },
+    {
       // The picture in the README. Composed rather than caught in use: it is
       // the first thing a reader sees, so it says what the board is for in the
       // items themselves. It lives here because the last one was arranged by
@@ -299,6 +313,7 @@ ShellRoot {
       name: "13-preview",
       setup: function () {
         if (plugin.split) plugin.activePane.toggleSplit(plugin.layout)
+        if (plugin.activePane.timeline) plugin.activePane.leaveTimeline()
         shots.session().saveError = ""
         plugin.activePane.linkingFrom = -1
         plugin.activePane.statusText = ""

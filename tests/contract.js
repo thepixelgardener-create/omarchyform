@@ -84,7 +84,7 @@ function expect(names, available, what, where) {
 }
 
 // The views address the controller as ctl.
-for (const file of ["Board.qml", "Node.qml", "Browser.qml", "Help.qml", "BoardToolbar.qml", "BoardExchange.qml", "BoardImage.qml", "ScrollHint.qml", "Commands.qml", "Conflict.qml"]) {
+for (const file of ["Board.qml", "Node.qml", "Browser.qml", "Help.qml", "BoardToolbar.qml", "BoardExchange.qml", "BoardImage.qml", "ScrollHint.qml", "Commands.qml", "Conflict.qml", "TimelineStrip.qml"]) {
   const source = read(file)
   expect(referenced(source, "ctl."), controller, "the controller", file)
 }
@@ -94,7 +94,7 @@ for (const file of ["Board.qml", "Node.qml", "Browser.qml", "Help.qml", "BoardTo
 // a token Theme.qml does not declare is a TypeError on a desktop.
 const themeTokens = declaredMembers(read("Theme.qml"))
 const themed = ["Board.qml", "Node.qml", "Browser.qml", "Help.qml", "BoardToolbar.qml",
-                "BoardImage.qml", "ScrollHint.qml", "Commands.qml", "Conflict.qml", "Surface.qml"]
+                "BoardImage.qml", "ScrollHint.qml", "Commands.qml", "Conflict.qml", "Surface.qml", "TimelineStrip.qml"]
 for (const file of themed) expect(referenced(read(file), "theme."), themeTokens, "Theme.qml", file)
 
 // The session addresses its document as session.ctl.
@@ -187,7 +187,7 @@ const panSource = read("tests/qt/PaneStub.qml")
 const panStub = declaredMembers(panSource)
 const panTheme = membersAt(blockBody(panSource, "property QtObject theme:"), 4)
 for (const file of ["Board.qml", "Node.qml", "BoardToolbar.qml", "Help.qml", "Browser.qml",
-                    "ScrollHint.qml", "Commands.qml", "Conflict.qml", "BoardImage.qml", "Surface.qml"]) {
+                    "ScrollHint.qml", "Commands.qml", "Conflict.qml", "BoardImage.qml", "Surface.qml", "TimelineStrip.qml"]) {
   expect(referenced(read(file), "ctl."), panStub, "the tst_pan stub", file)
   expect(referenced(read(file), "theme."), panTheme, "the tst_pan stub's theme", file)
 }
@@ -248,7 +248,7 @@ function declaredSignals(source) {
 for (const file of ["Omarchyform.qml", "BoardPane.qml", "BoardDocument.qml", "BoardSession.qml", "BoardPersistence.qml", "BoardExchange.qml", "BoardLibrary.qml",
                     "Board.qml", "Node.qml", "Browser.qml", "Help.qml", "BoardToolbar.qml",
                     "BoardImage.qml", "ScrollHint.qml", "Commands.qml", "Conflict.qml",
-                    "Theme.qml", "Surface.qml"]) {
+                    "Theme.qml", "Surface.qml", "TimelineStrip.qml"]) {
   const source = read(file)
   const rootId = (source.match(/^\s*id:\s*(\w+)\s*$/m) || [])[1]
   if (!rootId) { failures.push(`${file}: no id on the root object to check against`); continue }

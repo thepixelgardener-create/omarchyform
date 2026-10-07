@@ -219,6 +219,12 @@ Item {
     doc.historyLast = record.i
     doc.historyCount += 1
     doc.historyBytes += History.utf8Length(text) + 1
+    if (doc.replay) {
+      doc.replay.h.records.push(record)
+      History.extendIndex(doc.replay.ix, doc.replay.h)
+      indexer.start()
+      doc.replayRevision += 1
+    }
     if (doc.historyCount > History.MAX_HISTORY_RECORDS || doc.historyBytes > History.MAX_HISTORY_BYTES) doc.startTrim()
   }
 
@@ -236,6 +242,7 @@ Item {
   // to read. Answers why the board must be read-only, or "".
   function adoptHistory(text, boardText) {
     doc.historyToken += 1
+    doc.dropReplay()
     doc.head = doc.snapshot()
     doc.loadedState = doc.head
     doc.editLabel = ""
@@ -330,6 +337,9 @@ Item {
       doc.flash("The oldest " + answer.dropped + " edits left this board's history; it keeps the newest "
                 + History.MAX_HISTORY_RECORDS)
     doc.historyTrimmed = true
+    // A pane looking back reads the trimmed history again; where it was may
+    // be one of the edits that went.
+    if (doc.replay) doc.readReplay()
     session.save(true)
   }
 
@@ -338,6 +348,7 @@ Item {
   function forgetHistory() {
     doc.endEdit()
     doc.historyToken += 1
+    doc.dropReplay()
     doc.historyHeader = ""
     doc.historyRecords = ""
     doc.historyCount = 0
@@ -349,6 +360,63 @@ Item {
     doc.historyTrimming = false
     doc.head = doc.snapshot()
     session.save(true)
+  }
+
+  // ---------------------------------------------------------------- replay
+  // The history parsed, with the index a timeline seeks with, while any pane
+  // is looking back through it: read once however many panes look, extended as
+  // edits are recorded, read again after a trim, and let go when the last pane
+  // stops looking. Parsed here, on the shell's thread, because seeking from a
+  // worker cost more than it saved (gate 3).
+  property var replay: null
+  property int replayUsers: 0
+  // Bumped whenever what the replay holds changes, for the panes looking.
+  property int replayRevision: 0
+
+  // Answers "" or why there is nothing to look back through.
+  function openReplay() {
+    if (doc.historyChecking) return "still reading this board's history · try again in a moment"
+    // The edit in progress is the latest step, so the timeline ends where the
+    // board is.
+    doc.endEdit()
+    if (doc.historyHeader === "") return "this board has no history yet · it starts with the next edit"
+    if (!doc.replay && !doc.readReplay()) return "this board's history could not be read"
+    doc.replayUsers += 1
+    return ""
+  }
+
+  function closeReplay() {
+    doc.replayUsers = Math.max(0, doc.replayUsers - 1)
+    if (doc.replayUsers === 0) doc.dropReplay()
+  }
+
+  function readReplay() {
+    var h
+    try { h = JSON.parse(History.joinText(doc.historyHeader, doc.historyRecords)) } catch (e) { h = null }
+    if (!h || History.checkShape(h) !== "") { doc.dropReplay(); return false }
+    doc.replay = { h: h, ix: History.newIndex(h, 100) }
+    indexer.start()
+    doc.replayRevision += 1
+    return true
+  }
+
+  function dropReplay() {
+    indexer.stop()
+    if (doc.replay === null) return
+    doc.replay = null
+    doc.replayRevision += 1
+  }
+
+  // A slice of the index at a time, between frames: 200 records took at most
+  // 17ms on a 3000-item board (tests/history-bench.js).
+  function indexReplay() {
+    if (!doc.replay || History.indexSome(doc.replay.ix, doc.replay.h, 200)) indexer.stop()
+  }
+  Timer { id: indexer; interval: 1; repeat: true; onTriggered: doc.indexReplay() }
+
+  // The board after `count` records: 0 is where the history starts.
+  function replayState(count) {
+    return doc.replay ? History.stateAt(doc.replay.ix, doc.replay.h, count) : null
   }
 
   // A history that could not be read, kept where the board's backups are,

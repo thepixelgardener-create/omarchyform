@@ -24,7 +24,8 @@ the section has been updated.
 | Live checks for gate 2 | Done in ee50f9d and 520b8ce. `test:omarchy` drives split view with real keys in both host modes; `test:paste` passes; `shots` photographs both layouts; `bench:scene` at 3000 items matches `origin/main` after the boards were moved back to single-board depth |
 | 3. History storage and budgets | Done; see "Gate 3 results". Embedded storage passes with the conditions recorded there |
 | 4. Recording and migration | Done; `tests/recording.js`, the CLI suite, a headless run of the real worker, and the live suites, whose boards' histories all play back |
-| 5–6. Timeline and release review | Not started |
+| 5. Timeline | Done; `tests/timeline.js` checks every step shown against a snapshot, `tst_split.qml` the strip, a headless run the real plugin, and `npm run shots` photographs it (`12d-timeline`) |
+| 6. Release review | Not started |
 
 A saved second board that no longer exists opens empty in its pane, the way a
 missing `lastBoard` always has, rather than restoring a single pane.

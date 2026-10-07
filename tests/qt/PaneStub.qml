@@ -50,6 +50,22 @@ Item {
   function activate() { ctl.activations += 1 }
   function toggleSplit(layout) {}
   function otherPane() {}
+  // ---- the timeline: a strip to draw, and keys that reach nothing here
+  property bool timeline: false
+  property bool lookingBack: false
+  property string timelineSays: ""
+  property real timelineFraction: 0
+  property real scrubbedTo: -1
+  function scrubTo(fraction) { ctl.scrubbedTo = fraction }
+  function toggleTimeline() {}
+  function compareWithCurrent() {}
+  function leaveTimeline() {}
+  function timelineBack() {}
+  function timelineStep(by) {}
+  function timelineFirst() {}
+  function timelineLatest() {}
+  function togglePlay() {}
+  function setPlaySpeed(speed) {}
   // The same shape the controller builds, because the board asks one question
   // of BoardStore rather than deciding the line twice.
   function statusState() {

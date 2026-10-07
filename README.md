@@ -218,6 +218,8 @@ colours apart, and the controls carry names and roles for a screen reader.
 | `w` | Switch between fullscreen and windowed |
 | `v` / `V` | Split side by side / stacked; the same key again goes back to one pane |
 | `o` | Move to the other pane |
+| `t` | Timeline: step back through what this board was; `esc` back to now |
+| `T` | An earlier version beside the board as it is now |
 | `f` | Fit the whole board on screen |
 | `0` | Reset the view |
 | `+` / `-` | Zoom |
@@ -507,6 +509,16 @@ leaves the current board editable so you can switch again.
 Which board you had open is remembered in `state.json` and reopened next time.
 
 ## History
+
+`t` opens the timeline for the pane you are in. `h` and `l` step back and
+forward through what the board was, `H` and `L` jump to where the history
+starts and to the latest step, `space` plays it forward a step a second, and
+`1` to `4` play at half, normal, double and four times the speed. `esc` comes
+back to the board as it is, and again closes the timeline. The strip along the
+bottom says which step is on screen, what it was and when; click or drag along
+it to scrub. An earlier version is only to look at: nothing edits, pastes into
+or exports it, and the header says so. `T` puts an earlier version beside the
+board as it is, in two panes, so you can see what changed.
 
 A board remembers its edits, in order, so a timeline can play it back: each
 command, each drag, each pause in typing and each undo is one step. The

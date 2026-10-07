@@ -69,6 +69,10 @@ TestCase {
     right.items.clear()
     left.selectedIndex = -1
     right.selectedIndex = -1
+    left.timeline = false
+    left.lookingBack = false
+    left.statusText = ""
+    left.scrubbedTo = -1
   }
 
   function test_onePaneFillsTheSurface() {
@@ -205,5 +209,28 @@ TestCase {
     ws.layout = "stacked"
     surface.height = 500
     compare(ws.squeezed, true)
+  }
+
+  // The timeline's strip: there only while the pane is in it, saying what
+  // the pane says, with its marker where the step is, and a click along it
+  // asking for that far through the history.
+  function test_theTimelineStripScrubs() {
+    var strip = findChild(slot(0), "timeline-strip")
+    compare(strip.visible, false, "not there outside the timeline")
+    left.timeline = true
+    left.lookingBack = true
+    left.timelineSays = "step 2 of 4 · Move · 10:00"
+    left.timelineFraction = 0.5
+    compare(strip.visible, true)
+    var words = findChild(strip, "timeline-words")
+    compare(words.text, "step 2 of 4 · Move · 10:00")
+    var track = findChild(strip, "timeline-track")
+    var marker = findChild(strip, "timeline-marker")
+    compare(marker.x, Math.round(0.5 * (track.width - marker.width)))
+    mouseClick(track, track.width / 4, track.height / 2)
+    verify(Math.abs(left.scrubbedTo - 0.25) < 0.01, "scrubbed to " + left.scrubbedTo)
+    left.statusText = "this is an earlier version"
+    compare(words.text, "this is an earlier version", "what the pane has just said comes first")
+    verify(strip.y + strip.height <= slot(0).height, "inside its pane")
   }
 }
