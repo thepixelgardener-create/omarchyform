@@ -156,15 +156,15 @@ TestCase {
     for (var f = 0; f < seeds.length; f++) {
       var text = bench.read("@DIR@/" + seeds[f] + ".json")
       var before = bench.memory()
+      // Opening a board: the board read in front of its history, the history
+      // left as text — what Store.readBoardFile does, timed as it does it.
       var t0 = Date.now()
-      var at = text.lastIndexOf(marker)
-      // The comma before the marker belongs to the history, not the board.
-      var liveText = text.slice(0, at - 1) + "\n}\n"
-      var historyText = text.slice(at + marker.length, text.length - 3)
+      var read = Store.readBoardFile(text)
       var split = Date.now() - t0
-      t0 = Date.now()
-      var live = JSON.parse(liveText)
-      var parseBoard = Date.now() - t0
+      var liveText = read.board
+      var historyText = read.history
+      var live = { items: read.data.items, links: read.data.links, nextId: read.data.nextId }
+      var parseBoard = read.split ? 0 : -1
       // What opening the timeline costs on this thread: the history alone.
       t0 = Date.now()
       JSON.parse(historyText)
@@ -175,7 +175,7 @@ TestCase {
       bench.lastTick = 0
       ticker.start()
       t0 = Date.now()
-      worker.sendMessage({ history: historyText, live: liveText })
+      worker.sendMessage({ history: historyText, live: liveText, raw: text })
       var send = Date.now() - t0
       tryVerify(function () { return bench.reply !== null && bench.reply.kind === "ready" }, 60000)
       var ready = bench.reply
@@ -202,7 +202,7 @@ TestCase {
       ticker.stop()
       var after = bench.memory()
       console.log("BENCH worker, " + live.items.length + " items, " + ready.records + " records, "
-        + (text.length / 1048576).toFixed(2) + " MiB file: split " + split + ", board alone " + parseBoard
+        + (text.length / 1048576).toFixed(2) + " MiB file: read the board " + split + (parseBoard < 0 ? " (whole)" : "")
         + ", history here " + parseHistory + ", hand over " + send + ", worker parse " + ready.parse + " + check and index " + ready.verify
         + ", longest stall meanwhile " + whileReading + "; state arrives in p95 " + bench.spread(arrivals).p95
         + ", filled in p95 " + bench.spread(fills).p95 + ", longest stall " + bench.worstGap

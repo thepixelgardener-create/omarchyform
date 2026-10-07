@@ -426,6 +426,29 @@ try {
     assert.match(refused.raw, /newer Omarchyform/)
     console.log('ok — command line: a run is one edit in the board\'s history')
   }
+
+  {
+    // A board with its history moved before its items: the run changes what
+    // it was asked to and nothing else, and the history goes on.
+    const H = require('../bin/store').loadStore(fs.readFileSync(path.join(__dirname, '..', 'BoardHistory.js'), 'utf8'))
+    const file = path.join(dir, 'sorted.json')
+    assert.equal(run('new', file, '--note', 'one', '--note', 'two').status, 0)
+    assert.equal(pipe(JSON.stringify([{ op: 'setTint', args: [1, 'accent'] }]), 'apply', file).status, 0)
+    const before = JSON.parse(fs.readFileSync(file, 'utf8'))
+    const moved = {}
+    for (const key of ['kind', 'version', 'history', 'nextId', 'items', 'links']) moved[key] = before[key]
+    fs.writeFileSync(file, JSON.stringify(moved, null, 2) + '\n')
+    const applied = pipe(JSON.stringify([{ op: 'setText', args: [2, 'changed'] }]), 'apply', file)
+    assert.equal(applied.status, 0, applied.raw)
+    const after = JSON.parse(fs.readFileSync(file, 'utf8'))
+    assert.deepEqual(after.items.map(r => [r.id, r.text, r.tint]), [[1, 'one', 'accent'], [2, 'changed', 'foreground']],
+      'the one edit, and every item kept')
+    assert.deepEqual(after.links, before.links)
+    assert.equal(after.nextId, before.nextId)
+    assert.deepEqual(after.history.records.map(r => r.a), ['Command line', 'Command line'], 'no change from outside invented')
+    assert.equal(H.verify(after.history, { items: after.items, links: after.links, nextId: after.nextId }), '')
+    console.log('ok — command line: a board with its keys in another order loses nothing')
+  }
 } finally {
   fs.rmSync(dir, { recursive: true, force: true })
 }

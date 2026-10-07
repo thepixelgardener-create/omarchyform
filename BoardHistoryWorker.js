@@ -13,14 +13,38 @@ Qt.include("BoardHistory.js")
 
 function check(message) {
   var answer = { kind: "checked", token: message.token, error: "", unreadable: false, newer: false,
-                 bridge: "", count: 0, bytes: 0, last: 0, text: "" }
-  if (message.history.length > MAX_HISTORY_TEXT) {
+                 bridge: "", count: 0, bytes: 0, last: 0, text: "", reload: false }
+  // The board was read from in front of the history, which was left as text.
+  // Read the file whole here and prove that was the whole canvas: a board
+  // whose keys were moved after the history would have lost them. If it was
+  // not, or the file is not JSON at all, the board is read again whole.
+  var whole = null
+  if (message.raw) {
+    try { whole = JSON.parse(message.raw) } catch (e) { whole = null }
+    var front = null
+    try { front = JSON.parse(message.board) } catch (e) { front = null }
+    var same = function (a, b) { return JSON.stringify(a) === JSON.stringify(b) }
+    if (!whole || typeof whole !== "object" || !front
+        || !same(whole.items, front.items) || !same(whole.links, front.links) || whole.nextId !== front.nextId) {
+      answer.reload = true
+      return answer
+    }
+  }
+  if (typeof message.history !== "string" || message.history.length > MAX_HISTORY_TEXT) {
     answer.error = "larger than a history can be"
     answer.unreadable = true
     return answer
   }
   var h
   try { h = JSON.parse(message.history) } catch (e) { h = null }
+  // What was left as text did not parse, but the file did: something follows
+  // the history. It is the file's history, and goes back in this writer's
+  // shape.
+  var reshaped = false
+  if (h === null && whole && whole.history && typeof whole.history === "object") {
+    h = whole.history
+    reshaped = true
+  }
   var shape = checkShape(h)
   if (shape !== "") {
     answer.error = shape
@@ -38,7 +62,7 @@ function check(message) {
   var state = { items: live.items, links: live.links || [], nextId: live.nextId }
   // A history laid out by hand cannot be appended to as text; it goes back
   // written the way this writes one, without the record about to be added.
-  if (message.normalize) answer.text = JSON.stringify(h)
+  if (message.normalize || reshaped) answer.text = JSON.stringify(h)
   var w = working(h.base)
   for (var i = 0; i < h.records.length; i++) {
     var wrong = apply(w, h.records[i].p)

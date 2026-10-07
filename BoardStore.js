@@ -1075,6 +1075,11 @@ function overlongNote(rows) {
 function readFile(raw) {
   var parsed
   try { parsed = JSON.parse(raw) } catch (e) { return null }
+  return boardOf(parsed)
+}
+
+// A parsed file as a board, or null when it is not one this reads.
+function boardOf(parsed) {
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null
   if (parsed.version !== undefined && !knownVersion(parsed.version)) return null
   var fields = ["items", "notes", "links"]
@@ -1095,20 +1100,54 @@ function readFile(raw) {
   }
 }
 
-// A board file in two: the board in front, as a board of its own, and its
-// history after it as text, or "" when it has none or it is not where this
-// writer puts it. readFile on the first part reads the board without parsing
-// the history; see HISTORY_MARKER.
-function splitHistory(raw) {
+// A board file read as a board and its history. The history is left as text
+// when it is where this writer puts it — last, after HISTORY_MARKER — and the
+// board in front of it is a whole board on its own: its items, connectors and
+// next id all there. Anything else, a history moved before the items by a
+// formatter that sorts keys, a file with CRLF or tab indentation, is read
+// whole instead, so the canvas is never built from part of a board. Reading
+// whole costs a parse of the history on the shell's thread, once; the next
+// write puts it back where this writer puts it.
+//
+// A scan of the history to prove it ends at the board's closing brace cost
+// 192ms for a 1 MiB history in the board's engine, three times the parse. The
+// worker proves it instead, off this thread, by reading the file whole and
+// comparing (BoardHistoryWorker.js).
+//
+//   data     what readFile answers, from whichever way it was read; null when
+//            the file is not a board
+//   board    the text the board was read from
+//   history  the history as text, "" when there is none
+//   split    whether the history was left as text, unparsed
+function readBoardFile(raw, whole) {
   var text = typeof raw === "string" ? raw : ""
   var end = text.length
   while (end > 0 && (text.charAt(end - 1) === "\n" || text.charAt(end - 1) === "\r" || text.charAt(end - 1) === " ")) end--
-  var at = text.lastIndexOf(HISTORY_MARKER)
-  if (at < 1 || text.charAt(at - 1) !== "," || text.charAt(end - 1) !== "}") return { board: text, history: "" }
-  var history = text.slice(at + HISTORY_MARKER.length, end - 1)
-  var last = history.length
-  while (last > 0 && /\s/.test(history.charAt(last - 1))) last--
-  return { board: text.slice(0, at - 1) + "\n}\n", history: history.slice(0, last) }
+  var at = whole === true ? -1 : text.lastIndexOf(HISTORY_MARKER)
+  if (at > 0 && text.charAt(at - 1) === "," && text.charAt(end - 1) === "}") {
+    var board = text.slice(0, at - 1) + "\n}\n"
+    var parsed = null
+    try { parsed = JSON.parse(board) } catch (e) { parsed = null }
+    var whole = parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)
+      && Array.isArray(parsed.items) && Array.isArray(parsed.links) && typeof parsed.nextId === "number"
+    if (whole) {
+      var history = text.slice(at + HISTORY_MARKER.length, end - 1)
+      var last = history.length
+      while (last > 0 && /\s/.test(history.charAt(last - 1))) last--
+      var data = boardOf(parsed)
+      if (data) data.history = null
+      return { data: data, board: board, history: history.slice(0, last), split: true }
+    }
+  }
+  var read = readFile(text)
+  return { data: read, board: text, history: read && read.history ? JSON.stringify(read.history) : "", split: false }
+}
+
+// The two halves readBoardFile found, as text: the board, and the history
+// after it or "". A file it read whole comes back whole, with no history.
+function splitHistory(raw) {
+  var parts = readBoardFile(raw)
+  return { board: parts.board, history: parts.split ? parts.history : "" }
 }
 
 function joinHistory(boardText, historyText) {

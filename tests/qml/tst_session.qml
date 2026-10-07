@@ -59,7 +59,7 @@ ShellRoot {
     // The history is the document's; this one keeps none, as a board written
     // before history did.
     function fileText() { return Store.writeFile(items, links, ctl.nextId) }
-    function adoptHistory(text, boardText) { return "" }
+    function adoptHistory(text, boardText, raw) { return "" }
     // The session asks whether the library is open, and leaves word there.
     property QtObject library: QtObject {
       property bool showing: false

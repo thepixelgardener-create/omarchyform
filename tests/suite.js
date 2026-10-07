@@ -1266,6 +1266,59 @@ function tests(S) {
     eq(S.readFile(JSON.stringify({ version: 7, items: [] })), null, "and one from the future does not")
   })
 
+  test("a board reads the same whatever order its keys are in", () => {
+    const tricky = 'quote " brace } bracket ] and \\ a backslash, then\n  "history": {"v": 9} in a note'
+    const items = [
+      { id: 1, kind: "note", x: 0, y: 0, w: 100, h: 100, tint: "accent", text: tricky, pinned: false, src: "" },
+      { id: 7, kind: "rect", x: 9, y: 9, w: 100, h: 100, tint: "muted", text: "{[}]", pinned: true, src: "" }
+    ]
+    const board = { kind: "omarchyform.board", version: 6, nextId: 12, items, links: [{ from: 7, to: 1 }] }
+    const history = { v: 1, lineage: "x", start: 0, records: [],
+                      base: { items: [{ id: 1, kind: "note", text: 'nested "history": [1] }' }], links: [], nextId: 2 } }
+    const orders = {
+      last: ["kind", "version", "nextId", "items", "links", "history"],
+      first: ["history", "kind", "version", "nextId", "items", "links"],
+      middle: ["kind", "version", "history", "nextId", "items", "links"],
+      "before links": ["kind", "version", "nextId", "items", "history", "links"],
+      sorted: ["history", "items", "kind", "links", "nextId", "version"]
+    }
+    const all = Object.assign({}, board, { history })
+    const layouts = {
+      "two spaces": o => JSON.stringify(o, null, 2) + "\n",
+      compact: o => JSON.stringify(o),
+      tabs: o => JSON.stringify(o, null, "\t"),
+      crlf: o => JSON.stringify(o, null, 2).replace(/\n/g, "\r\n") + "\r\n",
+      "trailing space": o => JSON.stringify(o, null, 2) + "  \n\n "
+    }
+    for (const [order, keys] of Object.entries(orders)) {
+      const ordered = {}
+      for (const k of keys) ordered[k] = all[k]
+      for (const [layout, write] of Object.entries(layouts)) {
+        const read = S.readBoardFile(write(ordered))
+        const what = order + ", " + layout
+        ok(read.data, what + " reads")
+        eq(read.data.items, items, what + ": every item, in paint order")
+        eq(read.data.links, board.links, what + ": the connectors")
+        eq(read.data.nextId, 12, what + ": the next id")
+        eq(JSON.parse(read.history), history, what + ": and the history")
+        // Only this writer's layout is left as text; everything else is read
+        // whole, which is slower and always right.
+        eq(read.split, order === "last" && layout === "two spaces" || order === "last" && layout === "trailing space",
+           what + ": " + (read.split ? "split" : "read whole"))
+      }
+    }
+    // Truncated, or not JSON at all: not a board.
+    const good = JSON.stringify(all, null, 2) + "\n"
+    for (const broken of [good.slice(0, -20), "{", ""]) eq(S.readBoardFile(broken).data, null, "not a board")
+    // Cut off inside the history, the board in front of it is still whole and
+    // is read; the worker, reading the file whole, finds it is not JSON and
+    // has it read again whole, as not a board (tests/recording.js).
+    const cut = good.slice(0, good.indexOf('"history"') + 30) + "\n}\n"
+    eq(S.readBoardFile(cut).split, true)
+    eq(S.readBoardFile(cut).data.items.length, 2)
+    eq(S.readBoardFile(cut, true).data, null, "read whole, it is not a board")
+  })
+
   test("a model is brought to a state touching only what differs", () => {
     const row = (id, over) => Object.assign({ id, kind: "note", x: id, y: 0, w: 100, h: 100, tint: "muted",
                                               text: "t" + id, pinned: false, src: "" }, over)

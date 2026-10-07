@@ -246,6 +246,77 @@ const plain = (n) => JSON.stringify({ kind: 'omarchyform.board', version: 5, nex
 }
 
 {
+  // A board whose history is not where this writer puts it — after some keys
+  // and before the items, as an editor or a script can leave it — reads whole:
+  // every item is there, nothing is written while it is read and checked, and
+  // nothing is taken for an unreadable history. The next edit writes it back
+  // in order. (History first, as sorting keys leaves it, was always read whole:
+  // the marker has to follow a comma.)
+  const first = opened(plain(3))
+  first.root.selectOnly(0)
+  first.root.recolorItem()
+  first.land()
+  const saved = JSON.parse(written(first).text)
+  const moved = {}
+  for (const key of ['kind', 'version', 'history', 'nextId', 'items', 'links']) moved[key] = saved[key]
+  const text = JSON.stringify(moved, null, 2) + '\n'
+  assert.ok(text.indexOf('"history"') < text.indexOf('"items"'), 'the history comes before the items')
+
+  const c = opened(text)
+  assert.equal(c.items.count, 3, 'every item is read')
+  c.answer(W.check(c.worker.asked[c.worker.asked.length - 1]))
+  c.land()
+  assert.equal(c.writes.length, 0, 'nothing is written while it is read')
+  assert.equal(c.aside.written.length, 0, 'and nothing is taken for unreadable')
+  assert.equal(c.items.count, 3)
+  c.root.selectOnly(2)
+  c.root.cycleKind()
+  c.land()
+  const w = written(c)
+  assert.deepEqual(w.file.items.map(r => [r.id, r.kind, r.tint]),
+    saved.items.map(r => [r.id, r.id === 3 ? 'rect' : r.kind, r.tint]), 'the edit is the only change to the board')
+  assert.deepEqual(w.records.map(r => r.a), ['Colour', 'Shape'], 'and the history goes on')
+  assert.equal(H.verify(w.history, live(w.file)), '')
+  assert.ok(w.text.indexOf('"history"') > w.text.indexOf('"links"'), 'written back in this writer\'s order')
+
+  // Cut off inside the history: the board in front reads, but the file is not
+  // JSON. The worker has it read again whole, which makes it unreadable — and
+  // nothing is recovered from it or written over it.
+  const good = written(first).text
+  const cut = good.slice(0, good.indexOf('"history"') + 40) + '\n}\n'
+  const d = opened(cut)
+  d.answer(W.check(d.worker.asked[d.worker.asked.length - 1]))
+  d.land()
+  assert.equal(d.root.canEdit, false, 'read-only, as any unreadable board')
+  assert.equal(d.items.count, 0)
+  assert.equal(d.writes.length, 0, 'nothing written over it')
+  assert.equal(d.aside.written.length, 0, 'and no history recovered from it')
+
+  // Something after the history: the history is the file's, not unreadable.
+  const after = good.replace(/\n\}\n$/, ',\n  "later": 1\n}\n')
+  const e = opened(after)
+  e.answer(W.check(e.worker.asked[e.worker.asked.length - 1]))
+  e.land()
+  assert.equal(e.aside.written.length, 0)
+  e.root.selectOnly(0)
+  e.root.cycleKind()
+  e.land()
+  assert.deepEqual(labels(e), ['Colour', 'Shape'])
+
+  // The same key twice: whichever the board read in front of the history,
+  // the file says the last. The worker finds they differ and the board is read
+  // again whole, as the file says.
+  const twice = good.replace('\n  "history": ', '\n  "items": [],\n  "history": ')
+    .replace(/,\n {2}"history": /, ',\n  "history": ')
+  const later = twice.slice(0, twice.lastIndexOf('\n}')) + ',\n  "items": ' + JSON.stringify(saved.items.slice(0, 1)) + '\n}\n'
+  const f = opened(later)
+  f.answer(W.check(f.worker.asked[f.worker.asked.length - 1]))
+  assert.equal(f.items.count, 1, 'read again whole, it is what the file says')
+  assert.equal(f.writes.length, 0)
+  console.log('ok — recording: the order of a board\'s keys never changes what is read')
+}
+
+{
   // Past the limit, the oldest tenth goes and the baseline moves on; edits
   // made while the worker trims are kept.
   const c = opened(plain(1))

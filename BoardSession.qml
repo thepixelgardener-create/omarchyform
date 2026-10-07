@@ -170,7 +170,7 @@ Item {
     // Ours after all — a revision read before the file had settled, or a write
     // recorded late. The baseline moves to what is actually there, and
     // anything still unsaved is written again against the revision it has.
-    var data = Store.readFile(Store.splitHistory(raw).board)
+    var data = Store.readBoardFile(raw).data
     session.lastSavedText = raw
     session.lastSavedCount = data ? data.items.length : 0
     session.save(true)
@@ -229,7 +229,7 @@ Item {
     if (board !== session.ctl.currentBoard) return
     var split = result.indexOf("\n")
     var raw = split >= 0 ? result.slice(split + 1) : ""
-    if (split < 1 || !Store.readFile(Store.splitHistory(raw).board)) {
+    if (split < 1 || !Store.readBoardFile(raw).data) {
       session.diskReadFailed(board)
       return
     }
@@ -265,11 +265,14 @@ Item {
   }
 
   // Only a confirmed missing file may become a new, writable empty board.
-  function loadBoard(raw, missing) {
+  // `whole` reads the file whole even when its history could be left as text:
+  // the worker found the board read from in front of it is not the board the
+  // file holds.
+  function loadBoard(raw, missing, whole) {
     // The board in front of its history, which stays text: the document hands
     // it to a worker rather than parse it here.
-    var parts = Store.splitHistory(raw)
-    var data = Store.readFile(parts.board)
+    var parts = Store.readBoardFile(raw, whole === true)
+    var data = parts.data
     // A note too long to lay out without holding the shell up. The board is
     // opened the way an unreadable one is, empty and read-only, so nothing
     // waits on the text and nothing saves over it; the command line can still
@@ -295,8 +298,10 @@ Item {
     // A board that cannot be read has no history to take; one that can has
     // its history taken, unless it is from a newer Omarchyform, which makes
     // the board read-only like any newer board.
-    var history = parts.history !== "" ? parts.history : data && data.history ? JSON.stringify(data.history) : ""
-    var refusal = data ? session.ctl.adoptHistory(history, parts.board) : session.ctl.adoptHistory("", "")
+    // Read in front of its history, the worker is handed the whole file as
+    // well, to prove the board read is the board the file holds.
+    var refusal = data ? session.ctl.adoptHistory(parts.history, parts.board, parts.split ? raw : "")
+                       : session.ctl.adoptHistory("", "", "")
     if (refusal !== "") {
       session.damaged = true
       session.damageReason = refusal

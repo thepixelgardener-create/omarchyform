@@ -103,10 +103,10 @@ function readText(file) {
 // understands ends the run with the reason.
 function loadBoard(file, text) {
   const version = declaredVersion(text)
-  // The board in front of its history; the history is read here whole, since
-  // nothing is kept waiting on this.
-  const parts = S.splitHistory(text)
-  const data = S.readFile(parts.board)
+  // Read whole, history and all: nothing is kept waiting on this, so there is
+  // no reason to leave the history as text, and no way for the order of the
+  // keys in the file to change what is read.
+  const data = S.readFile(text)
   if (!data) {
     // A board from a newer Omarchyform is not a broken one. The board itself
     // opens it read-only rather than saving over what it cannot represent, and
@@ -120,12 +120,7 @@ function loadBoard(file, text) {
   const links = new RowModel()
   S.fillItems(items, data.items)
   S.fillLinks(links, items, data.links)
-  let history = data.history
-  if (parts.history !== "") {
-    try { history = JSON.parse(parts.history) }
-    catch { history = undefined }
-  }
-  return { data, items, links, version, history }
+  return { data, items, links, version, history: data.history }
 }
 
 // A board's history, checked before anything is added to it. One that ends

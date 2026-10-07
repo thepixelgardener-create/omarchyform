@@ -147,6 +147,9 @@ Item {
   // onto it. Edits made meanwhile wait, unnumbered, in historyWaiting.
   property string historyAsLoaded: ""
   property bool historyChecking: false
+  // The whole file, while the worker proves the board read in front of the
+  // history is the board it holds; "" when it was read whole to begin with.
+  property string historyRaw: ""
   property var historyWaiting: []
   property bool historyTrimming: false
   property bool historyTrimmed: false
@@ -240,8 +243,9 @@ Item {
   // A board has been read: from its file when it was opened, or again because
   // it changed on disk. Its history is taken as text and handed to the worker
   // to read. Answers why the board must be read-only, or "".
-  function adoptHistory(text, boardText) {
+  function adoptHistory(text, boardText, raw) {
     doc.historyToken += 1
+    doc.historyRaw = ""
     doc.dropReplay()
     doc.head = doc.snapshot()
     doc.loadedState = doc.head
@@ -268,10 +272,11 @@ Item {
     }
     doc.historyStart = facts && typeof facts.start === "number" ? facts.start : Date.now()
     doc.historyChecking = true
+    doc.historyRaw = raw === undefined ? "" : raw
     // Laid out some other way, by an editor's formatter say: the worker sends
     // it back in this writer's shape rather than this thread parsing it.
     historyWorker.sendMessage({ check: true, token: doc.historyToken, history: text, board: boardText,
-                                now: Date.now(), normalize: parts === null })
+                                raw: doc.historyRaw, now: Date.now(), normalize: parts === null })
     return ""
   }
 
@@ -279,6 +284,15 @@ Item {
     // One answer per reading; a second is not news.
     if (!doc.historyChecking) return
     doc.historyChecking = false
+    // The board read in front of the history is not the board the file holds,
+    // or the file is not JSON at all: read it again, whole. Nothing has been
+    // written meanwhile, and nothing is recovered from what was misread.
+    var raw = doc.historyRaw
+    doc.historyRaw = ""
+    if (answer.reload) {
+      session.loadBoard(raw, false, true)
+      return
+    }
     if (answer.unreadable) {
       // Kept, not repaired: the old history goes beside the board's backups,
       // and a new one starts from the board as it was opened.

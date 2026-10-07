@@ -12,6 +12,9 @@ WorkerScript.onMessage = function (message) {
     var t0 = Date.now()
     history = JSON.parse(message.history)
     var live = JSON.parse(message.live)
+    // And the file whole, as the board's worker does to prove the board read
+    // in front of the history is all of it.
+    if (message.raw) JSON.parse(message.raw)
     var parse = Date.now() - t0
     t0 = Date.now()
     var wrong = checkShape(history)
