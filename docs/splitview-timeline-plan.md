@@ -25,7 +25,7 @@ the section has been updated.
 | 3. History storage and budgets | Done; see "Gate 3 results". Embedded storage passes with the conditions recorded there |
 | 4. Recording and migration | Done; `tests/recording.js`, the CLI suite, a headless run of the real worker, and the live suites, whose boards' histories all play back |
 | 5. Timeline | Done; `tests/timeline.js` checks every step shown against a snapshot, `tst_split.qml` the strip, a headless run the real plugin, and `npm run shots` photographs it (`12d-timeline`) |
-| 6. Release review | Done on `dev`; see "Gate 6 results". What is left is the owner's call to release |
+| 6. Release review | Done on `dev`, with the follow-up review's three fixes in 0883789, 0e87b41 and f73c571; see "Gate 6 results". What is left is the owner's call to release, and one manual drag from a file manager |
 
 A saved second board that no longer exists opens empty in its pane, the way a
 missing `lastBoard` always has, rather than restoring a single pane.
@@ -490,6 +490,59 @@ between groups; experimental storage fixtures must not rewrite users' boards.
 
 ## Gate 6 results
 
+### Follow-up review fixes
+
+A follow-up review of 789d538 reproduced three defects. Its
+[fix plan](dev-review-fix-plan.md) is done, one commit each, 2026-10-07:
+
+| Defect | Fix | Fails on the baseline, passes here |
+| --- | --- | --- |
+| P1: a file with `history` before `items` lost its items, and the recovery save wrote the empty board | 0883789: the fast split is taken only when the board in front of the marker has its own items, links and `nextId`; the worker compares that canvas with the whole file's and has the board read again whole on any difference | `tests/suite.js`, `tests/recording.js` and `tests/cli.js` on 789d538 |
+| P2: a pretty-printed history from a newer Omarchyform was found only by the worker, and the board could be edited and written meanwhile | 0e87b41: while the worker checks a history the board is read-only, says "Checking history…" and writes nothing; a newer history refuses the board, file untouched byte for byte | `tests/recording.js` and the real-document scenario `tests/qml/tst_history.qml` on 0883789; the CLI's refusals already held there |
+| P2: a picture dropped on the pane the keyboard was not in landed on the other board | f73c571: the receiving pane names itself to `importDropped(entries, pane)`; each queued picture keeps that pane, its board and how many boards it had been given, and is placed there or refused and reported | the four drop blocks in `tests/split.js`, which run the exchange's real queue, and the live drop in `test:omarchy`, on 0e87b41 |
+
+Checked at f73c571, one suite at a time: `npm test`, `test:qml` (six
+scenarios), `test:ui` (150 passed), the live `test:omarchy` and `test:paste`,
+and the new `test:drop`. qmllint reports nothing new in the changed QML.
+`git diff --check` is clean. The plugin validator is still `VALID`,
+review-required, with no findings. Its one new advisory,
+`qml-collected-input` in `tests/qml/tst_history.qml`, is that test reading its
+fixture boards.
+
+How each drop is covered: the board's own `DropArea` hands a file to its pane
+at its pane's point. `npm run test:drop` proves this offscreen with platform
+drag-and-drop events (`tests/qt/drop_inject.cpp`, built against the local Qt's
+private window-system header), both layouts, keyboard in the other pane. A
+drag inside a QML test cannot, because `Drag.mimeData` travels only with
+drags the platform runs. From the pane on, `tests/split.js` covers: different
+boards, the same board in both panes, focus moving mid-copy, the pane
+switching, closing, or closing and reopening on its board, several queued
+drops, a history check starting before the copy or the measuring ends, and an
+earlier version on screen. The live suite drops a real picture on the other
+pane's temporary board through the real helper.
+
+**Pending, manual:** dragging a picture from a file manager onto the pane the
+keyboard is not in, on the desktop. Nothing here can drive a compositor drag.
+
+Timings after the fixes, `npm run bench:history`, same machine:
+
+- Reading a board on the shell's thread, now through `Store.readBoardFile`
+  with the layout check, takes 10–14 ms on the ordinary fixtures. The 26 MiB
+  long-notes board takes 112 ms; under gate 3 it took 83 ms to open, already
+  over the budget before any history. The longest stall while the worker
+  reads stays 11 ms.
+- The worker parses the history and the whole file, 81–220 ms, then checks
+  and indexes. That is up to twice its parse under gate 3, off the shell's
+  thread.
+- A board is read-only while its history is checked: 465–872 ms on the
+  four fixtures, 2–26 MiB with 3,000–10,000 edits. The pane says so
+  meanwhile, and the palette's excuse for a refused command names it.
+
+One unexplained result: a `test:qml` run once printed no line for the session
+scenario. Nine runs since have passed, and it has not come back.
+
+### Measurements
+
 Measured 2026-10-07 on the same machine, the live desktop for drawing and
 offscreen for memory.
 
@@ -523,9 +576,10 @@ Known and accepted:
 
 - Any `WorkerScript` under Quickshell logs "QObject::connect … invalid nullptr
   parameter" once, even an empty one. It comes from Quickshell, not this code.
-- If the shell stops within the worker's first reading of a history, a board
-  edited in that window was written with the history it was opened with. The
-  next open then records the difference as "Changed outside Omarchyform".
+- A board with a history cannot be edited for the half second or so its
+  worker takes to check it on opening. The pane shows "Checking history…"
+  meanwhile. Nothing is written until the check is done, so a newer or
+  damaged history is never saved over.
 - `qt-ui` CI runs Qt 6.4 and does not exercise the history worker. It was
   checked on Qt 6.11 here.
 
@@ -611,4 +665,3 @@ Write paths into a document's models, all in the pane after 2a:
 Every pane write ends in `save()`, `save(true)` or `scheduleSave()`, so that
 is where a pane tells the document it has edited. The document passes this to
 the other pane, which then looks its cursor up by id again.
-

@@ -14,13 +14,18 @@ since older boards are migrated on load rather than rejected.
   A board only one pane shows is saved before that pane leaves it, and two
   versions or a failed save keep the pane open. Drag the line between the
   panes to resize them; a window too small for two shows the pane you are in.
-  The layout is remembered.
+  The layout is remembered. A picture dropped on a pane goes on that pane's
+  board, wherever the keyboard is.
 - Boards remember their edits: every command, drag, pause in typing and undo
   is one step in a history kept in the board's file, newest 10,000 kept.
   **Forget this board's history** clears it. A board with history is format
   version 6, which Omarchyform 0.4.x opens read-only; boards without one and
-  copies made to share stay version 5. `bin/omarchyform apply` records each
-  run as one step.
+  copies made to share stay version 5. A board is read-only while its history
+  is checked on opening, under a second at 10,000 edits, and says **Checking
+  history…**. A file another tool has reformatted or reordered keeps its
+  whole board, and one whose history is from a newer Omarchyform stays
+  read-only and untouched. `bin/omarchyform apply` records each run as one
+  step.
 - A timeline: `t` steps back through a board's history in the pane you are
   in, `space` plays it forward at up to four times the speed, and `esc` comes
   back to now. An earlier version is read-only. `T` shows one beside the board
