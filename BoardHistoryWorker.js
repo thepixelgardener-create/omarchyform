@@ -14,17 +14,29 @@ Qt.include("BoardHistory.js")
 function check(message) {
   var answer = { kind: "checked", token: message.token, error: "", unreadable: false, newer: false,
                  bridge: "", count: 0, bytes: 0, last: 0, text: "", reload: false }
+  // Nested history values are untrusted too. Always answer so the document
+  // can preserve the bad history and recover instead of remaining locked.
+  try { return checkHistory(message, answer) } catch (e) {
+    answer.error = "history could not be replayed: " + String(e)
+    answer.unreadable = true
+    answer.text = ""
+    answer.bridge = ""
+    return answer
+  }
+}
+
+function checkHistory(message, answer) {
   // The board was read from in front of the history, which was left as text.
-  // Read the file whole here and prove that was the whole canvas: a board
-  // whose keys were moved after the history would have lost them. If it was
-  // not, or the file is not JSON at all, the board is read again whole.
+  // Read the file whole here and prove that was the whole canvas and version:
+  // keys moved after history must not disappear or bypass version protection.
+  // If they differ, or the file is not JSON, the board is read again whole.
   var whole = null
   if (message.raw) {
     try { whole = JSON.parse(message.raw) } catch (e) { whole = null }
     var front = null
     try { front = JSON.parse(message.board) } catch (e) { front = null }
     var same = function (a, b) { return JSON.stringify(a) === JSON.stringify(b) }
-    if (!whole || typeof whole !== "object" || !front
+    if (!whole || typeof whole !== "object" || !front || whole.version !== front.version
         || !same(whole.items, front.items) || !same(whole.links, front.links) || whole.nextId !== front.nextId) {
       answer.reload = true
       return answer
@@ -87,6 +99,14 @@ function check(message) {
 
 function shorten(message) {
   var answer = { kind: "trimmed", token: message.token, error: "", text: "", dropped: 0, count: 0, bytes: 0, last: 0 }
+  try { return trimHistory(message, answer) } catch (e) {
+    answer.error = "history could not be trimmed: " + String(e)
+    answer.text = ""
+    return answer
+  }
+}
+
+function trimHistory(message, answer) {
   var h
   try { h = JSON.parse(message.history) } catch (e) { h = null }
   var shape = checkShape(h)

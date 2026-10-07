@@ -16,11 +16,19 @@ const H = loadStore(fs.readFileSync(path.join(__dirname, '..', 'BoardHistory.js'
 // BoardHistoryWorker.js as the worker thread runs it: its Qt.include is the
 // codec's own functions, in scope.
 function worker() {
-  const context = vm.createContext(Object.assign({ WorkerScript: { sendMessage() {} } }, H))
+  const replies = []
+  const context = vm.createContext(Object.assign({ WorkerScript: { sendMessage(m) { replies.push(m) } } }, H))
   const source = fs.readFileSync(path.join(__dirname, '..', 'BoardHistoryWorker.js'), 'utf8')
     .replace(/^Qt\.include\(.*\)$/m, '')
   vm.runInContext(source, context)
-  return { check: m => context.check(m), shorten: m => context.shorten(m) }
+  return { check: m => context.check(m), shorten: m => context.shorten(m),
+    dispatch(m) {
+      replies.length = 0
+      context.WorkerScript.onMessage(m)
+      assert.equal(replies.length, 1, 'every worker request receives one reply')
+      assert.equal(replies[0].token, m.token, 'the reply retains its request token')
+      return replies[0]
+    } }
 }
 const W = worker()
 
@@ -44,6 +52,87 @@ function opened(text) {
 const plain = (n) => JSON.stringify({ kind: 'omarchyform.board', version: 5, nextId: n + 1, links: [],
   items: Array.from({ length: n }, (_, i) => ({ id: i + 1, kind: 'note', x: i * 300, y: 0, w: 220, h: 160,
     tint: 'foreground', text: 'note ' + (i + 1), pinned: false, src: '' })) }, null, 2) + '\n'
+
+{
+  // The version after history is just as authoritative as one before it,
+  // including a duplicate key whose last value wins under JSON parsing.
+  const file = JSON.parse(plain(2))
+  const history = H.create(live(file), 1, 'version-after-history')
+  for (const version of [7, '6', null, 6]) {
+    for (const duplicate of [false, true]) {
+      const fields = { kind: file.kind }
+      if (duplicate) fields.version = 6
+      Object.assign(fields, { nextId: file.nextId, items: file.items, links: file.links, history })
+      const text = JSON.stringify(fields, null, 2).slice(0, -2)
+        + ',\n  "version": ' + JSON.stringify(version) + '\n}\n'
+      const c = opened(text)
+      assert.equal(c.root.canEdit, false, 'validation holds editing')
+      for (let attempts = 0; c.doc.historyChecking; attempts++) {
+        assert.ok(attempts < 3, 'whole-file reload finishes validation')
+        c.answer(W.dispatch(c.worker.asked[c.worker.asked.length - 1]))
+      }
+      c.land()
+      assert.equal(c.writes.length, 0, 'opening never rewrites the file')
+      assert.equal(c.aside.written.length, 0, 'version refusal is not history recovery')
+      assert.equal(c.root.canEdit, version === 6, 'only the supported version is editable')
+      c.root.selectOnly(0)
+      c.root.recolorItem()
+      c.session.flushSave()
+      c.land()
+      if (version === 6) assert.equal(written(c).file.items.length, 2)
+      else assert.equal(c.writes.length, 0, 'an unsupported version cannot be overwritten')
+    }
+  }
+  console.log('ok — recording: a board version after history still protects the file')
+}
+
+{
+  // Malformed nested values must produce an answer, not an uncaught worker
+  // exception that leaves the document waiting forever.
+  const file = JSON.parse(plain(2))
+  for (const damage of [
+    h => { h.base.items = [null] },
+    h => { h.base.links = [null] },
+    h => { h.records = [{ i: 1, a: 'Broken', p: { s: [null] } }] }
+  ]) {
+    const history = H.create(live(file), 1, 'malformed-nested-history')
+    damage(history)
+    const c = opened(JSON.stringify(Object.assign({}, file, { version: 6, history }), null, 2) + '\n')
+    const answer = W.dispatch(c.worker.asked[c.worker.asked.length - 1])
+    assert.equal(answer.unreadable, true, 'the worker reports malformed history')
+    assert.ok(answer.error, 'the failure explains why')
+    c.answer(answer)
+    c.land()
+    assert.equal(c.doc.historyChecking, false, 'validation completes')
+    assert.equal(c.root.canEdit, true, 'recovery unlocks the intact canvas')
+    assert.deepEqual(JSON.parse(c.aside.written[0].text), history, 'original history is kept aside')
+    assert.deepEqual(written(c).file.items, file.items, 'recovery preserves the live items')
+    assert.equal(H.verify(written(c).history, live(written(c).file)), '')
+    c.root.selectOnly(0)
+    c.root.recolorItem()
+    c.land()
+    assert.deepEqual(labels(c), ['Colour'], 'editing resumes after recovery')
+  }
+  console.log('ok — recording: malformed nested history replies and recovery completes')
+
+  // Trimming also replays history on the worker. Its failure must release
+  // the document's trimming state without replacing the original history.
+  const history = H.create(live(file), 1, 'malformed-trim')
+  history.base.items = [null]
+  history.records = Array.from({ length: H.MAX_HISTORY_RECORDS + 1 }, (_, i) =>
+    ({ i: i + 1, a: 'Move', p: {} }))
+  const trimmed = W.dispatch({ trim: true, token: 91, history: JSON.stringify(history) })
+  assert.equal(trimmed.kind, 'trimmed')
+  assert.ok(trimmed.error, 'trim failures receive an error reply too')
+  assert.equal(trimmed.text, '', 'no partial replacement history is returned')
+  const c = opened(plain(2))
+  c.doc.historyTrimming = true
+  const before = c.doc.historyRecords
+  c.doc.trimmedHistory(trimmed)
+  assert.equal(c.doc.historyTrimming, false)
+  assert.equal(c.doc.historyRecords, before)
+  assert.equal(c.writes.length, 0)
+}
 
 {
   // A board without a history gets one at its first edit, starting from the

@@ -3,7 +3,7 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const { spawnSync } = require('child_process')
-for (const scenario of ['persistence', 'session', 'timeout', 'exchange', 'clipboard', 'history']) {
+for (const scenario of ['persistence', 'session', 'timeout', 'exchange', 'clipboard', 'history', 'history_edge']) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'omarchyform-persistence-'))
   try {
     fs.writeFileSync(path.join(dir, 'blocked.json'), 'original')
@@ -73,7 +73,7 @@ for (const scenario of ['persistence', 'session', 'timeout', 'exchange', 'clipbo
       fs.writeFileSync(path.join(dir, 'locked/there.omarchyform.json'), 'not mine to replace')
       fs.chmodSync(path.join(dir, 'locked'), 0o500)
     }
-    if (scenario === 'history') {
+    if (scenario === 'history' || scenario === 'history_edge') {
       // Two boards with histories, both pretty-printed, so the shell cannot
       // read either history's version off its front: one from a newer
       // Omarchyform, one this reads.
@@ -92,6 +92,14 @@ for (const scenario of ['persistence', 'session', 'timeout', 'exchange', 'clipbo
       }
       write('newer', 2)
       write('known', 1)
+      const known = JSON.parse(fs.readFileSync(path.join(dir, 'known.json'), 'utf8'))
+      // The canvas prefix has no version; the real worker must reload the
+      // whole board and let the loader refuse its newer version.
+      fs.writeFileSync(path.join(dir, 'future.json'), JSON.stringify({ kind: known.kind,
+        nextId: known.nextId, items: known.items, links: known.links,
+        history: known.history, version: 7 }, null, 2) + '\n')
+      known.history.base.items = [null]
+      fs.writeFileSync(path.join(dir, 'broken.json'), JSON.stringify(known, null, 2) + '\n')
     }
     if (scenario === 'clipboard') {
       fs.mkdirSync(path.join(dir, 'stubs'))
@@ -112,13 +120,14 @@ cat > "$OMARCHYFORM_TEST_DIR/copied"
       fs.copyFileSync(path.join(__dirname, '..', file), path.join(dir, file))
     // The scenarios import the repository from two folders up; here it is the
     // folder they run in.
-    fs.writeFileSync(path.join(dir, 'shell.qml'), fs.readFileSync(path.join(__dirname, `qml/tst_${scenario}.qml`), 'utf8')
+    fs.writeFileSync(path.join(dir, 'shell.qml'), fs.readFileSync(path.join(__dirname, `qml/tst_${scenario === 'history_edge' ? 'history' : scenario}.qml`), 'utf8')
       .replace('import "../.."', '').replace(/"\.\.\/\.\.\/(\w+\.js)"/g, '"$1"'))
     const result = spawnSync('qs', ['--no-color', '-p', path.join(dir, 'shell.qml')], {
       encoding: 'utf8', timeout: 15000,
       env: { ...process.env, QT_QPA_PLATFORM: 'offscreen', QT_QPA_PLATFORMTHEME: '',
         PATH: path.join(dir, 'stubs') + ':' + process.env.PATH,
-        QT_QUICK_CONTROLS_STYLE: 'Basic', XDG_RUNTIME_DIR: dir, OMARCHYFORM_TEST_DIR: dir }
+        QT_QUICK_CONTROLS_STYLE: 'Basic', XDG_RUNTIME_DIR: dir, OMARCHYFORM_TEST_DIR: dir,
+        OMARCHYFORM_HISTORY_EDGE: scenario === 'history_edge' ? '1' : '0' }
     })
     const output = (result.stdout || '') + (result.stderr || '')
     if (result.error || result.status !== 0 || !output.includes(`${scenario.toUpperCase()}_TESTS_PASSED`) || output.includes('FAIL:')) {
