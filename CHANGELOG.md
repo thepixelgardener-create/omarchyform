@@ -38,6 +38,16 @@ since older boards are migrated on load rather than rejected.
   is one open board with its undo history and session, and `Omarchyform.qml`
   is the workspace around them. Nothing changes on screen.
 
+### Fixed
+
+- A board with its format version after its history now receives the same
+  version check as any other board. Newer formats cannot be opened for editing
+  and overwritten as version 6 because their JSON properties were reordered.
+- Malformed nested history now returns a worker error instead of leaving the
+  board stuck at **Checking history…**. The existing recovery keeps the bad
+  history aside and preserves the live board. Trimming failures also return
+  an error without replacing the history.
+
 ## 0.4.6 — 2026-10-05
 
 ### Changed

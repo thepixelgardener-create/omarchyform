@@ -6,6 +6,34 @@ Status: done on `dev` in `0883789`, `0e87b41` and `f73c571`. Results and
 the one manual check left are under "Gate 6 results" in the
 [development plan](splitview-timeline-plan.md).
 
+## Follow-up review fixes — 2026-10-07
+
+Implemented locally on top of `4e6b391` after the second review:
+
+- Compare the complete board's version with the fast-read prefix. A version
+  placed after history (including a duplicate final version) triggers a whole
+  reload and the existing supported-version check before editing is enabled.
+- Return explicit worker errors for exceptions in history checking or trimming.
+  Malformed baseline items/links and patch entries no longer leave the board
+  waiting indefinitely; normal recovery preserves the original bad history
+  aside and keeps the live canvas.
+
+Both regressions failed before their fixes and pass afterward. Validation:
+`npm test`, `npm run test:qml` (including real-worker edge cases),
+`npm run test:ui` (150 passed), and `npm run test:omarchy` passed. Plugin
+validation, JavaScript syntax, controller contracts, the final-property lint
+check and `git diff --check` passed. Live checks used temporary boards.
+
+The expanded QML test initially reached its success marker but hung during
+shutdown. A debugger located the wait in `QQuickWorkerScript` destruction;
+the test now destroys its dynamic documents while the QML engine is running,
+then quits. Both history sessions exit normally with this teardown. This is
+a test teardown change, not a claimed fix to Qt's engine-shutdown behavior.
+
+No installed plugin files or real boards were changed by these fixes/tests.
+
+## Original fix scope
+
 Fix the three reproduced review findings in separate commits, with regression
 tests in each. Prioritize the two history issues because they can overwrite
 saved data. Preserve the current history format and owner-approved retention
