@@ -102,6 +102,10 @@ normal navigation, mark-all, editing and deletion skip it. Use it for the panel
 a cluster sits on, or a label for a region. Pin the shape *after* the items
 that go on top of it exist, and give it a `muted` tint.
 
+**`texture`** is optional on notes and shapes: `plain` (default), `ruled`,
+`grid`, `dots`, or `hatch`. Textured boards use format 7 even without history.
+Images stay plain. Unknown texture values load as plain. `setTexture` sets one.
+
 **Links.** Directed, drawn as an arrow from `from` to `to`. **Only one runs
 between any pair.** A connector pointing at an item that is not there is
 dropped on load rather than breaking the board.
@@ -120,8 +124,8 @@ from here; it takes the pair in either order.
 **`nextId`** is the next id to hand out. `apply` maintains it; do not set it.
 
 **`history`**, last in the file, is every edit the board remembers, so its
-timeline can play it back. A board that has one is `"version": 6`; one that
-does not is still 5. `apply` adds one record per run, labelled "Command line",
+timeline can play it back. A board with history or textures is `"version": 7`;
+one with neither is still 5. Version 6 histories still load. `apply` adds one record per run, labelled "Command line",
 however many operations it carries, and keeps the newest 10,000. Never edit
 the history by hand. If the board itself was edited by hand, the next `apply`
 records the difference as one record, "Changed outside Omarchyform". A history

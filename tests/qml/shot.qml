@@ -64,6 +64,25 @@ ShellRoot {
       }
     },
     {
+      name: "02a-item-textures",
+      setup: function () {
+        var p = plugin.activePane
+        var styles = ["ruled", "grid", "dots", "hatch", "plain", "dots", "grid"]
+        for (var i = 0; i < styles.length; i++) p.items.setProperty(i, "itexture", styles[i])
+        p.addLink(2, 3)
+        p.addLink(3, 4)
+        p.selectOnly(1)
+        p.repaintLinks()
+      }
+    },
+    { name: "02b-paper", setup: function () { plugin.activePane.setCanvasColour("Paper"); plugin.activePane.statusText = "" } },
+    { name: "02c-ink", setup: function () { plugin.activePane.setCanvasColour("Ink"); plugin.activePane.statusText = "" } },
+    { name: "02d-canvas-group", setup: function () { plugin.activePane.openGroup("canvas") } },
+    { name: "02e-texture-group", setup: function () { plugin.activePane.openGroup("texture") } },
+    { name: "02f-theme-restored", setup: function () {
+      plugin.activePane.endPalette(); plugin.activePane.setCanvasColour("Theme"); plugin.activePane.statusText = ""
+    } },
+    {
       // The header is one line until the menu is asked for.
       name: "02b-menu-open",
       // Walked two along, so the keyboard's place in it is visible.

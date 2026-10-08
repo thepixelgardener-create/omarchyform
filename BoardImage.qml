@@ -84,40 +84,13 @@ Item {
     property bool canEdit: false
     property bool showPinned: false
     // The board's palette, with its emphasis taken out: nothing is selected in
-    // a picture, so a tint that would be drawn strongly on screen is drawn
-    // plainly here. Shaped like the real theme because a Node cannot tell the
-    // difference — tests/contract.js is what holds the two shapes together.
-    property QtObject theme: QtObject {
-      property color foreground: picture.chosen ? picture.chosen.foreground : picture.theme.foreground
-      property color accent: picture.chosen ? picture.chosen.borders.accent : picture.theme.accent
-      property color muted: picture.chosen ? picture.chosen.borders.muted : picture.theme.muted
-      property color canvasBackground: picture.chosen ? picture.chosen.background : picture.theme.canvasBackground
-      property string fontFamily: picture.theme.fontFamily
-      property int fontSubtitle: picture.theme.fontSubtitle
-      property int fontBody: picture.theme.fontBody
-      property int borderWidth: picture.theme.borderWidth
-      property int cornerRadius: picture.theme.cornerRadius
-      // A note's coloured spans follow whatever the picture is drawn in, the
-      // same way its fills and borders do.
-      readonly property var markupColors: picture.chosen ? ({
-        foreground: picture.chosen.foreground,
-        accent: picture.chosen.borders.accent,
-        urgent: picture.chosen.borders.urgent,
-        muted: picture.chosen.borders.muted
-      }) : picture.theme.markupColors
-      function sp(n) { return picture.theme.sp(n) }
-      // A chosen palette names its fills and borders outright rather than
-      // blending them, so nothing here has to reproduce the theme's arithmetic
-      // against colours it was never chosen for. `strong` is ignored either
-      // way: nothing in a picture is selected.
-      function tintFill(tint, strong) {
-        return picture.chosen ? Store.paletteTint(picture.chosen, "fills", tint)
-                              : picture.theme.tintFill(tint, false)
-      }
-      function tintBorder(tint, strong) {
-        return picture.chosen ? Store.paletteTint(picture.chosen, "borders", tint)
-                              : picture.theme.tintBorder(tint, false)
-      }
+    // a picture. Unless a palette was asked for, it is the board as it looks,
+    // on its own canvas colour, Paper and Ink included.
+    property QtObject sceneTheme: BoardPalette {
+      base: picture.theme
+      chosen: picture.chosen ? picture.chosen : picture.ctl.sceneTheme.chosen
+      shade: picture.ctl.sceneTheme.shade
+      plain: true
     }
     property int minItemSize: picture.ctl.minItemSize
     function imagePath(name) { return picture.ctl.imagePath(name) }
@@ -154,7 +127,7 @@ Item {
   }
   Rectangle {
     anchors.fill: parent
-    color: picture.chosen ? picture.chosen.background : picture.theme.canvasBackground
+    color: renderCtl.sceneTheme.canvasBackground
   }
   Item {
     id: world
@@ -182,19 +155,18 @@ Item {
         c.reset()
         c.scale(picture.ratio, picture.ratio)
         c.translate(picture.area ? 32-picture.area.minX : 0, picture.area ? 32-picture.area.minY : 0)
-        c.strokeStyle = picture.chosen ? picture.chosen.connector : picture.theme.foreground
+        c.strokeStyle = renderCtl.sceneTheme.connector
         c.fillStyle = c.strokeStyle
-        // A chosen palette's connector colour is already the weight it wants
-        // against its own background; the theme's foreground is not, and is
-        // held back here exactly as the board holds it back.
-        c.globalAlpha = picture.chosen ? 1 : Store.CONNECTOR_ALPHA
+        c.globalAlpha = renderCtl.sceneTheme.connectorAlpha
         c.lineWidth = 1.5
+        c.lineCap = "round"
+        c.lineJoin = "round"
         var byId = Store.idIndex(nodes)
         for (var i = 0; i < edges.count; i++) {
           var link = edges.get(i)
-          // The head is 7 board units, scaled with the rest of the picture.
-          var g = Store.connectorGeometry(nodes.get(byId[link.lfrom]), nodes.get(byId[link.lto]), 7)
-          c.beginPath(); c.moveTo(g.fromX, g.fromY); c.lineTo(g.toX, g.toY); c.stroke()
+          var g = Store.connectorGeometry(nodes.get(byId[link.lfrom]), nodes.get(byId[link.lto]), 9, 2)
+          if (!g.visible) continue
+          c.beginPath(); c.moveTo(g.fromX, g.fromY); c.lineTo((g.leftX + g.rightX) / 2, (g.leftY + g.rightY) / 2); c.stroke()
           c.beginPath(); c.moveTo(g.toX, g.toY); c.lineTo(g.leftX, g.leftY); c.lineTo(g.rightX, g.rightY)
           c.closePath(); c.fill()
         }

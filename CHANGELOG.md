@@ -7,6 +7,11 @@ since older boards are migrated on load rather than rejected.
 
 ### Added
 
+- Per-item textures for notes and shapes: Plain (the default), Ruled, Grid,
+  Dots, and Hatch. Kept through undo, duplication, history, sharing and PNG export.
+- Canvas colours: Theme, Lighter, Darker, Paper and Ink, remembered across
+  restarts and shared by both panes. Paper and Ink adapt item and text colours.
+
 - Split view: `v` puts a second pane beside the board, `V` stacks it below, and
   the same key again goes back to one pane. Each pane has its own camera,
   selection and board; two panes on one board share it, and each keeps its
@@ -19,8 +24,8 @@ since older boards are migrated on load rather than rejected.
 - Boards remember their edits: every command, drag, pause in typing and undo
   is one step in a history kept in the board's file, newest 10,000 kept.
   **Forget this board's history** clears it. A board with history is format
-  version 6, which Omarchyform 0.4.x opens read-only; boards without one and
-  copies made to share stay version 5. A board is read-only while its history
+  version 7, which older versions open read-only; boards without history or
+  item textures and plain copies made to share stay version 5. A board is read-only while its history
   is checked on opening, under a second at 10,000 edits, and says **Checking
   history…**. A file another tool has reformatted or reordered keeps its
   whole board, and one whose history is from a newer Omarchyform stays
@@ -32,6 +37,13 @@ since older boards are migrated on load rather than rejected.
   as it is.
 
 ### Changed
+
+- Related commands open groups, while search still finds individual commands.
+  Backspace with an empty query returns from a group to the full list.
+- Connections have clearer arrows and highlight the selected item's links.
+  Clicking a destination preserves the source; `x` confirms and Escape cancels.
+- Connector drawing reuses item lookups, skips offscreen links and batches
+  drawing by colour. Item fill weights are read once per theme change.
 
 - The controller is split in three, ahead of split view: `BoardPane.qml` is
   one view of a board and the controller its views read, `BoardDocument.qml`

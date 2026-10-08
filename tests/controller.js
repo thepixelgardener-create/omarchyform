@@ -765,8 +765,9 @@ console.log('ok — controller: walking the header menu and running its commands
   assert.equal(c.root.paletteVisible, true)
   assert.equal(c.root.paletteQuery, '')
   assert.equal(c.root.paletteIndex, 0, 'opens on the first, ready to run')
-  assert.equal(c.root.paletteMatches.length, S.COMMANDS.filter(x => x.listed !== false && x.needs !== "typing").length,
-    'every command but the ways into this list')
+  assert.equal(c.root.paletteMatches.length,
+    S.COMMANDS.filter(x => x.listed !== false && x.needs !== "typing" && !x.group).length,
+    'every command but the ways into this list, each family as its one entry')
 
   // Typing narrows it, and the cursor goes back to the top rather than staying
   // on a row that now means something else.
@@ -774,7 +775,7 @@ console.log('ok — controller: walking the header menu and running its commands
   assert.equal(c.root.paletteIndex, 2)
   c.root.setPaletteQuery('col')
   assert.equal(c.root.paletteIndex, 0)
-  assert.deepEqual(c.root.paletteMatches.map(m => m.name), ['Change colour'])
+  assert.equal(c.root.paletteMatches[0].name, 'Change colour')
   c.root.setPaletteQuery('')
   assert.equal(c.root.paletteQuery, '')
 
@@ -830,11 +831,21 @@ console.log('ok — controller: walking the header menu and running its commands
   assert.equal(c.root.paletteVisible, true)
   assert.equal(c.root.paletteScope, 'selection')
   assert.ok(c.root.paletteMatches.length > 0)
-  assert.ok(c.root.paletteMatches.every(m => ['target', 'item', 'group'].includes(m.needs)),
+  assert.ok(c.root.paletteMatches.every(m => ['target', 'item', 'group', 'texture'].includes(m.needs)),
     'only what acts on the selection')
   // Alignment is offered by name, so the second key of the chord is something
-  // to learn rather than something to know already.
+  // to learn rather than something to know already: the chord's entry opens
+  // its six answers, and backspace goes back.
+  c.root.paletteIndex = c.root.paletteMatches.findIndex(m => m.name === 'Align and spread')
+  c.root.runPaletteChoice()
+  assert.equal(c.root.paletteVisible, true, 'a family is opened, not run')
+  assert.equal(c.root.paletteGroup, 'align')
   assert.ok(c.root.paletteMatches.some(m => m.name === 'Align left edges'))
+  assert.ok(c.root.paletteMatches.every(m => m.group === 'align'))
+  assert.equal(c.root.arranging, false, 'and the chord is not waiting for a key')
+  c.root.leaveGroup()
+  assert.equal(c.root.paletteGroup, '')
+  assert.ok(c.root.paletteMatches.some(m => m.name === 'Align and spread'))
   c.root.endPalette()
   assert.equal(c.root.paletteScope, 'selection', 'the scope belongs to the opening, not the closing')
   c.root.beginPalette()
@@ -1213,11 +1224,13 @@ console.log('ok — controller: bringing things forward and sending them back')
   assert.equal(c.links.count, 2, 'and the connector between them was copied too')
 
   // And the same list, narrowed to what can be done with what is selected, is
-  // where all of those came from.
+  // where all of those came from: each family by its entry, and inside it.
   const actions = S.matchCommands('', 'selection').map(m => m.name)
   for (const name of ['Connect to another', 'Change colour', 'Change shape', 'Duplicate',
-                      'Align left edges', 'Bring to front', 'Pin or unpin as background', 'Delete'])
+                      'Align and spread', 'Bring forward or send back…', 'Pin or unpin as background', 'Delete'])
     assert.ok(actions.includes(name), name + ' is in the actions for a selection')
+  assert.ok(S.matchCommands('', 'selection', 'align').some(m => m.name === 'Align left edges'))
+  assert.ok(S.matchCommands('', 'selection', 'layer').some(m => m.name === 'Bring to front'))
 }
 console.log('ok — controller: a first board built only from names in the list')
 {
@@ -1271,9 +1284,8 @@ console.log('ok — controller: a first board built only from names in the list'
   c.root.undo()
   assert.equal(c.links.count, 1, 'which works')
 
-  // The far end is walked to, not clicked at: a pointer selection starts
-  // afresh, which ends the gesture rather than answering it. Documented here
-  // because the README says so and nothing else would notice it changing.
+  // The far end can be walked to or clicked: either way the near end is held
+  // until x answers or escape lets go.
   c.root.selectOnly(0)
   c.root.toggleLinking()
   assert.equal(c.root.linkingFrom, a, 'one end is held')
@@ -1282,8 +1294,9 @@ console.log('ok — controller: a first board built only from names in the list'
   c.root.move(1, 0, false)
   assert.equal(c.root.linkingFrom, a, 'and so does moving the cursor')
   c.root.pointerSelect(1, false)
-  assert.equal(c.root.linkingFrom, -1, 'a click lets go of it')
-  assert.equal(c.root.linkOutcome, 'none', 'and the line stops promising anything')
+  assert.equal(c.root.linkingFrom, a, 'a click keeps the near end')
+  assert.equal(c.root.linkOutcome, 'reverse', 'and the line says what x will do with the one clicked')
+  c.root.back()
 
   // Escape while choosing changes nothing and leaves nothing half-made.
   const before = JSON.stringify(S.linkRows(c.links))
@@ -1579,7 +1592,9 @@ console.log('ok — controller: canvas pattern settings, old state and persisten
   c.root.runMenu(c.store.menuIndex('background'))
   assert.equal(c.root.menuVisible, false)
   assert.equal(c.root.paletteVisible, true)
-  assert.deepEqual(Array.from(c.root.paletteMatches, entry => entry.arg), ['Dots', 'Grid', 'Ruled', 'Plain'])
+  assert.equal(c.root.paletteGroup, 'canvas', 'the canvas family, pattern and colour')
+  assert.deepEqual(Array.from(c.root.paletteMatches, entry => entry.arg),
+    ['Dots', 'Grid', 'Ruled', 'Plain', 'Theme', 'Lighter', 'Darker', 'Paper', 'Ink'])
   for (const pattern of ['Grid', 'Ruled', 'Plain', 'Dots']) {
     c.root.chooseCanvasBackground()
     c.root.paletteIndex = c.root.paletteMatches.findIndex(entry => entry.arg === pattern)
@@ -1595,7 +1610,7 @@ console.log('ok — controller: canvas pattern settings, old state and persisten
     assert.equal(reopened.root.paletteMatches[reopened.root.paletteIndex].arg, pattern)
   }
   c.session.damaged = true
-  c.root.runCommand('Canvas background: Plain')
+  c.root.runCommand('Canvas pattern: Plain')
   assert.equal(c.root.showGrid, false, 'appearance works on read-only boards')
   assert.equal(c.writes.length, 0, 'appearance never writes the board')
   assert.equal(c.doc.undoStack.length, 0, 'appearance never consumes board undo')
@@ -1604,3 +1619,74 @@ console.log('ok — controller: canvas pattern settings, old state and persisten
   assert.equal(c.states.length, savedCount)
 }
 console.log('ok — controller: in-board background choice survives bar opening and reload')
+
+{
+  // The canvas colour: a setting like the pattern, remembered, never part of
+  // a board, and nothing a read-only board refuses.
+  const c = controller()
+  c.session.loadBoard('{"version":5,"items":[]}', false)
+  assert.equal(c.workspace.canvasColour, 'Theme')
+  c.root.chooseCanvasBackground()
+  c.root.paletteIndex = c.root.paletteMatches.findIndex(entry => entry.name === 'Canvas colour: Paper')
+  c.root.runPaletteChoice()
+  assert.equal(c.root.paletteVisible, false)
+  assert.equal(c.workspace.canvasColour, 'Paper')
+  assert.match(c.root.statusText, /Canvas colour: Paper/)
+  assert.equal(JSON.parse(c.states.at(-1)).canvasColour, 'Paper')
+  const reopened = controller()
+  reopened.workspace.applyState(c.states.at(-1))
+  reopened.workspace.applyPayload('{"settings":{"showGrid":true,"canvasPattern":"Dots"}}')
+  assert.equal(reopened.workspace.canvasColour, 'Paper', 'kept across a restart and the bar opening it')
+  for (const colour of ['unknown', '', null, 42, 'paper']) {
+    reopened.workspace.applyState(JSON.stringify({ canvasColour: colour }))
+    assert.equal(reopened.workspace.canvasColour, 'Paper', 'a colour this does not know changes nothing')
+  }
+  const saved = c.states.length
+  c.root.setCanvasColour('Purple')
+  assert.equal(c.workspace.canvasColour, 'Paper')
+  assert.equal(c.states.length, saved, 'and is not written down')
+  c.session.damaged = true
+  c.root.runCommand('Canvas colour: Ink')
+  assert.equal(c.workspace.canvasColour, 'Ink', 'appearance works on read-only boards')
+  assert.equal(c.writes.length, 0, 'and never writes the board')
+  assert.equal(c.doc.undoStack.length, 0, 'or takes an undo step')
+}
+console.log('ok — controller: the canvas colour is a remembered setting, not part of a board')
+
+{
+  const c = controller()
+  c.root.addItem('note', 0, 0)
+  c.root.addItem('ellipse', 300, 0)
+  c.root.markedIds = [c.items.get(0).iid, c.items.get(1).iid]
+  c.root.beginSelectionActions()
+  c.root.paletteIndex = c.root.paletteMatches.findIndex(m => m.opens === 'texture')
+  assert.ok(c.root.paletteIndex >= 0)
+  c.root.runPaletteChoice()
+  assert.equal(c.root.paletteGroup, 'texture')
+  assert.equal(c.root.paletteMatches.length, 5)
+  c.root.paletteIndex = c.root.paletteMatches.findIndex(m => m.arg === 'grid')
+  c.root.runPaletteChoice()
+  assert.equal(c.items.get(0).itexture, 'grid')
+  assert.equal(c.items.get(1).itexture, 'grid')
+  const count = c.doc.undoStack.length
+  c.root.setTexture('grid')
+  assert.equal(c.doc.undoStack.length, count, 'no redundant undo')
+  c.root.undo()
+  assert.equal(c.items.get(0).itexture, 'plain')
+  c.root.redo()
+  c.root.duplicateTargets()
+  assert.equal(c.items.get(c.items.count - 1).itexture, 'grid')
+  c.root.selectedIndex = 0
+  c.root.markedIds = []
+  c.items.setProperty(0, 'kind', 'image')
+  c.root.setTexture('dots')
+  assert.equal(c.items.get(0).itexture, 'grid', 'image ignored')
+  c.items.setProperty(0, 'kind', 'note')
+  c.items.setProperty(0, 'ipinned', true)
+  c.root.setTexture('hatch')
+  assert.equal(c.items.get(0).itexture, 'hatch')
+  c.session.damaged = true
+  c.root.setTexture('dots')
+  assert.equal(c.items.get(0).itexture, 'hatch', 'read-only board unchanged')
+  console.log('ok — controller: texture group, multi-selection, undo, copy and read-only')
+}

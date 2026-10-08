@@ -9,7 +9,7 @@ FocusScope {
   id: board
 
   required property var ctl
-  readonly property var theme: board.ctl.theme
+  readonly property var theme: board.ctl.sceneTheme
 
   focus: true
   readonly property real headerHeight: toolbar.y + toolbar.height
@@ -45,28 +45,55 @@ FocusScope {
     onStillLoading: board.ctl.flash("Waiting for pictures to load…")
   }
 
-  // A connector as the board draws it: the line and head that
-  // Store.connectorGeometry worked out in board units, through the camera.
-  // The camera is passed in rather than asked for through ctl.toScreenX: this
-  // runs for every corner of every connector on every frame of a pan, and a
-  // call into the controller costs more than the arithmetic it does.
-  function strokeConnector(ctx, g, zoom, camX, camY) {
-    ctx.beginPath()
-    ctx.moveTo(g.fromX * zoom + camX, g.fromY * zoom + camY)
-    ctx.lineTo(g.toX * zoom + camX, g.toY * zoom + camY)
-    ctx.stroke()
-  }
-  function fillArrowHead(ctx, g, zoom, camX, camY) {
-    ctx.beginPath()
-    ctx.moveTo(g.toX * zoom + camX, g.toY * zoom + camY)
-    ctx.lineTo(g.leftX * zoom + camX, g.leftY * zoom + camY)
-    ctx.lineTo(g.rightX * zoom + camX, g.rightY * zoom + camY)
-    ctx.closePath()
-    ctx.fill()
-  }
-
   function repaintGrid() { grid.requestPaint() }
   function repaintLinks() { linkCanvas.requestPaint() }
+
+  // Which row each item id is on, for the connectors. Built again only when
+  // rows come or go or move, or the pane shows other items: an item's id never
+  // changes in place, and a drag only changes where it is.
+  property var indexedItems: null
+  property var linkIndex: ({})
+  property bool linkIndexDirty: true
+  function invalidateLinkIndex() { board.linkIndexDirty = true; board.repaintLinks() }
+  Connections {
+    target: board.ctl.items
+    function onRowsInserted() { board.invalidateLinkIndex() }
+    function onRowsRemoved() { board.invalidateLinkIndex() }
+    function onRowsMoved() { board.invalidateLinkIndex() }
+    function onModelReset() { board.invalidateLinkIndex() }
+  }
+  // The selected item's connectors are drawn in the accent.
+  Connections {
+    target: board.ctl
+    function onSelectedIndexChanged() { board.repaintLinks() }
+  }
+
+  // Connectors as the board draws them: the lines and heads that
+  // Store.connectorGeometry worked out in board units, through the camera, in
+  // one stroke and one fill for the lot rather than two draw calls each. The
+  // line stops at the base of its head, so a round cap never pokes through the
+  // point. The camera is passed in rather than asked for through
+  // ctl.toScreenX: this runs for every corner of every connector on every
+  // frame of a pan, and a call into the controller costs more than the
+  // arithmetic it does.
+  function paintConnectors(ctx, geometries, zoom, camX, camY) {
+    ctx.beginPath()
+    for (var i = 0; i < geometries.length; i++) {
+      var g = geometries[i]
+      ctx.moveTo(g.fromX * zoom + camX, g.fromY * zoom + camY)
+      ctx.lineTo((g.leftX + g.rightX) / 2 * zoom + camX, (g.leftY + g.rightY) / 2 * zoom + camY)
+    }
+    ctx.stroke()
+    ctx.beginPath()
+    for (var j = 0; j < geometries.length; j++) {
+      var arrow = geometries[j]
+      ctx.moveTo(arrow.toX * zoom + camX, arrow.toY * zoom + camY)
+      ctx.lineTo(arrow.leftX * zoom + camX, arrow.leftY * zoom + camY)
+      ctx.lineTo(arrow.rightX * zoom + camX, arrow.rightY * zoom + camY)
+      ctx.closePath()
+    }
+    ctx.fill()
+  }
   function probeImage(name) {
     sizeProbe.pending = name
     sizeProbe.source = ""
@@ -80,7 +107,8 @@ FocusScope {
   Connections {
     target: board.theme
     function onDotColorChanged() { board.repaintGrid() }
-    function onForegroundChanged() { board.repaintLinks() }
+    function onConnectorChanged() { board.repaintLinks() }
+    function onAccentChanged() { board.repaintLinks() }
   }
 
   // A real window hands focus to its content item, not to whatever is nested
@@ -240,27 +268,48 @@ FocusScope {
     onPaint: {
       var ctx = getContext("2d")
       ctx.reset()
-      ctx.strokeStyle = board.theme.foreground
-      ctx.fillStyle = board.theme.foreground
+      ctx.strokeStyle = board.theme.connector
+      ctx.fillStyle = board.theme.connector
       ctx.lineWidth = Math.max(1, 1.5 * board.ctl.zoom)
-      ctx.globalAlpha = Store.CONNECTOR_ALPHA
+      ctx.lineCap = "round"
+      ctx.lineJoin = "round"
+      ctx.globalAlpha = board.theme.connectorAlpha
       var zoom = board.ctl.zoom, camX = board.ctl.camX, camY = board.ctl.camY
-      // Never smaller on screen than 7 pixels, however far out the view is.
-      var head = Math.max(7, 7 * zoom) / zoom
+      // Visible direction even when zoomed out, and a small gap at the border.
+      var head = Math.max(8, 9 * zoom) / zoom
 
       var items = board.ctl.items
       var links = board.ctl.links
-      var byId = Store.idIndex(items)
+      if (board.indexedItems !== items || board.linkIndexDirty) {
+        board.linkIndex = Store.idIndex(items)
+        board.indexedItems = items
+        board.linkIndexDirty = false
+      }
+      var byId = board.linkIndex
+      var selectedId = board.ctl.selectedIndex >= 0 && board.ctl.selectedIndex < items.count
+        ? items.get(board.ctl.selectedIndex).iid : -1
+      var normal = [], highlighted = []
+      var left = -camX / zoom, top = -camY / zoom
+      var right = (width - camX) / zoom, bottom = (height - camY) / zoom
 
       for (var i = 0; i < links.count; i++) {
         var l = links.get(i)
         var ai = byId[l.lfrom]
         var bi = byId[l.lto]
         if (ai === undefined || bi === undefined) continue
-        var g = Store.connectorGeometry(items.get(ai), items.get(bi), head)
-        board.strokeConnector(ctx, g, zoom, camX, camY)
-        board.fillArrowHead(ctx, g, zoom, camX, camY)
+        var a = items.get(ai), b = items.get(bi)
+        if (!Store.connectorInView(a, b, left, top, right, bottom, head)) continue
+        var g = Store.connectorGeometry(a, b, head, 2 / zoom)
+        if (!g.visible) continue
+        if (l.lfrom === selectedId || l.lto === selectedId) highlighted.push(g)
+        else normal.push(g)
       }
+      board.paintConnectors(ctx, normal, zoom, camX, camY)
+      ctx.strokeStyle = board.theme.accent
+      ctx.fillStyle = board.theme.accent
+      ctx.globalAlpha = 0.95
+      ctx.lineWidth = Math.max(1.75, 1.8 * zoom)
+      board.paintConnectors(ctx, highlighted, zoom, camX, camY)
 
       // While picking the far end, trail a dashed line to the selection so it
       // is obvious what is about to be joined: edge to edge, where the
@@ -269,8 +318,10 @@ FocusScope {
       if (si !== undefined && board.ctl.selectedIndex >= 0 && si !== board.ctl.selectedIndex) {
         ctx.globalAlpha = 0.9
         ctx.setLineDash([6, 5])
-        board.strokeConnector(ctx, Store.connectorGeometry(items.get(si), items.get(board.ctl.selectedIndex), 0),
-                              zoom, camX, camY)
+        var preview = Store.connectorGeometry(items.get(si), items.get(board.ctl.selectedIndex), head, 2 / zoom)
+        if (preview.visible) {
+          board.paintConnectors(ctx, [preview], zoom, camX, camY)
+        }
         ctx.setLineDash([])
       }
     }
@@ -768,6 +819,8 @@ FocusScope {
   function paletteKey(event) {
     var ctrl = (event.modifiers & Qt.ControlModifier) !== 0
     if (event.key === Qt.Key_Escape) board.ctl.endPalette()
+    else if (event.key === Qt.Key_Backspace && board.ctl.paletteQuery === "" && board.ctl.paletteGroup !== "")
+      board.ctl.leaveGroup()
     else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) board.ctl.runPaletteChoice()
     else if (event.key === Qt.Key_Down || event.key === Qt.Key_Tab) board.ctl.movePalette(1)
     else if (event.key === Qt.Key_Up || event.key === Qt.Key_Backtab) board.ctl.movePalette(-1)

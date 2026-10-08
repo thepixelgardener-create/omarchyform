@@ -660,23 +660,26 @@ function tests(S) {
   })
 
   test("the command list offers what was typed, best first", () => {
-    // Nothing typed is the whole table, minus the ways into the list itself.
+    // Nothing typed is the whole table, minus the ways into the list itself
+    // and with each family of variants standing behind its one entry.
     const all = S.matchCommands("")
-    eq(all.length, S.COMMANDS.filter(c => c.listed !== false && c.needs !== "typing").length)
+    eq(all.length, S.COMMANDS.filter(c => c.listed !== false && c.needs !== "typing" && !c.group).length)
     ok(all.every(c => c.listed !== false), "the ways in do not list themselves")
 
     // Asked for a selection, it is the commands that act on one — which is
     // what a menu of actions for the selection offers, from the same table.
     const mine = S.matchCommands("", "selection")
     ok(mine.length > 0 && mine.length < all.length)
-    ok(mine.every(c => ["target", "item", "group"].indexOf(c.needs) >= 0),
+    ok(mine.every(c => ["target", "item", "group", "texture"].indexOf(c.needs) >= 0),
        "only the ones that need something selected")
-    ok(mine.some(c => c.name === "Align left edges"), "including the arrangement chord's answers")
+    ok(mine.some(c => c.name === "Align and spread"), "including the arrangement chord, as its family")
     ok(mine.some(c => c.name === "Change colour"), "and the plain ones that act on what is selected")
-    ok(mine.some(c => c.name === "Bring to front"), "and the ones a background counts for")
+    ok(mine.some(c => c.name === "Bring forward or send back…"), "and the ones a background counts for")
     ok(mine.some(c => c.name === "Pin or unpin as background"), "and the one that takes it out of the background")
     ok(!mine.some(c => c.name === "New board"), "and nothing that is about the board itself")
-    eq(S.matchCommands("align", "selection").length, 6, "narrowing still works inside it")
+    eq(S.matchCommands("align", "selection").map(c => c.name).slice(0, 2), ["Align and spread", "Align left edges"],
+       "narrowing finds the family and its members")
+    eq(S.matchCommands("align", "selection").length, 7)
 
     // A name that starts with the query was meant more often than one that
     // merely contains it, whatever order the table puts them in.
@@ -685,8 +688,7 @@ function tests(S) {
     ok(names.indexOf("New board") > 0, "and the rest still follow")
     ok(names.indexOf("Rename") < 0)
 
-    eq(S.matchCommands("  COLOUR ").map(c => c.name).join(","), "Change colour",
-       "case and stray spaces are not the point")
+    eq(S.matchCommands("  COLOUR ")[0].name, "Change colour", "case and stray spaces are not the point")
 
     // Half-remembering the letter should work too: type it and see what it does.
     eq(S.matchCommands("g")[0].name, "Align and spread")
@@ -696,6 +698,44 @@ function tests(S) {
   // The names say what a command does in the board's own words, which is not
   // the word most people reach for first. The aliases are the way in from the
   // word every other program uses; nothing dispatches by one.
+  test("variants come in families: one entry to browse, each member by name", () => {
+    const names = (q, scope, group) => S.matchCommands(q, scope, group).map(c => c.name)
+    // Every family has exactly one entry that opens it, and every entry that
+    // opens one has members.
+    const groups = new Set(S.COMMANDS.filter(c => c.group).map(c => c.group))
+    for (const group of groups) {
+      eq(S.COMMANDS.filter(c => c.opens === group).length, 1, "one entry opens " + group)
+      ok(S.groupTitle(group) !== "", group + " has a title")
+      ok(names("", "all", group).length >= 2, group + " has members")
+    }
+    for (const c of S.COMMANDS.filter(c => c.opens)) ok(groups.has(c.opens), c.name + " opens a family")
+    // A family's members all need the same thing, so opening the family from
+    // its entry can never show a member the entry's scope would hide.
+    for (const group of groups) {
+      const needs = new Set(S.COMMANDS.filter(c => c.group === group).map(c => c.needs))
+      eq(needs.size, 1, group + "'s members need one thing")
+    }
+    // Browsing shows the entry and not the members.
+    ok(names("").includes("Canvas background…"))
+    ok(!names("").includes("Canvas pattern: Grid"))
+    ok(names("", "typing").includes("Colour the words…"))
+    ok(!names("", "typing").includes("Colour it urgent"))
+    // Inside a family, only its members, whatever the scope.
+    eq(names("", "all", "canvas"), ["Canvas pattern: Dots", "Canvas pattern: Grid", "Canvas pattern: Ruled",
+      "Canvas pattern: Plain", "Canvas colour: Theme", "Canvas colour: Lighter", "Canvas colour: Darker",
+      "Canvas colour: Paper", "Canvas colour: Ink"])
+    eq(names("", "all", "text-colour").length, 4, "a typing family opens from the board's list too")
+    eq(names("pa", "all", "canvas"), ["Canvas pattern: Dots", "Canvas pattern: Grid", "Canvas pattern: Ruled",
+      "Canvas pattern: Plain", "Canvas colour: Paper"], "and typing narrows it, in the table's order")
+    // Typing finds a member directly, from anywhere.
+    eq(names("paper")[0], "Canvas colour: Paper")
+    eq(names("on white")[0], "Export a PNG on white")
+    eq(names("front", "selection")[0], "Bring to front")
+    eq(S.groupTitle("canvas"), "Canvas background")
+    eq(S.groupTitle("align"), "Align and spread")
+    eq(S.groupTitle("nothing"), "")
+  })
+
   test("the command list answers to the ordinary word as well as its own", () => {
     const first = q => (S.matchCommands(q)[0] || {}).name
     const found = q => S.matchCommands(q).map(c => c.name)
@@ -736,10 +776,10 @@ function tests(S) {
        "the names keep the order the table gives them")
     eq(S.matchCommands("i")[0].name, "Type in it", "the key still wins over an alias")
 
-    // Nothing typed is still the whole table in table order.
+    // Nothing typed is still the table in table order, families folded.
     eq(S.matchCommands("").map(c => c.name).join(","),
-       S.COMMANDS.filter(c => c.listed !== false && c.needs !== "typing").map(c => c.name).join(","),
-       "an empty query is the table, unchanged")
+       S.COMMANDS.filter(c => c.listed !== false && c.needs !== "typing" && !c.group).map(c => c.name).join(","),
+       "an empty query is the table, families folded")
 
     // Scope is still the first question asked: an alias cannot smuggle a
     // command that is not about the selection into the selection's own menu.
@@ -1039,7 +1079,7 @@ function tests(S) {
     for (const command of S.COMMANDS) {
       ok(typeof command.name === "string" && command.name !== "", "a name")
       ok(typeof command.run === "string" && command.run !== "", command.name + " runs something")
-      ok(["", "edit", "target", "item", "group", "conflict", "typing"].indexOf(command.needs) >= 0,
+      ok(["", "edit", "target", "item", "group", "texture", "conflict", "typing"].indexOf(command.needs) >= 0,
          command.name + " needs something known")
       eq(names[command.name], undefined, "one entry called " + command.name)
       if (command.key !== "") eq(keys[command.key], undefined, "one command on " + command.key)
@@ -1263,7 +1303,7 @@ function tests(S) {
   test("boards from every version this has ever written still load", () => {
     for (const v of [1, 2, 3, 4, 5, 6])
       ok(S.readFile(JSON.stringify({ version: v, items: [] })) !== null, "version " + v)
-    eq(S.readFile(JSON.stringify({ version: 7, items: [] })), null, "and one from the future does not")
+    eq(S.readFile(JSON.stringify({ version: S.FORMAT_VERSION + 1, items: [] })), null, "and one from the future does not")
   })
 
   test("a board reads the same whatever order its keys are in", () => {
@@ -1882,6 +1922,71 @@ function tests(S) {
       eq(items2.rows, items.rows, `round ${round}: items`)
       eq(links2.rows, links.rows, `round ${round}: links`)
     }
+  })
+
+  test("canvas colours shade the theme, or borrow the export's white and black", () => {
+    const luma = c => 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b
+    const dark = { r: 0.06, g: 0.07, b: 0.08 }, light = { r: 0.95, g: 0.95, b: 0.94 }
+    const shade = (c, colour, isLight) => S.canvasShade(c.r, c.g, c.b, colour, isLight)
+    eq(shade(dark, "Theme", false), dark, "the theme's own is the theme's own")
+    for (const [bg, isLight] of [[dark, false], [light, true]]) {
+      const lighter = shade(bg, "Lighter", isLight), darker = shade(bg, "Darker", isLight)
+      ok(luma(lighter) > luma(bg) && luma(darker) < luma(bg), "lighter is lighter and darker darker")
+      for (const c of [lighter, darker]) for (const v of [c.r, c.g, c.b]) ok(v >= 0 && v <= 1, "in range")
+      // Toward the text a little, away from it further, so neither shade
+      // costs the text much of its contrast.
+      const toward = isLight ? darker : lighter
+      ok(Math.abs(luma(toward) - luma(bg)) < 0.1, "a small step toward the text")
+    }
+    eq(S.canvasPalette("Paper"), S.exportPalette("light"))
+    eq(S.canvasPalette("Ink"), S.exportPalette("dark"))
+    for (const colour of ["Theme", "Lighter", "Darker", "unknown"]) eq(S.canvasPalette(colour), null)
+    for (const colour of S.CANVAS_COLOURS)
+      ok(S.commandByName("Canvas colour: " + colour), colour + " has a command")
+  })
+
+  test("connectors keep crossings of the view, hide overlaps and fit short gaps", () => {
+    const a = item({ ix: -200 }), b = item({ ix: 600 })
+    ok(S.connectorInView(a, b, 0, 0, 400, 300, 10), "crossing link survives")
+    ok(!S.connectorInView(a, item({ ix: -400 }), 0, 0, 400, 300, 10), "offscreen link culled")
+    ok(!S.connectorGeometry(item(), item({ ix: 30 }), 9, 2).visible, "overlap hidden")
+    const g = S.connectorGeometry(item(), item({ ix: 110 }), 9, 2)
+    ok(g.visible)
+    near(g.fromX, 102)
+    near(g.toX, 108)
+    ok(g.leftX > g.fromX && g.rightX > g.fromX, "head fits available space")
+  })
+
+  test("textures persist, default to plain, and clear during replay", () => {
+    const model = new FakeModel([item(), item({ iid: 2, kind: "ellipse", itexture: "grid" }),
+      item({ iid: 3, kind: "image", isrc: "picture.png", itexture: "dots" })])
+    const file = JSON.parse(S.writeFile(model, new FakeModel(), 4))
+    eq(file.version, S.FORMAT_VERSION)
+    eq(file.items.map(r => r.texture || "plain"), ["plain", "grid", "plain"])
+    const loaded = new FakeModel()
+    S.fillItems(loaded, file.items)
+    eq(loaded.rows.map(r => r.itexture), ["plain", "grid", "plain"])
+    delete file.items[1].texture
+    S.syncItems(loaded, file.items)
+    eq(loaded.get(1).itexture, "plain")
+    eq(S.normalizeTexture("unknown"), "plain")
+    eq(JSON.parse(S.writeFile(loaded, new FakeModel(), 4)).version, S.PLAIN_VERSION)
+  })
+
+  test("texture strokes stay inside each shape and have bounded density", () => {
+    for (const kind of S.KINDS) for (const texture of S.TEXTURES) {
+      const path = S.texturePath(kind, texture, 220, 160, 8)
+      eq(path === "", texture === "plain")
+      ok(!/NaN|Infinity/.test(path))
+      for (const match of path.matchAll(/[ML] ([^, ]+),([^ ]+)/g)) {
+        const x = Number(match[1]) - 110, y = Number(match[2]) - 80
+        ok(Math.abs(x) <= 102.0001 && Math.abs(y) <= 72.0001)
+        if (kind === "ellipse") ok(x*x/(102*102) + y*y/(72*72) <= 1.0001)
+        if (kind === "diamond") ok(Math.abs(x)/102 + Math.abs(y)/72 <= 1.0001)
+      }
+      ok((S.texturePath(kind, texture, 100000, 100000, 0).match(/M /g) || []).length <= 1000)
+    }
+    eq(S.texturePath("image", "grid", 200, 200, 0), "")
   })
 
   return t

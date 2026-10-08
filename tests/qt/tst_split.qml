@@ -146,7 +146,7 @@ TestCase {
   function test_aPressOnTheOtherPaneActivatesAndSelects() {
     ws.layout = "side-by-side"
     right.items.append({ iid: 1, kind: "note", ix: 100, iy: 200, iw: 160, ih: 120,
-                         itint: "foreground", itext: "", ipinned: false, isrc: "" })
+                         itint: "foreground", itexture: "plain", itext: "", ipinned: false, isrc: "" })
     waitForRendering(surface)
     mouseClick(slot(1), 180, 260, Qt.LeftButton)
     compare(right.activations, 1)

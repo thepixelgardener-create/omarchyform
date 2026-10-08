@@ -131,7 +131,7 @@ function makePane(workspace, exchange, Store) {
     camX: 0, camY: 0, zoom: 1, activeBoard: null, markedIds: [], showPinned: false, arranging: false,
     finding: false, findQuery: '', findCount: 0, imageQueue: [], leaving: false, textEditor: null,
     menuVisible: false, zoomMenuVisible: false, menuIndex: 0, helpVisible: false,
-    paletteVisible: false, paletteQuery: '', paletteIndex: 0, paletteRows: 9,
+    paletteVisible: false, paletteQuery: '', paletteIndex: 0, paletteRows: 9, paletteGroup: '',
     conflictVisible: false, conflictIndex: 0, paletteScope: 'all', imageBusy: false,
     statusText: '', failureText: '', failureKind: '', pendingFirstNote: '', forgetArmedAt: 0,
     timeline: false, timelineLive: true, timelineRecord: 0, replayDoc: null, playing: false, playSpeed: 1,
@@ -184,7 +184,7 @@ function makePane(workspace, exchange, Store) {
   Object.defineProperty(root, 'findDimming', { get: () => root.finding && root.findQuery !== '' })
   Object.defineProperty(root, 'findNeedle', { get: () => root.findQuery.toLowerCase() })
   Object.defineProperty(root, 'paletteMatches', { get: () =>
-    root.paletteVisible ? Store.matchCommands(root.paletteQuery, root.paletteScope) : [] })
+    root.paletteVisible ? Store.matchCommands(root.paletteQuery, root.paletteScope, root.paletteGroup) : [] })
   Object.defineProperty(root, 'exchangeBusy', { get: () => !!exchange.busy })
   // The binding the failure timer runs on, which the QML declares and this
   // harness would otherwise not have. Same shape as the original, so a change
@@ -224,7 +224,7 @@ function controller() {
   // it changes it for every object reading it, as the one import does in QML.
   const Store = loadStore()
   const workspace = { opened: true, stateReady: true, windowMode: false, autosaveMs: 700, step: 40,
-    showGrid: true, canvasPattern: 'Dots', canvasBackgroundChosen: false, startWindowed: false,
+    showGrid: true, canvasPattern: 'Dots', canvasBackgroundChosen: false, canvasColour: 'Theme', startWindowed: false,
     boardsDir: '/boards', backupsDir: '/backups', dataDir: '/data', imagesDir: '/data/images',
     locksDir: '/data/locks', helperScript: '/BoardFiles.sh', launchNewBoard: false, launchOpenPath: '',
     copyingFor: null, documents: [], panes: [], layout: 'single', splitRatio: 0.5, pendingLeave: null }

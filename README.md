@@ -105,11 +105,11 @@ board written by a newer version than the one you are running opens read-only
 rather than losing what it does not understand, so downgrading is safe too.
 
 From the version with a timeline on, a board starts keeping its history the
-first time you edit it, and is then written as format 6 (see
-[History](#history)). Boards you only look at stay as they were. A version
-before that opens a format 6 board read-only. To take a board back to one,
-save a copy to share (`ctrl+shift+s`), which never carries history, or run
-**Forget this board's history** first.
+first time you edit it, and is then written as format 7 (see
+[History](#history)). Boards you only look at stay as they were. Older versions
+open these boards read-only. To take a board back to one, set item textures to
+Plain, then save a copy to share (`ctrl+shift+s`), which never carries history,
+or run **Forget this board's history** first.
 
 If you installed the desktop entry, re-run its installer,
 `desktop/install.sh` in the plugin's folder, after an update to pick up any
@@ -299,15 +299,29 @@ write.** Everything arriving from a board file is escaped before any of this is
 applied, so nothing anyone else wrote reaches the screen as markup — a note
 saying `<b>hello</b>` shows you those characters.
 
+## Item textures and command groups
+
+Notes and shapes start with a plain background. Select one or mark a group,
+press `.` (or right-click), and choose **Item texture…**: **Plain**, **Ruled**,
+**Grid**, **Dots**, or **Hatch**. Pictures keep their image. Textures follow the
+canvas palette and are preserved by undo, duplication, saving, history, and PNG
+export. The canvas pattern is a separate setting.
+
+Related commands now open groups: item textures, alignment, layers, canvas
+appearance, PNG exports, text colours, and conflict choices. Search still finds
+individual commands directly. Inside a group, clear the search and press
+Backspace to return to all commands; Escape closes the command list.
+
 ## Connectors
 
-Select one item, press `x`, move the selection to the other with `tab` or
+Select one item, press `x`, click the other item or move to it with `tab` or
 `h` `j` `k` `l`, and press `x` again. A dashed line follows the selection while
 you choose, and the line under the header says what the second `x` will do
 before you press it.
 
-The far end is chosen with the keyboard: clicking an item starts a fresh
-selection, which ends the half-made connector without drawing anything.
+Clicking a target keeps the source while you choose. Dragging and editing are
+paused during this gesture. Connections touching the selected item use the
+accent colour, with clearer arrowheads and a small gap at item borders.
 
 Only one connector runs between any two items, so drawing one over a pair that
 already has one changes the one that is there rather than adding a second:
@@ -540,9 +554,10 @@ history**, in the command list, asks to be run twice and then starts again from
 the board as it is. A copy saved to share never includes it, and a board
 imported from one starts its own.
 
-A board with history is format version 6. Omarchyform 0.4.x opens one
-read-only, so it can never save over the board and lose the history; a board
-without history, and every copy made to share, is still version 5. If a board
+A board with history or item textures is format version 7. Older versions open
+it read-only to avoid losing features. A board without history and with only
+Plain item backgrounds, including a plain copy made to share, is version 5.
+Existing version 6 histories continue to load. If a board
 was edited by something that does not keep history — a text editor, say — the
 difference is recorded as one step, "Changed outside Omarchyform". A history
 that cannot be read is kept beside the board's backups, and a new one starts.
@@ -645,23 +660,26 @@ the keyboard cursor as a soft fill with its label in the accent, which the shell
 keeps for that row alone. The shortcut list is in labelled sections, as the
 shell's panels are, and the header's controls are its soft-filled buttons.
 
-**Day and night** is not a setting here either. Omarchy themes declare
-`mode = "light"` or `mode = "dark"` in their `colors.toml`; the board reads
-that and adjusts the weight of its canvas pattern accordingly. A third-party theme
-that omits `mode` falls back to the background's Rec. 709 luminance.
+**Theme**, **Lighter**, and **Darker** follow the desktop’s light or dark mode.
+Omarchy themes declare `mode` in `colors.toml`; a theme without it falls back
+to its background luminance. **Paper** and **Ink** use their own matching
+foreground and pattern colours.
 
 ### Canvas background
 
-Inside the board, click **Menu → Background**, then choose **Dots**, **Grid**,
-**Ruled**, or **Plain**. The current choice is highlighted. You can also press
+Inside the board, click **Menu → Background** to open the canvas group. Choose
+a pattern (**Dots**, **Grid**, **Ruled**, **Plain**) or a colour (**Theme**,
+**Lighter**, **Darker**, **Paper**, **Ink**). The current pattern is highlighted.
+You can also press
 **Ctrl+P** outside a note and search for **background**, **texture**, or **pattern**.
-Dots are the default, and an existing preference for a plain canvas is preserved.
+Dots and Theme are the defaults. Paper and Ink also adjust text and item
+colours to keep them readable. An existing preference for a plain canvas is preserved.
 
 Patterns use the theme's colours and stay attached to the board as you pan and
 zoom. The choice applies immediately and is remembered for bar and keyboard
 opening. A choice made here takes precedence over the bar's initial canvas
-settings. It applies to the
-working canvas; PNG exports keep their plain background.
+settings. It applies to the working canvas in both panes; PNG exports follow the chosen canvas colour but
+omit its pattern. Item textures are included in exports.
 
 ## Layout
 
@@ -675,6 +693,7 @@ working canvas; PNG exports keep their plain background.
 | `Theme.qml` | Colours, fonts, sizes and weights, all read from the shell's theme with fallbacks |
 | `Surface.qml` | The card a panel is drawn on, in the shell's menu colours and the theme's border for them |
 | `Node.qml` | One item: note, box, ellipse, diamond or picture. Shapes are `QtQuick.Shapes` geometry, so they stay sharp at any zoom |
+| `BoardPalette.qml` | Shared canvas and export colours, including Paper and Ink |
 | `Commands.qml` | The command list on `:`, `ctrl+p` and `.` |
 | `Conflict.qml` | The question asked when a board has two versions |
 | `Browser.qml` | The board browser: draws the library |

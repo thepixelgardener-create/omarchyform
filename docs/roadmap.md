@@ -77,4 +77,4 @@ Revisit these after 0.5 and feedback from real use:
   [development plan](splitview-timeline-plan.md). Two panes side by side or
   stacked, a history every board keeps, and a timeline to step and play
   through it. Not released; its release review is the plan's gate 6, and the
-  history makes boards format 6.
+  history and per-item textures now make boards format 7.

@@ -163,3 +163,22 @@ function session(seed, items, edits, mix) {
   assert.equal(H.utf8Length('aé🙂漢'), 1 + 2 + 4 + 3)
   console.log('ok — history: limits are checked before a record is taken')
 }
+
+{
+  const start = board(random(29), 3)
+  const explicit = H.copyState(start)
+  explicit.items[0].texture = 'plain'
+  assert.equal(H.diff(start, explicit), null, 'older rows mean plain')
+  const textured = H.copyState(start)
+  textured.items[0].texture = 'grid'
+  const h = H.create(start, 0, 'textures')
+  H.append(h, start, textured, 'Texture', 1)
+  H.append(h, textured, start, 'Texture', 2)
+  const stored = JSON.parse(JSON.stringify(h))
+  assert.equal(H.verify(stored, start), '', 'set and clear texture survive JSON')
+  const ix = H.newIndex(stored, 1)
+  while (!H.indexSome(ix, stored, 10)) {}
+  assert.equal(H.stateAt(ix, stored, 1).items[0].texture, 'grid')
+  assert.equal(H.stateAt(ix, stored, 2).items[0].texture, undefined)
+  console.log('ok — history: textures and return to plain survive playback')
+}

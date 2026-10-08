@@ -7,9 +7,86 @@ var MIN_SIZE = 60
 var KINDS = ["note", "rect", "ellipse", "diamond"]
 var CANVAS_PATTERNS = ["Dots", "Grid", "Ruled"]
 
+// The canvas's colour, a setting like its pattern rather than part of a board.
+// Theme is the desktop's background, and Lighter and Darker shade it, leaving
+// every other colour on the board the theme's. Paper and Ink are the PNG
+// export's white and black palettes: under them the notes, shapes and
+// connectors change too, as they do in a picture "on white", because the
+// theme's text would not read on a canvas the theme did not choose.
+var CANVAS_COLOURS = ["Theme", "Lighter", "Darker", "Paper", "Ink"]
+
+function canvasPalette(colour) {
+  return colour === "Paper" ? EXPORT_PALETTES.light : colour === "Ink" ? EXPORT_PALETTES.dark : null
+}
+
+// A shade of the theme's background, as 0–1 channels. A little toward the
+// theme's text, and further away from it: a shade has to be told from the
+// theme's own background without costing the text on it its contrast, and on
+// a dark theme lighter is toward the text.
+function canvasShade(r, g, b, colour, light) {
+  var to = colour === "Lighter" ? 1 : colour === "Darker" ? 0 : -1
+  if (to < 0) return { r: r, g: g, b: b }
+  var k = (to === 1) !== light ? 0.08 : 0.4
+  return { r: r + (to - r) * k, g: g + (to - g) * k, b: b + (to - b) * k }
+}
+
 // Items carry a theme role, not a hex colour, so a board follows the desktop
 // theme instead of fighting it. The shell exposes these four.
 var TINTS = ["foreground", "accent", "urgent", "muted"]
+var TEXTURES = ["plain", "ruled", "grid", "dots", "hatch"]
+function normalizeTexture(value) { return TEXTURES.indexOf(value) >= 0 ? value : "plain" }
+
+// Clip vector strokes to an inset shape. Limit density so huge backgrounds
+// cannot allocate millions of dots. Called only for visible textured items.
+function texturePath(kind, texture, w, h, radius) {
+  if (normalizeTexture(texture) === "plain" || kind === "image" || w <= 0 || h <= 0) return ""
+  var inset = Math.min(w / 4, h / 4, Math.max(6, radius || 0))
+  var rx = w / 2 - inset, ry = h / 2 - inset
+  var step = Math.max(16, Math.max(w, h) / 100, Math.sqrt(w * h / 900))
+  var paths = []
+  function inside(x, y) {
+    return kind === "ellipse" ? x * x / (rx * rx) + y * y / (ry * ry) < 0.96
+      : kind === "diamond" ? Math.abs(x) / rx + Math.abs(y) / ry < 0.96 : true
+  }
+  function line(x, y, dx, dy) {
+    var lo = 0, hi = 1
+    if (kind === "ellipse") {
+      var a = dx * dx / (rx * rx) + dy * dy / (ry * ry)
+      var b = 2 * (x * dx / (rx * rx) + y * dy / (ry * ry))
+      var c = x * x / (rx * rx) + y * y / (ry * ry) - 1
+      var disc = b * b - 4 * a * c
+      if (disc <= 0) return
+      lo = Math.max(lo, (-b - Math.sqrt(disc)) / (2 * a))
+      hi = Math.min(hi, (-b + Math.sqrt(disc)) / (2 * a))
+    } else {
+      var planes = kind === "diamond" ? [[1 / rx, 1 / ry], [1 / rx, -1 / ry], [-1 / rx, 1 / ry], [-1 / rx, -1 / ry]]
+        : [[1 / rx, 0], [-1 / rx, 0], [0, 1 / ry], [0, -1 / ry]]
+      for (var p = 0; p < planes.length; p++) {
+        var n = planes[p], denom = n[0] * dx + n[1] * dy
+        var remaining = 1 - n[0] * x - n[1] * y
+        if (Math.abs(denom) < 0.000001) { if (remaining < 0) return }
+        else if (denom > 0) hi = Math.min(hi, remaining / denom)
+        else lo = Math.max(lo, remaining / denom)
+      }
+    }
+    if (hi <= lo) return
+    paths.push("M " + (w / 2 + x + dx * lo) + "," + (h / 2 + y + dy * lo)
+      + " L " + (w / 2 + x + dx * hi) + "," + (h / 2 + y + dy * hi))
+  }
+  if (texture === "dots") {
+    for (var y = -ry + step / 2; y < ry; y += step)
+      for (var x = -rx + step / 2; x < rx; x += step)
+        if (inside(x, y)) paths.push("M " + (w / 2 + x) + "," + (h / 2 + y) + " l 0.1,0")
+  } else if (texture === "hatch") {
+    for (var start = -rx - 2 * ry; start < rx; start += step) line(start, ry, 2 * ry, -2 * ry)
+  } else {
+    for (var row = -ry + step / 2; row < ry; row += step) line(-rx, row, 2 * rx, 0)
+    if (texture === "grid")
+      for (var col = -rx + step / 2; col < rx; col += step) line(col, -ry, 0, 2 * ry)
+  }
+  return paths.join(" ")
+}
+
 
 // An image lives beside the board rather than inside it: a screenshot in
 // base64 would be megabytes rewritten on every autosave. The item keeps only
@@ -546,31 +623,42 @@ var COMMANDS = [
     also: ["code", "monospace", "shortcut"] },
   { name: "Make it a heading", key: "", run: "headText", needs: "typing",
     also: ["title", "bigger"] },
-  { name: "Colour it plain", key: "ctrl+1", run: "markText", arg: "foreground", needs: "typing" },
-  { name: "Colour it accent", key: "ctrl+2", run: "markText", arg: "accent", needs: "typing" },
-  { name: "Colour it urgent", key: "ctrl+3", run: "markText", arg: "urgent", needs: "typing" },
-  { name: "Colour it muted", key: "ctrl+4", run: "markText", arg: "muted", needs: "typing" },
+  { name: "Colour the words…", key: "", run: "openGroup", arg: "text-colour", needs: "typing", opens: "text-colour" },
+  { name: "Colour it plain", key: "ctrl+1", run: "markText", arg: "foreground", needs: "typing", group: "text-colour" },
+  { name: "Colour it accent", key: "ctrl+2", run: "markText", arg: "accent", needs: "typing", group: "text-colour" },
+  { name: "Colour it urgent", key: "ctrl+3", run: "markText", arg: "urgent", needs: "typing", group: "text-colour" },
+  { name: "Colour it muted", key: "ctrl+4", run: "markText", arg: "muted", needs: "typing", group: "text-colour" },
   { name: "Change shape", key: "s", run: "cycleKind", needs: "target" },
   { name: "Change colour", key: "c", run: "recolorItem", needs: "target" },
+  { name: "Item texture…", key: "", run: "openGroup", arg: "texture", opens: "texture", needs: "texture", also: ["background", "fill"] },
+  { name: "Texture: Plain", key: "", run: "setTexture", arg: "plain", needs: "texture", group: "texture", also: ["background", "fill"] },
+  { name: "Texture: Ruled", key: "", run: "setTexture", arg: "ruled", needs: "texture", group: "texture", also: ["background", "fill"] },
+  { name: "Texture: Grid", key: "", run: "setTexture", arg: "grid", needs: "texture", group: "texture", also: ["background", "fill"] },
+  { name: "Texture: Dots", key: "", run: "setTexture", arg: "dots", needs: "texture", group: "texture", also: ["background", "fill"] },
+  { name: "Texture: Hatch", key: "", run: "setTexture", arg: "hatch", needs: "texture", group: "texture", also: ["background", "fill"] },
   { name: "Connect to another", key: "x", run: "toggleLinking", needs: "target", also: ["link"] },
   { name: "Remove its connectors", key: "X", run: "unlinkSelected", needs: "target", also: ["disconnect", "unlink"] },
   { name: "Duplicate", key: "ctrl+d", run: "duplicateTargets", needs: "target" },
   { name: "Delete", key: "del", run: "removeTargets", needs: "target" },
-  { name: "Align and spread", key: "g", run: "beginArrange", needs: "edit" },
+  // The chord's own entry is its family's: in the list it opens the six
+  // answers by name, and `g` still waits for the second key.
+  { name: "Align and spread", key: "g", run: "beginArrange", needs: "group", opens: "align" },
   // The chord's six answers, each with a name, so the second key is something
   // to learn rather than something to know already.
-  { name: "Align left edges", key: "g h", run: "alignTargets", arg: "left", needs: "group" },
-  { name: "Align right edges", key: "g l", run: "alignTargets", arg: "right", needs: "group" },
-  { name: "Align top edges", key: "g k", run: "alignTargets", arg: "top", needs: "group" },
-  { name: "Align bottom edges", key: "g j", run: "alignTargets", arg: "bottom", needs: "group" },
-  { name: "Align centres across", key: "g c", run: "alignTargets", arg: "centreX", needs: "group" },
-  { name: "Align centres down", key: "g m", run: "alignTargets", arg: "centreY", needs: "group" },
-  { name: "Spread evenly across", key: "g H", run: "spreadTargets", arg: "x", needs: "group" },
-  { name: "Spread evenly down", key: "g J", run: "spreadTargets", arg: "y", needs: "group" },
-  { name: "Bring forward", key: "]", run: "layerTargets", arg: "forward", needs: "item" },
-  { name: "Send backward", key: "[", run: "layerTargets", arg: "backward", needs: "item" },
-  { name: "Bring to front", key: "}", run: "layerTargets", arg: "front", needs: "item" },
-  { name: "Send to back", key: "{", run: "layerTargets", arg: "back", needs: "item" },
+  { name: "Align left edges", key: "g h", run: "alignTargets", arg: "left", needs: "group", group: "align" },
+  { name: "Align right edges", key: "g l", run: "alignTargets", arg: "right", needs: "group", group: "align" },
+  { name: "Align top edges", key: "g k", run: "alignTargets", arg: "top", needs: "group", group: "align" },
+  { name: "Align bottom edges", key: "g j", run: "alignTargets", arg: "bottom", needs: "group", group: "align" },
+  { name: "Align centres across", key: "g c", run: "alignTargets", arg: "centreX", needs: "group", group: "align" },
+  { name: "Align centres down", key: "g m", run: "alignTargets", arg: "centreY", needs: "group", group: "align" },
+  { name: "Spread evenly across", key: "g H", run: "spreadTargets", arg: "x", needs: "group", group: "align" },
+  { name: "Spread evenly down", key: "g J", run: "spreadTargets", arg: "y", needs: "group", group: "align" },
+  { name: "Bring forward or send back…", key: "", run: "openGroup", arg: "layer", needs: "item", opens: "layer",
+    also: ["layer", "order", "front"] },
+  { name: "Bring forward", key: "]", run: "layerTargets", arg: "forward", needs: "item", group: "layer" },
+  { name: "Send backward", key: "[", run: "layerTargets", arg: "backward", needs: "item", group: "layer" },
+  { name: "Bring to front", key: "}", run: "layerTargets", arg: "front", needs: "item", group: "layer" },
+  { name: "Send to back", key: "{", run: "layerTargets", arg: "back", needs: "item", group: "layer" },
   { name: "Pin or unpin as background", key: "p", run: "togglePin", needs: "item" },
   { name: "Select backgrounds", key: "P", run: "togglePinnedSelection", needs: "" },
   { name: "Mark this one as well", key: "space", run: "toggleMark", needs: "", also: ["add to selection"] },
@@ -582,10 +670,27 @@ var COMMANDS = [
   { name: "Find in this board", key: "/", run: "beginFind", needs: "" },
   { name: "Fit the board on screen", key: "f", run: "fitToItems", needs: "" },
   { name: "Reset the view", key: "0", run: "resetView", needs: "" },
-  { name: "Canvas background: Dots", key: "", run: "setCanvasBackground", arg: "Dots", needs: "", also: ["texture", "pattern"] },
-  { name: "Canvas background: Grid", key: "", run: "setCanvasBackground", arg: "Grid", needs: "", also: ["texture", "pattern", "squares"] },
-  { name: "Canvas background: Ruled", key: "", run: "setCanvasBackground", arg: "Ruled", needs: "", also: ["texture", "pattern", "lines"] },
-  { name: "Canvas background: Plain", key: "", run: "setCanvasBackground", arg: "Plain", needs: "", also: ["texture", "pattern", "none"] },
+  // The canvas behind every board: its pattern and its colour, one entry.
+  { name: "Canvas background…", key: "", run: "openGroup", arg: "canvas", needs: "", opens: "canvas",
+    also: ["pattern", "colour", "color"] },
+  { name: "Canvas pattern: Dots", key: "", run: "setCanvasBackground", arg: "Dots", needs: "", group: "canvas",
+    also: ["background", "texture"] },
+  { name: "Canvas pattern: Grid", key: "", run: "setCanvasBackground", arg: "Grid", needs: "", group: "canvas",
+    also: ["background", "texture", "squares"] },
+  { name: "Canvas pattern: Ruled", key: "", run: "setCanvasBackground", arg: "Ruled", needs: "", group: "canvas",
+    also: ["background", "texture", "lines"] },
+  { name: "Canvas pattern: Plain", key: "", run: "setCanvasBackground", arg: "Plain", needs: "", group: "canvas",
+    also: ["background", "texture", "none"] },
+  { name: "Canvas colour: Theme", key: "", run: "setCanvasColour", arg: "Theme", needs: "", group: "canvas",
+    also: ["background", "color"] },
+  { name: "Canvas colour: Lighter", key: "", run: "setCanvasColour", arg: "Lighter", needs: "", group: "canvas",
+    also: ["background", "color"] },
+  { name: "Canvas colour: Darker", key: "", run: "setCanvasColour", arg: "Darker", needs: "", group: "canvas",
+    also: ["background", "color"] },
+  { name: "Canvas colour: Paper", key: "", run: "setCanvasColour", arg: "Paper", needs: "", group: "canvas",
+    also: ["background", "color", "white"] },
+  { name: "Canvas colour: Ink", key: "", run: "setCanvasColour", arg: "Ink", needs: "", group: "canvas",
+    also: ["background", "color", "black"] },
   { name: "Zoom in", key: "+", run: "zoomCentre", arg: 1.2, needs: "" },
   { name: "Zoom out", key: "-", run: "zoomCentre", arg: 1 / 1.2, needs: "" },
   { name: "Fullscreen or windowed", key: "w", run: "toggleWindowMode", needs: "" },
@@ -611,13 +716,15 @@ var COMMANDS = [
   // One command per palette rather than a mode to be in: the list is reached
   // by typing, so "white" finds the one that matters without anything new on
   // the board to look at. `ctrl+e` keeps its meaning — the board as it looks.
-  { name: "Export a PNG", key: "ctrl+e", run: "choosePng", arg: "theme", needs: "",
+  { name: "Export a PNG…", key: "", run: "openGroup", arg: "png", needs: "", opens: "png",
     also: ["image", "picture", "screenshot"] },
-  { name: "Export a PNG on white", key: "", run: "choosePng", arg: "light", needs: "",
+  { name: "Export a PNG", key: "ctrl+e", run: "choosePng", arg: "theme", needs: "", group: "png",
+    also: ["image", "picture", "screenshot"] },
+  { name: "Export a PNG on white", key: "", run: "choosePng", arg: "light", needs: "", group: "png",
     also: ["png light", "light png", "white background"] },
-  { name: "Export a PNG on black", key: "", run: "choosePng", arg: "dark", needs: "",
+  { name: "Export a PNG on black", key: "", run: "choosePng", arg: "dark", needs: "", group: "png",
     also: ["png dark", "dark png", "black background"] },
-  { name: "Export a PNG in black and white", key: "", run: "choosePng", arg: "mono", needs: "",
+  { name: "Export a PNG in black and white", key: "", run: "choosePng", arg: "mono", needs: "", group: "png",
     also: ["png mono", "monochrome", "greyscale", "grayscale", "print"] },
   { name: "Save now", key: "ctrl+s", run: "flushSave", needs: "" },
   // Asked for twice: the first run says what the second will do.
@@ -626,9 +733,11 @@ var COMMANDS = [
   // Only offered while two versions of the open board exist. They have no keys
   // of their own: the panel that appears with the conflict numbers them, and
   // this is how they are found by name.
-  { name: "Keep the version from disk", key: "", run: "conflictUseDisk", needs: "conflict" },
-  { name: "Save my changes as a copy", key: "", run: "conflictSaveCopy", needs: "conflict" },
-  { name: "Replace the version on disk", key: "", run: "conflictReplaceDisk", needs: "conflict" },
+  { name: "Two versions of this board…", key: "", run: "openGroup", arg: "conflict", needs: "conflict", opens: "conflict",
+    also: ["conflict", "disk"] },
+  { name: "Keep the version from disk", key: "", run: "conflictUseDisk", needs: "conflict", group: "conflict" },
+  { name: "Save my changes as a copy", key: "", run: "conflictSaveCopy", needs: "conflict", group: "conflict" },
+  { name: "Replace the version on disk", key: "", run: "conflictReplaceDisk", needs: "conflict", group: "conflict" },
   { name: "Menu in the header", key: "m", run: "toggleMenu", needs: "" },
   { name: "Keys", key: "?", run: "toggleHelp", needs: "" },
   // The two ways in do not list themselves.
@@ -636,13 +745,10 @@ var COMMANDS = [
   { name: "Actions for the selection", key: ".", run: "beginSelectionActions", needs: "", listed: false }
 ]
 
-// What to offer for what has been typed. A name that starts with the query is
-// what was meant more often than one that merely contains it, and the order is
-// otherwise the table's own, which groups by what the commands are for.
 // What a command needs before it can do anything, and which of those are
 // about the thing that is selected — the set a menu of actions for a selection
 // offers, as opposed to everything the board can do.
-var SELECTION_NEEDS = ["target", "item", "group"]
+var SELECTION_NEEDS = ["target", "item", "group", "texture"]
 
 // What a command needs a caret in a note for. Its own scope, because the list
 // opened while typing is a different list: everything else on the board acts on
@@ -673,7 +779,15 @@ function aliasLeads(command, needle) {
   return false
 }
 
-function matchCommands(query, scope) {
+// What to offer for what has been typed. A name that starts with the query is
+// what was meant more often than one that merely contains it, and the order is
+// otherwise the table's own, which groups by what the commands are for.
+//
+// Variants come in families: a command with a `group` is one of them, and the
+// command that `opens` that group stands for them. Browsing, with nothing
+// typed, shows the family's one entry; typing finds any of them by name; and
+// inside a family, `group`, the list is that family and nothing else.
+function matchCommands(query, scope, group) {
   var needle = String(query === undefined ? "" : query).toLowerCase().trim()
   var leading = []
   var rest = []
@@ -683,11 +797,17 @@ function matchCommands(query, scope) {
   var aliased = []
   for (var i = 0; i < COMMANDS.length; i++) {
     if (COMMANDS[i].listed === false) continue
-    if (scope === "selection" && SELECTION_NEEDS.indexOf(COMMANDS[i].needs) < 0) continue
-    if (scope === "typing" && TYPING_NEEDS.indexOf(COMMANDS[i].needs) < 0) continue
-    // And the other way: what only makes sense with a caret in a note stays out
-    // of the list the board opens, where there is nothing for it to act on.
-    if (scope !== "typing" && TYPING_NEEDS.indexOf(COMMANDS[i].needs) >= 0) continue
+    // A family's members all need the same thing, so inside one the scope
+    // has already been answered by the entry that opened it.
+    if (group) { if (COMMANDS[i].group !== group) continue }
+    else {
+      if (needle === "" && COMMANDS[i].group) continue
+      if (scope === "selection" && SELECTION_NEEDS.indexOf(COMMANDS[i].needs) < 0) continue
+      if (scope === "typing" && TYPING_NEEDS.indexOf(COMMANDS[i].needs) < 0) continue
+      // And the other way: what only makes sense with a caret in a note stays
+      // out of the list the board opens, where there is nothing for it to act on.
+      if (scope !== "typing" && TYPING_NEEDS.indexOf(COMMANDS[i].needs) >= 0) continue
+    }
     if (needle === "") { rest.push(COMMANDS[i]); continue }
     var name = COMMANDS[i].name.toLowerCase()
     var at = name.indexOf(needle)
@@ -705,6 +825,13 @@ function matchCommands(query, scope) {
   return leading.concat(rest, aliased)
 }
 
+// What a family is called, for the line the list shows it under.
+function groupTitle(group) {
+  for (var i = 0; i < COMMANDS.length; i++)
+    if (COMMANDS[i].opens === group) return COMMANDS[i].name.replace(/…$/, "")
+  return ""
+}
+
 function commandByName(name) {
   for (var i = 0; i < COMMANDS.length; i++) if (COMMANDS[i].name === name) return COMMANDS[i]
   return null
@@ -717,6 +844,7 @@ function commandByName(name) {
 // argument, so a new command in a family already here has one already.
 var COMMAND_ICONS = {
   addRelative: { note: "\uf249", rect: "\uf096", ellipse: "\uf10c" },
+  setTexture: "\uf00a",
   editSelected: "\uf040",
   markText: { bold: "\uf032", italic: "\uf033", key: "\uf121",
               foreground: "\uf1fc", accent: "\uf1fc", urgent: "\uf1fc", muted: "\uf1fc" },
@@ -744,6 +872,9 @@ var COMMAND_ICONS = {
   fitToItems: "\uf065",
   resetView: "\uf015",
   setCanvasBackground: "\uf03e",
+  setCanvasColour: "\uf042",
+  // A family's entry wears the glyph its members do.
+  openGroup: { texture: "\uf00a", "text-colour": "\uf1fc", layer: "\uf0dc", canvas: "\uf03e", png: "\uf03e", conflict: "\uf0a0" },
   toggleWindowMode: "\uf2d0",
   // Columns for side by side, a stack of boxes for stacked.
   toggleSplit: { "side-by-side": "\uf0db", stacked: "\uf233" },
@@ -796,15 +927,14 @@ var KEY_HELP_SECTIONS = [
     ["r / e", "new box / ellipse"],
     ["s", "cycle shape: note, box, ellipse, diamond"],
     ["c", "change its colour"],
+    [". then Item texture", "plain, ruled, grid, dots or hatch background"],
     ["p / shift+p", "pin as background / select backgrounds"],
     ["ctrl+d", "duplicate it, connectors between the copies included"],
     ["del / backspace", "delete what is marked, or the one under the cursor"],
     ["u / ctrl+r", "undo / redo"]
   ] },
   { title: "Connect", rows: [
-    // Walked to, not clicked at: a pointer selection starts afresh and ends the
-    // half-made connector, so the keys are what the line has room to teach.
-    ["x", "connect: x on one, tab or hjkl to the other, x again"],
+    ["x", "connect: x on one, click or tab to the other, x again"],
     // Which of the two it will be is said on the line under the header while the
     // far end is being chosen, so this row says that there is a choice rather
     // than asking anyone to work out which side of it they are on.
@@ -879,6 +1009,7 @@ function itemRows(items) {
   for (var i = 0; i < items.count; i++) {
     var n = items.get(i)
     out.push({ id: n.iid, kind: n.kind, x: n.ix, y: n.iy, w: n.iw, h: n.ih, tint: n.itint, text: n.itext, pinned: n.ipinned === true, src: n.isrc })
+    if (n.kind !== "image" && normalizeTexture(n.itexture) !== "plain") out[out.length - 1].texture = n.itexture
   }
   return out
 }
@@ -915,6 +1046,7 @@ function syncItems(items, rows) {
     if (have.iw !== want.w) items.setProperty(i, "iw", want.w)
     if (have.ih !== want.h) items.setProperty(i, "ih", want.h)
     if (have.itint !== want.tint) items.setProperty(i, "itint", want.tint)
+    if (have.itexture !== normalizeTexture(want.texture)) items.setProperty(i, "itexture", normalizeTexture(want.texture))
     if (have.itext !== want.text) items.setProperty(i, "itext", want.text)
     if (have.ipinned !== (want.pinned === true)) items.setProperty(i, "ipinned", want.pinned === true)
     if (have.isrc !== want.src) items.setProperty(i, "isrc", want.src)
@@ -923,7 +1055,7 @@ function syncItems(items, rows) {
   for (var a = same; a < rows.length; a++) {
     var n = rows[a]
     items.append({ iid: n.id, kind: n.kind, ix: n.x, iy: n.y, iw: n.w, ih: n.h, itint: n.tint,
-                   itext: n.text, ipinned: n.pinned === true, isrc: n.src })
+                   itext: n.text, ipinned: n.pinned === true, isrc: n.src, itexture: normalizeTexture(n.texture) })
   }
 }
 
@@ -958,6 +1090,7 @@ function fillItems(items, rows) {
       iw: Math.max(MIN_SIZE, num(n.w, 180)),
       ih: Math.max(MIN_SIZE, num(n.h, 140)),
       itint: normalizeTint(n.tint || n.color),
+      itexture: kind === "image" ? "plain" : normalizeTexture(n.texture),
       itext: typeof n.text === "string" ? n.text : "",
       ipinned: n.pinned === true,
       isrc: kind === "image" ? n.src : ""
@@ -997,7 +1130,7 @@ function indexOfId(items, id) {
   return -1
 }
 
-// An id -> index map, built once per paint instead of scanning per connector.
+// An id -> index map, which the canvas keeps until rows come, go or move.
 function idIndex(items) {
   var map = {}
   for (var i = 0; i < items.count; i++) map[items.get(i).iid] = i
@@ -1016,12 +1149,10 @@ function nextFreeId(items, stored) {
 // line asks this too, to tell a board from a newer Omarchyform apart from one
 // that is broken.
 //
-// Version 6 is a board that carries its edit history. A board without one is
-// still written as version 5, so a copy made to share, and a board nobody has
-// edited since, open in every Omarchyform since 0.4 — and a board with history
-// opens in one older than this read-only, so it can never be saved over and
-// lose it.
-var FORMAT_VERSION = 6
+// Version 6 introduced history; version 7 adds item textures and their history
+// patches. Older readers open these boards read-only to prevent feature loss.
+// Plain boards without history still write version 5.
+var FORMAT_VERSION = 7
 var PLAIN_VERSION = 5
 
 // Where a board's history starts in its file. Always the last key and always
@@ -1172,11 +1303,13 @@ var FORMAT_MARKER = "omarchyform.board"
 // a history is appended to as text rather than written out again, which on a
 // long one cost 80-160ms a save.
 function writeFile(items, links, nextId, historyText) {
+  var rows = itemRows(items)
+  var textured = rows.some(function (row) { return row.texture !== undefined })
   var board = JSON.stringify({
     kind: FORMAT_MARKER,
-    version: historyText ? FORMAT_VERSION : PLAIN_VERSION,
+    version: historyText || textured ? FORMAT_VERSION : PLAIN_VERSION,
     nextId: nextId,
-    items: itemRows(items),
+    items: rows,
     links: linkRows(links)
   }, null, 2) + "\n"
   return historyText ? joinHistory(board, historyText) : board
@@ -1841,17 +1974,39 @@ var CONNECTOR_ALPHA = 0.55
 // connector is — which a label placed against it will depend on. How long the
 // head is, how heavy the line, in what colour and through which camera stays
 // with each of them.
-function connectorGeometry(a, b, head) {
+//
+// `gap` keeps both ends a little off the items' edges, and the head shrinks to
+// fit between two items that nearly touch. Two items that overlap have no line
+// between them to draw: `visible` is false.
+function connectorGeometry(a, b, head, gap) {
   var acx = a.ix + a.iw / 2, acy = a.iy + a.ih / 2
   var bcx = b.ix + b.iw / 2, bcy = b.iy + b.ih / 2
   var from = edgePoint(a, acx, acy, bcx, bcy)
   var to = edgePoint(b, bcx, bcy, acx, acy)
   var angle = Math.atan2(to.y - from.y, to.x - from.x)
+  var distance = Math.sqrt(Math.pow(to.x - from.x, 2) + Math.pow(to.y - from.y, 2))
+  var visible = (to.x - from.x) * (bcx - acx) + (to.y - from.y) * (bcy - acy) > 0
+  var inset = Math.min(gap || 0, distance / 4)
+  from.x += inset * Math.cos(angle); from.y += inset * Math.sin(angle)
+  to.x -= inset * Math.cos(angle); to.y -= inset * Math.sin(angle)
+  head = Math.min(head, Math.max(0, distance - 2 * inset) * 0.45)
   return {
+    visible: visible,
     fromX: from.x, fromY: from.y, toX: to.x, toY: to.y,
     leftX: to.x - head * Math.cos(angle - ARROW_SPREAD), leftY: to.y - head * Math.sin(angle - ARROW_SPREAD),
     rightX: to.x - head * Math.cos(angle + ARROW_SPREAD), rightY: to.y - head * Math.sin(angle + ARROW_SPREAD)
   }
+}
+
+// Whether a connector can touch the view, in board units. Its line runs
+// between points on the segment joining the two centres, so the box round the
+// centres holds it; `margin` is room for the head and the stroke. A connector
+// crossing the view with both ends outside it is kept.
+function connectorInView(a, b, left, top, right, bottom, margin) {
+  var ax = a.ix + a.iw / 2, ay = a.iy + a.ih / 2
+  var bx = b.ix + b.iw / 2, by = b.iy + b.ih / 2
+  return Math.max(ax, bx) + margin >= left && Math.min(ax, bx) - margin <= right
+    && Math.max(ay, by) + margin >= top && Math.min(ay, by) - margin <= bottom
 }
 
 function cycle(list, current) {

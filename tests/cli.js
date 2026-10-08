@@ -249,7 +249,7 @@ try {
     for (const entry of listed.out.ops) {
       assert.ok(entry.args && entry.does, `${entry.op} says what it takes and does`)
       const sample = {
-        add: ['note', 0, 0], setText: [1, 'x'], setTint: [1, 'accent'], setKind: [1, 'rect'],
+        add: ['note', 0, 0], setText: [1, 'x'], setTint: [1, 'accent'], setKind: [1, 'rect'], setTexture: [1, 'grid'],
         move: [1, 10, 10], resize: [1, 100, 100], pin: [1, true], remove: [2], link: [1, 2],
         unlink: [1, 2]
       }[entry.op]
@@ -257,6 +257,27 @@ try {
     }
     assert.deepEqual(listed.out.kinds, S.KINDS, 'kinds come from the board, not a copy')
     assert.deepEqual(listed.out.tints, S.TINTS, 'and so do tints')
+    assert.deepEqual(listed.out.textures, S.TEXTURES, 'and textures')
+  }
+
+  {
+    // A texture set from the command line is the one the board draws, and a
+    // board carrying one is written in the format that keeps it.
+    const file = path.join(dir, 'textured.json')
+    run('new', file, '--note', 'a', '--note', 'b')
+    assert.equal(pipe(JSON.stringify([{ op: 'setTexture', args: [2, 'hatch'] }]), 'apply', file, '-').status, 0)
+    const written = JSON.parse(fs.readFileSync(file, 'utf8'))
+    assert.equal(written.version, S.FORMAT_VERSION)
+    assert.equal(written.items[1].texture, 'hatch')
+    assert.equal(written.items[0].texture, undefined, 'plain is not written down')
+    const unknown = pipe(JSON.stringify([{ op: 'setTexture', args: [1, 'tartan'] }]), 'apply', file, '-')
+    assert.equal(unknown.status, 1, 'a texture this does not know is refused')
+    const picture = path.join(dir, 'picture.json')
+    fs.writeFileSync(picture, JSON.stringify({ version: 5, nextId: 2, links: [],
+      items: [{ id: 1, kind: 'image', x: 0, y: 0, w: 100, h: 100, src: 'a.png' }] }))
+    const refused = pipe(JSON.stringify([{ op: 'setTexture', args: [1, 'grid'] }]), 'apply', picture, '-')
+    assert.equal(refused.status, 1, 'and so is a picture')
+    assert.match(refused.raw, /picture/)
   }
 
   {
@@ -387,7 +408,7 @@ try {
     assert.equal(applied.status, 0, applied.raw)
     assert.equal(applied.out.history, 1)
     let h = plays()
-    assert.equal(h.board.version, 6)
+    assert.equal(h.board.version, 7)
     assert.deepEqual(h.records.map(r => r.a), ['Command line'])
     assert.equal(h.board.history.base.items.length, 1, 'starting from the board as it was read')
     assert.equal(h.problem, '')

@@ -97,7 +97,7 @@ for (const scenario of ['persistence', 'session', 'timeout', 'exchange', 'clipbo
       // whole board and let the loader refuse its newer version.
       fs.writeFileSync(path.join(dir, 'future.json'), JSON.stringify({ kind: known.kind,
         nextId: known.nextId, items: known.items, links: known.links,
-        history: known.history, version: 7 }, null, 2) + '\n')
+        history: known.history, version: 8 }, null, 2) + '\n')
       known.history.base.items = [null]
       fs.writeFileSync(path.join(dir, 'broken.json'), JSON.stringify(known, null, 2) + '\n')
     }

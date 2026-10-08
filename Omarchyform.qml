@@ -26,6 +26,15 @@ Item {
   // stub has to guess at.
   Theme { id: themeTokens }
   readonly property Theme theme: themeTokens
+  // What the boards are drawn in: the theme on the chosen canvas colour. The
+  // panels and the header stay in the theme's own colours.
+  BoardPalette {
+    id: scenePalette
+    base: themeTokens
+    chosen: Store.canvasPalette(root.canvasColour)
+    shade: root.canvasColour
+  }
+  readonly property BoardPalette sceneTheme: scenePalette
 
   // -------------------------------------------------------------------- panes
   // Two views, both always there: the second shows nothing while the layout is
@@ -326,6 +335,9 @@ Item {
   property bool showGrid: true
   property string canvasPattern: "Dots"
   property bool canvasBackgroundChosen: false
+  // Chosen in the board only, and remembered in state.json: one of
+  // Store.CANVAS_COLOURS.
+  property string canvasColour: "Theme"
   property bool startWindowed: false
   property bool windowMode: false
 
@@ -351,6 +363,13 @@ Item {
     if (root.showGrid) root.canvasPattern = pattern
     // A deliberate choice in the board wins over the bar's opening defaults.
     root.canvasBackgroundChosen = true
+    root.writeState()
+    return true
+  }
+
+  function setCanvasColour(colour) {
+    if (Store.CANVAS_COLOURS.indexOf(colour) < 0) return false
+    root.canvasColour = colour
     root.writeState()
     return true
   }
@@ -398,6 +417,7 @@ Item {
       showGrid: root.showGrid,
       canvasPattern: root.canvasPattern,
       canvasBackgroundChosen: root.canvasBackgroundChosen,
+      canvasColour: root.canvasColour,
       startWindowed: root.startWindowed
     }, null, 2) + "\n")
   }
@@ -430,6 +450,7 @@ Item {
       if (typeof st.showGrid === "boolean") root.showGrid = st.showGrid
       if (Store.CANVAS_PATTERNS.indexOf(st.canvasPattern) >= 0) root.canvasPattern = st.canvasPattern
       root.canvasBackgroundChosen = st.canvasBackgroundChosen === true
+      if (Store.CANVAS_COLOURS.indexOf(st.canvasColour) >= 0) root.canvasColour = st.canvasColour
       if (typeof st.startWindowed === "boolean") root.startWindowed = st.startWindowed
       // With no board open yet, the bar's preference decides the surface.
       if (st.windowMode === undefined) root.windowMode = root.startWindowed
@@ -615,7 +636,7 @@ Item {
     id: boardWindow
     visible: root.opened && root.windowMode
     title: "Omarchyform"
-    color: root.theme.canvasBackground
+    color: root.sceneTheme.canvasBackground
     implicitWidth: 1100
     implicitHeight: 750
     minimumSize: Qt.size(480, 360)

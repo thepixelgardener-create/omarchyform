@@ -45,11 +45,11 @@ TestCase {
     ctl.items.clear()
     ctl.links.clear()
     ctl.items.append({ iid: 1, kind: "note", ix: 100, iy: 200, iw: 200, ih: 150,
-                       itint: "foreground", itext: "hello", ipinned: false, isrc: "" })
+                       itint: "foreground", itexture: "plain", itext: "hello", ipinned: false, isrc: "" })
     ctl.items.append({ iid: 2, kind: "rect", ix: 420, iy: 200, iw: 200, ih: 150,
-                       itint: "foreground", itext: "", ipinned: true, isrc: "" })
+                       itint: "foreground", itexture: "plain", itext: "", ipinned: true, isrc: "" })
     ctl.items.append({ iid: 3, kind: "image", ix: 100, iy: 400, iw: 160, ih: 120,
-                       itint: "foreground", itext: "", ipinned: false, isrc: "red.png" })
+                       itint: "foreground", itexture: "plain", itext: "", ipinned: false, isrc: "red.png" })
     ctl.camX = 0
     ctl.camY = 0
     ctl.zoom = 1
@@ -61,6 +61,8 @@ TestCase {
     ctl.showPinned = false
     ctl.helpVisible = false
     ctl.paletteVisible = false
+    ctl.paletteGroup = ""
+    ctl.paletteQuery = ""
     ctl.library.showing = false
     ctl.menuVisible = false
     ctl.undoCount = 0
@@ -108,6 +110,47 @@ TestCase {
   }
 
   // ------------------------------------------------------------------ panning
+
+  // The connectors' id index is kept between paints, and rebuilt when rows
+  // move, go or arrive.
+  function test_groupBackspaceKeepsTypingAndReturnsWhenEmpty() {
+    ctl.paletteGroup = "canvas"
+    ctl.paletteVisible = true
+    var field = findChild(surface, "command-query")
+    tryCompare(field, "activeFocus", true)
+    keyClick("I")
+    keyClick("n")
+    keyClick("k")
+    compare(ctl.paletteQuery, "Ink")
+    keyClick(Qt.Key_Backspace)
+    compare(ctl.paletteQuery, "In")
+    compare(ctl.paletteGroup, "canvas")
+    keyClick(Qt.Key_Backspace)
+    keyClick(Qt.Key_Backspace)
+    compare(ctl.paletteQuery, "")
+    keyClick(Qt.Key_Backspace)
+    compare(ctl.paletteGroup, "")
+    verify(ctl.paletteVisible)
+    keyClick(Qt.Key_Escape)
+    verify(!ctl.paletteVisible)
+  }
+
+  function test_connectorIndexFollowsModelRows() {
+    surface.repaintLinks()
+    tryCompare(surface, "linkIndexDirty", false)
+    compare(surface.linkIndex[1], 0)
+    ctl.items.move(0, 2, 1)
+    tryCompare(surface, "linkIndexDirty", false)
+    compare(surface.linkIndex[1], 2)
+    ctl.items.remove(0)
+    tryCompare(surface, "linkIndexDirty", false)
+    compare(surface.linkIndex[1], 1)
+    compare(surface.linkIndex[2], undefined)
+    ctl.items.append({ iid: 9, kind: "rect", ix: 600, iy: 200, iw: 100, ih: 100,
+      itint: "foreground", itexture: "plain", itext: "", ipinned: false, isrc: "" })
+    tryCompare(surface, "linkIndexDirty", false)
+    compare(surface.linkIndex[9], 2)
+  }
 
   // The displacement is the pointer's, in screen pixels, wherever it started.
   function test_middleDragPansFromAnywhere_data() {
@@ -707,11 +750,11 @@ TestCase {
   function test_theItemOnTopIsTheOneTheBoardSaysIsOnTop() {
     ctl.items.clear()
     ctl.items.append({ iid: 1, kind: "rect", ix: 60, iy: 180, iw: 420, ih: 300,
-                       itint: "foreground", itext: "", ipinned: true, isrc: "" })
+                       itint: "foreground", itexture: "plain", itext: "", ipinned: true, isrc: "" })
     ctl.items.append({ iid: 2, kind: "image", ix: 100, iy: 220, iw: 200, ih: 150,
-                       itint: "foreground", itext: "", ipinned: false, isrc: "red.png" })
+                       itint: "foreground", itexture: "plain", itext: "", ipinned: false, isrc: "red.png" })
     ctl.items.append({ iid: 3, kind: "note", ix: 200, iy: 280, iw: 200, ih: 150,
-                       itint: "foreground", itext: "", ipinned: false, isrc: "" })
+                       itint: "foreground", itexture: "plain", itext: "", ipinned: false, isrc: "" })
     var red = Qt.rgba(1, 0, 0, 1)
     // Where only the picture is, so the wait is for the picture and nothing else.
     tryVerify(function () { return grabImage(surface).pixel(150, 300) === red }, 2000, "the picture arrived")
@@ -755,7 +798,7 @@ TestCase {
     ctl.items.clear()
     for (var i = 0; i < row.pins.length; i++)
       ctl.items.append({ iid: i + 1, kind: "rect", ix: 60 + i * 30, iy: 200, iw: 100, ih: 100,
-                         itint: "foreground", itext: "", ipinned: row.pins[i], isrc: "" })
+                         itint: "foreground", itexture: "plain", itext: "", ipinned: row.pins[i], isrc: "" })
     wait(0)
     check("loaded")
     ctl.items.setProperty(2, "ipinned", !ctl.items.get(2).ipinned)

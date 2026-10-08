@@ -58,7 +58,7 @@ const plain = (n) => JSON.stringify({ kind: 'omarchyform.board', version: 5, nex
   // including a duplicate key whose last value wins under JSON parsing.
   const file = JSON.parse(plain(2))
   const history = H.create(live(file), 1, 'version-after-history')
-  for (const version of [7, '6', null, 6]) {
+  for (const version of [8, '6', null, 6]) {
     for (const duplicate of [false, true]) {
       const fields = { kind: file.kind }
       if (duplicate) fields.version = 6
@@ -143,7 +143,7 @@ const plain = (n) => JSON.stringify({ kind: 'omarchyform.board', version: 5, nex
   c.root.recolorItem()
   c.land()
   const w = written(c)
-  assert.equal(w.file.version, 6)
+  assert.equal(w.file.version, 7)
   assert.equal(w.records.length, 1)
   assert.equal(w.records[0].a, 'Colour')
   assert.equal(w.history.base.items[0].tint, 'foreground', 'the baseline is the board before the edit')
@@ -523,7 +523,7 @@ const plain = (n) => JSON.stringify({ kind: 'omarchyform.board', version: 5, nex
   c.land()
   c.root.forgetHistory()
   assert.match(c.root.statusText, /Run it again/)
-  assert.equal(written(c).file.version, 6, 'asking once forgets nothing')
+  assert.equal(written(c).file.version, 7, 'asking once forgets nothing')
   c.root.forgetHistory()
   c.land()
   const w = written(c)

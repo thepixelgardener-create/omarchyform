@@ -126,18 +126,27 @@ Item {
     muted: Store.hexColor(theme.muted)
   })
 
-  function tintFill(tint, strong) {
+  // The shell's surface weights, read once per theme change rather than once
+  // for every item's fill.
+  readonly property real normalFillAlpha: theme.token(function () { return Style.normalFillAlpha }, 0.04)
+  readonly property real selectedFillAlpha: theme.token(function () { return Style.selectedFillAlpha }, 0.18)
+  readonly property real normalBorderAlpha: theme.token(function () { return Style.normalBorderAlpha }, 0.4)
+
+  // Blended against the canvas it sits on, which is the theme's background
+  // unless the canvas has been shaded: `under` is that shade.
+  function tintFill(tint, strong, under) {
     var c = theme.tintColor(tint)
+    var bg = under === undefined ? theme.canvasBackground : under
     // Use the shell's surface weights. Coloured notes get a little more ink;
     // ordinary notes stay quiet enough that the text carries the hierarchy.
-    var normal = theme.token(function () { return Style.normalFillAlpha }, 0.04)
-    var selected = theme.token(function () { return Style.selectedFillAlpha }, 0.18)
+    var normal = theme.normalFillAlpha
+    var selected = theme.selectedFillAlpha
     var a = strong ? selected : Math.min(1, normal + (tint === "accent" || tint === "urgent" ? 0.04 : 0.02))
-    return Qt.rgba(c.r * a + theme.canvasBackground.r * (1-a), c.g * a + theme.canvasBackground.g * (1-a), c.b * a + theme.canvasBackground.b * (1-a), 1)
+    return Qt.rgba(c.r * a + bg.r * (1-a), c.g * a + bg.g * (1-a), c.b * a + bg.b * (1-a), 1)
   }
   function tintBorder(tint, strong) {
     var c = theme.tintColor(tint)
-    var a = strong ? 1.0 : theme.token(function () { return Style.normalBorderAlpha }, 0.4)
+    var a = strong ? 1.0 : theme.normalBorderAlpha
     return Qt.rgba(c.r, c.g, c.b, a)
   }
 

@@ -36,6 +36,8 @@ Item {
   // What the board looks like is in Theme.qml, held by the workspace: one
   // object for every pane, and one object for a test to hold.
   readonly property Theme theme: root.workspace.theme
+  // What the board and its items are drawn in, which the panels are not.
+  readonly property BoardPalette sceneTheme: root.workspace.sceneTheme
 
   readonly property int minItemSize: Store.MIN_SIZE
 
@@ -656,7 +658,7 @@ Item {
       iid: root.nextId, kind: kind,
       ix: wx - w / 2, iy: wy - h / 2, iw: w, ih: h,
       itint: Store.TINTS[root.doc.nextColor % Store.TINTS.length],
-      itext: "", ipinned: false, isrc: ""
+      itext: "", ipinned: false, isrc: "", itexture: "plain"
     })
     root.doc.nextId += 1
     root.doc.nextColor += 1
@@ -742,18 +744,24 @@ Item {
   }
 
   function setZoom(level) { root.zoomCentre(level / root.zoom) }
+  // The menu's Background: the canvas's family, on the pattern it has now.
   function chooseCanvasBackground() {
     root.beginPalette("all")
-    root.setPaletteQuery("Canvas background:")
+    root.openGroup("canvas")
     var current = root.showGrid ? root.canvasPattern : "Plain"
     for (var i = 0; i < root.paletteMatches.length; i++)
-      if (root.paletteMatches[i].arg === current) root.paletteIndex = i
+      if (root.paletteMatches[i].run === "setCanvasBackground" && root.paletteMatches[i].arg === current)
+        root.paletteIndex = i
   }
 
   // Every pane wears the same background: it is a setting, not part of a board.
   function setCanvasBackground(pattern) {
     if (!root.workspace.setCanvasBackground(pattern)) return
-    root.flash("Canvas background: " + pattern)
+    root.flash("Canvas pattern: " + pattern)
+  }
+  function setCanvasColour(colour) {
+    if (!root.workspace.setCanvasColour(colour)) return
+    root.flash("Canvas colour: " + colour)
   }
 
   function showHelp() { root.helpVisible = true }
@@ -772,6 +780,8 @@ Item {
   // "all" is every command; "selection" is the ones that act on what is
   // selected, which is what a menu of actions for it offers.
   property string paletteScope: "all"
+  // A family of commands the list is showing by itself, or "" for all of them.
+  property string paletteGroup: ""
   property var textEditor: null
   onEditIndexChanged: root.textEditor = null
 
@@ -790,7 +800,7 @@ Item {
     if (root.commandReady("typing")) root.textEditor.heading()
   }
   readonly property var paletteMatches: root.paletteVisible
-    ? Store.matchCommands(root.paletteQuery, root.paletteScope) : []
+    ? Store.matchCommands(root.paletteQuery, root.paletteScope, root.paletteGroup) : []
   // How many rows the panel draws. The rest are still there to be typed at.
   readonly property int paletteRows: 9
 
@@ -812,6 +822,7 @@ Item {
     if (root.paletteScope !== "typing") root.stopEditing()
     root.menuVisible = false
     root.paletteVisible = true
+    root.paletteGroup = ""
     root.paletteQuery = ""
     root.paletteIndex = 0
     root.focusKeys()
@@ -819,6 +830,23 @@ Item {
 
   function endPalette() {
     root.paletteVisible = false
+    root.paletteGroup = ""
+    root.paletteQuery = ""
+    root.paletteIndex = 0
+  }
+
+  // A family by itself: what its entry opens in the list. Backspace with
+  // nothing typed goes back to every command.
+  function openGroup(group) {
+    if (Store.groupTitle(group) === "") return
+    if (!root.paletteVisible) root.beginPalette("all")
+    if (!root.paletteVisible) return
+    root.paletteGroup = group
+    root.paletteQuery = ""
+    root.paletteIndex = 0
+  }
+  function leaveGroup() {
+    root.paletteGroup = ""
     root.paletteQuery = ""
     root.paletteIndex = 0
   }
@@ -846,6 +874,7 @@ Item {
     if (needs === "edit") return root.canEdit
     if (!root.canEdit) return needs === ""
     if (needs === "typing") return root.editIndex >= 0 && !!root.textEditor
+    if (needs === "texture") return root.textureTargets().length > 0
     if (needs === "target") return root.targets().length > 0
     // A background under the cursor counts: which one is on top, and whether
     // it stays a background at all, are questions about it.
@@ -861,6 +890,7 @@ Item {
     if (!root.canEdit) return root.damaged ? "this board is read-only" : "the board is not ready yet"
     if (needs === "typing") return "start editing a note"
     if (needs === "group") return "mark two or more"
+    if (needs === "texture") return "select a note or shape"
     if (needs === "target" || needs === "item") return "nothing is selected"
     return "not now"
   }
@@ -868,6 +898,9 @@ Item {
   function runPaletteChoice() {
     var choice = root.paletteMatches[root.paletteIndex]
     if (!choice) { root.flash(root.paletteQuery === "" ? "no commands" : "no command goes by that"); return }
+    // A family's entry opens the family here, whatever its key does: `g`
+    // still waits for a second key, and the list names the answers instead.
+    if (choice.opens) { root.openGroup(choice.opens); return }
     root.endPalette()
     root.runCommand(choice.name)
   }
@@ -1015,7 +1048,7 @@ Item {
       root.items.append({
         iid: id, kind: n.kind,
         ix: n.ix + Store.DUPLICATE_OFFSET, iy: n.iy + Store.DUPLICATE_OFFSET,
-        iw: n.iw, ih: n.ih, itint: n.itint, itext: n.itext, ipinned: false, isrc: n.isrc
+        iw: n.iw, ih: n.ih, itint: n.itint, itext: n.itext, ipinned: false, isrc: n.isrc, itexture: Store.normalizeTexture(n.itexture)
       })
       fresh.push(id)
     }
@@ -1092,6 +1125,23 @@ Item {
     var next = Store.cycle(Store.TINTS, n.itint)
     for (var i = 0; i < t.length; i++) root.items.setProperty(t[i], "itint", next)
     root.save()
+  }
+
+  function textureTargets() {
+    var here = root.selected()
+    var targets = here && here.ipinned ? [root.selectedIndex] : root.targets()
+    return targets.filter(function (at) { return root.items.get(at).kind !== "image" })
+  }
+
+  function setTexture(texture) {
+    if (!root.canEdit || Store.TEXTURES.indexOf(texture) < 0) return
+    var targets = root.textureTargets()
+    var changed = targets.filter(function (at) { return Store.normalizeTexture(root.items.get(at).itexture) !== texture })
+    if (changed.length === 0) { root.flash(targets.length ? "texture already " + texture : "select a note or shape"); return }
+    root.pushUndo("Texture")
+    for (var i = 0; i < changed.length; i++) root.items.setProperty(changed[i], "itexture", texture)
+    root.save()
+    root.flash("texture: " + texture + " · " + changed.length + (changed.length === 1 ? " item" : " items") + " · u to undo")
   }
 
   function cycleKind() {
@@ -1176,6 +1226,11 @@ Item {
 
   // --------------------------------------------------------------- navigation
   function pointerSelect(index, additive) {
+    // Choosing the far end of a connector by clicking it: the near end is
+    // held, as moving to it with the keys holds it, until x joins them or
+    // escape lets go. A background is not something to join.
+    var source = root.linkingFrom
+    if (source >= 0 && root.items.get(index).ipinned) return
     if (additive && !root.items.get(index).ipinned) {
       if (root.markedIds.length === 0 && root.selectedIndex >= 0 && root.selectedIndex !== index
           && !root.items.get(root.selectedIndex).ipinned) root.markedIds = [root.items.get(root.selectedIndex).iid]
@@ -1185,7 +1240,8 @@ Item {
       root.selectedIndex = index
     } else root.selectOnly(index)
     root.editIndex = -1
-    root.linkingFrom = -1
+    root.linkingFrom = source
+    root.repaintLinks()
     root.focusKeys()
   }
 

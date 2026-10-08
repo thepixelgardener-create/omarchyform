@@ -257,6 +257,18 @@ const OPS = {
       return { changed: Number(a[0]) }
     }
   },
+  setTexture: {
+    args: "id, " + S.TEXTURES.join("|"),
+    does: "give a note or shape a background texture; a picture keeps its own",
+    run(board, a) {
+      const at = mustRow(board, a[0], "setTexture")
+      const texture = String(a[1])
+      if (S.TEXTURES.indexOf(texture) < 0) die(`setTexture: ${texture} is not one of ${S.TEXTURES.join(", ")}`)
+      if (board.items.get(at).kind === "image") die(`setTexture: item ${a[0]} is a picture, which keeps its own image`)
+      board.items.setProperty(at, "itexture", texture)
+      return { changed: Number(a[0]) }
+    }
+  },
   move: {
     args: "id, x, y",
     does: "put an item somewhere else",
@@ -448,7 +460,7 @@ function verbOps() {
   answer({
     ok: true,
     ops: Object.keys(OPS).map(name => ({ op: name, args: OPS[name].args, does: OPS[name].does })),
-    kinds: S.KINDS, tints: S.TINTS, minimumSize: S.MIN_SIZE
+    kinds: S.KINDS, tints: S.TINTS, textures: S.TEXTURES, minimumSize: S.MIN_SIZE
   })
 }
 

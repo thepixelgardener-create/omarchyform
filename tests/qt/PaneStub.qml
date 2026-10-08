@@ -112,7 +112,7 @@ Item {
   function editSelected() { ctl.editIndex = ctl.selectedIndex }
   function addItem(kind, x, y) {
     itemModel.append({ iid: itemModel.count + 100, kind: kind, ix: x, iy: y, iw: 160, ih: 120,
-                       itint: "foreground", itext: "", ipinned: false, isrc: "" })
+                       itint: "foreground", itexture: "plain", itext: "", ipinned: false, isrc: "" })
   }
 
   // ---- the board's own state, and the panels that read it
@@ -149,15 +149,17 @@ Item {
   property string paletteScope: "all"
   property bool paletteVisible: false
   property string paletteQuery: ""
+  property string paletteGroup: ""
   property int paletteIndex: 0
   property int paletteRows: 9
-  readonly property var paletteMatches: Store.matchCommands(ctl.paletteQuery)
+  readonly property var paletteMatches: Store.matchCommands(ctl.paletteQuery, ctl.paletteScope, ctl.paletteGroup)
   function commandReady(needs) { return true }
   function commandExcuse(needs) { return "" }
   function setPaletteQuery(text) { ctl.paletteQuery = text }
   function runPaletteChoice() {}
   function beginPalette() {}
-  function endPalette() {}
+  function endPalette() { ctl.paletteVisible = false; ctl.paletteGroup = ""; ctl.paletteQuery = "" }
+  function leaveGroup() { ctl.paletteGroup = "" }
   function movePalette(step) {}
   property bool conflictVisible: false
   property int conflictIndex: 0
@@ -245,9 +247,14 @@ Item {
   function unlinkSelected() {}
   function zoomCentre(factor) {}
 
+  // The board draws in its own palette and the panels in the theme; one
+  // stand-in serves both, so it carries the palette's members as well.
+  readonly property QtObject sceneTheme: ctl.theme
   property QtObject theme: QtObject {
     property color canvasBackground: "#101315"
     property color foreground: "#cccccc"
+    property color connector: "#cccccc"
+    property real connectorAlpha: 0.55
     property color barBackground: "#161b22"
     property color barForeground: "#e6e6e6"
     property color accent: "cyan"

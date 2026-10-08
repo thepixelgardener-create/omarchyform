@@ -93,7 +93,8 @@ for (const file of ["Board.qml", "Node.qml", "Browser.qml", "Help.qml", "BoardTo
 // than off the controller, so the same check applies to it: a panel that reads
 // a token Theme.qml does not declare is a TypeError on a desktop.
 const themeTokens = declaredMembers(read("Theme.qml"))
-const themed = ["Board.qml", "Node.qml", "Browser.qml", "Help.qml", "BoardToolbar.qml",
+// The board and its items read BoardPalette instead, checked further down.
+const themed = ["Browser.qml", "Help.qml", "BoardToolbar.qml",
                 "BoardImage.qml", "ScrollHint.qml", "Commands.qml", "Conflict.qml", "Surface.qml", "TimelineStrip.qml"]
 for (const file of themed) expect(referenced(read(file), "theme."), themeTokens, "Theme.qml", file)
 
@@ -227,9 +228,19 @@ expect(nodeReads, nestedMembers(read("tests/qt/tst_node.qml"), "ctl"),
 // added to Node would have gone missing from every exported image in silence.
 expect(nodeReads, nestedMembers(read("BoardImage.qml"), "renderCtl"),
   "the PNG export's renderCtl", "BoardImage.qml")
-expect(referenced(read("Node.qml"), "theme."),
-  membersAt(blockBody(read("BoardImage.qml"), "property QtObject theme:"), 6),
-  "the PNG export's theme", "BoardImage.qml")
+
+// The board and its items draw through BoardPalette, on screen and in a PNG:
+// what either reads off its theme is declared there, and what the palette
+// reads off the theme it is based on is the theme's.
+const paletteMembers = declaredMembers(read("BoardPalette.qml"))
+expect(referenced(read("Node.qml"), "theme."), paletteMembers, "BoardPalette", "Node.qml")
+expect(referenced(read("Board.qml"), "board.theme."), paletteMembers, "BoardPalette", "Board.qml")
+expect(referenced(read("BoardPalette.qml"), "colours.base."), declaredMembers(read("Theme.qml")),
+  "the theme", "BoardPalette.qml")
+// And the export suite's theme, which a BoardPalette is built on there.
+expect(referenced(read("BoardPalette.qml"), "colours.base."),
+  membersAt(blockBody(read("tests/qt/tst_export.qml"), "property QtObject theme:"), 6),
+  "the tst_export stub's theme", "BoardPalette.qml")
 
 // A file also reaches into itself by its own id, and QML resolves that name the
 // same way it resolves ctl. — at runtime, in code paths a green suite may never

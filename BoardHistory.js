@@ -48,12 +48,15 @@ var MAX_CHUNK_MS = 5000
 // Text at least this long is recorded as the stretch that changed. Typing into
 // a long note would otherwise store the whole note again with every pause.
 var TEXT_SPLICE_MIN = 64
-var ITEM_FIELDS = ["kind", "x", "y", "w", "h", "tint", "text", "pinned", "src"]
+var ITEM_FIELDS = ["kind", "x", "y", "w", "h", "tint", "text", "pinned", "src", "texture"]
+function textureValue(row) { return row.texture || "plain" }
 
 // ---------------------------------------------------------------- states
 function copyRow(r) {
-  return { id: r.id, kind: r.kind, x: r.x, y: r.y, w: r.w, h: r.h, tint: r.tint, text: r.text,
+  var row = { id: r.id, kind: r.kind, x: r.x, y: r.y, w: r.w, h: r.h, tint: r.tint, text: r.text,
            pinned: r.pinned === true, src: r.src }
+  if (textureValue(r) !== "plain") row.texture = r.texture
+  return row
 }
 
 function copyState(state) {
@@ -72,6 +75,7 @@ function sameState(a, b) {
     if (p.id !== q.id) return false
     for (var f = 0; f < ITEM_FIELDS.length; f++) {
       var name = ITEM_FIELDS[f]
+      if (name === "texture") { if (textureValue(p) !== textureValue(q)) return false; continue }
       if (name === "pinned" ? (p.pinned === true) !== (q.pinned === true) : p[name] !== q[name]) return false
     }
   }
@@ -165,8 +169,8 @@ function diff(before, after) {
     var change = null
     for (var f = 0; f < ITEM_FIELDS.length; f++) {
       var name = ITEM_FIELDS[f]
-      var then = name === "pinned" ? old.pinned === true : old[name]
-      var value = name === "pinned" ? row.pinned === true : row[name]
+      var then = name === "texture" ? textureValue(old) : name === "pinned" ? old.pinned === true : old[name]
+      var value = name === "texture" ? textureValue(row) : name === "pinned" ? row.pinned === true : row[name]
       if (then === value) continue
       if (name === "text" && typeof then === "string" && typeof value === "string" && then.length >= TEXT_SPLICE_MIN) {
         var cut = textSplice(then, value)
@@ -256,6 +260,7 @@ function apply(w, p) {
       var next = copyRow(old)
       for (var f = 0; f < ITEM_FIELDS.length; f++)
         if (change[ITEM_FIELDS[f]] !== undefined) next[ITEM_FIELDS[f]] = change[ITEM_FIELDS[f]]
+      if (next.texture === "plain") delete next.texture
       w.rows[id] = next
     }
   }
