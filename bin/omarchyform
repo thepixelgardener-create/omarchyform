@@ -123,6 +123,13 @@ function loadBoard(file, text) {
   return { data, items, links, version, history: data.history }
 }
 
+// Nested replay data can throw even after the shallow shape check. Validation
+// reports that as data; callers that mutate must refuse it before writing.
+function verifyHistory(history, state) {
+  try { return H.verify(history, state) }
+  catch (error) { return "invalid replay data: " + String(error) }
+}
+
 // A board's history, checked before anything is added to it. One that ends
 // somewhere else — the file was edited by something that keeps none — gets
 // the difference as one record. One that cannot be played is not added to:
@@ -134,9 +141,11 @@ function checkHistory(file, history, state) {
     die(file + "'s history " + (history && history.v > H.HISTORY_VERSION
       ? "is from a newer Omarchyform" : "cannot be read (" + shape + ")"),
       "open it in Omarchyform, which keeps that history aside and starts a new one")
-  const wrong = H.verify(history, state)
+  const wrong = verifyHistory(history, state)
   if (wrong === "") return history
-  if (H.bridge(history, state, Date.now()) === null)
+  let bridged = null
+  try { bridged = H.bridge(history, state, Date.now()) } catch { /* malformed nested replay data */ }
+  if (bridged === null)
     die(file + "'s history cannot be read (" + wrong + ")",
         "open it in Omarchyform, which keeps that history aside and starts a new one")
   return history
@@ -412,7 +421,7 @@ function verbValidate(args) {
   if (history !== null && history !== undefined) {
     const shape = H.checkShape(history)
     const state = { items: S.itemRows(items), links: S.linkRows(links), nextId: S.nextFreeId(items, data.nextId) }
-    const problem = shape !== "" ? shape : H.verify(history, state)
+    const problem = shape !== "" ? shape : verifyHistory(history, state)
     kept = { records: Array.isArray(history.records) ? history.records.length : 0, plays: problem === "" }
     if (problem !== "") warnings.push("its history " + problem)
   }

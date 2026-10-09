@@ -43,14 +43,18 @@ Item {
   // importing and exporting for the rest of the session, and a failure nobody
   // is told about looks exactly like nothing having happened.
   function fail(message, kind) {
-    busy = false
     error = message
-    failed(message, kind)
+    try { failed(message, kind) } finally { busy = false }
   }
 
   function stage(text, name, editFirst) {
     if (busy) return false
     busy = true
+    return stageImport(text, name, editFirst)
+  }
+
+  // Internal continuation: retain the operation owner between import stages.
+  function stageImport(text, name, editFirst) {
     error = ""
     firstNote = editFirst
     baseName = Store.nameIsValid(name) ? name : "imported"
@@ -107,7 +111,6 @@ Item {
     property string source: ""
     stdout: StdioCollector { id: measured; waitForEnd: true }
     onExited: function (code) {
-      exchange.busy = false
       var bytes = code === 0 ? parseInt(measured.text, 10) : 0
       if (!isFinite(bytes) || bytes <= 0) { exchange.fail("Could not read that board", "board"); return }
       if (bytes > exchange.maxImportBytes) {
@@ -150,7 +153,7 @@ Item {
     // Through the same rewrite even when nothing was carried: a board that
     // leaves its pictures out still names them, and those names would address
     // whatever this library happens to hold under them.
-    if (names.length === 0) { exchange.stage(Store.withSharedImages(raw, {}), base, false); return }
+    if (names.length === 0) { exchange.stageImport(Store.withSharedImages(raw, {}), base, false); return }
     busy = true
     exchange.sharing = { raw: raw, base: base, images: carried, names: names, at: 0, landed: {} }
     exchange.nextSharedImage()
@@ -165,10 +168,7 @@ Item {
     if (job.at >= job.names.length) {
       exchange.sharing = null
       exchange.createdNote = ""
-      // stage() takes the flag straight back; it is cleared so its own guard,
-      // which is there to refuse a second import, does not refuse this one.
-      exchange.busy = false
-      exchange.stage(Store.withSharedImages(job.raw, job.landed), job.base, false)
+      exchange.stageImport(Store.withSharedImages(job.raw, job.landed), job.base, false)
       return
     }
     bytes.path = ""
@@ -371,11 +371,13 @@ Item {
     id: publish
     stdout: StdioCollector { id: published; waitForEnd: true }
     onExited: function(code) {
-      exchange.busy = false
       if (code !== 0) { exchange.fail("Could not save there; choose a location outside the app data folder", "board"); return }
-      if (exchange.operation === "copy") exchange.copied(published.text)
-      else if (exchange.operation === "publish") exchange.created(published.text, exchange.firstNote)
-      else exchange.finished("Editable copy saved" + exchange.exportNote, "board")
+      // Completion signals still belong to the pane that started this operation.
+      try {
+        if (exchange.operation === "copy") exchange.copied(published.text)
+        else if (exchange.operation === "publish") exchange.created(published.text, exchange.firstNote)
+        else exchange.finished("Editable copy saved" + exchange.exportNote, "board")
+      } finally { exchange.busy = false }
     }
   }
   // Copying out. One picture on its own goes as the picture, so it can be

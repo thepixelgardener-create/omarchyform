@@ -491,3 +491,36 @@ function closeOther(c) {
   assert.match(b.statusText, /earlier version/)
   console.log('ok — split: a drop on a pane that cannot take it is refused, and said')
 }
+
+{
+  const c = controller(), a = c.root, b = c.second
+  a.toggleSplit('side-by-side'); b.openBoard('b.json')
+  b.addItem('note', 0, 0)
+  const saving = c.of(b.doc)
+  c.workspace.activate(a)
+  c.workspace.closeSplit()
+  assert.ok(c.workspace.pendingLeave)
+  c.workspace.activate(b)
+  saving.complete(); c.workspace.retryLeave()
+  assert.equal(c.workspace.activePane, a, 'delayed close restores focus to the surviving pane')
+  assert.equal(b.doc, null)
+  a.toggleSplit('side-by-side')
+  assert.equal(c.workspace.split, true, 'the next split still works')
+  console.log('ok — split: focus changes during a delayed close leave a usable pane')
+}
+
+{
+  const c = controller(), a = c.root, b = c.second
+  a.toggleSplit('side-by-side'); b.openBoard('b.json')
+  a.addItem('note', 0, 0)
+  a.openBoard('b.json')
+  assert.ok(c.workspace.pendingLeave)
+  b.openBoard('c.json')
+  if (c.of(b.doc).persistence.busy) c.of(b.doc).complete()
+  assert.equal(b.currentBoard, 'c.json')
+  c.complete(); c.workspace.retryLeave()
+  assert.equal(a.currentBoard, 'b.json', 'a pending open resolves the requested path again')
+  assert.equal(b.currentBoard, 'c.json')
+  assert.notEqual(a.doc, b.doc)
+  console.log('ok — split: a delayed open cannot follow a document to a different path')
+}

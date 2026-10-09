@@ -118,6 +118,9 @@ Item {
     var gone = root.otherOf(keep)
     if (!gone) return
     root.leavePane(gone, function () {
+      // Focus may have moved while the discarded pane finished saving.
+      if (root.activePane !== keep) root.activePane.deactivate()
+      root.activePane = keep
       root.layout = "single"
       root.panes = [keep, gone]
       gone.doc = null
@@ -200,7 +203,7 @@ Item {
     // session's own switch, which saves first, waits for a write in flight and
     // will not walk away from two versions of a board.
     if (!shared && !open) { doc.openBoard(path, fresh); return }
-    root.leavePane(pane, function () { root.bind(pane, open || root.createDocument(path, fresh)) })
+    root.leavePane(pane, function () { root.bind(pane, root.documentAt(path) || root.createDocument(path, fresh)) })
   }
 
   // Leaving a pane's board, then doing `then`. A board another pane is still

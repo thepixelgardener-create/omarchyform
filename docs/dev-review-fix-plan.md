@@ -6,6 +6,33 @@ Status: done on `dev` in `0883789`, `0e87b41` and `f73c571`. Results and
 the one manual check left are under "Gate 6 results" in the
 [development plan](splitview-timeline-plan.md).
 
+## Thorough review fixes — 2026-10-09
+
+Seven additional reproduced defects are fixed in the working tree:
+
+- In-place board switches invalidate old worker/replay ownership before the path changes.
+- Trim replies carry the original cutoff even when no records survive.
+- Import stages and completion signals retain the operation's originating pane.
+- Delayed split closure restores focus to the surviving pane.
+- Delayed opens resolve the requested path again after saving.
+- External imports discard foreign history as well as remapping live images.
+- Nested malformed CLI history produces JSON diagnostics and refuses edits.
+
+Regression coverage lives in `tests/recording.js`, `tests/split.js`,
+`tests/exchange.js`, `tests/suite.js`, `tests/cli.js`, and the real QML exchange
+scenario. [Contributor instructions](../AGENTS.md) record the invariants and
+required checks for future changes.
+
+Validation: `npm test`, all seven `npm run test:qml` scenarios,
+`npm run test:ui` (162 passed), and `npm run test:omarchy` passed. Each of the
+seven regressions also failed when its original defect was restored in a
+separate temporary checkout. The oversized-trim test additionally checks
+recording after reopening. The security regression screen, plugin validation, the final-property lint
+gate, and `git diff --check` passed. Existing unrelated qmllint warnings remain.
+
+Native file-manager dragging into the inactive split pane and IME behavior
+remain manual checks; the automated results above do not establish either.
+
 ## Follow-up review fixes — 2026-10-07
 
 Implemented locally on top of `4e6b391` after the second review:

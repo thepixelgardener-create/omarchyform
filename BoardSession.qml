@@ -86,6 +86,7 @@ Item {
     session.ctl.undoStack = []
     session.ctl.redoStack = []
     session.ctl.resetSelection(true)
+    session.ctl.abandonHistory()
     session.ctl.currentBoard = path
     session.ctl.resetView()
     // Again once it has loaded: the view frames what is on the board, and until

@@ -7,6 +7,9 @@ on `dev` are not all in the released 0.4.6 package; the
 
 ## Current development
 
+- [Contributor instructions](../AGENTS.md): ownership, persistence and regression
+  requirements for code changes.
+
 - [Roadmap](roadmap.md): completed work, unreleased features and future scope.
 - [Split view and timeline](splitview-timeline-plan.md): implementation decisions,
   validation results and remaining release checks.

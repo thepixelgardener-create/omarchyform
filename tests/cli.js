@@ -441,6 +441,33 @@ try {
     assert.match(refused.raw, /history cannot be read/)
     assert.equal(fs.readFileSync(file, 'utf8'), brokenText)
     assert.equal(run('validate', file).out.history.plays, false)
+    for (const damage of [
+      h => { h.base.items = [null] },
+      h => { h.base.links = [null] },
+      h => { h.records[0].p = { a: [null] } }
+    ]) {
+      const malformed = JSON.parse(brokenText)
+      damage(malformed.history)
+      const text = JSON.stringify(malformed)
+      fs.writeFileSync(file, text)
+      const backups = path.join(dir, '.local/share/omarchyform/backups')
+      const inventory = () => fs.existsSync(backups) ? fs.readdirSync(backups, { recursive: true }).map(name => {
+        const p = path.join(backups, name)
+        return [name, fs.statSync(p).isFile() ? fs.readFileSync(p, 'utf8') : null]
+      }) : []
+      const before = inventory()
+      const validation = run('validate', file)
+      assert.equal(validation.status, 0, validation.raw)
+      assert.equal(validation.out.history.plays, false)
+      assert.ok(validation.out.warnings.length > 0)
+      for (const result of [run('inspect', file), pipe(JSON.stringify([{ op: 'setTint', args: [1, 'muted'] }]), 'apply', file)]) {
+        assert.equal(result.status, 1, result.raw)
+        assert.equal(result.out.ok, false, 'malformed nested history returns a JSON error')
+        assert.match(result.out.error, /history cannot be read/)
+      }
+      assert.equal(fs.readFileSync(file, 'utf8'), text)
+      assert.deepEqual(inventory(), before, 'rejected replay does not alter backups')
+    }
     broken.history.v = 2
     fs.writeFileSync(file, JSON.stringify(broken, null, 2) + '\n')
     refused = pipe(JSON.stringify([{ op: 'setTint', args: [1, 'muted'] }]), 'apply', file)

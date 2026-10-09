@@ -244,6 +244,16 @@ Item {
     return Store.writeFile(itemModel, linkModel, doc.nextId, history)
   }
 
+  // End ownership before a session changes paths, even before the next file loads.
+  function abandonHistory() {
+    doc.historyToken += 1
+    doc.historyChecking = false
+    doc.historyTrimming = false
+    doc.historyRaw = ""
+    doc.historyWaiting = []
+    doc.dropReplay()
+  }
+
   // A board has been read: from its file when it was opened, or again because
   // it changed on disk. Its history is taken as text and handed to the worker
   // to read. Answers why the board must be read-only, or "".
@@ -362,11 +372,11 @@ Item {
     doc.historyTrimming = false
     var parts = answer.error === "" ? History.splitText(answer.text) : null
     if (!parts) return
-    var since = doc.historyRecords.indexOf('{"i":' + (answer.last + 1) + ",")
+    var since = doc.historyRecords.indexOf('{"i":' + (answer.cutoff + 1) + ",")
     var tail = since >= 0 ? doc.historyRecords.slice(since) : ""
     doc.historyHeader = parts.header
     doc.historyRecords = tail === "" ? parts.records : parts.records === "" ? tail : parts.records + "," + tail
-    doc.historyCount = answer.count + (doc.historyLast - answer.last)
+    doc.historyCount = answer.count + (doc.historyLast - answer.cutoff)
     doc.historyBytes = answer.bytes + (tail === "" ? 0 : History.utf8Length(tail) + 1)
     if (!doc.historyTrimmed)
       doc.flash("The oldest " + answer.dropped + " edits left this board's history; it keeps the newest "

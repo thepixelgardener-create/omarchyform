@@ -636,3 +636,57 @@ const plain = (n) => JSON.stringify({ kind: 'omarchyform.board', version: 5, nex
   assert.equal(JSON.parse(c.store.writeFile(c.items, c.links, 3)).history, undefined, 'a shared copy has none')
   console.log('ok — recording: two panes, one history; copies to share leave it out')
 }
+
+{
+  const board = JSON.parse(plain(1))
+  const history = H.create(live(board), 1, 'late-reload')
+  board.items[0].text = 'outside edit in A'
+  // Valid JSON, with authoritative fields after history, requires the worker's whole-file reload.
+  delete board.version
+  const c = opened(JSON.stringify({ ...board, history, version: 7 }, null, 2))
+  const reply = W.dispatch(c.worker.asked.at(-1))
+  assert.equal(reply.reload, true)
+  const writes = c.writes.length
+  c.root.openBoard('b.json')
+  assert.equal(c.doc.currentBoard, 'b.json')
+  c.session.revision = 'revision-of-B'
+  c.answer(reply)
+  assert.equal(c.session.boardLoaded, false, 'A cannot complete the pending load of B')
+  assert.equal(c.writes.length, writes, 'A must never be saved under B’s revision and path')
+  c.session.loadBoard(plain(2), false)
+  assert.equal(c.items.count, 2)
+  assert.equal(c.doc.historyChecking, false)
+  console.log('ok — recording: switching paths invalidates history replies before the new file loads')
+}
+
+{
+  // One legal multi-item edit can exceed the entire history byte budget.
+  for (const editMeanwhile of [false, true]) {
+    const board = JSON.parse(plain(16))
+    for (const item of board.items) item.text = 'x'.repeat(1048576)
+    const c = opened(JSON.stringify(board))
+    c.root.markAll(); c.root.duplicateTargets(); c.land()
+    assert.equal(c.doc.historyTrimming, true)
+    const request = c.worker.asked.at(-1)
+    if (editMeanwhile) {
+      c.root.selectOnly(0); c.root.recolorItem(); c.land()
+    }
+    const reply = W.dispatch(request)
+    assert.equal(reply.count, 0, 'the oversized record is absorbed into the baseline')
+    c.answer(reply); c.land()
+    let w = written(c)
+    assert.equal(w.records.length, editMeanwhile ? 1 : 0, 'only edits after the request are reattached')
+    assert.equal(c.doc.historyCount, w.records.length)
+    assert.equal(H.verify(w.history, live(w.file)), '')
+    c.root.selectOnly(0); c.root.recolorItem(); c.land()
+    w = written(c)
+    assert.equal(H.verify(w.history, live(w.file)), '', 'the next edit still replays after a complete trim')
+    c.session.loadBoard(w.text, false)
+    c.answer(W.dispatch(c.worker.asked.at(-1))); c.land()
+    assert.equal(c.aside.written.length, 0, 'reopening retains valid history without recovery')
+    c.root.selectOnly(0); c.root.recolorItem(); c.land()
+    w = written(c)
+    assert.equal(H.verify(w.history, live(w.file)), '', 'recording continues after reopening trimmed history')
+  }
+  console.log('ok — recording: trimming every record preserves the baseline and concurrent edits')
+}

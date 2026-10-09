@@ -57,6 +57,13 @@ since older boards are migrated on load rather than rejected.
 
 ### Fixed
 
+- Prevent late history worker replies from saving an old board under a newly opened board's path.
+- Preserve valid history when one oversized edit is fully absorbed into the baseline.
+- Keep import/export results with their originating pane through completion.
+- Keep delayed split closures and board opens correct when focus or another pane's board changes.
+- Discard foreign history on import so deleted image references cannot address local library images.
+- Return structured CLI diagnostics for malformed nested history without changing boards or backups.
+
 - Escape during a drag or resize cancels only that gesture, without also
   dismissing the board.
 - Pasted notes and pictures create one complete history step, without an

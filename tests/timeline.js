@@ -258,7 +258,7 @@ function edited() {
   const size = H.measure(h)
   c.doc.historyTrimming = true
   c.answer({ kind: 'trimmed', token: c.doc.historyToken, error: '', text: JSON.stringify(h), dropped: 2,
-             count: size.count, bytes: size.bytes, last: size.last })
+             count: size.count, bytes: size.bytes, last: size.last, cutoff: c.doc.historyLast })
   c.index()
   assert.match(a.statusText, /oldest, which have left/)
   assert.equal(a.timelineRecord, 2, 'it goes to the oldest step there still is')

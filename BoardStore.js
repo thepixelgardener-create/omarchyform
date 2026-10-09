@@ -1483,6 +1483,9 @@ function withSharedImages(raw, landed) {
   try { parsed = JSON.parse(raw) } catch (e) { return raw }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return raw
   delete parsed.images
+  // Foreign replay can contain deleted images with names from another library.
+  // Import the current board as a new baseline, never its local edit history.
+  delete parsed.history
   var rows = Array.isArray(parsed.items) ? parsed.items
     : (Array.isArray(parsed.notes) ? parsed.notes : [])
   for (var i = 0; i < rows.length; i++) {

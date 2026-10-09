@@ -1267,6 +1267,21 @@ function tests(S) {
     eq(legacy.notes, [{ src: "", text: "y" }], "and so does one from before there were items")
   })
 
+  test("external imports discard history that can name foreign library images", () => {
+    for (const carried of [false, true]) {
+      const raw = JSON.stringify({ version: 7, nextId: 3,
+        items: carried ? [{ id: 2, kind: "image", src: "current.png" }] : [], links: [],
+        images: carried ? { "current.png": "QUJD" } : {},
+        history: { v: 1, base: { items: [{ id: 1, kind: "image", src: "private.png" }], links: [], nextId: 2 }, records: [] }
+      })
+      const imported = JSON.parse(S.withSharedImages(raw, { "current.png": "landed.png" }))
+      eq(imported.history, undefined, "deleted foreign images cannot be restored through replay")
+      eq(imported.images, undefined)
+      if (carried) eq(imported.items[0].src, "landed.png", "live images still map to their imported files")
+      eq(JSON.parse(raw).history.base.items[0].src, "private.png", "the source remains intact")
+    }
+  })
+
   test("an image keeps its file name and nothing else does", () => {
     const items = new FakeModel()
     S.fillItems(items, [

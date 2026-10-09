@@ -111,6 +111,8 @@ function trimHistory(message, answer) {
   try { h = JSON.parse(message.history) } catch (e) { h = null }
   var shape = checkShape(h)
   if (shape !== "") { answer.error = shape; return answer }
+  // The request boundary survives even when every record is absorbed into base.
+  answer.cutoff = measure(h).last
   answer.dropped = trim(h)
   var size = measure(h)
   answer.count = size.count

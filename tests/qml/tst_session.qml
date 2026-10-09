@@ -60,6 +60,7 @@ ShellRoot {
     // before history did.
     function fileText() { return Store.writeFile(items, links, ctl.nextId) }
     function adoptHistory(text, boardText, raw) { return "" }
+    function abandonHistory() {}
     property bool historyChecking: false
     property var pointerOwner: null
     // The session asks whether the library is open, and leaves word there.
