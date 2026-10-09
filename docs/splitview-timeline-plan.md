@@ -25,7 +25,7 @@ the section has been updated.
 | 3. History storage and budgets | Done; see "Gate 3 results". Embedded storage passes with the conditions recorded there |
 | 4. Recording and migration | Done; `tests/recording.js`, the CLI suite, a headless run of the real worker, and the live suites, whose boards' histories all play back |
 | 5. Timeline | Done; `tests/timeline.js` checks every step shown against a snapshot, `tst_split.qml` the strip, a headless run the real plugin, and `npm run shots` photographs it (`12d-timeline`) |
-| 6. Release review | Done on `dev`, with the follow-up review's three fixes in 0883789, 0e87b41 and f73c571; see "Gate 6 results". What is left is the owner's call to release, and one manual drag from a file manager |
+| 6. Release review | Follow-up fixes implemented on `dev`; see "Gate 6 results" for dated checks. Native file-manager drop and IME composition remain unverified. Large textured-board performance is measured with limits recorded. Release is not yet declared |
 
 A saved second board that no longer exists opens empty in its pane, the way a
 missing `lastBoard` always has, rather than restoring a single pane.
@@ -198,8 +198,10 @@ Decided by the owner on 2026-10-06, after gate 3:
   board's history" asks to be run twice, then starts a new history from the
   board as it is. Text deleted from a note otherwise stays in its file's
   history; shared copies never carry history.
-- **The format becomes version 6.** Released versions open a board with
-  history read-only, so they can never save over it and drop the history.
+- **The current format is version 7.** History first used version 6; per-item
+  textures advance it to 7. Version 6 still loads. Boards without history or
+  non-plain textures use version 5. Older readers refuse newer formats rather
+  than overwrite features they do not understand.
 
 History is an ordered record of accepted document changes, independent of
 undo/redo. Each record has a stable ID, monotonic sequence, timestamp, action,
@@ -207,11 +209,12 @@ and the data needed to reconstruct the resulting state. Ordering uses the
 sequence, not the wall clock. A pane stores a record ID or `live`, not a
 mutable array index; convert IDs to slider positions for display.
 
-Define `beginEdit(action)`, `commitEdit()` and `cancelEdit()` around mutations.
-Each completed transaction produces at most one history record and publishes
-an immutable committed head. Cancel restores its pre-edit state; unchanged
-transactions produce no record. Undo and redo append resulting states as new
-timeline records without consuming or rebuilding the undo stack from history.
+`BoardDocument.beginEdit`, `commitEdit` and `endEdit` record accepted changes.
+`BoardPane.beginPointerEdit` and `finishPointerEdit` hold a cancelable pointer
+transaction; its document blocks history commits and writes until it finishes.
+Cancel restores the starting items and undo/redo stacks; unchanged transactions
+produce no record. Undo and redo append resulting states as new timeline records
+without consuming or rebuilding the undo stack from history.
 Text undo grouping remains an independent policy; history chunking must not
 silently change existing undo behavior.
 
@@ -224,18 +227,13 @@ silently change existing undo behavior.
 | IME text | No boundary through uncommitted composition; commit the accepted text afterward |
 | CLI | One successful mutation/batch; failed or no-op commands add nothing |
 
-Gate 4 refinement: **every write completes the edit in progress first.** A
-file whose board is ahead of its history fails verification when it is next
-opened. And a write that holds back typing the history has not taken yet
-hides that typing from the session's conflict check, which compares what is
-on disk with what would be written: an outside change would reload the board
-over it. So the edit in progress is recorded before any write. What triggers
-writes stays editor-side: the autosave delay after the last change, a five
-second maximum for continuous typing, a discrete command, or leaving the
-board. Disk completion never cuts a record. Edits that should merge — typing
-in one note, a held move or resize key — schedule a write instead of making
-one, and a new edit of the same kind continues the record rather than
-starting one.
+Gate 4 refinement: **a saved canvas and its history must describe the same
+state.** Accepted edits are recorded before serialization. Typing and held
+keys schedule saves; discrete commands and gesture completion save immediately.
+A previous write completing may coalesce accepted edits into the next save.
+An active pointer transaction is the exception: saving waits for release or
+cancellation, so an intermediate position cannot reach disk. Its unsaved geometry
+remains visible to the external-change conflict check.
 
 Timer boundaries are deterministic editor events, independent of save
 completion. Continuous typing can therefore produce several labeled text
@@ -489,6 +487,65 @@ Keep tests with the behavior they protect. The feature branch stays usable
 between groups; experimental storage fixtures must not rewrite users' boards.
 
 ## Gate 6 results
+
+### Remaining fixes checked on 2026-10-09
+
+Follow-up to the canvas update at `95f645b`, implemented locally on `dev`:
+
+- Text paste, picture paste and picture drop record the populated item once,
+  including its final size and source. No placeholder is saved. Recording
+  tests cover the resulting history, disk writes, undo and redo.
+- A verified external history extension keeps the open replay, each pane's
+  retained cursor and the original playback endpoint. Shared records and the
+  shared baseline must match, not just the lineage string. External trimming
+  clamps only expired cursors; replacement, rollback and unreadable histories
+  close the old replay. Existing checkpoints survive an appended suffix.
+- Normalizing a formatted history advances the clean in-memory baseline.
+  Otherwise the next external update was incorrectly treated as a conflict.
+  The real QML worker/file-watcher fixture now tests consecutive extension and
+  replacement writes, in addition to the controller's two-pane cases.
+- Pointer cancellation restores the starting items and undo/redo stacks.
+  Save completions wait while a gesture is uncommitted; cancellation creates
+  no gesture record and writes no canceled geometry. Any earlier accepted
+  edit whose save was deferred resumes afterward. Reload instead discards the
+  pending gesture without writing over the incoming file.
+  Key release, focus loss and command changes finish
+  held movement/resize edits. Controller tests cover cancellation, release,
+  a preceding write completing during a drag, and reload before release.
+  Qt tests exercise the MouseArea cancellation signal and real key events;
+  they do not claim a native compositor grab-cancellation test.
+- The live smoke test exposed a `Color` name collision in the current runtime.
+  Theme and bar tokens now explicitly reference `Commons.Color`, preserving
+  live Omarchy palette changes.
+
+Validation: `npm test`; `test:qml` (seven scenarios); `test:ui` (161 passed,
+zero failed); live Wayland `test:omarchy` and clipboard `test:paste`; plugin
+validation; `git diff --check`.
+The owner still needs the native file-manager drop onto an inactive pane.
+IME composition boundaries remain unverified. The subsequent cleanup pass
+measured a fully textured 3,000-item board; see
+[performance results](performance.md#fully-textured-large-board--2026-10-09).
+No release or version bump is made here.
+
+### Final maintenance pass — 2026-10-09
+
+Item creation now takes content and final dimensions together, removing the
+deferred-save flag and follow-up role writes from paste. The final dimensions
+also determine its center. Gesture completion no longer ends a canceled edit
+twice, and Escape consumes a pointer cancellation before normal navigation.
+Theme imports consistently qualify Omarchy tokens. History suites share one
+worker harness; an unused worker setup and duplicate comments were removed.
+The contract scanner reads only QML files, avoiding generated fixture folders.
+The docs index and roadmap distinguish shipped, unreleased and historical work.
+
+Final validation: full `npm test`, seven `test:qml` scenarios, 162 `test:ui`
+checks, the security screen, shell syntax and final-property lint checks,
+plugin validation, and live Wayland and clipboard smoke tests. The final
+read-only review found a deferred-save cancellation case; it was fixed and
+rechecked, with the full controller/QML/UI suites passing afterward. Native
+file-manager drag remains not tested, as confirmed by the owner on 2026-10-09;
+IME composition is still unverified. These are release checks, not claims of
+completed validation.
 
 ### Follow-up review fixes
 

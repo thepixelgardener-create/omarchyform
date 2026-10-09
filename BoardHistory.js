@@ -362,6 +362,54 @@ function room(history, bytesSoFar, record) {
   return { fits: true, why: "", bytes: bytesSoFar + size }
 }
 
+// Compare JSON data without depending on object-key order. Iterative because
+// history files can contain deeply nested extra fields from external writers.
+function sameData(a, b) {
+  var pending = [[a, b]]
+  while (pending.length > 0) {
+    var pair = pending.pop(), left = pair[0], right = pair[1]
+    if (left === right) continue
+    if (left === null || right === null || typeof left !== "object" || typeof right !== "object") return false
+    if (Array.isArray(left) !== Array.isArray(right)) return false
+    var keys = Object.keys(left)
+    if (keys.length !== Object.keys(right).length) return false
+    for (var k = 0; k < keys.length; k++) {
+      var name = keys[k]
+      if (!Object.prototype.hasOwnProperty.call(right, name)) return false
+      pending.push([left[name], right[name]])
+    }
+  }
+  return true
+}
+
+// Only called for histories already checked by the worker. A matching lineage
+// alone is not enough: the shared state and every retained record must agree.
+// Allow a trimmed prefix while there are still old steps whose identity we can
+// prove. Reformatting JSON does not change a record's identity.
+function extendsHistory(before, after, beforeIndex) {
+  if (before.v !== after.v || before.lineage !== after.lineage || before.start !== after.start) return false
+  var oldRows = before.records, newRows = after.records
+  var oldFirst = oldRows.length ? oldRows[0].i - 1 : 0
+  var newFirst = newRows.length ? newRows[0].i - 1 : 0
+  var oldLast = oldRows.length ? oldRows[oldRows.length - 1].i : oldFirst
+  var newLast = newRows.length ? newRows[newRows.length - 1].i : newFirst
+  var first = Math.max(oldFirst, newFirst)
+  if (newLast < oldLast || first > oldLast) return false
+  var oldAt = 0, newAt = 0
+  while (oldAt < oldRows.length && oldRows[oldAt].i <= first) oldAt++
+  while (newAt < newRows.length && newRows[newAt].i <= first) newAt++
+  if ((oldAt ? oldRows[oldAt - 1].i : oldFirst) !== first
+      || (newAt ? newRows[newAt - 1].i : newFirst) !== first) return false
+  var oldBase = oldAt ? stateAt(beforeIndex || newIndex(before), before, oldAt) : before.base
+  var newBase = newAt ? stateAt(newIndex(after), after, newAt) : after.base
+  if (!sameState(oldBase, newBase)) return false
+  while (oldAt < oldRows.length) {
+    if (newAt >= newRows.length || !sameData(oldRows[oldAt], newRows[newAt])) return false
+    oldAt++; newAt++
+  }
+  return true
+}
+
 // ----------------------------------------------------------------- reading
 // Everything about a history's shape that can be checked without playing it.
 // Cheap enough to do when a board is opened.

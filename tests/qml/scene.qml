@@ -18,6 +18,7 @@ ShellRoot {
   id: bench
 
   readonly property int size: parseInt(Quickshell.env("OMARCHYFORM_BENCH_ITEMS") || "1000")
+  readonly property bool textures: Quickshell.env("OMARCHYFORM_BENCH_TEXTURES") === "1"
   // Every phase is measured over the same number of frames, so the columns
   // compare with each other as well as with a previous run.
   readonly property int framesPerPhase: 60
@@ -37,7 +38,8 @@ ShellRoot {
       rows.push({
         id: i + 1, kind: i % 7 === 0 ? "ellipse" : i % 5 === 0 ? "rect" : "note",
         x: (i % columns) * 260, y: Math.floor(i / columns) * 200,
-        w: 180, h: 140, tint: "foreground", text: "note " + (i + 1)
+        w: 180, h: 140, tint: "foreground", text: "note " + (i + 1),
+        texture: bench.textures ? ["ruled", "grid", "dots", "hatch"][i % 4] : "plain"
       })
     }
     var links = []

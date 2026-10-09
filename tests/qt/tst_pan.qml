@@ -38,6 +38,30 @@ TestCase {
     height: test.height
   }
 
+  function test_keyGestureEndsOnReleaseAndFocusLoss() {
+    surface.focusKeys()
+    keyPress(Qt.Key_Right, Qt.ShiftModifier)
+    var before = ctl.keyEnds
+    keyRelease(Qt.Key_Right, Qt.ShiftModifier)
+    verify(ctl.keyEnds > before, "direction and modifier releases end the held gesture")
+    keyPress(Qt.Key_Right, Qt.ShiftModifier)
+    before = ctl.keyEnds
+    test.forceActiveFocus()
+    compare(ctl.keyEnds, before + 1, "losing keyboard focus ends the gesture")
+    keyRelease(Qt.Key_Right, Qt.ShiftModifier)
+  }
+
+  function test_escapeCancelsOnlyThePointerGesture() {
+    surface.focusKeys()
+    ctl.beginPointerEdit("Move")
+    var before = ctl.backs
+    keyClick(Qt.Key_Escape)
+    compare(ctl.pointerEdit, null, "Escape cancels the active gesture")
+    compare(ctl.backs, before, "the same Escape does not dismiss the board")
+    keyClick(Qt.Key_Escape)
+    compare(ctl.backs, before + 1, "a subsequent Escape resumes normal navigation")
+  }
+
   // A note, a shape pinned as a background and a picture, and a camera at rest.
   // They sit well below the header, so a press on one is a press on the canvas
   // rather than on the chrome.

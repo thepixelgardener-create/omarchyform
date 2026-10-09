@@ -38,7 +38,7 @@ function makeDocument(workspace, board, Store) {
     historyHeader: '', historyRecords: '', historyCount: 0, historyBytes: 0, historyLast: 0, historyStart: 0,
     historyAsLoaded: '', historyChecking: false, historyRaw: '', historyWaiting: [], historyTrimming: false, historyTrimmed: false,
     historyToken: 0, head: null, loadedState: null, editLabel: '', editKey: '', changed: false, changedSince: 0,
-    replay: null, replayUsers: 0,
+    replay: null, replayUsers: 0, pointerOwner: null,
     // Connections in the QML: every pane on this board but the one that
     // edited follows the edit.
     edited(by) {
@@ -134,7 +134,7 @@ function makePane(workspace, exchange, Store) {
     paletteVisible: false, paletteQuery: '', paletteIndex: 0, paletteRows: 9, paletteGroup: '',
     conflictVisible: false, conflictIndex: 0, paletteScope: 'all', imageBusy: false,
     statusText: '', failureText: '', failureKind: '', pendingFirstNote: '', forgetArmedAt: 0,
-    timeline: false, timelineLive: true, timelineRecord: 0, replayDoc: null, playing: false, playSpeed: 1,
+    timeline: false, timelineLive: true, timelineRecord: 0, replayDoc: null, playing: false, playSpeed: 1, pointerEdit: null,
     playEnd: 0, scrubWanted: 0, compareArmedAt: 0, docSerial: 0,
     worldStep: 40, minItemSize: 60, viewW: 1000, viewH: 700 }
   const empty = new FakeModel()

@@ -43,6 +43,13 @@ TestCase {
     property int undoCount: 0
     property int saveCount: 0
     property int flushCount: 0
+    property var pointerEdit: null
+    property int cancels: 0
+    function beginPointerEdit(label) { pointerEdit = {}; pushUndo() }
+    function finishPointerEdit(cancel) {
+      if (pointerEdit) { if (cancel) cancels++; else save() }
+      pointerEdit = null
+    }
     function isMarked(id) { return false }
     // The camera a node culls itself against. Off by default: these tests are
     // about what one node draws, and a node outside the viewport draws itself
@@ -136,6 +143,8 @@ TestCase {
     ctl.undoCount = 0
     ctl.saveCount = 0
     ctl.flushCount = 0
+    ctl.pointerEdit = null
+    ctl.cancels = 0
     backgroundMiddlePresses = 0
     model.set(0, {ix:100, iy:100, iw:180, ih:140, itext:"", itexture:"plain"})
   }
@@ -189,6 +198,24 @@ TestCase {
     compare(model.get(0).ih, 160)
     compare(ctl.undoCount, 1)
     compare(ctl.saveCount, 1)
+  }
+  function test_canceledGesture_data() {
+    return [{ tag: "drag", area: "node-drag", x: 140, y: 140 },
+            { tag: "resize", area: "node-resize", x: 272, y: 232 }]
+  }
+  function test_canceledGesture(data) {
+    ctl.selectedIndex = 0
+    wait(1)
+    mousePress(test, data.x, data.y, Qt.LeftButton)
+    mouseMove(test, data.x + 40, data.y + 20, -1, Qt.LeftButton)
+    var area = findChild(subject, data.area)
+    verify(area !== null)
+    // Exercise Qt's cancellation signal directly; disabling a MouseArea does
+    // not itself revoke an existing grab on the offscreen platform.
+    area.canceled()
+    compare(ctl.cancels, 1, "the cancellation signal cancels the controller transaction")
+    compare(ctl.saveCount, 0, "cancellation does not commit")
+    mouseRelease(test, data.x + 40, data.y + 20, Qt.LeftButton)
   }
   function test_pinnedPointer() {
     subject.ipinned = true

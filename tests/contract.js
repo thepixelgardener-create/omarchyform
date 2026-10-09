@@ -26,6 +26,7 @@ function declaredMembers(source) {
   for (const m of source.matchAll(/^ {2}(?:readonly\s+|required\s+)?property\s+(?:alias\s+)?[\w.<>]+\s+(\w+)/gm))
     names.add(m[1])
   for (const m of source.matchAll(/^ {2}function\s+(\w+)\s*\(/gm)) names.add(m[1])
+  for (const m of source.matchAll(/^ {2}signal\s+(\w+)\s*\(/gm)) names.add(m[1])
   return names
 }
 
@@ -481,8 +482,8 @@ const reservedIds = new Set([
 ])
 
 for (const file of [...fs.readdirSync(root).filter(f => f.endsWith(".qml")),
-                    ...fs.readdirSync(path.join(root, "tests/qml")).map(f => "tests/qml/" + f),
-                    ...fs.readdirSync(path.join(root, "tests/qt")).map(f => "tests/qt/" + f)]) {
+                    ...fs.readdirSync(path.join(root, "tests/qml")).filter(f => f.endsWith(".qml")).map(f => "tests/qml/" + f),
+                    ...fs.readdirSync(path.join(root, "tests/qt")).filter(f => f.endsWith(".qml")).map(f => "tests/qt/" + f)]) {
   for (const m of read(file).matchAll(/^\s*id:\s*(\w+)\s*$/gm))
     if (reservedIds.has(m[1]))
       failures.push(`${file}: "${m[1]}" is a property every Item has, so it is not a safe id`)

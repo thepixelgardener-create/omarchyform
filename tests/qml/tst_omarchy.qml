@@ -3,6 +3,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Hyprland
 import qs.Commons
+import qs.Commons as Commons
 import "services" as Host
 
 ShellRoot {
@@ -116,7 +117,9 @@ ShellRoot {
       test.check(test.ticks < 400, "runtime test completes (stage " + test.stage + ")")
       if (test.stage === 0 && plugin.activePane.boardLoaded) {
         test.check(plugin.theme.fontBody === Style.font.body, "body font uses Style")
-        test.check(plugin.theme.canvasBackground === Color.background, "background uses Color")
+        test.check(plugin.theme.canvasBackground === Commons.Color.background,
+                   "background uses Color (" + plugin.theme.canvasBackground + " vs " + Commons.Color.background
+                   + ")")
         plugin.windowMode = true
         plugin.open("{}")
         test.stage = 1
@@ -247,13 +250,13 @@ ShellRoot {
         test.check(plugin.activePane.activeBoard.grabToImage(function(result) {
           test.check(result.saveToFile(Quickshell.env("OMARCHYFORM_TEST_DIR") + "/window.png"), "window capture")
           // Mutate only the isolated shell singleton, not the user's theme.
-          Color.foreground = "#00ff00"
-          Color.accent = "#ff00ff"
+          Commons.Color.foreground = "#00ff00"
+          Commons.Color.accent = "#ff00ff"
           test.switchedAt = test.ticks
           test.stage = 47
         }), "window capture scheduled")
       } else if (test.stage === 47 && test.ticks > test.switchedAt + 5) {
-        test.check(plugin.theme.foreground === Color.foreground, "theme binding updates")
+        test.check(plugin.theme.foreground === Commons.Color.foreground, "theme binding updates")
         test.stage = 48
         test.check(plugin.activePane.activeBoard.grabToImage(function(result) {
           test.check(result.saveToFile(Quickshell.env("OMARCHYFORM_TEST_DIR") + "/window-themed.png"), "theme capture")

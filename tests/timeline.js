@@ -4,13 +4,32 @@
 // The workspace, panes and documents run from their QML sources, as in
 // tests/controller.js; the history worker from its own file.
 const assert = require('assert/strict')
-const fs = require('fs')
-const path = require('path')
-const vm = require('vm')
 const { loadStore } = require('../bin/store')
 const { controller } = require('./workspace-harness')
+const { History: H, historyWorker } = require('./history-worker')
 
 const S = loadStore()
+const worker = historyWorker()
+
+function checkIncoming(c) {
+  for (let attempts = 0; c.doc.historyChecking; attempts++) {
+    assert.ok(attempts < 3, 'whole-file validation finishes')
+    c.answer(worker.dispatch(c.worker.asked[c.worker.asked.length - 1]))
+  }
+  c.land()
+  c.index()
+}
+
+function incoming(c, alter = () => {}) {
+  const file = JSON.parse(c.writes[c.writes.length - 1].text)
+  const before = H.copyState(file)
+  file.items[0].text = 'edited externally'
+  H.append(file.history, before, file, 'Typing', Date.now())
+  alter(file)
+  c.session.diskText = JSON.stringify(file, null, 2) + '\n'
+  c.session.externalWrite()
+  return file
+}
 
 const rows = model => S.itemRows(model).map(r => [r.id, r.kind, r.x, r.y, r.tint, r.text])
 
@@ -144,12 +163,86 @@ function edited() {
 }
 
 {
+  const c = edited(), a = c.root, b = c.second
+  a.toggleSplit('side-by-side')
+  a.toggleTimeline(); b.toggleTimeline(); c.index()
+  a.showRecord(3); b.showRecord(4)
+  a.togglePlay()
+  const oldIndex = c.doc.replay.ix
+  // Reordering object keys changes the file, but not a retained record.
+  incoming(c, file => { file.history.records = file.history.records.map(r =>
+    ({ p: r.p, a: r.a, t: r.t, i: r.i })) })
+  assert.equal(c.doc.historyChecking, true)
+  assert.equal(a.timeline, true, 'the verified timeline stays while the worker checks')
+  assert.deepEqual(rows(a.items), c.snaps[3])
+  checkIncoming(c)
+  assert.equal(a.timeline, true)
+  assert.equal(b.timeline, true)
+  assert.equal(a.timelineRecord, 3)
+  assert.equal(b.timelineRecord, 4)
+  assert.deepEqual(rows(a.items), c.snaps[3])
+  assert.deepEqual(rows(b.items), c.snaps[4])
+  assert.equal(c.doc.replay.ix, oldIndex, 'an appended suffix reuses the existing checkpoints')
+  assert.equal(a.lastRecord(), 6)
+  assert.equal(a.playing, true)
+  while (a.playing) a.playStep()
+  assert.equal(a.timelineRecord, 5, 'playback still ends where it began')
+  b.timelineNow()
+  assert.equal(b.items.get(0).itext, 'edited externally')
+  console.log('ok — timeline: checked external extensions keep both cursors and the playback endpoint')
+}
+
+{
+  for (const at of [0, 3]) {
+    const c = edited(), a = c.root
+    a.toggleTimeline(); c.index(); a.showRecord(at)
+    incoming(c, file => {
+      file.history.base = H.stateAt(H.newIndex(file.history), file.history, 2)
+      file.history.records = file.history.records.slice(2)
+    })
+    checkIncoming(c)
+    assert.equal(a.timeline, true)
+    assert.equal(a.timelineRecord, Math.max(2, at))
+    assert.deepEqual(rows(a.items), c.snaps[Math.max(2, at)])
+    if (at === 0) assert.match(a.statusText, /oldest, which have left/)
+  }
+  console.log('ok — timeline: externally trimmed extensions preserve retained steps and clamp older ones')
+}
+
+{
+  for (const kind of ['lineage', 'rewritten record', 'rollback', 'forgotten', 'broken', 'newer']) {
+    const c = edited(), a = c.root
+    a.toggleTimeline(); c.index(); a.showRecord(3); a.togglePlay()
+    incoming(c, file => {
+      if (kind === 'lineage') file.history.lineage = 'replacement'
+      if (kind === 'rewritten record') file.history.records[0].a = 'Different edit'
+      if (kind === 'rollback') {
+        Object.assign(file, H.stateAt(H.newIndex(file.history), file.history, 4))
+        file.history.records = file.history.records.slice(0, 4)
+      }
+      if (kind === 'forgotten') delete file.history
+      if (kind === 'broken') file.history.records[0].p = { d: [999] }
+      if (kind === 'newer') file.history.v = 2
+    })
+    checkIncoming(c)
+    assert.equal(a.timeline, false, kind + ': no stale timeline remains')
+    assert.equal(a.playing, false, kind + ': playback stops')
+    assert.equal(c.doc.replay, null)
+  }
+  // A user closing the timeline while validation runs must not have it reopened.
+  const c = edited()
+  c.root.toggleTimeline(); c.index(); c.root.showRecord(3)
+  incoming(c)
+  c.root.leaveTimeline()
+  checkIncoming(c)
+  assert.equal(c.root.timeline, false)
+  assert.equal(c.doc.replay, null)
+  console.log('ok — timeline: replacements close stale timelines; delayed checks never reopen them')
+}
+
+{
   // The oldest edits leaving, and the history being forgotten, while a pane
   // looks back.
-  const H = loadStore(fs.readFileSync(path.join(__dirname, '..', 'BoardHistory.js'), 'utf8'))
-  const context = vm.createContext(Object.assign({ WorkerScript: { sendMessage() {} } }, H))
-  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'BoardHistoryWorker.js'), 'utf8')
-    .replace(/^Qt\.include\(.*\)$/m, ''), context)
   const c = edited()
   const a = c.root
   a.toggleTimeline()

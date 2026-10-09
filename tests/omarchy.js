@@ -84,7 +84,6 @@ try {
     console.log('ok — clipboard images reach the live canvas, repeat, undo and save')
   } else {
     // The status line said the export succeeded; this says the board is in it.
-    // The status line said the export succeeded; this says the board is in it.
     // An item culled by mistake draws nothing and still exports at exactly the
     // right size, so neither the file existing nor its dimensions would notice.
     //

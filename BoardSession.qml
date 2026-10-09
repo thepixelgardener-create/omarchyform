@@ -96,6 +96,9 @@ Item {
 
   function save(allowEmpty) {
     if (!session.boardLoaded || session.diskReading) return
+    // A pointer gesture can still be canceled. A preceding write completing
+    // must not publish its intermediate geometry.
+    if (session.ctl.pointerOwner) return
     // Nothing is written while the board's history is being read: what the
     // file holds is not known to be something this may write over. Nothing can
     // have changed meanwhile — the board is not editable until then — so a
@@ -283,6 +286,7 @@ Item {
   // the worker found the board read from in front of it is not the board the
   // file holds.
   function loadBoard(raw, missing, whole) {
+    if (session.ctl.pointerOwner) session.ctl.pointerOwner.discardPointerEdit()
     // The board in front of its history, which stays text: the document hands
     // it to a worker rather than parse it here.
     var parts = Store.readBoardFile(raw, whole === true)

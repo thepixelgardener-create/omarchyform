@@ -5,32 +5,10 @@
 // limits. The workspace, panes and documents run from their QML sources, as in
 // tests/controller.js; the history worker runs from its own file.
 const assert = require('assert/strict')
-const fs = require('fs')
-const path = require('path')
-const vm = require('vm')
-const { loadStore } = require('../bin/store')
 const { controller } = require('./workspace-harness')
+const { History: H, historyWorker } = require('./history-worker')
 
-const H = loadStore(fs.readFileSync(path.join(__dirname, '..', 'BoardHistory.js'), 'utf8'))
-
-// BoardHistoryWorker.js as the worker thread runs it: its Qt.include is the
-// codec's own functions, in scope.
-function worker() {
-  const replies = []
-  const context = vm.createContext(Object.assign({ WorkerScript: { sendMessage(m) { replies.push(m) } } }, H))
-  const source = fs.readFileSync(path.join(__dirname, '..', 'BoardHistoryWorker.js'), 'utf8')
-    .replace(/^Qt\.include\(.*\)$/m, '')
-  vm.runInContext(source, context)
-  return { check: m => context.check(m), shorten: m => context.shorten(m),
-    dispatch(m) {
-      replies.length = 0
-      context.WorkerScript.onMessage(m)
-      assert.equal(replies.length, 1, 'every worker request receives one reply')
-      assert.equal(replies[0].token, m.token, 'the reply retains its request token')
-      return replies[0]
-    } }
-}
-const W = worker()
+const W = historyWorker()
 
 // The last file written, as a board and the history that came with it.
 function written(c) {
@@ -52,6 +30,109 @@ function opened(text) {
 const plain = (n) => JSON.stringify({ kind: 'omarchyform.board', version: 5, nextId: n + 1, links: [],
   items: Array.from({ length: n }, (_, i) => ({ id: i + 1, kind: 'note', x: i * 300, y: 0, w: 220, h: 160,
     tint: 'foreground', text: 'note ' + (i + 1), pinned: false, src: '' })) }, null, 2) + '\n'
+
+{
+  for (const label of ['Move', 'Resize']) {
+    const c = opened(plain(2)), a = c.root
+    a.selectOnly(0)
+    a.recolorItem(); c.land()
+    a.undo(); c.land()
+    a.markAll()
+    const before = a.snapshot(), undo = c.doc.undoStack, redo = c.doc.redoStack
+    const count = c.doc.historyCount, writes = c.writes.length
+    a.beginPointerEdit(label)
+    if (label === 'Move') a.moveTargets(15, 25)
+    else a.resizeTargets(15, 25)
+    c.doc.save(true)
+    assert.equal(c.writes.length, writes, 'a save during a gesture must wait for its outcome')
+    a.finishPointerEdit(true); c.land()
+    assert.deepEqual(a.snapshot(), before, label + ': cancellation restores all marked items')
+    assert.equal(c.doc.undoStack, undo)
+    assert.equal(c.doc.redoStack, redo, 'cancellation preserves the redo branch')
+    assert.equal(c.doc.historyCount, count)
+    assert.equal(c.writes.length, writes, 'cancellation writes no intermediate board')
+
+    a.beginPointerEdit(label)
+    if (label === 'Move') a.moveTargets(30, 40)
+    else a.resizeTargets(30, 40)
+    a.finishPointerEdit(false); c.land()
+    assert.equal(c.doc.historyCount, count + 1, 'release records the whole gesture once')
+    assert.equal(labels(c).at(-1), label)
+    assert.equal(H.verify(written(c).history, live(written(c).file)), '')
+  }
+  const c = opened(plain(1)), a = c.root
+  a.selectOnly(0)
+  a.nudgeSelected(1, 0); a.nudgeSelected(1, 0)
+  a.finishKeyEdit(); c.land()
+  assert.deepEqual(labels(c), ['Move'], 'release commits the held movement')
+  a.nudgeSelected(1, 0); a.finishKeyEdit(); c.land()
+  assert.deepEqual(labels(c), ['Move', 'Move'], 'another press is its own step')
+  a.resizeSelected(1, 0); a.deactivate(); c.land()
+  assert.deepEqual(labels(c), ['Move', 'Move', 'Resize'], 'focus loss finishes resizing')
+
+  // Completing a preceding save while a drag is held cannot publish its
+  // intermediate position; a reload discards the gesture without saving over it.
+  a.recolorItem()
+  const before = a.snapshot(), pendingWrites = c.writes.length
+  a.beginPointerEdit('Move'); a.moveTargets(50, 60)
+  c.land()
+  assert.equal(c.writes.length, pendingWrites)
+  a.finishPointerEdit(true)
+  assert.deepEqual(a.snapshot(), before)
+  a.beginPointerEdit('Move'); a.moveTargets(70, 80)
+  c.session.loadBoard(plain(2), false)
+  a.finishPointerEdit(false)
+  assert.equal(c.items.count, 2, 'a late pointer release cannot restore the previous board')
+  assert.equal(c.writes.length, pendingWrites, 'reload cancellation writes nothing')
+
+  const pending = opened(plain(1)), p = pending.root
+  p.selectOnly(0)
+  p.recolorItem() // first write starts
+  p.recolorItem() // second accepted change waits behind it
+  const accepted = p.snapshot()
+  p.beginPointerEdit('Move'); p.moveTargets(90, 100)
+  pending.land() // completion cannot save while the pointer gesture is active
+  assert.equal(pending.writes.length, 1)
+  p.finishPointerEdit(true); pending.land()
+  assert.deepEqual(p.snapshot(), accepted)
+  assert.equal(pending.writes.length, 2, 'cancellation resumes the earlier accepted change')
+  assert.equal(written(pending).file.items[0].tint, 'urgent')
+  assert.deepEqual(labels(pending), ['Colour', 'Colour'])
+  assert.equal(H.verify(written(pending).history, live(written(pending).file)), '')
+  console.log('ok — recording: canceled pointer gestures restore state; release and focus loss finish key gestures')
+}
+
+{
+  for (const kind of ['text', 'image', 'drop']) {
+    const c = opened(plain(0))
+    if (kind === 'text') c.root.pasteText('A complete pasted note')
+    else {
+      if (kind === 'drop') c.root.imageQueue = [{ name: 'test.png', x: 100, y: 200,
+        atPoint: true, board: c.root.currentBoard, shown: c.root.docSerial }]
+      c.root.pasteImage('test.png', 1200, 600)
+    }
+    c.land()
+    const w = written(c)
+    assert.deepEqual(labels(c), [kind === 'text' ? 'Paste' : 'Picture'], kind + ': one history step')
+    const item = w.file.items[0]
+    assert.equal(item.text, kind === 'text' ? 'A complete pasted note' : '')
+    assert.equal(item.src, kind === 'text' ? '' : 'test.png')
+    assert.deepEqual([item.w, item.h], kind === 'text' ? [300, 200] : [360, 180])
+    if (kind === 'drop') assert.deepEqual([item.x, item.y], [-80, 110])
+    else assert.deepEqual([item.x + item.w / 2, item.y + item.h / 2],
+      [c.root.toWorldX(c.root.viewW / 2), c.root.toWorldY(c.root.viewH / 2)], 'paste centers the final size')
+    for (const write of c.writes) {
+      const file = JSON.parse(write.text)
+      assert.deepEqual(file.items, w.file.items, kind + ': no empty placeholder reaches disk')
+      assert.equal(H.verify(file.history, live(file)), '')
+    }
+    c.root.undo(); c.land()
+    assert.equal(c.items.count, 0, kind + ': one undo removes the paste')
+    c.root.redo(); c.land()
+    assert.deepEqual(written(c).file.items, w.file.items, kind + ': redo restores the complete item')
+  }
+  console.log('ok — recording: text, image and dropped image each save one complete history step')
+}
 
 {
   // The version after history is just as authoritative as one before it,

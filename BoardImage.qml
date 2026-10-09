@@ -116,6 +116,9 @@ Item {
     function save() {}
     function scheduleSave() {}
     function pushUndo() {}
+    property var pointerEdit: null
+    function beginPointerEdit(label) {}
+    function finishPointerEdit(cancel) {}
     function beginTextPalette(editor) {}
     function stopEditing() {}
     function flash(text) {}

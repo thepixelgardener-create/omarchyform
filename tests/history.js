@@ -31,6 +31,42 @@ function session(seed, items, edits, mix) {
 }
 
 {
+  const { history, states } = session(71, 8, 30, Object.keys(MIXES)[0])
+  const prefix = JSON.parse(JSON.stringify(history))
+  prefix.records = prefix.records.slice(0, 10)
+  const ix = H.newIndex(prefix)
+  while (!ix.done) H.indexSome(ix, prefix, 10)
+  assert.equal(H.extendsHistory(prefix, history, ix), true)
+  assert.equal(H.extendsHistory(history, prefix), false, 'a rollback is not an extension')
+  for (const dropped of [1, 5, 10]) {
+    const trimmed = JSON.parse(JSON.stringify(history))
+    trimmed.base = clone(states[dropped])
+    trimmed.records = trimmed.records.slice(dropped)
+    assert.equal(H.extendsHistory(prefix, trimmed, ix), true, 'a verified shared boundary survives trimming')
+    assert.equal(H.extendsHistory(trimmed, history), true, 'restoring older retained steps keeps the shared history')
+    trimmed.base.items[0].x += 1
+    assert.equal(H.extendsHistory(prefix, trimmed, ix), false, 'the shared state must match')
+  }
+  const unrelated = JSON.parse(JSON.stringify(history))
+  unrelated.base = clone(states[11])
+  unrelated.records = unrelated.records.slice(11)
+  assert.equal(H.extendsHistory(prefix, unrelated, ix), false, 'without an overlap the old cursor cannot be proved')
+  for (const key of ['v', 'lineage', 'start']) {
+    const changed = JSON.parse(JSON.stringify(history))
+    changed[key] += 1
+    assert.equal(H.extendsHistory(prefix, changed, ix), false, key + ' identifies a different history')
+  }
+  const changed = JSON.parse(JSON.stringify(history))
+  changed.records[3].a = 'Rewritten'
+  assert.equal(H.extendsHistory(prefix, changed, ix), false, 'retained edits must match as well as their states')
+  assert.equal(H.sameData({ b: [1, { x: 2 }], a: 3 }, { a: 3, b: [1, { x: 2 }] }), true)
+  assert.equal(H.sameData({ a: undefined }, { b: undefined }), false)
+  const empty = H.create(history.base, history.start, history.lineage)
+  assert.equal(H.extendsHistory(empty, history), true, 'the original baseline can grow its first records')
+  console.log('ok — history: extensions prove the shared state and records, including trimmed prefixes')
+}
+
+{
   // Each record turns the state before it into the state after it, exactly,
   // for every kind of edit in every mix.
   for (const mix of Object.keys(MIXES)) {

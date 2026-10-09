@@ -2,6 +2,10 @@
 
 A local whiteboard for brainstorming, mind maps and diagrams on Omarchy.
 
+This README describes the `dev` branch. Split view, history, item textures and
+canvas colours are unreleased; see the [changelog](CHANGELOG.md) for shipped
+versions and the [documentation guide](docs/README.md) for development status.
+
 An infinite canvas. Sticky notes, images, shapes and connectors on a board you can pan and
 zoom, driven from the keyboard, stored as a plain JSON file on your own disk.
 
@@ -546,8 +550,13 @@ command, each drag, each pause in typing and each undo is one step. The
 history is kept in the board's own file, after the board, and saved with it
 under the same lock and backup. It keeps the newest 10,000 steps; past that the
 oldest go, a tenth at a time, and the line says so the first time. Holding a
-key down, or typing without a pause, is one step until it stops — or five
-seconds of typing at most.
+movement or resize key groups repeats until release, focus loss or another
+command. Typing is grouped by pauses, with a five-second maximum chunk.
+An accepted drag or resize is one step; canceling restores its starting state.
+
+When another process extends the same history, an open timeline keeps its
+position and playback endpoint. If its oldest steps have been trimmed, it moves
+to the oldest retained step. Replacing the history closes the old timeline.
 
 Text you delete from a note stays in that history. **Forget this board's
 history**, in the command list, asks to be run twice and then starts again from
@@ -801,6 +810,7 @@ columns.
 ```bash
 npm run bench:scene            # 100, 500, 1000 and 3000 items
 npm run bench:scene -- 3000    # one size
+npm run bench:scene -- 3000 --textures # every item uses a non-plain texture
 npm run bench:scene -- --record  # and write docs/performance.md
 ```
 
@@ -924,11 +934,11 @@ speed.
 
 ## Notes on the platform
 
-Omarchy is pre-release and the shell's `qs.Commons` singletons are
-internals, not a versioned API. Every read of them here goes through a guard
-with a hardcoded fallback, so a rename upstream costs a wrong colour rather
-than a board that will not open. An import disappearing entirely is still
-fatal — QML has no optional imports.
+The shell's `qs.Commons` singletons are internals, not a versioned API.
+`Theme.qml` uses qualified names to avoid runtime name collisions and guards
+token reads with fallback values, so a renamed token need not prevent the
+board from opening. An import disappearing entirely is still fatal — QML has
+no optional imports.
 
 The overlay is built through `Variants` so its surface is constructed with its
 screen already set, and it opens on whichever output Hyprland has focused.
@@ -940,7 +950,7 @@ contents, including pictures supplied by the clipboard.
 
 ## Dependencies
 
-One external program of its own: **wl-clipboard**, for `wl-paste` and
+Clipboard integration uses **wl-clipboard**, for `wl-paste` and
 `wl-copy`. Pasting (`ctrl+v`) and copying out (`super+c`) need it — without it,
 a paste reports an empty clipboard and a copy says the clipboard could not be
 reached — and nothing else does, so a board without it still opens, edits,
@@ -1032,9 +1042,10 @@ Watch that log rather than trusting a silent rescan. Two checks catch this class
 of error before the shell ever sees it —
 `./tests/run` fails on any member that shadows a final one, and
 `npm run test:omarchy -- --live` loads the whole plugin the way the shell does.
-The unit suites do not: `npm run test:ui` mounts `Node.qml` rather than the
-surfaces, and the JavaScript suites never load QML at all, which is exactly why
-this reached a desktop in the first place.
+The offscreen Qt suite mounts nodes, boards, split view and supporting chrome
+against test controllers; it does not load the complete Omarchy host. The
+JavaScript suites execute controller functions without a QML engine. Both are
+useful regressions, but the live suite verifies the host integration.
 
 ## Not there yet
 
@@ -1058,6 +1069,11 @@ releases on Omarchy `4.0.0.r2158.gd174d4a-1` with a single 1920×1080 output at
 scale 1.6. Omarchy 4's plugin contract is still moving; these results do not
 establish compatibility with every version.
 
+The final `dev` checks on 2026-10-09 also exercised Qt 6.12.0, Quickshell 0.3.2
+and Omarchy `4.0.0.r6815.g50d687a-1` on Hyprland 0.56.2. The live plugin and
+clipboard fixtures use isolated board data. [Performance results](docs/performance.md)
+record that run's display configuration and large-board limits.
+
 The live checks do not exercise moving between monitors or every mixed-scale
 placement. An unscaled display and other compositors remain untested. Portrait
 and small-window layout is covered by the Qt layout suite rather than by hand
@@ -1074,5 +1090,5 @@ instead.
 
 ## License
 
-MIT. `wl-clipboard`, the one external program this calls, is
-GPL-2.0-or-later and is not redistributed here.
+MIT. Clipboard support invokes `wl-clipboard` (GPL-2.0-or-later) as a separate
+process; it is not redistributed here.

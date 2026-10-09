@@ -426,6 +426,7 @@ Item {
   // rather than ignoring it in the handler matters: an accepted button is a
   // consumed one, and the board's pan surface is above this anyway.
   MouseArea {
+    objectName: "node-drag"
     anchors.fill: parent
     enabled: node.ctl.editIndex !== node.index && (node.ipinned ? node.ctl.showPinned : !node.ctl.showPinned)
     acceptedButtons: Qt.LeftButton
@@ -445,18 +446,20 @@ Item {
     }
     onPositionChanged: function (mouse) {
       if (node.ipinned || !node.ctl.canEdit || node.ctl.linkingFrom >= 0 || !pressed || mouse.buttons !== Qt.LeftButton) return
+      if (dragging && !node.ctl.pointerEdit) return
       var dx = mouse.x - pressX
       var dy = mouse.y - pressY
       // A few pixels of slack so a click to select never nudges it.
       if (!dragging && Math.abs(dx) + Math.abs(dy) < 3) return
-      if (!dragging) node.ctl.pushUndo("Move")
+      if (!dragging) node.ctl.beginPointerEdit("Move")
       dragging = true
       node.ctl.moveTargets(dx, dy)
     }
     onReleased: {
-      if (dragging) node.ctl.save()
+      if (dragging) node.ctl.finishPointerEdit(false)
       dragging = false
     }
+    onCanceled: { if (dragging) node.ctl.finishPointerEdit(true); dragging = false }
     onDoubleClicked: {
       if (node.ipinned || !node.ctl.canEdit || node.ctl.linkingFrom >= 0) return
       node.ctl.pushUndo("Typing", node.iid)
@@ -466,6 +469,7 @@ Item {
 
   // Resize grip, bottom-right.
   MouseArea {
+    objectName: "node-resize"
     width: 16
     height: 16
     anchors { right: parent.right; bottom: parent.bottom }
@@ -484,13 +488,15 @@ Item {
     }
     onPositionChanged: function (mouse) {
       if (!pressed) return
-      if (!sizing) { node.ctl.pushUndo("Resize"); sizing = true }
+      if (sizing && !node.ctl.pointerEdit) return
+      if (!sizing) { node.ctl.beginPointerEdit("Resize"); sizing = true }
       node.ctl.resizeTargets(mouse.x - pressX, mouse.y - pressY)
     }
     onReleased: {
-      if (sizing) node.ctl.save()
+      if (sizing) node.ctl.finishPointerEdit(false)
       sizing = false
     }
+    onCanceled: { if (sizing) node.ctl.finishPointerEdit(true); sizing = false }
 
     visible: !node.ipinned && node.ctl.linkingFrom < 0 && (node.selected || hover.hovered)
     Rectangle {

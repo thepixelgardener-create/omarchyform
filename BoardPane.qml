@@ -128,11 +128,8 @@ Item {
 
   function pasteText(text) {
     if (!root.canEdit || !text) return
-    root.addItem("note", root.toWorldX(root.viewW / 2), root.toWorldY(root.viewH / 2), "Paste")
-    root.items.setProperty(root.selectedIndex, "itext", text)
-    root.items.setProperty(root.selectedIndex, "iw", 300)
-    root.items.setProperty(root.selectedIndex, "ih", 200)
-    root.save()
+    root.addItem("note", root.toWorldX(root.viewW / 2), root.toWorldY(root.viewH / 2), "Paste",
+                 { text: text, width: 300, height: 200 })
     root.flash("Text pasted · enter to edit", "paste")
     root.focusKeys()
   }
@@ -225,16 +222,7 @@ Item {
     var fitH = Math.max(root.minItemSize, Math.round(h * fit))
     var atX = placing && placing.atPoint ? placing.x : root.toWorldX(root.viewW / 2)
     var atY = placing && placing.atPoint ? placing.y : root.toWorldY(root.viewH / 2)
-    root.addItem("image", atX, atY)
-    root.items.setProperty(root.selectedIndex, "isrc", name)
-    root.items.setProperty(root.selectedIndex, "iw", fitW)
-    root.items.setProperty(root.selectedIndex, "ih", fitH)
-    // addItem centres an item of its default size; the picture's own size is
-    // only known now, so it is re-centred on the point it was actually meant
-    // for rather than sitting half a picture away from it.
-    root.items.setProperty(root.selectedIndex, "ix", atX - fitW / 2)
-    root.items.setProperty(root.selectedIndex, "iy", atY - fitH / 2)
-    root.save()
+    root.addItem("image", atX, atY, "Picture", { src: name, width: fitW, height: fitH })
     // A drop carries the point it was let go of; a paste does not. That is
     // also which operation it recovers: the file manager or the clipboard.
     root.flash(naturalWidth > 0 ? "Image added" : "Image added · it could not be read, so the size is a guess",
@@ -590,6 +578,7 @@ Item {
   // so typing in another note is a record of its own.
   function pushUndo(label, key) {
     if (!root.boardLoaded) return
+    if (root.doc.pointerOwner) root.doc.pointerOwner.finishPointerEdit(true)
     root.doc.beginEdit(label || "Edit", key === undefined ? "" : String(key))
     var s = root.doc.undoStack.slice()
     s.push(root.snapshot())
@@ -600,6 +589,56 @@ Item {
     while (s.length > maxSteps) s.shift()
     root.doc.undoStack = s
     root.doc.redoStack = []   // a new edit drops the redo branch
+  }
+
+  property var pointerEdit: null
+
+  // Reload is about to replace the models and undo stacks. Invalidate the
+  // pending pointer result without restoring or saving over the incoming file.
+  function discardPointerEdit() {
+    var edit = root.pointerEdit
+    root.pointerEdit = null
+    if (edit && edit.doc.pointerOwner === root) edit.doc.pointerOwner = null
+  }
+
+  function beginPointerEdit(label) {
+    if (root.doc.pointerOwner) root.doc.pointerOwner.finishPointerEdit(true)
+    root.finishKeyEdit()
+    var beforeUndo = root.doc.undoStack, beforeRedo = root.doc.redoStack
+    root.pushUndo(label)
+    root.pointerEdit = { doc: root.doc, token: root.doc.historyToken,
+                         before: root.doc.undoStack[root.doc.undoStack.length - 1],
+                         undo: beforeUndo, redo: beforeRedo }
+    root.doc.pointerOwner = root
+  }
+
+  function finishPointerEdit(cancel) {
+    var edit = root.pointerEdit
+    root.pointerEdit = null
+    if (!edit || edit.doc.pointerOwner !== root) return
+    edit.doc.pointerOwner = null
+    if (edit.doc !== root.doc || edit.token !== edit.doc.historyToken) return
+    if (cancel) {
+      // Sync in place: rebuilding delegates inside their canceled handler
+      // would destroy the item that is still releasing its pointer grab.
+      Store.syncItems(root.items, edit.before.items)
+      root.doc.undoStack = edit.undo
+      root.doc.redoStack = edit.redo
+      root.doc.changed = false
+      root.doc.edited(root)
+      root.repaintLinks()
+    } else root.save()
+    root.doc.endEdit()
+    // A preceding save may have completed while this gesture blocked its
+    // follow-up write. Resume that accepted state even after cancellation.
+    root.doc.flushSave()
+  }
+
+  function finishKeyEdit() {
+    if (!root.doc || root.doc.pointerOwner) return
+    if (root.doc.editLabel !== "Move" && root.doc.editLabel !== "Resize") return
+    root.doc.endEdit()
+    root.doc.flushSave()
   }
 
   function restore(snap) {
@@ -647,18 +686,21 @@ Item {
   }
 
   // -------------------------------------------------------------------- items
-  function addItem(kind, wx, wy, label) {
+  // Build the complete item before publishing it to the model or history.
+  // Paste supplies its content and final size; ordinary new items use defaults.
+  function addItem(kind, wx, wy, label, content) {
     if (!root.canEdit) return
     root.showPinned = false
     root.markedIds = []
     root.pushUndo(label || Store.ADD_LABELS[kind] || "New item")
-    var w = kind === "note" ? 180 : 160
-    var h = kind === "note" ? 140 : 110
+    var initial = content || {}
+    var w = initial.width === undefined ? (kind === "note" ? 180 : 160) : initial.width
+    var h = initial.height === undefined ? (kind === "note" ? 140 : 110) : initial.height
     root.items.append({
       iid: root.nextId, kind: kind,
       ix: wx - w / 2, iy: wy - h / 2, iw: w, ih: h,
       itint: Store.TINTS[root.doc.nextColor % Store.TINTS.length],
-      itext: "", ipinned: false, isrc: "", itexture: "plain"
+      itext: initial.text || "", ipinned: false, isrc: initial.src || "", itexture: "plain"
     })
     root.doc.nextId += 1
     root.doc.nextColor += 1
@@ -1451,7 +1493,8 @@ Item {
 
   // Escape unwinds one layer at a time rather than closing outright.
   function back() {
-    if (root.helpVisible) root.helpVisible = false
+    if (root.pointerEdit) root.finishPointerEdit(true)
+    else if (root.helpVisible) root.helpVisible = false
     else if (root.menuVisible) root.menuVisible = false
     else if (root.finding) root.endFind()
     else if (root.arranging) root.arranging = false
@@ -1538,6 +1581,8 @@ Item {
   // way Escape would end it, typing included, so two views of one board never
   // both have an editor open; what is selected stays for when it comes back.
   function deactivate() {
+    root.finishPointerEdit(true)
+    root.finishKeyEdit()
     if (root.editIndex >= 0) root.stopEditing()
     if (root.finding) root.endFind()
     if (root.paletteVisible) root.endPalette()
@@ -1571,6 +1616,8 @@ Item {
   // The surface is going away. What was half done on it ends; the board and
   // the camera stay where they were for when it comes back.
   function closeView() {
+    root.finishPointerEdit(true)
+    root.finishKeyEdit()
     root.stopPlaying()
     root.markedIds = []
     root.showPinned = false

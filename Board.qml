@@ -436,6 +436,12 @@ FocusScope {
     // Focus moves between the canvas and the browser declaratively. Leaving
     // both claiming it strands the keyboard on whichever hid last.
     focus: !board.ctl.browsing
+    onActiveFocusChanged: if (!activeFocus) board.ctl.finishKeyEdit()
+
+    Keys.onReleased: function(event) {
+      if (!event.isAutoRepeat && (keys.direction(event.key, event.text)
+          || event.key === Qt.Key_Shift || event.key === Qt.Key_Control)) board.ctl.finishKeyEdit()
+    }
 
     // Printable keys are a table rather than a ladder of else-ifs: adding a
     // command is one line, and the cheat sheet is the only other place to
@@ -489,6 +495,14 @@ FocusScope {
     }
 
     Keys.onPressed: function (event) {
+      if (board.ctl.pointerEdit) {
+        board.ctl.finishPointerEdit(true)
+        // Escape cancels this gesture only; it must not also dismiss the board.
+        if (event.key === Qt.Key_Escape) { event.accepted = true; return }
+      }
+      // A different command ends a held move even if the direction key is
+      // still down; auto-repeat events retain the current gesture.
+      if (!event.isAutoRepeat) board.ctl.finishKeyEdit()
       if (board.ctl.helpVisible) {
         if (event.key === Qt.Key_Escape || event.key === Qt.Key_F1 || event.text === "?") board.ctl.helpVisible = false
         else if (event.key === Qt.Key_Down || event.text === "j") help.scroll(board.theme.fontBody * 2)

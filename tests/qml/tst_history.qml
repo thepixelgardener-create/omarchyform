@@ -23,11 +23,20 @@ ShellRoot {
   readonly property string editablePath: test.edgeCases ? "broken.json" : "known.json"
   property var newer: null
   property var known: null
+  property var incoming: null
+  property var keptIndex: null
+  property int expectedCount: 0
   function check(condition, message) {
     if (!condition) { console.error("FAIL: " + message); Qt.quit(); throw new Error(message) }
   }
   function read(path) { reader.path = ""; reader.path = path; reader.reload(); reader.waitForJob(); return reader.text() }
   FileView { id: reader; blockLoading: true; blockAllReads: true; printErrors: false }
+  FileView { id: outside; preload: false; atomicWrites: true; printErrors: false }
+  function writeOutside(file) {
+    outside.path = test.dir + "/" + test.editablePath
+    var text = JSON.stringify(file, null, 2) + "\n"
+    Qt.callLater(function () { outside.setText(text) })
+  }
 
   // What a document reads off the workspace, and no panes.
   QtObject {
@@ -90,14 +99,36 @@ ShellRoot {
         test.check(saved.items[0].tint === "urgent", "the edit to the other was written")
         test.check(saved.history && saved.history.records.length === (test.edgeCases ? 1 : 2), "with its history and the new record")
         test.check(History.verify(saved.history, saved) === "", "which plays back to it")
+        test.check(test.known.openReplay() === "", "the verified history opens")
+        test.keptIndex = test.known.replay.ix
+        var before = History.copyState(saved)
+        saved.items[0].text = "from another process"
+        History.append(saved.history, before, saved, "Typing", Date.now())
+        test.expectedCount = saved.history.records.length
+        test.incoming = saved
+        test.writeOutside(saved)
+        test.ticks = 0
+        test.stage = 3
+      } else if (test.stage === 3 && test.known.items.get(0).itext === "from another process"
+                 && !test.known.historyChecking) {
+        test.check(test.known.replay !== null, "a checked external extension keeps the replay")
+        test.check(test.known.replay.ix === test.keptIndex, "and keeps its checkpoints")
+        test.check(test.known.replay.h.records.length === test.expectedCount, "the replay includes the incoming edit")
+        test.check(History.verify(test.known.replay.h, test.incoming) === "", "the extended replay reaches the new board")
+        test.incoming.history.lineage = "replacement"
+        test.writeOutside(test.incoming)
+        test.ticks = 0
+        test.stage = 4
+      } else if (test.stage === 4 && test.known.replay === null && !test.known.historyChecking) {
+        test.check(test.known.canEdit, "a replacement closes the replay without locking the live board")
         // Release dynamic documents while the QML engine is still running.
         // At engine shutdown Qt can otherwise destroy WorkerScript after its
         // worker thread has exited and hang in the worker's destructor.
         test.newer.destroy()
         test.known.destroy()
         test.ticks = 0
-        test.stage = 3
-      } else if (test.stage === 3 && test.ticks > 2) {
+        test.stage = 5
+      } else if (test.stage === 5 && test.ticks > 2) {
         console.log(test.edgeCases ? "HISTORY_EDGE_TESTS_PASSED" : "HISTORY_TESTS_PASSED")
         Qt.quit()
       } else if (test.ticks > 200) test.check(false, "stuck at stage " + test.stage)

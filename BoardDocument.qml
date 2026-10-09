@@ -168,6 +168,7 @@ Item {
   property string editLabel: ""
   property string editKey: ""
   property bool changed: false
+  property var pointerOwner: null
   property real changedSince: 0
 
   function snapshot() {
@@ -195,6 +196,7 @@ Item {
   // Records whatever has changed since the last record, under the name of the
   // edit in progress. A typing session goes on under its name after a pause.
   function commitEdit() {
+    if (doc.pointerOwner) return
     if (!doc.changed) return
     doc.changed = false
     if (!doc.head || !session.boardLoaded || session.damaged) return
@@ -248,7 +250,8 @@ Item {
   function adoptHistory(text, boardText, raw) {
     doc.historyToken += 1
     doc.historyRaw = ""
-    doc.dropReplay()
+    // Keep the last verified replay visible until the worker checks the new file.
+    indexer.stop()
     doc.head = doc.snapshot()
     doc.loadedState = doc.head
     doc.editLabel = ""
@@ -263,10 +266,13 @@ Item {
     doc.historyLast = 0
     doc.historyAsLoaded = text
     doc.historyChecking = false
-    if (text === "") return ""
+    if (text === "") { doc.dropReplay(); return "" }
     var parts = History.splitText(text)
     var facts = parts ? History.headerFacts(parts.header) : null
-    if (facts && facts.v > History.HISTORY_VERSION) return "has history from a newer Omarchyform"
+    if (facts && facts.v > History.HISTORY_VERSION) {
+      doc.dropReplay()
+      return "has history from a newer Omarchyform"
+    }
     if (parts) {
       doc.historyHeader = parts.header
       doc.historyRecords = parts.records
@@ -289,6 +295,7 @@ Item {
     // From a newer Omarchyform, however it was laid out: read-only, and the
     // file left exactly as it is. Not kept aside, not added to, not written.
     if (answer.newer) {
+      doc.dropReplay()
       doc.historyRaw = ""
       session.refuse("has history from a newer Omarchyform")
       return
@@ -303,6 +310,7 @@ Item {
       return
     }
     if (answer.unreadable) {
+      doc.dropReplay()
       // Kept, not repaired: the old history goes beside the board's backups,
       // and a new one starts from the board as it was opened.
       doc.setAside(doc.historyAsLoaded)
@@ -330,10 +338,14 @@ Item {
       }
     }
     doc.historyAsLoaded = ""
+    if (doc.replay) doc.readReplay(true)
     var waiting = doc.historyWaiting
     doc.historyWaiting = []
     for (var i = 0; i < waiting.length; i++) doc.appendRecord(waiting[i])
     if (answer.bridge !== "" || answer.unreadable || waiting.length > 0) session.save(true)
+    // Normalization only changes how a clean file is represented in memory.
+    // Keep that representation as the baseline for the next external write.
+    else if (!doc.changed) session.lastSavedText = doc.fileText()
   }
 
   // Past either limit, the oldest tenth goes: the worker trims a copy, and the
@@ -414,11 +426,22 @@ Item {
     if (doc.replayUsers === 0) doc.dropReplay()
   }
 
-  function readReplay() {
+  function readReplay(continuationOnly) {
     var h
     try { h = JSON.parse(History.joinText(doc.historyHeader, doc.historyRecords)) } catch (e) { h = null }
     if (!h || History.checkShape(h) !== "") { doc.dropReplay(); return false }
-    doc.replay = { h: h, ix: History.newIndex(h) }
+    var previous = doc.replay
+    if (continuationOnly && (!previous || !History.extendsHistory(previous.h, h, previous.ix))) {
+      doc.dropReplay()
+      return false
+    }
+    // An appended suffix keeps all existing checkpoints. A trimmed prefix
+    // changes their offsets and needs a fresh index, but keeps valid cursors.
+    var sameBase = continuationOnly && previous
+      && (previous.h.records.length ? previous.h.records[0].i : 1) === (h.records.length ? h.records[0].i : 1)
+    var ix = sameBase ? previous.ix : History.newIndex(h)
+    if (sameBase) History.extendIndex(ix, h)
+    doc.replay = { h: h, ix: ix }
     indexer.start()
     doc.replayRevision += 1
     return true

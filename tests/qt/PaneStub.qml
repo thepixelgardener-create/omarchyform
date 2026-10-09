@@ -38,6 +38,11 @@ Item {
   property var markedRect: null
   property int undoCount: 0
   property int saveCount: 0
+  property var pointerEdit: null
+  property int keyEnds: 0
+  function finishKeyEdit() { keyEnds++ }
+  function beginPointerEdit(label) { pointerEdit = {}; pushUndo() }
+  function finishPointerEdit(cancel) { if (pointerEdit && !cancel) save(); pointerEdit = null }
   property int removeCount: 0
   property int minItemSize: 60
   property bool culling: false
@@ -202,7 +207,8 @@ Item {
   function setFindQuery(text) {}
   function beginSelectionActions() { ctl.actionsOpened++ }
   property int actionsOpened: 0
-  function back() {}
+  property int backs: 0
+  function back() { backs++ }
   function choosePng() {}
   function copySelection() {}
   function cycleKind() {}

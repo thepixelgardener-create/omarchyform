@@ -61,6 +61,7 @@ ShellRoot {
     function fileText() { return Store.writeFile(items, links, ctl.nextId) }
     function adoptHistory(text, boardText, raw) { return "" }
     property bool historyChecking: false
+    property var pointerOwner: null
     // The session asks whether the library is open, and leaves word there.
     property QtObject library: QtObject {
       property bool showing: false

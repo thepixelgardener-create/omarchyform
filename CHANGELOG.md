@@ -38,6 +38,11 @@ since older boards are migrated on load rather than rejected.
 
 ### Changed
 
+- Item creation accepts its initial content and dimensions before adding it to
+  the model. Paste no longer needs a separate deferred-save path, and pasted
+  notes are centered using their final size.
+- Development docs distinguish unreleased work, remaining checks and historical
+  reviews. Shared history-worker test setup replaces duplicate implementations.
 - Related commands open groups, while search still finds individual commands.
   Backspace with an empty query returns from a group to the full list.
 - Connections have clearer arrows and highlight the selected item's links.
@@ -52,6 +57,18 @@ since older boards are migrated on load rather than rejected.
 
 ### Fixed
 
+- Escape during a drag or resize cancels only that gesture, without also
+  dismissing the board.
+- Pasted notes and pictures create one complete history step, without an
+  empty placeholder. Dropped pictures use the same transaction.
+- External history extensions preserve open timelines, retained cursors and
+  playback endpoints. Reformatted files no longer create false conflicts on
+  the next external update; replacement histories close the old timeline.
+- Canceled drags and resizes restore their starting state and preserve undo
+  and redo. Intermediate pointer positions are not saved. Movement and resize
+  key gestures finish on release, focus loss or a different command.
+- Theme and bar colours explicitly use Omarchy's colour provider, avoiding a
+  runtime name collision that silently substituted the fallback palette.
 - A board with its format version after its history now receives the same
   version check as any other board. Newer formats cannot be opened for editing
   and overwritten as version 6 because their JSON properties were reordered.
