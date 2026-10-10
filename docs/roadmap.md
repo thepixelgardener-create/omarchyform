@@ -1,6 +1,6 @@
 # Roadmap
 
-Updated 2026-10-09. This is the current release direction. The dated
+Updated 2026-10-10. This is the current release direction. The dated
 [architecture review](architecture-review-0.4.5.md) and
 [competitor analysis](competitor-analysis-0.4.5.md) explain the findings behind it.
 
@@ -37,19 +37,21 @@ and a security pass; the [changelog](../CHANGELOG.md) has each one.
 
 These are planned. Completed changes are recorded in the changelog.
 
-## Unreleased on `dev`
+## 0.4.7 — Split view, history and canvas customization
+
+Shipped.
 
 - Side-by-side and stacked panes, board history and timeline playback.
 - Per-item textures, canvas colours and grouped commands.
 - Connector item-index caching, offscreen rejection and drawing grouped by colour.
 - Confirming a connection after selecting its destination with the pointer.
+- A short README start page with feedback forms; the manual moved to `docs/`.
 
 The [split-view plan](splitview-timeline-plan.md#gate-6-results) records the
-follow-up fixes and checks. Native file-manager drop and IME composition still
-need verification. A fully textured 3,000-item board is now
-[measured](performance.md#fully-textured-large-board--2026-10-09), with frame-rate
-limits recorded. A release version has not been assigned. Boards with history
-or textures use format 7.
+follow-up fixes and checks. Native file-manager drop into the inactive pane was
+confirmed by hand; IME composition is still unverified. A fully textured
+3,000-item board is [measured](performance.md#fully-textured-large-board--2026-10-09),
+with frame-rate limits recorded. Boards with history or textures use format 7.
 
 ## 0.5 — Editable, labeled connectors
 

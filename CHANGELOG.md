@@ -3,7 +3,7 @@
 Notable changes, newest first. Board file versions are noted where they moved,
 since older boards are migrated on load rather than rejected.
 
-## Unreleased
+## 0.4.7 — 2026-10-10
 
 ### Added
 
@@ -41,6 +41,9 @@ since older boards are migrated on load rather than rejected.
 - Item creation accepts its initial content and dimensions before adding it to
   the model. Paste no longer needs a separate deferred-save path, and pasted
   notes are centered using their final size.
+- The README is a short start page that asks for feedback, with issue forms
+  for feedback and bugs. The manual moved word for word to `docs/install.md`,
+  `docs/guide.md`, `docs/files.md` and `docs/development.md`.
 - Development docs distinguish unreleased work, remaining checks and historical
   reviews. Shared history-worker test setup replaces duplicate implementations.
 - Related commands open groups, while search still finds individual commands.

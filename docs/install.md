@@ -75,7 +75,7 @@ they live outside the plugin directory, in `~/.local/share/omarchyform/`. A
 board written by a newer version than the one you are running opens read-only
 rather than losing what it does not understand, so downgrading is safe too.
 
-From the version with a timeline on, a board starts keeping its history the
+From 0.4.7 on, a board starts keeping its history the
 first time you edit it, and is then written as format 7 (see
 [History](guide.md#history)). Boards you only look at stay as they were. Older versions
 open these boards read-only. To take a board back to one, set item textures to
@@ -164,24 +164,25 @@ and is invoked as a separate process, not linked or redistributed here.
 
 | | |
 |---|---|
-| Omarchy | `omarchy-dev 4.0.0.r6720.g8e02fc8-1`, Quattro shell |
-| Qt | 6.11.2 |
-| Quickshell | 0.3.1 |
+| Omarchy | `omarchy-dev 4.0.0.r6863.ga15636b-1`, Quattro shell |
+| Qt | 6.12.0 |
+| Quickshell | 0.3.2 |
 | Compositor | Hyprland `0.56.2`, Wayland |
-| Displays attached | 1920×1080 at scale 1.6, single output |
+| Displays attached | 1920×1080 at scale 1.6 and 3840×2160 at scale 2 |
 | Clipboard | `wl-clipboard` 1:2.3.0 |
 
-The 0.4.6 automated and live smoke checks passed on this configuration on
-2026-10-05. 0.4.5 was tested on `omarchy-dev 4.0.0.r6713.ga85e29a-1` with a
-1920×1080 output at scale 1.6 and a 3840×2160 output at scale 2, and earlier
-releases on Omarchy `4.0.0.r2158.gd174d4a-1` with a single 1920×1080 output at
-scale 1.6. Omarchy 4's plugin contract is still moving; these results do not
-establish compatibility with every version.
+The 0.4.7 automated and live smoke checks passed on this configuration on
+2026-10-10. Two of five live runs that day stopped waiting for a synthesized
+key to reach the test window; the same commits passed when run again. 0.4.6 was
+tested on `omarchy-dev 4.0.0.r6720.g8e02fc8-1` with Qt 6.11.2, Quickshell 0.3.1
+and a single 1920×1080 output at scale 1.6, 0.4.5 on
+`omarchy-dev 4.0.0.r6713.ga85e29a-1`, and earlier releases on Omarchy
+`4.0.0.r2158.gd174d4a-1`. Omarchy 4's plugin contract is still moving; these
+results do not establish compatibility with every version.
 
-The final `dev` checks on 2026-10-09 also exercised Qt 6.12.0, Quickshell 0.3.2
-and Omarchy `4.0.0.r6815.g50d687a-1` on Hyprland 0.56.2. The live plugin and
-clipboard fixtures use isolated board data. [Performance results](performance.md)
-record that run's display configuration and large-board limits.
+The live plugin and clipboard fixtures use isolated board data.
+[Performance results](performance.md) record the display configuration and
+large-board limits of the run they come from.
 
 The live checks do not exercise moving between monitors or every mixed-scale
 placement. An unscaled display and other compositors remain untested. Portrait
