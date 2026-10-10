@@ -1,4 +1,6 @@
-pragma ComponentBehavior: Bound
+// Qt 6.4 Loader creates a child context for the texture component. Keep this
+// file unbound so that component can be instantiated there; model roles still
+// arrive through explicit required properties below.
 
 import QtQuick
 import QtQuick.Shapes

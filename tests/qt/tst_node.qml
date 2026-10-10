@@ -166,6 +166,8 @@ TestCase {
     model.setProperty(0, "itexture", "grid")
     tryCompare(subject, "textureStyle", "grid")
     tryCompare(layer, "active", true)
+    tryCompare(layer, "status", Loader.Ready)
+    verify(layer.item !== null, "the texture component actually instantiated")
     verify(waitForRendering(subject))
     var textured = grabImage(subject)
     model.setProperty(0, "itexture", "plain")
@@ -191,6 +193,8 @@ TestCase {
     compare(ctl.saveCount, 1)
   }
   function test_resize() {
+    // Let the preceding read-only case settle before targeting the resize grip.
+    verify(waitForRendering(subject))
     mousePress(test, 272, 232, Qt.LeftButton)
     mouseMove(test, 312, 252, -1, Qt.LeftButton)
     mouseRelease(test, 312, 252, Qt.LeftButton)
