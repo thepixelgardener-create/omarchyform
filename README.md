@@ -22,8 +22,16 @@ and closes the board. To open it from the keyboard as well, add a binding to
 o.bind("SUPER + SHIFT + I", "Omarchyform", "omarchy-shell shell toggle thepixelgardener.omarchyform")
 ```
 
+To remove it, run the command below. Your boards are left in
+`~/.local/share/omarchyform/`. If you installed the optional desktop entry,
+[uninstall that first](docs/install.md#removing-it).
+
+```bash
+omarchy plugin remove thepixelgardener.omarchyform
+```
+
 It is also in the [Omarchy plugin directory](https://plugins.omarchy.org/?text=omarchyform).
-Updating, removing and the optional desktop entry are in the
+Updating, the optional desktop entry and removing it are in the
 [install guide](docs/install.md).
 
 ## The first minute
