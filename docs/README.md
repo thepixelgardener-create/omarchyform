@@ -1,9 +1,18 @@
 # Documentation guide
 
-The [main README](../README.md) is the user manual: installation, keyboard
-controls, boards, history, sharing and development commands. Features described
-on `dev` are not all in the released 0.4.6 package; the
-[changelog](../CHANGELOG.md) separates unreleased work from shipped changes.
+The [main README](../README.md) is the start page: what Omarchyform is, how to
+install it and where to send feedback. The manual is split into four pages:
+
+- [Install, update and remove](install.md): binding a key, the desktop entry,
+  dependencies and the versions it was tested against.
+- [Using the board](guide.md): every key and command, notes, connectors,
+  backgrounds, boards, split view, sharing, saving and history.
+- [Boards on disk and the command line](files.md): the library layout, the
+  board file format and `bin/omarchyform`.
+- [Development](development.md): running from a clone, the source layout,
+  tests, benchmarks and platform notes.
+
+The [changelog](../CHANGELOG.md) separates unreleased work from tagged releases.
 
 ## Current development
 

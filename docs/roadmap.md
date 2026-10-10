@@ -84,3 +84,5 @@ Revisit these after 0.5 and feedback from real use:
 - Persistent groups with explicit membership.
 - SVG export and zoom to selection.
 - Explicit URL/file links if source collection proves a stronger need.
+
+Freehand drawing is outside the current scope.

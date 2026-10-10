@@ -1,8 +1,8 @@
 # Omarchyform, for the thing reading this
 
-The README is the manual for the person at the keyboard. This is the same
-program explained to something that will drive it through files and a command
-line, and will not see the screen.
+[Using the board](guide.md) is the manual for the person at the keyboard. This
+is the same program explained to something that will drive it through files and
+a command line, and will not see the screen.
 
 Read it before building a board. Most of what makes a generated board bad is
 not a wrong call — every call here is easy — it is not knowing how big a note

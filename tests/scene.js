@@ -62,7 +62,7 @@ function provenance() {
     ['OS', ask(`. /etc/os-release 2>/dev/null && echo "$PRETTY_NAME"`)],
     // The two ways this machine names its Omarchy disagree — the version file
     // says the release, the package says the revision. A bug report carries the
-    // package version, so that is the one recorded here and in the README.
+    // package version, so that is the one recorded here and in docs/install.md.
     ['Omarchy', ask(`omarchy-version 2>/dev/null || cat ${omarchy}/version 2>/dev/null`)],
     ['Display', display()]
   ].filter(row => row[1])
