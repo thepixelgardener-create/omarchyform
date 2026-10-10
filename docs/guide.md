@@ -344,12 +344,12 @@ picture, ready to paste into a chat or an editor; anything else goes as its text
 and several items arrive as paragraphs in board order. Backgrounds are left out,
 the way they are left out of every other bulk command.
 
-Pictures can also be dragged in from a file manager or a browser's downloads and
-land where you let go of them. Several at once arrive staggered rather than in
-one stack. What a file claims to be is ignored: the type is read from the
-content, the name and the folder are chosen here, and anything that is not a
-picture — or is larger than 32 MB — is refused with a reason rather than left on
-the board as a broken frame.
+External drag-and-drop is disabled. Qt reads a drag source's payload before
+application size checks can run, and a source that never stops sending can
+exhaust the shared shell's memory. Copy an image to the clipboard and use
+`ctrl+v` instead; that path reads through the bounded helper. File-manager
+"copy file" operations may offer file URLs rather than image bytes; use an
+image viewer's **Copy image** command in that case.
 
 `ctrl+n` makes a board and puts you straight into its first note, so a thought
 can be captured before it is named; `F2` names it afterwards.

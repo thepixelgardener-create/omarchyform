@@ -35,6 +35,11 @@ the CLI to create boards and is not a contribution guide.
   patch entries. CLI failures must remain JSON; validation reports an unplayable
   history, and rejected edits must leave both files and backups unchanged.
 
+- Reject external drag offers without reading `urls`, `text`, or raw MIME data.
+  Qt's Wayland reader is not byte-bounded; a size check after a getter is too
+  late. Keep `test:drop` proving rejection with zero payload retrieval. Do not
+  restore external drag-and-drop without a bounded transport.
+
 ## Regression checks
 
 For these paths, run `npm test` and `npm run test:qml`. Changes to QML interaction
@@ -49,7 +54,6 @@ reproduction that fails on the old behavior and assert user-visible outcomes or
 saved content, not just a helper's implementation. Include adverse completion
 ordering, empty retention, and malformed nested inputs where applicable.
 
-Report commands actually run and any remaining manual checks. Automated drops
-are not evidence that dragging from a native file manager into an inactive
-split pane works. Keep that check and IME behavior explicitly unverified until
-observed.
+Report commands actually run and any remaining manual checks. External drops
+are intentionally rejected; internal import-queue tests do not establish a
+safe external drag transport. IME behavior remains unverified until observed.

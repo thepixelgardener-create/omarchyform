@@ -559,6 +559,7 @@ ShellRoot {
         var other = plugin.panes[0]
         test.dropX = other.toWorldX(120)
         test.dropY = other.toWorldY(90)
+        // Trusted fixture path exercises the import queue, not external drag transport.
         other.dropFiles(["file://" + Quickshell.env("OMARCHYFORM_TEST_DIR") + "/pixels.png"], test.dropX, test.dropY)
         test.stage = 3921
       } else if (test.stage === 3921 && plugin.panes[0].items.count === 3) {

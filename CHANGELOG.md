@@ -3,6 +3,16 @@
 Notable changes, newest first. Board file versions are noted where they moved,
 since older boards are migrated on load rather than rejected.
 
+## Unreleased
+
+### Security
+
+- Reject external drag offers before Qt reads their payload. A hostile source
+  offering a never-ending URI list could otherwise exhaust the shared shell's
+  memory before import checks ran. Drag-and-drop image import is disabled;
+  use bounded clipboard image paste instead. Regression coverage requires
+  rejected offers and zero payload retrieval in single and split views.
+
 ## 0.4.8 — 2026-10-10
 
 ### Fixed

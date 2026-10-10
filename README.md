@@ -51,7 +51,7 @@ right-click lists what can be done with the selection. The mouse works too.
 
 ## What it does
 
-- Notes, boxes, ellipses, diamonds and pictures, pasted or dropped, joined by connectors
+- Notes, boxes, ellipses, diamonds and pictures pasted from the clipboard, joined by connectors
 - Headings, bold, italic, key labels and theme colours inside a note
 - A fullscreen overlay or an ordinary tiled window; `w` switches between them
 - Split view, `v` or `V`: two boards side by side, or two views of one
