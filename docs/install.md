@@ -171,11 +171,11 @@ and is invoked as a separate process, not linked or redistributed here.
 | Displays attached | 1920×1080 at scale 1.6 and 3840×2160 at scale 2 |
 | Clipboard | `wl-clipboard` 1:2.3.0 |
 
-The 0.4.7 automated and live smoke checks passed on this configuration on
-2026-10-10. Two of five live runs that day stopped waiting for a synthesized
-key to reach the test window; the same commits passed when run again. 0.4.6 was
-tested on `omarchy-dev 4.0.0.r6720.g8e02fc8-1` with Qt 6.11.2, Quickshell 0.3.1
-and a single 1920×1080 output at scale 1.6, 0.4.5 on
+The 0.4.8 and 0.4.7 automated and live smoke checks passed on this
+configuration on 2026-10-10. Two of five live runs that day stopped waiting for
+a synthesized key to reach the test window; the same commits passed when run
+again. 0.4.6 was tested on `omarchy-dev 4.0.0.r6720.g8e02fc8-1` with Qt 6.11.2,
+Quickshell 0.3.1 and a single 1920×1080 output at scale 1.6, 0.4.5 on
 `omarchy-dev 4.0.0.r6713.ga85e29a-1`, and earlier releases on Omarchy
 `4.0.0.r2158.gd174d4a-1`. Omarchy 4's plugin contract is still moving; these
 results do not establish compatibility with every version.

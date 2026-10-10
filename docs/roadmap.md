@@ -53,6 +53,12 @@ confirmed by hand; IME composition is still unverified. A fully textured
 3,000-item board is [measured](performance.md#fully-textured-large-board--2026-10-09),
 with frame-rate limits recorded. Boards with history or textures use format 7.
 
+## 0.4.8 — Bounded paste in text fields
+
+Shipped. Every text field reads a paste through the clipboard helper's 1 MiB
+limit instead of Qt's unbounded reader, from the marketplace review of 0.4.7;
+see the [security review](security-review.md#marketplace-review-of-047).
+
 ## 0.5 — Editable, labeled connectors
 
 Make relationships useful in a decision diagram: connect “Ready?” to “Ship”,
