@@ -880,6 +880,7 @@ FocusScope {
 
     TextInput {
       id: findField
+      objectName: "find-field"
       // Wide enough to see the caret in an empty query, and it grows with what
       // is typed rather than reserving a box the board has to look at.
       width: Math.max(board.theme.sp(24), Math.min(implicitWidth + board.theme.sp(2), board.width / 3))
@@ -917,8 +918,19 @@ FocusScope {
         })
       }
 
+      // Pasted text is read through the clipboard helper's limit rather than
+      // by Qt, which reads all of it first: see BoardExchange.pasteInto.
+      readonly property bool takesPaste: board.ctl.finding
+      readonly property int pasteLimit: findField.maximumLength
+      readonly property bool pasteLines: false
+      // The middle button pastes the primary selection, read the same way.
+      MouseArea { objectName: "find-field-middle"; anchors.fill: parent; acceptedButtons: Qt.MiddleButton }
+
       // The board decides what these two mean; everything else is typing.
-      Keys.onPressed: function (event) { board.findKey(event) }
+      Keys.onPressed: function (event) {
+        if (event.matches(StandardKey.Paste)) { event.accepted = true; board.ctl.pasteInto(findField); return }
+        board.findKey(event)
+      }
     }
 
     Text {

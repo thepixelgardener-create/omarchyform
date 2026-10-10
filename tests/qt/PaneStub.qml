@@ -233,6 +233,11 @@ Item {
   function moveMenu(step) {}
   function newBoard() {}
   function pasteClipboard() {}
+  // A field handing over its paste keys: recorded, so a test can say the
+  // field asked rather than pasted for itself.
+  property var pastedInto: null
+  property int pasteAsks: 0
+  function pasteInto(field) { pasteAsks++; pastedInto = field }
   function pasteImage(name, w, h) {}
   function recolorItem() {}
   function redo() {}

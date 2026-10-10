@@ -84,6 +84,9 @@ TestCase {
     function flushSave() { flushCount++ }
     property var paletteEditor: null
     function beginTextPalette(editor) { paletteEditor = editor }
+    property var pastedInto: null
+    property int pasteAsks: 0
+    function pasteInto(field) { pasteAsks++; pastedInto = field }
     function stopEditing() { editIndex = -1 }
     property string flashed: ""
     function flash(text) { flashed = text }
@@ -122,6 +125,16 @@ TestCase {
     itexture: model.get(0).itexture
     itext: model.get(0).itext
     isrc: ""
+  }
+  // Puts text on this platform's clipboard the way a person does, selected and
+  // copied; and a plain editor beside the board, which pastes it the way Qt
+  // pastes, so a test can show the clipboard holds something Qt would paste.
+  TextEdit { id: clipSource; visible: false; textFormat: TextEdit.PlainText }
+  TextEdit { id: plainEditor; x: 400; y: 400; width: 200; height: 30; textFormat: TextEdit.PlainText }
+  function putOnClipboard(text) {
+    clipSource.text = text
+    clipSource.selectAll()
+    clipSource.copy()
   }
   function init() {
     backgroundDoubleClicks = 0
@@ -431,6 +444,47 @@ TestCase {
     editor.insert(editor.length, "ab")
     compare(model.get(0).itext.length, Store.MAX_NOTE_LENGTH, "reaching the limit exactly is kept")
     keyClick(Qt.Key_Escape)
+  }
+
+  // Qt's own paste reads everything the clipboard's owner sends before the
+  // note's limit can count it, and an owner that never stops sending takes the
+  // shell's memory with it. The paste keys are taken from the editor and handed
+  // to the controller, which reads the clipboard through the helper's limit.
+  function test_pasteKeysGoThroughTheBoundedHelper_data() {
+    return [
+      { tag: "ctrl+v", key: Qt.Key_V, modifiers: Qt.ControlModifier },
+      { tag: "shift+insert", key: Qt.Key_Insert, modifiers: Qt.ShiftModifier }
+    ]
+  }
+  function test_pasteKeysGoThroughTheBoundedHelper(row) {
+    putOnClipboard("from the clipboard")
+    plainEditor.text = ""
+    plainEditor.forceActiveFocus()
+    keyClick(row.key, row.modifiers)
+    compare(plainEditor.text, "from the clipboard", "a plain editor here pastes it, so a paste would show")
+
+    model.setProperty(0, "itext", "note")
+    mouseDoubleClickSequence(test, 140, 140, Qt.LeftButton)
+    compare(ctl.editIndex, 0)
+    var editor = findChild(subject, "note-editor")
+    ctl.pasteAsks = 0
+    ctl.pastedInto = null
+    keyClick(row.key, row.modifiers)
+    compare(editor.text, "note", "the editor did not paste for itself")
+    compare(model.get(0).itext, "note", "and nothing reached the board")
+    compare(ctl.pasteAsks, 1, "it asked the controller instead")
+    verify(ctl.pastedInto === editor, "on its own behalf")
+    verify(editor.takesPaste, "while it is being typed in")
+    verify(editor.pasteLines, "keeping line breaks")
+    compare(editor.pasteLimit, Store.MAX_NOTE_LENGTH, "up to the longest a note can be")
+
+    ctl.canEdit = false
+    keyClick(row.key, row.modifiers)
+    compare(ctl.pasteAsks, 1, "a read-only editor does not ask")
+    compare(editor.text, "note", "or paste")
+    ctl.canEdit = true
+    keyClick(Qt.Key_Escape)
+    verify(!editor.takesPaste, "and once the caret has left, an answer arriving late is not taken")
   }
 
   // A long stretch with no space in it is wrapped anywhere, by the note and by

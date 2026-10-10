@@ -332,8 +332,56 @@ Item {
     if (clipboard.running || imageGrab.running || !exchange.ctl.canEdit) return
     pastePane = exchange.ctl
     pasteBoard = exchange.ctl.currentBoard
+    pasteForField = false
+    pasteField = null
     imageGrab.command = exchange.ctl.fileCommand("clipimage", [exchange.ctl.imagesDir, "paste-" + Date.now()])
     imageGrab.running = true
+  }
+
+  // Text for a field being typed in: a note, the command list, find, or the
+  // browser's search and names. Qt's own paste reads everything the
+  // clipboard's owner sends before anything here could count it, and an owner
+  // that never stops sending takes the whole shell's memory with it. So the
+  // fields hand their paste keys here instead, and the helper reads at most
+  // 1 MiB and refuses the rest.
+  //
+  // A flag rather than the field says which paste this is: a field can be
+  // destroyed while the clipboard is answering, and a paste meant for it must
+  // not turn into a note on the board. The answer goes into that field only
+  // while it is still taking text, and whatever goes wrong is told to the pane
+  // that asked, which need not be the one the keyboard is in by then.
+  property bool pasteForField: false
+  property var pasteField: null
+  function pasteInto(pane, field) {
+    if (clipboard.running || imageGrab.running || !field || field.readOnly) return false
+    pastePane = pane
+    pasteBoard = pane.currentBoard
+    pasteForField = true
+    pasteField = field
+    clipboard.running = true
+    return true
+  }
+
+  function fieldPasted(code, text) {
+    var pane = exchange.pastePane, field = exchange.pasteField
+    exchange.pasteForField = false
+    exchange.pasteField = null
+    if (code === 5) { pane.report("Clipboard text exceeds 1 MiB", "paste"); return }
+    if (code !== 0) { pane.report("Clipboard has no available text", "paste"); return }
+    if (!field || !field.takesPaste || field.readOnly) {
+      pane.report("Stopped typing before the clipboard answered; paste again", "paste")
+      return
+    }
+    var from = Math.min(field.selectionStart, field.selectionEnd)
+    var to = Math.max(field.selectionStart, field.selectionEnd)
+    var insert = Store.fitPaste(text, field.text.length - (to - from), field.pasteLimit, field.pasteLines)
+    if (insert === null) {
+      pane.report(field.pasteLines ? "A note holds up to 1 MB of text" : "Too long to paste here", "paste")
+      return
+    }
+    field.remove(from, to)
+    field.insert(from, insert)
+    field.cursorPosition = from + insert.length
   }
 
   FileView {
@@ -537,6 +585,7 @@ Item {
     command: exchange.ctl.fileCommand("cliptext", [])
     stdout: StdioCollector { id: pasted; waitForEnd: true }
     onExited: function(code) {
+      if (exchange.pasteForField) { exchange.fieldPasted(code, pasted.text); return }
       if (code === 5) { exchange.failed("Clipboard text exceeds 1 MiB", "paste"); return }
       if (code !== 0) { exchange.failed("Clipboard has no available text", "paste"); return }
       if (exchange.pasteBoard !== exchange.pastePane.currentBoard) { exchange.failed("Board changed; paste again", "paste"); return }

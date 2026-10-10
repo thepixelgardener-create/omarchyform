@@ -115,6 +115,9 @@ TestCase {
     function commandReady(needs) { return needs !== "target" }
     function commandExcuse(needs) { return "nothing is selected" }
     function setPaletteQuery(text) { ctl.paletteQuery = text }
+    property var pastedInto: null
+    property int pasteAsks: 0
+    function pasteInto(field) { pasteAsks++; pastedInto = field }
     function runPaletteChoice() {}
     function focusKeys() {}
     property bool conflictVisible: true

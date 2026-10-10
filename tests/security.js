@@ -69,6 +69,52 @@ for (const file of fs.readdirSync(root).filter(f => f.endsWith('.qml'))) {
   assert.equal((source.match(/textFormat: Text\.StyledText/g)||[]).length,
     styledCounts[file] || 0, `${file}: new styled renderer requires data-flow review`)
 }
+// Qt's own paste reads everything a clipboard's owner sends before anything
+// here can count it, so an owner that never stops sending takes the shell's
+// memory. Every field that takes typing hands its paste keys to pasteInto,
+// which reads through the helper's 1 MiB limit; a line field also takes the
+// middle button, which pastes the primary selection the same way. The note
+// editor's middle button is taken by Board.qml's pan surface, above every item.
+function pastePolicy(source) {
+  const errors = []
+  const lines = source.split('\n')
+  for (let i = 0; i < lines.length; i++) {
+    const start = /^( *)(TextInput|TextEdit) \{$/.exec(lines[i])
+    if (!start) {
+      if (/\b(TextInput|TextEdit)\s*\{/.test(lines[i]) && !/^\s*\/\//.test(lines[i]))
+        errors.push(`line ${i+1}: unsupported text field layout`)
+      continue
+    }
+    const end = lines.findIndex((line, n) => n > i && line === start[1] + '}')
+    const field = lines.slice(i + 1, end)
+    const body = field.join('\n')
+    // The paste keys, accepted, and handed over within the few lines after.
+    const keys = field.findIndex(line => /event\.matches\(StandardKey\.Paste\)/.test(line))
+    const handled = keys >= 0 && field.slice(keys, keys + 4).join('\n')
+    if (end < 0 || !handled || !/event\.accepted = true/.test(handled) || !/\.pasteInto\(/.test(handled))
+      errors.push(`line ${i+1}: ${start[2]} must hand its paste keys to pasteInto`)
+    if (start[2] === 'TextInput' && !/MouseArea \{[^\n]*acceptedButtons: Qt\.MiddleButton/.test(body))
+      errors.push(`line ${i+1}: TextInput must take the middle button from Qt`)
+  }
+  // exchange.paste() is the board's own, through the helper; any other is Qt's.
+  if (/(?<!exchange)\.paste\(\)/.test(source)) errors.push("Qt's own paste reads the clipboard without a limit")
+  return errors
+}
+assert.ok(pastePolicy('  TextInput {\n    text: "x"\n  }').length, 'a field without the paste keys is refused')
+assert.ok(pastePolicy('  TextEdit {\n    Keys.onPressed: function (event) {}\n  }').length)
+assert.ok(pastePolicy('  TextInput {\n    Keys.onPressed: function (event) {\n      if (event.matches(StandardKey.Paste)) { event.accepted = true; ctl.pasteInto(f); return }\n    }\n  }').length,
+  'a line field without the middle guard is refused')
+assert.ok(pastePolicy('  TextInput { id: f }').length, 'an unsupported layout is refused rather than skipped')
+assert.ok(pastePolicy('editor.paste()').length)
+assert.deepEqual(pastePolicy('root.workspace.exchange.paste()'), [], "the board's own paste is the bounded one")
+assert.deepEqual(pastePolicy('  TextInput {\n    MouseArea { anchors.fill: parent; acceptedButtons: Qt.MiddleButton }\n' +
+  '    Keys.onPressed: function (event) {\n      if (event.matches(StandardKey.Paste)) { event.accepted = true; ctl.pasteInto(f); return }\n    }\n  }'), [])
+for (const file of fs.readdirSync(root).filter(f => f.endsWith('.qml')))
+  assert.deepEqual(pastePolicy(fs.readFileSync(path.join(root, file), 'utf8')), [], file)
+assert.match(fs.readFileSync(path.join(root, 'Board.qml'), 'utf8'),
+  /MouseArea \{\n    id: panSurface\n[^}]*acceptedButtons: Qt\.MiddleButton/,
+  'the pan surface takes the middle button from every item, the note editor included')
+
 const exchange = fs.readFileSync(path.join(root, 'BoardExchange.qml'), 'utf8')
 assert.match(exchange, /fileCommand\("clipcopy", \[\]\)/, 'QML copy helper has no content arguments')
 assert.doesNotMatch(exchange, /fileCommand\("clipcopy", \[(?!\])/,
@@ -98,7 +144,7 @@ for (const text of ['<img src="https://example.invalid/beacon">',
 for (const name of ['../private.png', '/private.png', 'file:///private.png',
   'https://example.invalid/x', '..', 'a\nb.png', 'a%2fb.png'])
   assert.equal(S.imageIsValid(name), false, `reject image source ${JSON.stringify(name)}`)
-console.log('ok — security: explicit text formats, markup escaping and local image names')
+console.log('ok — security: explicit text formats, bounded paste, markup escaping and local image names')
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'omarchyform-security-'))
 try {

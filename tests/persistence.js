@@ -3,7 +3,7 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const { spawnSync } = require('child_process')
-for (const scenario of ['persistence', 'session', 'timeout', 'exchange', 'clipboard', 'history', 'history_edge']) {
+for (const scenario of ['persistence', 'session', 'timeout', 'exchange', 'clipboard', 'fieldpaste', 'history', 'history_edge']) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'omarchyform-persistence-'))
   try {
     fs.writeFileSync(path.join(dir, 'blocked.json'), 'original')
@@ -109,6 +109,19 @@ cat /proc/$$/cmdline > "$OMARCHYFORM_TEST_DIR/copy-argv"
 cat /proc/$PPID/cmdline >> "$OMARCHYFORM_TEST_DIR/copy-argv"
 cat > "$OMARCHYFORM_TEST_DIR/copied"
 [[ ! -e "$OMARCHYFORM_TEST_DIR/fail-copy" ]]
+`, {mode: 0o755})
+    }
+    if (scenario === 'fieldpaste') {
+      // Serves whatever the newest step wrote: text, nothing at all, or an owner
+      // that never stops sending, which is what Qt's own paste would read forever.
+      fs.mkdirSync(path.join(dir, 'stubs'))
+      fs.writeFileSync(path.join(dir, 'stubs/wl-paste'), `#!/bin/bash
+step=$(ls "$OMARCHYFORM_TEST_DIR" | grep '^clip-[0-9]*$' | sort | tail -n 1)
+case "$(head -n 1 "$OMARCHYFORM_TEST_DIR/$step")" in
+  endless) exec yes "an owner that never stops sending" ;;
+  fail) exit 1 ;;
+  *) tail -n +2 "$OMARCHYFORM_TEST_DIR/$step" ;;
+esac
 `, {mode: 0o755})
     }
     if (scenario === 'timeout') {

@@ -354,7 +354,22 @@ Item {
       body.select(start, start + replacement.length)
     }
 
+    // What a paste may bring in, for BoardExchange.pasteInto. Qt's own paste
+    // reads everything the clipboard's owner sends before onTextChanged can
+    // count it, and an owner that never stops sending takes the shell's memory
+    // with it; so the paste keys are taken from the editor here, and the
+    // clipboard helper reads the text instead, at most 1 MiB of it. The middle
+    // button never reaches the editor: Board.qml's pan surface takes it.
+    readonly property bool takesPaste: body.wantsEdit
+    readonly property int pasteLimit: Store.MAX_NOTE_LENGTH
+    readonly property bool pasteLines: true
+
     Keys.onPressed: function(event) {
+      if (event.matches(StandardKey.Paste)) {
+        event.accepted = true
+        if (!body.readOnly) node.ctl.pasteInto(body)
+        return
+      }
       if ((event.modifiers & Qt.ControlModifier) === 0) return
       if (event.key === Qt.Key_P) node.ctl.beginTextPalette(body)
       else if (event.key === Qt.Key_N) node.ctl.newBoard()

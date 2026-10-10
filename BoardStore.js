@@ -1177,6 +1177,16 @@ function knownVersion(version) {
 // (cliptext in BoardFiles.sh), so whatever can be pasted fits in a note.
 var MAX_NOTE_LENGTH = 1048576
 
+// What a paste into a field being typed in inserts, given how much of the
+// field's text stays: the clipboard's text, with its line breaks folded into
+// spaces in a field that holds one line, or null when the field would end up
+// longer than `limit`. Nothing is cut short — a paste that does not fit is
+// refused whole, the way the clipboard helper refuses one over 1 MiB.
+function fitPaste(text, kept, limit, lines) {
+  var insert = lines ? String(text) : String(text).replace(/\r\n|\r|\n/g, " ")
+  return kept + insert.length > limit ? null : insert
+}
+
 // How long a stretch of text with no space in it can be before a note stops
 // looking for a word boundary to break it at. Qt's ordinary wrap searches a
 // run for one before breaking it anywhere, and the search grows with the

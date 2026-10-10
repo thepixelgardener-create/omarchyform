@@ -31,6 +31,7 @@ an external service.
 | --- | --- | --- |
 | Copied notes | QML → helper → `wl-copy` | Content only on stdin; never argv/environment/logs. `security.js` inspects live Linux process metadata; `tst_clipboard.qml` exercises the QML caller, repeat copies, failure and large Unicode text. |
 | Pasted text/images | `wl-paste` → staging → QML/library | Bound bytes before returning text; reject bad image types and excessive supported dimensions; remove staging on success/failure. Filesystem and security tests. |
+| Text pasted into a field | Paste keys → `pasteInto` → helper → the field that asked | Qt's own paste reads everything a clipboard owner sends before any limit can count it, so no field may run it. The note editor, command list, find field and browser field hand Ctrl+V and Shift+Insert to the exchange, which reads through `cliptext`'s 1 MiB bound, refuses a paste that would not fit the field, and inserts only while that field is still taking text; failures go to the pane that asked. The line fields also take the middle button (primary selection); the pan surface takes it above the note editor. `security.js` refuses any text field without both; `tst_node.qml` and `tst_pan.qml` show each field no longer pastes for itself; `tst_fieldpaste.qml` runs the real exchange and helper against an owner that never stops sending, a late answer, a destroyed field and a clipboard with no text. |
 | Board JSON, titles, paths, errors | Models → Qt text | Explicit plain text for labels. Styled notes escape input first; status escapes variable messages. Source guards, hostile markup tests and Qt title test. |
 | Long note text | Board file, import, editor, CLI → text layout on the shell's thread | A note is at most 1 MiB: a board with a longer one opens read-only and empty, import and the CLI refuse one, the editor refuses to grow one. Unbroken runs wrap anywhere, and the editor holds a note only while open, so layout stays linear. Store, controller, node, exchange and CLI tests. |
 | Image names from boards | Local image URL, bundle/copy helper | Plain validated names, no URL or traversal; helper rejects symlink components. Logic/filesystem tests; manually inspect direct Qt loads. |
@@ -121,4 +122,23 @@ At base commit `8bf4c73`, the screen work found and fixed two further gaps:
    excerpt of private operation input. The response now gives a generic error.
 
 The clipboard argv fix remains covered at both the helper and QML boundaries.
+
+## Marketplace review of 0.4.7
+
+The verification review of `6eb82bb`
+([omacom/omarchy-plugin-marketplace#10902](https://github.com/omacom/omarchy-plugin-marketplace/issues/10902))
+found that the note editor still accepted Qt's own Ctrl+V and Shift+Insert,
+bypassing `cliptext`: Qt's Wayland data-offer reader appends until the sender
+stops, so a hostile clipboard owner could exhaust the shell's memory before
+the editor's 1 MiB check ran. The same was true of the command list, find and
+browser fields. Fixed in 0.4.8 as described in the table above. The review
+also named middle-click primary-selection paste in the note editor; that
+button was already taken by the pan surface (`tst_pan.qml`,
+`test_middleDragOverAnEditorPansInsteadOfPasting`), and the three line fields,
+which the pan surface does not cover, now take it themselves.
+
+Remaining: whatever is dragged onto the board is read by Qt from the drag
+source in the same way, without a total limit, before `importDropped` sees it.
+That needs the person to drag from the hostile application onto the board,
+rather than to paste whatever happens to own the clipboard.
 The known limits above remain open hardening areas, not completed fixes.

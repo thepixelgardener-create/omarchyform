@@ -139,8 +139,19 @@ Item {
           })
         }
 
+        // Pasted text is read through the clipboard helper's limit rather than
+        // by Qt, which reads all of it first: see BoardExchange.pasteInto.
+        readonly property bool takesPaste: panel.ctl.paletteVisible
+        readonly property int pasteLimit: typed.maximumLength
+        readonly property bool pasteLines: false
+        // The middle button pastes the primary selection, read the same way.
+        MouseArea { objectName: "command-query-middle"; anchors.fill: parent; acceptedButtons: Qt.MiddleButton }
+
         // The panel decides what these mean; everything else is typing.
-        Keys.onPressed: function (event) { panel.board.paletteKey(event) }
+        Keys.onPressed: function (event) {
+          if (event.matches(StandardKey.Paste)) { event.accepted = true; panel.ctl.pasteInto(typed); return }
+          panel.board.paletteKey(event)
+        }
       }
     }
 
