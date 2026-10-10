@@ -1,8 +1,12 @@
-# Working on Omarchyform
+# Contributing
 
-This repository is a Quickshell/QML app with shared JavaScript codecs and a Node
-CLI. `docs/for-agents.md` describes using the CLI to create boards; it is not a
-code-contribution guide. See `docs/README.md` for the documentation map.
+[Back to the README](../README.md) · [Development](development.md)
+
+Omarchyform is a Quickshell/QML app with shared JavaScript codecs and a Node
+CLI. This page holds the rules a code change has to keep. Running the plugin
+from a clone, the source layout and the test commands are in
+[Development](development.md); [for-agents.md](for-agents.md) describes using
+the CLI to create boards and is not a contribution guide.
 
 ## Ownership and persistence invariants
 

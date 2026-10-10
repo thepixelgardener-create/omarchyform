@@ -2,7 +2,7 @@
 
 [Back to the README](../README.md) · [Install](install.md) · [Using the board](guide.md) · [Boards on disk and the command line](files.md)
 
-Contributor rules for code changes are in [AGENTS.md](../AGENTS.md); the
+Contributor rules for code changes are in [Contributing](contributing.md); the
 [documentation guide](README.md) lists the design notes and reviews.
 
 ## Running from a clone

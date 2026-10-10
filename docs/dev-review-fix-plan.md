@@ -20,7 +20,7 @@ Seven additional reproduced defects are fixed in the working tree:
 
 Regression coverage lives in `tests/recording.js`, `tests/split.js`,
 `tests/exchange.js`, `tests/suite.js`, `tests/cli.js`, and the real QML exchange
-scenario. [Contributor instructions](../AGENTS.md) record the invariants and
+scenario. [Contributor instructions](contributing.md) record the invariants and
 required checks for future changes.
 
 Validation: `npm test`, all seven `npm run test:qml` scenarios,

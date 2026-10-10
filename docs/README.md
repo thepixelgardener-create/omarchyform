@@ -16,7 +16,7 @@ The [changelog](../CHANGELOG.md) separates unreleased work from tagged releases.
 
 ## Current development
 
-- [Contributor instructions](../AGENTS.md): ownership, persistence and regression
+- [Contributing](contributing.md): ownership, persistence and regression
   requirements for code changes.
 
 - [Roadmap](roadmap.md): completed work, unreleased features and future scope.
