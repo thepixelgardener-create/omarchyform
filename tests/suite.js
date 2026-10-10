@@ -106,6 +106,18 @@ function tests(S) {
     eq(S.overlongNote(S.readFile(JSON.stringify({ notes: [{ text: "x".repeat(at + 1) }] })).items), 0)
   })
 
+  test("a paste into a field fits whole or not at all, and one-line fields fold line breaks", () => {
+    eq(S.fitPaste("two\nlines", 3, 100, true), "two\nlines", "a note keeps its line breaks")
+    eq(S.fitPaste("a\r\nb\rc\nd", 0, 100, false), "a b c d", "a one-line field gets spaces for every kind")
+    eq(S.fitPaste("abc", 7, 10, true), "abc", "exactly the limit fits")
+    eq(S.fitPaste("abcd", 7, 10, true), null, "one past it is refused whole, not cut short")
+    eq(S.fitPaste("x".repeat(S.MAX_NOTE_LENGTH), 1, S.MAX_NOTE_LENGTH, true), null,
+       "the largest paste the helper allows does not fit a note that already holds anything")
+    eq(S.fitPaste("", 5, 5, false), "", "an empty paste changes nothing")
+    eq(S.fitPaste("a\nb", 7, 10, false), "a b", "folding a line break keeps the length")
+    eq(S.fitPaste("a\nb", 8, 10, false), null, "so it does not make room either")
+  })
+
   test("a long stretch with nowhere to break it is told apart from long text", () => {
     eq(S.hasLongRun("x".repeat(S.LONG_RUN)), true)
     eq(S.hasLongRun("x".repeat(S.LONG_RUN - 1)), false)

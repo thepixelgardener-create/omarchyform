@@ -47,6 +47,12 @@ current name selected so one keystroke replaces it. Where the keyboard is is
 marked with a `›` as well as a tint, so it does not depend on telling two
 colours apart, and the controls carry names and roles for a screen reader.
 
+Pasting into any of them, or into a note you are typing in, reads at most
+1 MiB from the clipboard, the same limit as pasting onto the board. Anything
+longer, or longer than the field takes, is refused whole with a message rather
+than cut short. A one-line field gets spaces where the pasted text had line
+breaks, and the middle button does not paste the primary selection.
+
 | Key | Does |
 |-----|------|
 | `n` | New note beside the selected one, ready to type |

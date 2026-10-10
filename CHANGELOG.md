@@ -3,6 +3,22 @@
 Notable changes, newest first. Board file versions are noted where they moved,
 since older boards are migrated on load rather than rejected.
 
+## 0.4.8 — 2026-10-10
+
+### Fixed
+
+- **Pasting into a note being typed in, the command list, find or the board
+  browser reads at most 1 MiB from the clipboard.** Ctrl+V and Shift+Insert
+  used Qt's own paste, which reads everything the clipboard's owner sends
+  before the note's 1 MB check could count it, so an application that never
+  stopped sending could exhaust the shell's memory. They now go through the
+  same bounded helper as pasting onto the board. A paste that would not fit
+  is refused whole with a message, a one-line field gets spaces for line
+  breaks, and a paste that arrives after you stopped typing is not inserted.
+  The middle button no longer pastes the primary selection into the three
+  one-line fields; over a note it already panned. Found in the marketplace
+  review of 0.4.7.
+
 ## 0.4.7 — 2026-10-10
 
 ### Added

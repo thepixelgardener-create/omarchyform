@@ -832,4 +832,81 @@ TestCase {
     wait(0)
     check("after the first moved to the top")
   }
+
+  // ------------------------------------------- pasting into the board's fields
+
+  // Puts text on this platform's clipboard the way a person does: selected
+  // and copied. A plain field beside the board pastes it the way Qt does, so a
+  // test can show the clipboard holds something Qt would paste.
+  TextEdit { id: clipSource; visible: false; textFormat: TextEdit.PlainText }
+  TextInput { id: plainField; x: 0; y: 0; width: 200; height: 20; visible: false }
+  function putOnClipboard(text) {
+    clipSource.text = text
+    clipSource.selectAll()
+    clipSource.copy()
+  }
+
+  // Each line field the board types into: how to open it, what it is called,
+  // and the guard that takes the middle button from it.
+  function test_lineFieldsPasteThroughTheBoundedHelper_data() {
+    return [
+      { tag: "command list", open: function () { ctl.paletteVisible = true },
+        close: function () { ctl.paletteVisible = false }, name: "command-query", guard: "command-query-middle" },
+      { tag: "find", open: function () { ctl.finding = true },
+        close: function () { ctl.finding = false }, name: "find-field", guard: "find-field-middle" },
+      { tag: "browser search", open: function () { ctl.library.showing = true; ctl.library.searching = true },
+        close: function () { ctl.library.searching = false; ctl.library.showing = false },
+        name: "browser-field", guard: "browser-field-middle" }
+    ]
+  }
+  // Qt's own paste reads everything the clipboard's owner sends before any
+  // limit could count it, the primary selection on the middle button as much
+  // as the clipboard on the paste keys. Both are taken from every line field:
+  // the keys go to the controller, which reads through the helper's limit, and
+  // the middle button stops at a guard over the field.
+  function test_lineFieldsPasteThroughTheBoundedHelper(row) {
+    putOnClipboard("from the\nclipboard")
+    plainField.visible = true
+    plainField.text = ""
+    plainField.forceActiveFocus()
+    keyClick(Qt.Key_V, Qt.ControlModifier)
+    verify(plainField.text.indexOf("clipboard") >= 0, "a plain field here pastes it, so a paste would show")
+    plainField.visible = false
+
+    row.open()
+    try {
+      checkLineField(row)
+    } finally {
+      // Closed whatever happened, so a failure here cannot leave a field open
+      // over the tests that follow.
+      row.close()
+      surface.focusKeys()
+    }
+  }
+  function checkLineField(row) {
+    var field = findChild(surface, row.name)
+    verify(field !== null, row.name)
+    tryVerify(function () { return field.activeFocus }, 2000, "the field takes the keyboard")
+    var before = field.text
+    ctl.pasteAsks = 0
+    ctl.pastedInto = null
+    keyClick(Qt.Key_V, Qt.ControlModifier)
+    keyClick(Qt.Key_Insert, Qt.ShiftModifier)
+    compare(field.text, before, "the field did not paste for itself")
+    compare(ctl.pasteAsks, 2, "both keys asked the controller instead")
+    verify(ctl.pastedInto === field, "on the field's behalf")
+    verify(field.takesPaste, "which takes a paste while it is open")
+    verify(!field.pasteLines, "on one line")
+    compare(field.pasteLimit, field.maximumLength, "and no longer than the field allows")
+
+    var guard = findChild(field, row.guard)
+    verify(guard !== null, row.guard)
+    mousePress(field, 4, field.height / 2, Qt.MiddleButton)
+    verify(guard.pressed, "the middle button stops at the guard")
+    mouseRelease(field, 4, field.height / 2, Qt.MiddleButton)
+    compare(field.text, before, "and nothing was pasted")
+
+    row.close()
+    verify(!field.takesPaste, "a closed field does not take a paste that answers late")
+  }
 }

@@ -120,6 +120,7 @@ Item {
     function beginPointerEdit(label) {}
     function finishPointerEdit(cancel) {}
     function beginTextPalette(editor) {}
+    function pasteInto(field) {}
     function stopEditing() {}
     function flash(text) {}
     function newBoard() {}

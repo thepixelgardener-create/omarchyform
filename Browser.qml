@@ -103,6 +103,7 @@ FocusScope {
 
         TextInput {
           id: typed
+          objectName: "browser-field"
           visible: browser.typing
           enabled: browser.typing
           anchors.left: promptLabel.right
@@ -157,10 +158,20 @@ FocusScope {
                                          : browser.searching ? browser.library.query : typed.text
           onHeldChanged: if (typed.held !== typed.text) typed.text = typed.held
 
+          // Pasted text is read through the clipboard helper's limit rather
+          // than by Qt, which reads all of it first: see BoardExchange.pasteInto.
+          readonly property bool takesPaste: browser.typing && browser.shown
+          readonly property int pasteLimit: typed.maximumLength
+          readonly property bool pasteLines: false
+          // The middle button pastes the primary selection, read the same way.
+          MouseArea { objectName: "browser-field-middle"; anchors.fill: parent; acceptedButtons: Qt.MiddleButton }
+
           // The browser decides what these mean; everything else is typing, and
           // is left to the field — including the caret keys, the selection and
-          // whatever an input method is in the middle of composing.
+          // whatever an input method is in the middle of composing. Except a
+          // paste, which goes through the clipboard helper's limit.
           Keys.onPressed: function (event) {
+            if (event.matches(StandardKey.Paste)) { event.accepted = true; browser.ctl.pasteInto(typed); return }
             if (event.key === Qt.Key_Escape || event.key === Qt.Key_Return || event.key === Qt.Key_Enter
                 || event.key === Qt.Key_Up || event.key === Qt.Key_Down)
               browser.library.key(event)

@@ -239,6 +239,9 @@ Item {
   }
 
   function pasteClipboard() { root.workspace.exchange.paste() }
+  // The paste keys of a field being typed in, read through the clipboard
+  // helper's limit rather than by Qt: see BoardExchange.pasteInto.
+  function pasteInto(field) { root.workspace.exchange.pasteInto(root, field) }
   function importBoard() { root.workspace.exchange.choose("import") }
   // What goes out is the board as it is. Sending an earlier version out is
   // not something this does yet, so looking back it says so.
