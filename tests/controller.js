@@ -1,146 +1,9 @@
-// Exercise the real controller functions with delayed I/O completions.
-const fs = require('fs')
-const vm = require('vm')
+// Exercise the real controller functions with delayed I/O completions. The
+// harness that builds the workspace, its panes and documents is shared with
+// tests/split.js.
 const assert = require('assert/strict')
-const { loadStore, FakeModel } = require('./harness')
-const source = fs.readFileSync(require('path').join(__dirname, '../Omarchyform.qml'), 'utf8')
-function controller() {
-  const items = new FakeModel(), links = new FakeModel()
-  const root = { currentBoard: 'a.json', items, links, nextId: 1, nextColor: 0, windowMode: false,
-    undoStack: [], redoStack: [], selectedIndex: -1, editIndex: -1,
-    camX: 0, camY: 0, zoom: 1, activeBoard: null, markedIds: [], showPinned: false, arranging: false,
-    showGrid: true, canvasPattern: 'Dots', canvasBackgroundChosen: false,
-    finding: false, findQuery: '', findCount: 0, imageQueue: [],
-    menuVisible: false, zoomMenuVisible: false, menuIndex: 0, helpVisible: false,
-    // Declared on the controller and defaulted there; the harness needs them
-    // because a failure's time on screen is measured against what is covering
-    // the line, and an undeclared name reads as undefined rather than as empty.
-    opened: true,
-    paletteVisible: false, paletteQuery: '', paletteIndex: 0, paletteRows: 9,
-    conflictVisible: false, conflictIndex: 0, paletteScope: 'all',
-    boardsDir: '/boards', backupsDir: '/backups', worldStep: 40, minItemSize: 60, viewW: 1000, viewH: 700 }
-  const session = { ctl: root, boardLoaded: true, damaged: false, pendingBoard: null,
-    lastSavedCount: 0, lastSavedText: '', saveError: '',
-    // The conflict state the QML declares, mirrored here: an undeclared
-    // property reads as undefined, which is not what a string property does.
-    conflict: false, resolving: '',
-    revision: '', forceNextSave: false, diskReading: false }
-  // The binding BoardSession.qml declares, term for term.
-  Object.defineProperty(session, 'canEdit', {
-    get: () => session.boardLoaded && !session.damaged && session.pendingBoard === null && !session.diskReading
-  })
-  for (const key of ['boardLoaded', 'damaged', 'pendingBoard', 'saveError', 'canEdit'])
-    Object.defineProperty(root, key, { get: () => session[key] })
-  Object.defineProperty(root, 'diskChanged', { get: () => session.conflict })
-  Object.defineProperty(root, 'boardPath', { get: () => '/boards/' + root.currentBoard })
-  // Mirrors the QML binding of the same name: the harness loads functions, not
-  // bindings, so a derived property has to be declared here.
-  Object.defineProperty(root, 'findDimming', { get: () => root.finding && root.findQuery !== '' })
-  Object.defineProperty(root, 'findNeedle', { get: () => root.findQuery.toLowerCase() })
-  Object.defineProperty(root, 'paletteMatches', { get: () =>
-    root.paletteVisible ? loadStore().matchCommands(root.paletteQuery, root.paletteScope) : [] })
-  // The binding the status line reads while a connector is being drawn, which
-  // the QML declares and this harness would otherwise not have. Kept as close
-  // to the original as a getter can be, so a change to one is visible as a
-  // difference from the other.
-  // The binding the failure timer runs on, which the QML declares and this
-  // harness would otherwise not have. Same shape as the original, so a change
-  // to one shows up as a difference from the other.
-  Object.defineProperty(root, 'failureVisible', { get: () =>
-    root.opened && root.failureText !== '' && root.saveError === '' && root.library.trashIndexError === ''
-    && !root.diskChanged && !root.damaged
-    && !root.helpVisible && !root.library.showing && !root.finding })
-  Object.defineProperty(root, 'linkOutcome', { get: () => {
-    if (root.linkingFrom < 0 || !root.canEdit) return 'none'
-    if (root.selectedIndex < 0 || root.selectedIndex >= items.count) return 'none'
-    const n = items.get(root.selectedIndex)
-    if (!n || n.ipinned) return 'none'
-    return loadStore().linkAt(links, root.linkingFrom, n.iid).outcome
-  } })
-  Object.defineProperty(root, 'markedLookup', { get: () => {
-    const lookup = {}
-    for (const id of root.markedIds) lookup[id] = true
-    return lookup
-  } })
-  const writes = []
-  const states = []
-  const persistence = { busy: false, contents: '',
-    save(path, text, backup, root, backupRoot, lock, expected) {
-      this.busy = true
-      this.contents = text
-      writes.push({ path, text, expected })
-    } }
-  // Stands in for BoardExchange: the controller hands it filtered paths and
-  // never learns what happens to them.
-  const exchange = { imported: [], copied: [], copies: [], chosen: [],
-    // The file dialog belongs to the desktop; what the controller does with it
-    // is ask for one, which is the part worth watching here.
-    choose(action) { exchange.chosen.push(action) },
-    importDropped(entries) { exchange.imported.push(...entries) },
-    copyItems(indices) { exchange.copied.push(Array.from(indices)) },
-    saveCopy(text, name) { exchange.copies.push({ text, name }); return true } }
-  // The session's binding of the same name, which the library is told about.
-  Object.defineProperty(session, 'busy', { get: () => persistence.busy || session.diskReading })
-  // The library, run from BoardLibrary.qml the way the controller and the
-  // session are, and wired to the controller the way Omarchyform.qml wires it.
-  // What it is told and its two bindings are mirrored, like the controller's.
-  const library = { boardsDir: '/boards', trashDir: '/trash', trashIndexPath: '/trash/index.json',
-    helperScript: '/BoardFiles.sh', showing: false, dir: '', query: '', index: 0, entries: [],
-    searching: false, promptLabel: '', input: '', action: '', pendingDelete: '', message: '', inTrash: false,
-    trashEntries: [], trashIndexSaving: false, trashIndexLoading: true, trashIndexNeedsRead: true, trashIndexError: '' }
-  Object.defineProperty(library, 'currentBoard', { get: () => root.currentBoard })
-  Object.defineProperty(library, 'boardConflicted', { get: () => root.diskChanged })
-  Object.defineProperty(library, 'boardSettled', { get: () => !session.busy && root.saveError === '' })
-  // The listing, the trash index and the helper's runs; none of them is the
-  // subject of these tests, so each is present and inert.
-  const trashIndexFile = { reload() {}, setText() {} }
-  const inert = () => ({ running: false, command: [] })
-  const scanProc = inert(), mkdirProc = inert(), moveProc = inert()
-  const trashProc = inert(), restoreProc = inert(), purgeProc = inert()
-  Object.defineProperty(library, 'busy', { get: () => mkdirProc.running || moveProc.running || trashProc.running
-    || restoreProc.running || purgeProc.running || library.trashIndexSaving || library.trashIndexLoading })
-  Object.defineProperty(library, 'rows', { get: () => library.inTrash
-    ? context.Store.sortedTrash(library.trashEntries)
-    : context.Store.filterEntries(library.entries, library.dir, library.query) })
-  library.openRequested = (path, fresh) => root.openBoard(path, fresh)
-  library.currentMoved = path => { root.currentBoard = path; root.writeState() }
-  library.notice = message => root.flash(message)
-  library.closed = () => root.focusKeys()
-  library.aboutToRename = () => root.flushSave()
-  root.library = library
-  const context = vm.createContext({ root, session, library, Store: loadStore(), itemModel: items, linkModel: links,
-    persistence, exchange, trashIndexFile, scanProc, mkdirProc, moveProc, trashProc, restoreProc, purgeProc,
-    statusTimer: {restart() {}}, failureTimer: {restart() {}}, saveTimer: { running: false, stop() {}, restart() {} }, stateFile: {setText(text) { states.push(text) }} })
-  function loadFunctions(target, qml) {
-    for (const match of qml.matchAll(/^  function (\w+)\((.*?)\) \{\n([\s\S]*?)^  }/gm))
-      target[match[1]] = vm.runInContext(`(function(${match[2]}) {${match[3]}})`, context)
-    for (const match of qml.matchAll(/^  function (\w+)\((.*?)\) \{ (.*?) }$/gm))
-      target[match[1]] = vm.runInContext(`(function(${match[2]}) {${match[3]}})`, context)
-  }
-  loadFunctions(root, source)
-  loadFunctions(session, fs.readFileSync(require('path').join(__dirname, '../BoardSession.qml'), 'utf8'))
-  loadFunctions(library, fs.readFileSync(require('path').join(__dirname, '../BoardLibrary.qml'), 'utf8'))
-  // Two of the session's functions reach for a FileView and a Process. What
-  // they fetch is what matters here, so they fetch it from the test instead.
-  session.diskText = ''
-  session.readDisk = () => session.diskText
-  session.requestDisk = resolve => session.acceptDisk(root.currentBoard,
-    loadStore().writeFile(items, links, root.nextId), resolve, 'rev-fresh\n' + session.diskText)
-  let revisions = 0
-  return { root, session, library, items, links, writes, states, persistence, exchange, store: context.Store, complete() {
-    const write = writes[writes.length - 1]
-    persistence.busy = false
-    session.savedBoard(write.path, write.text, 'rev-' + (++revisions))
-  },
-  // The helper refused the write: the file is no longer what this session
-  // last saw. `disk` is what is there instead.
-  refuse(disk) {
-    const write = writes[writes.length - 1]
-    persistence.busy = false
-    session.diskText = disk
-    session.staleSave(write.path, 'rev-external')
-  } }
-}
+const { loadStore } = require('./harness')
+const { controller } = require('./workspace-harness')
 {
   const c = controller()
   c.session.loadBoard('{broken', false)
@@ -238,7 +101,7 @@ function controller() {
   const rename = () => {
     const c = controller()
     c.library.trashIndexLoading = false
-    c.root.currentBoard = 'work/a.json'
+    c.doc.currentBoard = 'work/a.json'
     c.library.entries = [{ path: 'work', dir: true }, { path: 'work/a.json', dir: false }]
     c.library.ask('rename', 'rename to:', 'work')
     c.library.input = 'play'
@@ -294,7 +157,7 @@ function controller() {
 
   // Switch away before that write reports back, the way openBoard does.
   c.session.boardLoaded = false
-  c.root.currentBoard = 'b.json'
+  c.doc.currentBoard = 'b.json'
   c.session.loadBoard('', true)          // a board that does not exist yet
   const beforeBaseline = c.session.lastSavedText
 
@@ -393,8 +256,8 @@ console.log('ok — controller: damaged boards, delayed saves, switching, failur
   assert.deepEqual(Array.from(c.root.markedIds), [])
   assert.equal(c.root.showPinned, false)
   assert.deepEqual(Array.from(c.root.targets()), [])
-  assert.notEqual(c.root.backupPathFor('work/a.json'), c.root.backupPathFor('work__a.json'))
-  c.root.applyState('{"lastBoard":"../outside.json"}')
+  assert.notEqual(c.workspace.backupPathFor('work/a.json'), c.workspace.backupPathFor('work__a.json'))
+  c.workspace.applyState('{"lastBoard":"../outside.json"}')
   assert.equal(c.root.currentBoard, 'a.json')
 }
 {
@@ -427,7 +290,7 @@ console.log('ok — controller: damaged boards, delayed saves, switching, failur
   c.root.redo()
   assert.equal(c.items.get(0).ipinned, false)
   for (let i=0;i<130;i++) c.root.pushUndo()
-  assert.equal(c.root.undoStack.length, 100)
+  assert.equal(c.doc.undoStack.length, 100)
 }
 console.log('ok — controller: board-local marks, pinning, backup names and history cap')
 
@@ -605,9 +468,9 @@ console.log('ok — controller: duplicating items, their connectors and their pi
   // Aligning twice: the second time there is nothing to do and no undo entry.
   c.root.markedIds = ids.slice(0, 2)
   c.root.alignTargets('top')
-  const depth = c.root.undoStack.length
+  const depth = c.doc.undoStack.length
   c.root.alignTargets('top')
-  assert.equal(c.root.undoStack.length, depth, 'an alignment that changes nothing is not history')
+  assert.equal(c.doc.undoStack.length, depth, 'an alignment that changes nothing is not history')
 
   // Spreading needs three.
   c.root.markedIds = ids.slice(0, 2)
@@ -758,7 +621,7 @@ console.log('ok — controller: finding, stepping through matches and dimming th
   const switched = controller()
   switched.root.activeBoard = { probeImage() {}, repaintLinks() {}, focusKeys() {} }
   switched.root.imageDropped('late.png', 40, 50)
-  switched.root.currentBoard = 'b.json'
+  switched.doc.currentBoard = 'b.json'
   switched.root.pasteImage('late.png', 200, 100)
   assert.equal(switched.items.count, 0, 'the late picture does not land on the board that is open now')
   assert.equal(switched.root.imageQueue.length, 0, 'and it stops waiting')
@@ -771,7 +634,7 @@ console.log('ok — controller: finding, stepping through matches and dimming th
   mixed.root.activeBoard = { probeImage(name) { seen.push(name) }, repaintLinks() {}, focusKeys() {} }
   mixed.root.imageDropped('a-1.png', 0, 0)
   mixed.root.imageDropped('a-2.png', 0, 0)
-  mixed.root.currentBoard = 'b.json'
+  mixed.doc.currentBoard = 'b.json'
   mixed.root.imageDropped('b-1.png', 0, 0)
   mixed.root.pasteImage('a-1.png', 100, 100)
   assert.equal(mixed.items.count, 0, 'nothing meant for the closed board is placed')
@@ -902,8 +765,9 @@ console.log('ok — controller: walking the header menu and running its commands
   assert.equal(c.root.paletteVisible, true)
   assert.equal(c.root.paletteQuery, '')
   assert.equal(c.root.paletteIndex, 0, 'opens on the first, ready to run')
-  assert.equal(c.root.paletteMatches.length, S.COMMANDS.filter(x => x.listed !== false && x.needs !== "typing").length,
-    'every command but the ways into this list')
+  assert.equal(c.root.paletteMatches.length,
+    S.COMMANDS.filter(x => x.listed !== false && x.needs !== "typing" && !x.group).length,
+    'every command but the ways into this list, each family as its one entry')
 
   // Typing narrows it, and the cursor goes back to the top rather than staying
   // on a row that now means something else.
@@ -911,7 +775,7 @@ console.log('ok — controller: walking the header menu and running its commands
   assert.equal(c.root.paletteIndex, 2)
   c.root.setPaletteQuery('col')
   assert.equal(c.root.paletteIndex, 0)
-  assert.deepEqual(c.root.paletteMatches.map(m => m.name), ['Change colour'])
+  assert.equal(c.root.paletteMatches[0].name, 'Change colour')
   c.root.setPaletteQuery('')
   assert.equal(c.root.paletteQuery, '')
 
@@ -967,11 +831,21 @@ console.log('ok — controller: walking the header menu and running its commands
   assert.equal(c.root.paletteVisible, true)
   assert.equal(c.root.paletteScope, 'selection')
   assert.ok(c.root.paletteMatches.length > 0)
-  assert.ok(c.root.paletteMatches.every(m => ['target', 'item', 'group'].includes(m.needs)),
+  assert.ok(c.root.paletteMatches.every(m => ['target', 'item', 'group', 'texture'].includes(m.needs)),
     'only what acts on the selection')
   // Alignment is offered by name, so the second key of the chord is something
-  // to learn rather than something to know already.
+  // to learn rather than something to know already: the chord's entry opens
+  // its six answers, and backspace goes back.
+  c.root.paletteIndex = c.root.paletteMatches.findIndex(m => m.name === 'Align and spread')
+  c.root.runPaletteChoice()
+  assert.equal(c.root.paletteVisible, true, 'a family is opened, not run')
+  assert.equal(c.root.paletteGroup, 'align')
   assert.ok(c.root.paletteMatches.some(m => m.name === 'Align left edges'))
+  assert.ok(c.root.paletteMatches.every(m => m.group === 'align'))
+  assert.equal(c.root.arranging, false, 'and the chord is not waiting for a key')
+  c.root.leaveGroup()
+  assert.equal(c.root.paletteGroup, '')
+  assert.ok(c.root.paletteMatches.some(m => m.name === 'Align and spread'))
   c.root.endPalette()
   assert.equal(c.root.paletteScope, 'selection', 'the scope belongs to the opening, not the closing')
   c.root.beginPalette()
@@ -1065,7 +939,7 @@ console.log('ok — controller: the command palette and one dispatch for every c
     // so the question is still there when it comes back.
     c.root.endConflictChoice()
     const closed = c.writes.length
-    c.root.close()
+    c.workspace.close()
     assert.equal(c.writes.length, closed, 'closing writes nothing over the other version')
     assert.equal(c.session.conflict, true, 'and leaves the question standing')
     assert.equal(c.items.count, 2, 'with the edits still in hand')
@@ -1350,11 +1224,13 @@ console.log('ok — controller: bringing things forward and sending them back')
   assert.equal(c.links.count, 2, 'and the connector between them was copied too')
 
   // And the same list, narrowed to what can be done with what is selected, is
-  // where all of those came from.
+  // where all of those came from: each family by its entry, and inside it.
   const actions = S.matchCommands('', 'selection').map(m => m.name)
   for (const name of ['Connect to another', 'Change colour', 'Change shape', 'Duplicate',
-                      'Align left edges', 'Bring to front', 'Pin or unpin as background', 'Delete'])
+                      'Align and spread', 'Bring forward or send back…', 'Pin or unpin as background', 'Delete'])
     assert.ok(actions.includes(name), name + ' is in the actions for a selection')
+  assert.ok(S.matchCommands('', 'selection', 'align').some(m => m.name === 'Align left edges'))
+  assert.ok(S.matchCommands('', 'selection', 'layer').some(m => m.name === 'Bring to front'))
 }
 console.log('ok — controller: a first board built only from names in the list')
 {
@@ -1408,9 +1284,8 @@ console.log('ok — controller: a first board built only from names in the list'
   c.root.undo()
   assert.equal(c.links.count, 1, 'which works')
 
-  // The far end is walked to, not clicked at: a pointer selection starts
-  // afresh, which ends the gesture rather than answering it. Documented here
-  // because the README says so and nothing else would notice it changing.
+  // The far end can be walked to or clicked: either way the near end is held
+  // until x answers or escape lets go.
   c.root.selectOnly(0)
   c.root.toggleLinking()
   assert.equal(c.root.linkingFrom, a, 'one end is held')
@@ -1419,12 +1294,13 @@ console.log('ok — controller: a first board built only from names in the list'
   c.root.move(1, 0, false)
   assert.equal(c.root.linkingFrom, a, 'and so does moving the cursor')
   c.root.pointerSelect(1, false)
-  assert.equal(c.root.linkingFrom, -1, 'a click lets go of it')
-  assert.equal(c.root.linkOutcome, 'none', 'and the line stops promising anything')
+  assert.equal(c.root.linkingFrom, a, 'a click keeps the near end')
+  assert.equal(c.root.linkOutcome, 'reverse', 'and the line says what x will do with the one clicked')
+  c.root.back()
 
   // Escape while choosing changes nothing and leaves nothing half-made.
   const before = JSON.stringify(S.linkRows(c.links))
-  const undos = c.root.undoStack.length
+  const undos = c.doc.undoStack.length
   c.root.selectOnly(2)
   c.root.toggleLinking()
   c.root.selectedIndex = 0
@@ -1433,7 +1309,7 @@ console.log('ok — controller: a first board built only from names in the list'
   assert.equal(c.root.linkingFrom, -1, 'escape ends the gesture')
   assert.equal(c.root.linkOutcome, 'none', 'and promises nothing')
   assert.equal(JSON.stringify(S.linkRows(c.links)), before, 'the board is untouched')
-  assert.equal(c.root.undoStack.length, undos, 'and nothing was pushed to undo')
+  assert.equal(c.doc.undoStack.length, undos, 'and nothing was pushed to undo')
 
   // An end that cannot take one promises nothing, and pressing x there is not
   // taken as an answer to a question that was never asked.
@@ -1564,7 +1440,7 @@ console.log('ok — controller: what a connector gesture promises, and what it t
   c.root.report('Could not read the clipboard image', 'paste')
   assert.ok(c.root.failureVisible)
   for (const [set, unset] of [
-    [() => { c.root.opened = false }, () => { c.root.opened = true }],
+    [() => { c.workspace.opened = false }, () => { c.workspace.opened = true }],
     [() => { c.session.saveError = 'notes.json could not be written' }, () => { c.session.saveError = '' }],
     [() => { c.library.trashIndexError = 'x' }, () => { c.library.trashIndexError = '' }],
     [() => { c.session.conflict = true }, () => { c.session.conflict = false }],
@@ -1688,22 +1564,22 @@ console.log('ok — controller: a board opens clear of the header, and a reload 
 
 {
   const c = controller()
-  c.root.applyState('{"showGrid":false}')
+  c.workspace.applyState('{"showGrid":false}')
   assert.equal(c.root.showGrid, false, 'an existing plain background stays plain')
   assert.equal(c.root.canvasPattern, 'Dots', 'old state keeps the default pattern')
   for (const canvasPattern of ['Dots', 'Grid', 'Ruled']) {
-    c.root.applyPayload(JSON.stringify({settings: {showGrid: true, canvasPattern}}))
-    c.root.writeState()
+    c.workspace.applyPayload(JSON.stringify({settings: {showGrid: true, canvasPattern}}))
+    c.workspace.writeState()
     const saved = c.states.at(-1)
     assert.equal(JSON.parse(saved).canvasPattern, canvasPattern)
     const reopened = controller()
-    reopened.root.applyState(saved)
+    reopened.workspace.applyState(saved)
     assert.equal(reopened.root.canvasPattern, canvasPattern, 'keyboard opening retains the bar preference')
     assert.equal(reopened.root.showGrid, true)
   }
   for (const canvasPattern of ['unknown', '', null, 42, {}]) {
-    c.root.applyPayload(JSON.stringify({settings: {canvasPattern}}))
-    c.root.applyState(JSON.stringify({canvasPattern}))
+    c.workspace.applyPayload(JSON.stringify({settings: {canvasPattern}}))
+    c.workspace.applyState(JSON.stringify({canvasPattern}))
     assert.equal(c.root.canvasPattern, 'Ruled', 'invalid settings preserve the last valid pattern')
   }
 }
@@ -1716,28 +1592,101 @@ console.log('ok — controller: canvas pattern settings, old state and persisten
   c.root.runMenu(c.store.menuIndex('background'))
   assert.equal(c.root.menuVisible, false)
   assert.equal(c.root.paletteVisible, true)
-  assert.deepEqual(Array.from(c.root.paletteMatches, entry => entry.arg), ['Dots', 'Grid', 'Ruled', 'Plain'])
+  assert.equal(c.root.paletteGroup, 'canvas', 'the canvas family, pattern and colour')
+  assert.deepEqual(Array.from(c.root.paletteMatches, entry => entry.arg),
+    ['Dots', 'Grid', 'Ruled', 'Plain', 'Theme', 'Lighter', 'Darker', 'Paper', 'Ink'])
   for (const pattern of ['Grid', 'Ruled', 'Plain', 'Dots']) {
     c.root.chooseCanvasBackground()
     c.root.paletteIndex = c.root.paletteMatches.findIndex(entry => entry.arg === pattern)
     c.root.runPaletteChoice()
     assert.equal(c.root.paletteVisible, false)
     const reopened = controller()
-    reopened.root.applyState(c.states.at(-1))
+    reopened.workspace.applyState(c.states.at(-1))
     // Bar opening used to silently undo a choice by sending its defaults.
-    reopened.root.applyPayload('{"settings":{"showGrid":true,"canvasPattern":"Dots"}}')
+    reopened.workspace.applyPayload('{"settings":{"showGrid":true,"canvasPattern":"Dots"}}')
     assert.equal(reopened.root.showGrid, pattern !== 'Plain')
     if (pattern !== 'Plain') assert.equal(reopened.root.canvasPattern, pattern)
     reopened.root.chooseCanvasBackground()
     assert.equal(reopened.root.paletteMatches[reopened.root.paletteIndex].arg, pattern)
   }
   c.session.damaged = true
-  c.root.runCommand('Canvas background: Plain')
+  c.root.runCommand('Canvas pattern: Plain')
   assert.equal(c.root.showGrid, false, 'appearance works on read-only boards')
   assert.equal(c.writes.length, 0, 'appearance never writes the board')
-  assert.equal(c.root.undoStack.length, 0, 'appearance never consumes board undo')
+  assert.equal(c.doc.undoStack.length, 0, 'appearance never consumes board undo')
   const savedCount = c.states.length
   c.root.setCanvasBackground('invalid')
   assert.equal(c.states.length, savedCount)
 }
 console.log('ok — controller: in-board background choice survives bar opening and reload')
+
+{
+  // The canvas colour: a setting like the pattern, remembered, never part of
+  // a board, and nothing a read-only board refuses.
+  const c = controller()
+  c.session.loadBoard('{"version":5,"items":[]}', false)
+  assert.equal(c.workspace.canvasColour, 'Theme')
+  c.root.chooseCanvasBackground()
+  c.root.paletteIndex = c.root.paletteMatches.findIndex(entry => entry.name === 'Canvas colour: Paper')
+  c.root.runPaletteChoice()
+  assert.equal(c.root.paletteVisible, false)
+  assert.equal(c.workspace.canvasColour, 'Paper')
+  assert.match(c.root.statusText, /Canvas colour: Paper/)
+  assert.equal(JSON.parse(c.states.at(-1)).canvasColour, 'Paper')
+  const reopened = controller()
+  reopened.workspace.applyState(c.states.at(-1))
+  reopened.workspace.applyPayload('{"settings":{"showGrid":true,"canvasPattern":"Dots"}}')
+  assert.equal(reopened.workspace.canvasColour, 'Paper', 'kept across a restart and the bar opening it')
+  for (const colour of ['unknown', '', null, 42, 'paper']) {
+    reopened.workspace.applyState(JSON.stringify({ canvasColour: colour }))
+    assert.equal(reopened.workspace.canvasColour, 'Paper', 'a colour this does not know changes nothing')
+  }
+  const saved = c.states.length
+  c.root.setCanvasColour('Purple')
+  assert.equal(c.workspace.canvasColour, 'Paper')
+  assert.equal(c.states.length, saved, 'and is not written down')
+  c.session.damaged = true
+  c.root.runCommand('Canvas colour: Ink')
+  assert.equal(c.workspace.canvasColour, 'Ink', 'appearance works on read-only boards')
+  assert.equal(c.writes.length, 0, 'and never writes the board')
+  assert.equal(c.doc.undoStack.length, 0, 'or takes an undo step')
+}
+console.log('ok — controller: the canvas colour is a remembered setting, not part of a board')
+
+{
+  const c = controller()
+  c.root.addItem('note', 0, 0)
+  c.root.addItem('ellipse', 300, 0)
+  c.root.markedIds = [c.items.get(0).iid, c.items.get(1).iid]
+  c.root.beginSelectionActions()
+  c.root.paletteIndex = c.root.paletteMatches.findIndex(m => m.opens === 'texture')
+  assert.ok(c.root.paletteIndex >= 0)
+  c.root.runPaletteChoice()
+  assert.equal(c.root.paletteGroup, 'texture')
+  assert.equal(c.root.paletteMatches.length, 5)
+  c.root.paletteIndex = c.root.paletteMatches.findIndex(m => m.arg === 'grid')
+  c.root.runPaletteChoice()
+  assert.equal(c.items.get(0).itexture, 'grid')
+  assert.equal(c.items.get(1).itexture, 'grid')
+  const count = c.doc.undoStack.length
+  c.root.setTexture('grid')
+  assert.equal(c.doc.undoStack.length, count, 'no redundant undo')
+  c.root.undo()
+  assert.equal(c.items.get(0).itexture, 'plain')
+  c.root.redo()
+  c.root.duplicateTargets()
+  assert.equal(c.items.get(c.items.count - 1).itexture, 'grid')
+  c.root.selectedIndex = 0
+  c.root.markedIds = []
+  c.items.setProperty(0, 'kind', 'image')
+  c.root.setTexture('dots')
+  assert.equal(c.items.get(0).itexture, 'grid', 'image ignored')
+  c.items.setProperty(0, 'kind', 'note')
+  c.items.setProperty(0, 'ipinned', true)
+  c.root.setTexture('hatch')
+  assert.equal(c.items.get(0).itexture, 'hatch')
+  c.session.damaged = true
+  c.root.setTexture('dots')
+  assert.equal(c.items.get(0).itexture, 'hatch', 'read-only board unchanged')
+  console.log('ok — controller: texture group, multi-selection, undo, copy and read-only')
+}

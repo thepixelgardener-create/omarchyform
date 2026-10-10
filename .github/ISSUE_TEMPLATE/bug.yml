@@ -1,0 +1,40 @@
+name: Bug report
+description: Something does not work the way it should.
+title: "Bug: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please do not attach a board with private content. A small board that shows the problem helps more.
+        Security problems go through the private route in SECURITY.md, not here.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what you saw instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How can it be reproduced?
+      placeholder: |
+        1. Open a new board with ctrl+n
+        2. ...
+  - type: input
+    id: plugin-version
+    attributes:
+      label: Omarchyform version
+      description: The `version` in `~/.config/omarchy/plugins/thepixelgardener.omarchyform/manifest.json`.
+  - type: input
+    id: omarchy-version
+    attributes:
+      label: Omarchy version
+      description: The output of `omarchy-version`.
+  - type: textarea
+    id: log
+    attributes:
+      label: Shell log
+      description: If the board does not open or something fails, the end of `/run/user/$UID/quickshell/by-id/*/log.qslog`.
+      render: text

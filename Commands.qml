@@ -89,9 +89,12 @@ Item {
         objectName: "command-prompt"
         anchors.verticalCenter: parent.verticalCenter
         anchors.left: parent.left
+        anchors.right: parent.right
+        elide: Text.ElideRight
         anchors.leftMargin: typed.cursorRectangle.x + typed.cursorRectangle.width + panel.theme.sp(4)
         visible: typed.text === ""
-        text: panel.ctl.paletteScope === "typing" ? "Format the text…"
+        text: panel.ctl.paletteGroup !== "" ? Store.groupTitle(panel.ctl.paletteGroup) + " · backspace: back"
+          : panel.ctl.paletteScope === "typing" ? "Format the text…"
           : panel.ctl.paletteScope === "selection" ? "Do something with it…" : "Run a command…"
         color: panel.theme.panelText
         opacity: 0.58
@@ -276,7 +279,9 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             anchors.right: parent.right
             anchors.rightMargin: panel.theme.sp(8)
-            text: row.modelData.key
+            // A family's entry leads somewhere rather than doing something.
+            text: !row.modelData.opens ? row.modelData.key
+              : row.modelData.key === "" ? "›" : row.modelData.key + "  ›"
             color: row.current && row.ready ? panel.theme.cursorText : panel.theme.panelText
             opacity: !row.ready ? 0.4 : row.current ? 1.0 : 0.85
             font.family: panel.theme.menuFontFamily

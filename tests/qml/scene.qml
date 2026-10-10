@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import qs.Commons
 import "BoardStore.js" as Store
+import "BoardHistory.js" as History
 import "services" as Host
 
 // What the board costs to *draw*, which tests/bench.js does not measure and
@@ -17,6 +18,7 @@ ShellRoot {
   id: bench
 
   readonly property int size: parseInt(Quickshell.env("OMARCHYFORM_BENCH_ITEMS") || "1000")
+  readonly property bool textures: Quickshell.env("OMARCHYFORM_BENCH_TEXTURES") === "1"
   // Every phase is measured over the same number of frames, so the columns
   // compare with each other as well as with a previous run.
   readonly property int framesPerPhase: 60
@@ -36,16 +38,52 @@ ShellRoot {
       rows.push({
         id: i + 1, kind: i % 7 === 0 ? "ellipse" : i % 5 === 0 ? "rect" : "note",
         x: (i % columns) * 260, y: Math.floor(i / columns) * 200,
-        w: 180, h: 140, tint: "foreground", text: "note " + (i + 1)
+        w: 180, h: 140, tint: "foreground", text: "note " + (i + 1),
+        texture: bench.textures ? ["ruled", "grid", "dots", "hatch"][i % 4] : "plain"
       })
     }
     var links = []
     for (var j = 1; j < bench.size; j++) links.push({ from: j, to: j + 1 })
-    Store.fillItems(plugin.items, rows)
-    Store.fillLinks(plugin.links, plugin.items, links)
-    plugin.nextId = bench.size + 1
-    plugin.selectOnly(0)
-    plugin.resetView()
+    Store.fillItems(plugin.activePane.items, rows)
+    Store.fillLinks(plugin.activePane.links, plugin.activePane.items, links)
+    plugin.activePane.doc.nextId = bench.size + 1
+    plugin.activePane.selectOnly(0)
+    plugin.activePane.resetView()
+    bench.buildHistory()
+  }
+
+  // A history for the timeline phases, as the board would have recorded it:
+  // moves, the edit there is most of — 5,000 on a smaller board and 10,000 on
+  // one of 3,000 items, the fixtures docs/splitview-timeline-plan.md names.
+  // Each is made on the board as well, so the history ends where the board
+  // is, and the real worker reads and checks it like any board's.
+  function buildHistory() {
+    var p = plugin.activePane
+    var start = { items: Store.itemRows(p.items), links: Store.linkRows(p.links), nextId: p.doc.nextId }
+    var header = History.startText(start, Date.now() - 3600000, "bench")
+    var records = []
+    var seed = 1
+    var edits = bench.size >= 3000 ? 10000 : 5000
+    for (var i = 0; i < edits; i++) {
+      seed = (seed * 1103515245 + 12345) % 2147483648
+      var at = seed % bench.size
+      var row = p.items.get(at)
+      var x = row.ix + (seed >> 8) % 41 - 20, y = row.iy + (seed >> 4) % 41 - 20
+      p.items.setProperty(at, "ix", x)
+      p.items.setProperty(at, "iy", y)
+      records.push(JSON.stringify({ i: i + 1, t: i, a: "Move", p: { s: [[row.iid, { x: x, y: y }]] } }))
+    }
+    var board = JSON.stringify({ items: Store.itemRows(p.items), links: Store.linkRows(p.links), nextId: p.doc.nextId })
+    p.doc.adoptHistory(History.joinText(header, records.join(",")), board)
+  }
+
+  // A random step each frame: what scrubbing costs from being asked for a step
+  // to that step being drawn. The index is built before the clock starts.
+  function scrubbing() {
+    var p = plugin.activePane
+    var seed = (bench.seen * 7919 + 13) % 1000
+    p.scrubTo(seed / 1000)
+    p.scrubNow()
   }
 
   // Each phase leaves the board the way the next one wants it, then is
@@ -54,45 +92,72 @@ ShellRoot {
     { name: "idle", enter: function () {}, step: function () {} },
     {
       name: "pan",
-      enter: function () { plugin.resetView() },
-      step: function () { plugin.panBy(6, 2) }
+      enter: function () { plugin.activePane.resetView() },
+      step: function () { plugin.activePane.panBy(6, 2) }
     },
     {
       name: "zoom",
-      enter: function () { plugin.resetView() },
+      enter: function () { plugin.activePane.resetView() },
       // Back and forth, so it stays over the board rather than zooming out of
       // it and measuring an empty screen.
-      step: function () { plugin.zoomCentre(bench.seen % 40 < 20 ? 1.02 : 1 / 1.02) }
+      step: function () { plugin.activePane.zoomCentre(bench.seen % 40 < 20 ? 1.02 : 1 / 1.02) }
     },
     {
       name: "drag 1",
-      enter: function () { plugin.resetView(); plugin.selectOnly(0) },
-      step: function () { plugin.moveTargets(bench.seen % 2 ? 4 : -4, 2) }
+      enter: function () { plugin.activePane.resetView(); plugin.activePane.selectOnly(0) },
+      step: function () { plugin.activePane.moveTargets(bench.seen % 2 ? 4 : -4, 2) }
     },
     {
       name: "drag all",
-      enter: function () { plugin.resetView(); plugin.markAll() },
-      step: function () { plugin.moveTargets(bench.seen % 2 ? 4 : -4, 2) }
+      enter: function () { plugin.activePane.resetView(); plugin.activePane.markAll() },
+      step: function () { plugin.activePane.moveTargets(bench.seen % 2 ? 4 : -4, 2) }
     },
     {
       name: "mark",
-      enter: function () { plugin.markedIds = [] },
+      enter: function () { plugin.activePane.markedIds = [] },
       // Marking everything and dropping it again re-evaluates the marked
       // binding on every delegate, twice a cycle.
       step: function () {
-        if (bench.seen % 10 === 0) plugin.markAll()
-        else if (bench.seen % 10 === 5) plugin.markedIds = []
+        if (bench.seen % 10 === 0) plugin.activePane.markAll()
+        else if (bench.seen % 10 === 5) plugin.activePane.markedIds = []
       }
     },
     {
       name: "find",
-      enter: function () { plugin.markedIds = []; plugin.beginFind() },
+      enter: function () { plugin.activePane.markedIds = []; plugin.activePane.beginFind() },
       // A keystroke at a time, then back to nothing: every delegate re-runs
       // matchesFind on each one.
       step: function () {
         var q = ["n", "no", "not", "note"][Math.floor(Math.max(0, bench.seen) / 8) % 4]
-        if (plugin.findQuery !== q) { plugin.endFind(); plugin.beginFind(); plugin.setFindQuery(q) }
+        if (plugin.activePane.findQuery !== q) { plugin.activePane.endFind(); plugin.activePane.beginFind(); plugin.activePane.setFindQuery(q) }
       }
+    },
+    {
+      name: "scrub",
+      enter: function () {
+        var p = plugin.activePane
+        p.endFind()
+        p.resetView()
+        p.toggleTimeline()
+        while (p.doc.replay && !p.doc.replay.ix.done) p.doc.indexReplay()
+      },
+      step: function () { bench.scrubbing() }
+    },
+    {
+      name: "scrub, two panes",
+      enter: function () {
+        var p = plugin.activePane
+        p.leaveTimeline()
+        p.compareWithCurrent()
+        while (p.doc.replay && !p.doc.replay.ix.done) p.doc.indexReplay()
+      },
+      step: function () { bench.scrubbing() }
+    },
+    {
+      name: "play",
+      enter: function () { plugin.activePane.timelineFirst() },
+      // A step forward every frame, as playing at any speed is one step at a time.
+      step: function () { plugin.activePane.showRecord(plugin.activePane.timelineRecord + 1) }
     }
   ]
 
@@ -119,7 +184,7 @@ ShellRoot {
       console.log("BENCH items " + bench.size)
       // How much of the board was on screen decides what a frame cost, and
       // the window is whatever the compositor handed out.
-      console.log("BENCH window " + Math.round(plugin.viewW) + "x" + Math.round(plugin.viewH))
+      console.log("BENCH window " + Math.round(plugin.activePane.viewW) + "x" + Math.round(plugin.activePane.viewH))
       for (var i = 0; i < bench.report.length; i++) {
         var r = bench.report[i]
         console.log("BENCH " + r.name + "\t" + r.mean.toFixed(2) + "\t" + r.p95.toFixed(2))
@@ -164,13 +229,13 @@ ShellRoot {
       ticks += 1
       if (ticks > 400) { console.error("BENCH_TIMEOUT"); Qt.quit(); return }
       if (bench.phase !== -1) return
-      if (!plugin.boardLoaded) return
-      if (!plugin.activeBoard) {
+      if (!plugin.activePane.boardLoaded) return
+      if (!plugin.activePane.activeBoard) {
         plugin.windowMode = true
         plugin.open("{}")
         return
       }
-      if (plugin.items.count === 0) { bench.build(); return }
+      if (plugin.activePane.items.count === 0) { bench.build(); return }
       running = false
       bench.advance()
     }

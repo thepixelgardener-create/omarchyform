@@ -22,30 +22,30 @@ ShellRoot {
     running: true
     onTriggered: {
       test.check(++test.ticks < 550, "paste completed at stage " + test.stage)
-      if (test.stage === 0 && plugin.boardLoaded) {
+      if (test.stage === 0 && plugin.activePane.boardLoaded) {
         plugin.windowMode = true
         plugin.open("{}")
         test.stage = 1
-      } else if (test.stage === 1 && plugin.activeBoard) {
-        plugin.pasteClipboard()
+      } else if (test.stage === 1 && plugin.activePane.activeBoard) {
+        plugin.activePane.pasteClipboard()
         test.stage = 2
-      } else if (test.stage === 2 && plugin.items.count === 1) {
-        test.check(plugin.items.get(0).kind === "image", "paste creates an image")
-        test.check(plugin.imageQueue.length === 0, "image probe completes")
-        test.check(plugin.items.get(0).iw === 60 && plugin.items.get(0).ih === 60,
+      } else if (test.stage === 2 && plugin.activePane.items.count === 1) {
+        test.check(plugin.activePane.items.get(0).kind === "image", "paste creates an image")
+        test.check(plugin.activePane.imageQueue.length === 0, "image probe completes")
+        test.check(plugin.activePane.items.get(0).iw === 60 && plugin.activePane.items.get(0).ih === 60,
                    "uses decoded dimensions with minimum size")
-        plugin.pasteClipboard()
+        plugin.activePane.pasteClipboard()
         test.stage = 3
-      } else if (test.stage === 3 && plugin.items.count === 2) {
-        test.check(plugin.items.get(0).isrc !== plugin.items.get(1).isrc, "repeat paste has its own file")
-        plugin.undo()
-        test.check(plugin.items.count === 1, "undo removes one paste")
-        plugin.redo()
-        test.check(plugin.items.count === 2, "redo restores paste")
-        plugin.flushSave()
+      } else if (test.stage === 3 && plugin.activePane.items.count === 2) {
+        test.check(plugin.activePane.items.get(0).isrc !== plugin.activePane.items.get(1).isrc, "repeat paste has its own file")
+        plugin.activePane.undo()
+        test.check(plugin.activePane.items.count === 1, "undo removes one paste")
+        plugin.activePane.redo()
+        test.check(plugin.activePane.items.count === 2, "redo restores paste")
+        plugin.activePane.flushSave()
         test.stage = 4
-      } else if (test.stage === 4 && plugin.boardState === "Saved locally") {
-        disk.path = plugin.boardsDir + "/" + plugin.currentBoard
+      } else if (test.stage === 4 && plugin.activePane.boardState === "Saved locally") {
+        disk.path = plugin.boardsDir + "/" + plugin.activePane.currentBoard
         disk.reload()
         disk.waitForJob()
         var saved = JSON.parse(disk.text())
@@ -58,13 +58,13 @@ ShellRoot {
         marker.path = Quickshell.env("OMARCHYFORM_TEST_DIR") + "/no-clipboard"
         marker.setText("x")
         marker.waitForJob()
-        plugin.statusText = ""
-        plugin.pasteClipboard()
+        plugin.activePane.statusText = ""
+        plugin.activePane.pasteClipboard()
         test.stage = 5
-      } else if (test.stage === 5 && plugin.failureText !== "") {
-        test.check(plugin.failureKind === "paste",
-                   "a clipboard with nothing to give is a failure to paste: " + plugin.failureKind)
-        test.check(plugin.items.count === 2, "and nothing was added")
+      } else if (test.stage === 5 && plugin.activePane.failureText !== "") {
+        test.check(plugin.activePane.failureKind === "paste",
+                   "a clipboard with nothing to give is a failure to paste: " + plugin.activePane.failureKind)
+        test.check(plugin.activePane.items.count === 2, "and nothing was added")
         // It is a failure, not an acknowledgement: it went to the line that
         // waits rather than the one that fades, and a gesture started
         // afterwards does not take it down.
@@ -73,47 +73,47 @@ ShellRoot {
         // empty. A flash from something earlier can still be inside its two and
         // a half seconds, which has nothing to do with the claim and made this
         // fail about one run in five.
-        test.check(plugin.statusText.indexOf(plugin.failureText) < 0,
-                   "the failure did not also arrive as a flash: " + plugin.statusText)
-        plugin.selectOnly(0)
-        plugin.toggleLinking()
-        test.check(plugin.failureText !== "", "starting a connector leaves it alone")
-        plugin.back()
+        test.check(plugin.activePane.statusText.indexOf(plugin.activePane.failureText) < 0,
+                   "the failure did not also arrive as a flash: " + plugin.activePane.statusText)
+        plugin.activePane.selectOnly(0)
+        plugin.activePane.toggleLinking()
+        test.check(plugin.activePane.failureText !== "", "starting a connector leaves it alone")
+        plugin.activePane.back()
         // Only the same operation working says it recovered.
-        plugin.flash("PNG saved · full board, without controls", "png")
-        test.check(plugin.failureText !== "", "another operation working says nothing about it")
+        plugin.activePane.flash("PNG saved · full board, without controls", "png")
+        test.check(plugin.activePane.failureText !== "", "another operation working says nothing about it")
         plugin.close()
-        plugin.report("Failure received while closed", "paste")
+        plugin.activePane.report("Failure received while closed", "paste")
         test.closedAt = test.ticks
         test.stage = 6
       } else if (test.stage === 6 && test.ticks - test.closedAt > 140) {
         test.check(!plugin.opened, "board stayed closed for seven seconds")
-        test.check(plugin.failureText === "Failure received while closed",
+        test.check(plugin.activePane.failureText === "Failure received while closed",
                    "reporting while closed did not start the expiry timer")
         plugin.open("{}")
         test.stage = 7
-      } else if (test.stage === 7 && plugin.activeBoard) {
-        test.check(plugin.failureVisible, "reopening shows the retained failure")
+      } else if (test.stage === 7 && plugin.activePane.activeBoard) {
+        test.check(plugin.activePane.failureVisible, "reopening shows the retained failure")
         // Copying out is its own operation: it cannot answer for pasting.
-        plugin.flash("Copied", "copy")
-        test.check(plugin.failureText !== "", "a copy working says nothing about a paste")
-        plugin.flash("Text pasted · enter to edit", "paste")
-        test.check(plugin.failureText === "", "the paste answering does")
-        plugin.report("First visible failure", "paste")
+        plugin.activePane.flash("Copied", "copy")
+        test.check(plugin.activePane.failureText !== "", "a copy working says nothing about a paste")
+        plugin.activePane.flash("Text pasted · enter to edit", "paste")
+        test.check(plugin.activePane.failureText === "", "the paste answering does")
+        plugin.activePane.report("First visible failure", "paste")
         test.reportedAt = Date.now()
         test.stage = 8
       } else if (test.stage === 8 && Date.now() - test.reportedAt >= 5000) {
-        plugin.report("Second visible failure", "png")
+        plugin.activePane.report("Second visible failure", "png")
         test.reportedAt = Date.now()
         test.stage = 9
       } else if (test.stage === 9 && Date.now() - test.reportedAt >= 1500) {
         // The first message's six-second deadline has passed. A replacement
         // must still have its own time on screen, not the old timer's remainder.
-        test.check(plugin.failureText === "Second visible failure",
+        test.check(plugin.activePane.failureText === "Second visible failure",
                    "a replacement gets a fresh display interval")
         test.stage = 10
       } else if (test.stage === 10 && Date.now() - test.reportedAt >= 6500) {
-        test.check(plugin.failureText === "", "the replacement eventually expires")
+        test.check(plugin.activePane.failureText === "", "the replacement eventually expires")
         console.log("OMARCHY_TESTS_PASSED")
         Qt.quit()
       }

@@ -23,257 +23,10 @@ TestCase {
   width: 800
   height: 600
 
-  Item {
+  PaneStub {
     id: ctl
-
-    // ---- the camera, which is what a pan is allowed to touch
-    property real camX: 0
-    property real camY: 0
-    property real zoom: 1
-    property real viewW: test.width
-    property real viewH: test.height
-    function panBy(dx, dy) { ctl.camX += dx; ctl.camY += dy }
-    function zoomAt(sx, sy, factor) {
-      var next = Math.max(0.2, Math.min(4, ctl.zoom * factor))
-      if (next === ctl.zoom) return
-      var wx = ctl.toWorldX(sx), wy = ctl.toWorldY(sy)
-      ctl.zoom = next
-      ctl.camX = sx - wx * ctl.zoom
-      ctl.camY = sy - wy * ctl.zoom
-    }
-    function toWorldX(sx) { return (sx - ctl.camX) / ctl.zoom }
-    function toWorldY(sy) { return (sy - ctl.camY) / ctl.zoom }
-    function toScreenX(wx) { return wx * ctl.zoom + ctl.camX }
-    function toScreenY(wy) { return wy * ctl.zoom + ctl.camY }
-
-    // ---- what is on the board, and what has been done to it
-    property alias items: itemModel
-    property alias links: linkModel
-    property int selectedIndex: -1
-    property int editIndex: -1
-    property int linkingFrom: -1
-    property string linkOutcome: "none"
-    property var markedRect: null
-    property int undoCount: 0
-    property int saveCount: 0
-    property int removeCount: 0
-    property int minItemSize: 60
-    property bool culling: false
-    // The same shape the controller builds, because the board asks one question
-    // of BoardStore rather than deciding the line twice.
-    function statusState() {
-      return {
-        opened: true, helpVisible: ctl.helpVisible, browserVisible: ctl.library.showing,
-        finding: ctl.finding, saveError: ctl.saveError, trashIndexError: ctl.library.trashIndexError,
-        diskChanged: ctl.diskChanged, damaged: ctl.damaged, failureText: ctl.failureText,
-        paletteVisible: ctl.paletteVisible, arranging: ctl.arranging,
-        showPinned: ctl.showPinned, editing: ctl.editIndex >= 0,
-        linking: ctl.linkingFrom >= 0, statusText: ctl.statusText,
-        switching: ctl.pendingBoard !== null, saving: ctl.saving
-      }
-    }
-    function isMarked(id) { return false }
-    function matchesFind(text) { return false }
-    // A two-pixel red PNG, inline: a real decode with no file to create, so an
-    // image on this board is an image rather than an empty frame standing in
-    // for one. The same picture tst_node uses.
-    readonly property string redPixels: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP4z8AARAwQCgAf7gP9i18U1AAAAABJRU5ErkJggg=="
-    function imagePath(name) { return name === "" ? "" : ctl.redPixels }
-    function pointerSelect(index, additive) { ctl.selectedIndex = index; ctl.editIndex = -1 }
-    function selectOnly(index) { ctl.selectedIndex = index }
-    function markInRect(x0, y0, x1, y1, additive) { ctl.markedRect = [x0, y0, x1, y1] }
-    function moveTargets(dx, dy) {
-      var i = Math.max(0, ctl.selectedIndex)
-      itemModel.setProperty(i, "ix", itemModel.get(i).ix + dx)
-      itemModel.setProperty(i, "iy", itemModel.get(i).iy + dy)
-    }
-    function resizeTargets(dx, dy) {
-      var i = Math.max(0, ctl.selectedIndex)
-      itemModel.setProperty(i, "iw", Math.max(ctl.minItemSize, itemModel.get(i).iw + dx))
-      itemModel.setProperty(i, "ih", Math.max(ctl.minItemSize, itemModel.get(i).ih + dy))
-    }
-    // What a picture would be framed around, and what it would be drawn in.
-    property string pngPalette: "theme"
-    function targets() { return ctl.selectedIndex >= 0 ? [ctl.selectedIndex] : [] }
-    function removeTargets() { ctl.removeCount++ }
-    function pushUndo() { ctl.undoCount++ }
-    function save(quiet) { ctl.saveCount++ }
-    function scheduleSave() { ctl.saveCount++ }
-    function flushSave() {}
-    function beginTextPalette(editor) {}
-    function stopEditing() { ctl.editIndex = -1 }
-    function editSelected() { ctl.editIndex = ctl.selectedIndex }
-    function addItem(kind, x, y) {
-      itemModel.append({ iid: itemModel.count + 100, kind: kind, ix: x, iy: y, iw: 160, ih: 120,
-                         itint: "foreground", itext: "", ipinned: false, isrc: "" })
-    }
-
-    // ---- the board's own state, and the panels that read it
-    property bool canEdit: true
-    property bool boardLoaded: true
-    property bool damaged: false
-    property string damageReason: ""
-    property var pendingBoard: null
-    property bool saving: false
-    property string saveError: ""
-    property bool diskChanged: false
-    property string statusText: ""
-    property string failureText: ""
-    property string boardTitle: "notes"
-    property string boardState: "Saved locally"
-    property string currentBoard: "notes.json"
-    property string dataDir: "/tmp"
-    property string accentMarkup: "#00ffff"
-    property bool showGrid: true
-    property string canvasPattern: "Dots"
-    property bool showPinned: false
-    property bool finding: false
-    property string findQuery: ""
-    property int findCount: 0
-    property bool findDimming: false
-    property bool arranging: false
-    property bool helpVisible: false
-    property bool imageBusy: false
-    property var activeBoard: null
-
-    property bool menuVisible: false
-    property bool zoomMenuVisible: false
-    property int menuIndex: 0
-    property string paletteScope: "all"
-    property bool paletteVisible: false
-    property string paletteQuery: ""
-    property int paletteIndex: 0
-    property int paletteRows: 9
-    readonly property var paletteMatches: Store.matchCommands(ctl.paletteQuery)
-    function commandReady(needs) { return true }
-    function commandExcuse(needs) { return "" }
-    function setPaletteQuery(text) { ctl.paletteQuery = text }
-    function runPaletteChoice() {}
-    function beginPalette() {}
-    function endPalette() {}
-    function movePalette(step) {}
-    property bool conflictVisible: false
-    property int conflictIndex: 0
-    function runConflictChoice() {}
-    function endConflictChoice() {}
-    function moveConflict(step) {}
-
-    // Shaped like BoardLibrary.qml, for the browser the board carries.
-    property QtObject library: QtObject {
-      id: libraryStub
-      property bool showing: false
-      property bool searching: false
-      property string query: ""
-      property string promptLabel: ""
-      property string input: ""
-      property string trashIndexError: ""
-      property string message: ""
-      property string dir: ""
-      property string currentBoard: ""
-      property var rows: []
-      property int index: 0
-      property bool inTrash: false
-      function enter() {}
-      function key(event) {}
-      function hide() { libraryStub.showing = false }
-    }
-    function openBrowser() {}
-
-    // ---- everything a keystroke reaches, present and inert: this suite is
-    // about the pointer, and a missing one is a TypeError rather than a
-    // failure that says so.
-    function addRelative(kind) {}
-    function alignTargets(edge) {}
-    function spreadTargets(axis) {}
-    function beginArrange() {}
-    function cancelArrange() {}
-    function beginFind() {}
-    function endFind() {}
-    function nextMatch() {}
-    function setFindQuery(text) {}
-    function beginSelectionActions() { ctl.actionsOpened++ }
-    property int actionsOpened: 0
-    function back() {}
-    function choosePng() {}
-    function copySelection() {}
-    function cycleKind() {}
-    function dropFiles(urls, x, y) {}
-    function duplicateTargets() {}
-    function exportBoard() {}
-    function finishPng(path) {}
-    function fitToItems() {}
-    function flash(text) { ctl.statusText = text }
-    function focusKeys() { if (ctl.activeBoard) ctl.activeBoard.focusKeys() }
-    function importBoard() {}
-    function layerTargets(where) {}
-    function markAll() {}
-    function move(dx, dy, carry) {}
-    function moveMenu(step) {}
-    function newBoard() {}
-    function pasteClipboard() {}
-    function pasteImage(name, w, h) {}
-    function recolorItem() {}
-    function redo() {}
-    function renameBoard() {}
-    function repaintLinks() {}
-    function resetView() {}
-    function resizeSelected(dx, dy) {}
-    function runMenu(index) {}
-    function selectNext(step) {}
-    function toggleHelp() {}
-    function toggleLinking() {}
-    function toggleMark() {}
-    function toggleMenu() {}
-    function togglePin() {}
-    function togglePinnedSelection() {}
-    function toggleWindowMode() {}
-    function undo() {}
-    function unlinkSelected() {}
-    function zoomCentre(factor) {}
-
-    property QtObject theme: QtObject {
-      property color canvasBackground: "#101315"
-      property color foreground: "#cccccc"
-      property color barBackground: "#161b22"
-      property color barForeground: "#e6e6e6"
-      property color accent: "cyan"
-      property color urgent: "red"
-      property color muted: "gray"
-      property color dotColor: "#202020"
-      property color panelBackground: "#101315"
-      property color panelText: "#cccccc"
-      property color panelScrim: "#80101315"
-      property color cursorFill: "#14cccccc"
-      property color cursorText: "cyan"
-      property var panelBorder: ({ color: "#cccccc", widths: { top: 2, right: 2, bottom: 2, left: 2 },
-                                   gradient: { colors: [], angle: 0, enabled: false } })
-      property var cursorBorder: ({ color: "transparent", widths: { top: 0, right: 0, bottom: 0, left: 0 },
-                                    gradient: { colors: [], angle: 0, enabled: false } })
-      // The shell's button fills, its section label and glyph sizes, and the
-      // menu's family.
-      property color controlFill: "#0acccccc"
-      property color hoverFill: "#14cccccc"
-      property string menuFontFamily: "monospace"
-      property int fontCaption: 10
-      property int fontIcon: 18
-      property string fontFamily: "monospace"
-      // Not readonly: one test below turns the text up to what a theme with
-      // large type does in a small window, which is where a hint that does
-      // not wrap covers the board instead of describing it.
-      property int fontBody: 12
-      property int fontSubtitle: 13
-      property int fontHeading: 18
-      property int borderWidth: 1
-      property int cornerRadius: 0
-      readonly property var markupColors: ({ foreground: "#cccccc", accent: "#00ffff",
-                                             urgent: "#ff5555", muted: "#888888" })
-      function sp(n) { return n }
-      function tintFill(tint, strong) { return "#181818" }
-      function tintBorder(tint, strong) { return "#cccccc" }
-    }
-
-    ListModel { id: itemModel }
-    ListModel { id: linkModel }
+    viewW: test.width
+    viewH: test.height
   }
 
   // Sized rather than anchored, so a test can shrink it to the window a small
@@ -285,18 +38,42 @@ TestCase {
     height: test.height
   }
 
+  function test_keyGestureEndsOnReleaseAndFocusLoss() {
+    surface.focusKeys()
+    keyPress(Qt.Key_Right, Qt.ShiftModifier)
+    var before = ctl.keyEnds
+    keyRelease(Qt.Key_Right, Qt.ShiftModifier)
+    verify(ctl.keyEnds > before, "direction and modifier releases end the held gesture")
+    keyPress(Qt.Key_Right, Qt.ShiftModifier)
+    before = ctl.keyEnds
+    test.forceActiveFocus()
+    compare(ctl.keyEnds, before + 1, "losing keyboard focus ends the gesture")
+    keyRelease(Qt.Key_Right, Qt.ShiftModifier)
+  }
+
+  function test_escapeCancelsOnlyThePointerGesture() {
+    surface.focusKeys()
+    ctl.beginPointerEdit("Move")
+    var before = ctl.backs
+    keyClick(Qt.Key_Escape)
+    compare(ctl.pointerEdit, null, "Escape cancels the active gesture")
+    compare(ctl.backs, before, "the same Escape does not dismiss the board")
+    keyClick(Qt.Key_Escape)
+    compare(ctl.backs, before + 1, "a subsequent Escape resumes normal navigation")
+  }
+
   // A note, a shape pinned as a background and a picture, and a camera at rest.
   // They sit well below the header, so a press on one is a press on the canvas
   // rather than on the chrome.
   function init() {
-    itemModel.clear()
-    linkModel.clear()
-    itemModel.append({ iid: 1, kind: "note", ix: 100, iy: 200, iw: 200, ih: 150,
-                       itint: "foreground", itext: "hello", ipinned: false, isrc: "" })
-    itemModel.append({ iid: 2, kind: "rect", ix: 420, iy: 200, iw: 200, ih: 150,
-                       itint: "foreground", itext: "", ipinned: true, isrc: "" })
-    itemModel.append({ iid: 3, kind: "image", ix: 100, iy: 400, iw: 160, ih: 120,
-                       itint: "foreground", itext: "", ipinned: false, isrc: "red.png" })
+    ctl.items.clear()
+    ctl.links.clear()
+    ctl.items.append({ iid: 1, kind: "note", ix: 100, iy: 200, iw: 200, ih: 150,
+                       itint: "foreground", itexture: "plain", itext: "hello", ipinned: false, isrc: "" })
+    ctl.items.append({ iid: 2, kind: "rect", ix: 420, iy: 200, iw: 200, ih: 150,
+                       itint: "foreground", itexture: "plain", itext: "", ipinned: true, isrc: "" })
+    ctl.items.append({ iid: 3, kind: "image", ix: 100, iy: 400, iw: 160, ih: 120,
+                       itint: "foreground", itexture: "plain", itext: "", ipinned: false, isrc: "red.png" })
     ctl.camX = 0
     ctl.camY = 0
     ctl.zoom = 1
@@ -308,6 +85,8 @@ TestCase {
     ctl.showPinned = false
     ctl.helpVisible = false
     ctl.paletteVisible = false
+    ctl.paletteGroup = ""
+    ctl.paletteQuery = ""
     ctl.library.showing = false
     ctl.menuVisible = false
     ctl.undoCount = 0
@@ -333,7 +112,7 @@ TestCase {
 
   // A point inside the first item, in screen coordinates.
   function onTheNote() {
-    return [ctl.toScreenX(itemModel.get(0).ix + 60), ctl.toScreenY(itemModel.get(0).iy + 60)]
+    return [ctl.toScreenX(ctl.items.get(0).ix + 60), ctl.toScreenY(ctl.items.get(0).iy + 60)]
   }
 
   function drag(button, x, y, dx, dy) {
@@ -347,14 +126,55 @@ TestCase {
 
   function geometry() {
     var out = []
-    for (var i = 0; i < itemModel.count; i++) {
-      var n = itemModel.get(i)
+    for (var i = 0; i < ctl.items.count; i++) {
+      var n = ctl.items.get(i)
       out.push([n.ix, n.iy, n.iw, n.ih, n.itext])
     }
     return JSON.stringify(out)
   }
 
   // ------------------------------------------------------------------ panning
+
+  // The connectors' id index is kept between paints, and rebuilt when rows
+  // move, go or arrive.
+  function test_groupBackspaceKeepsTypingAndReturnsWhenEmpty() {
+    ctl.paletteGroup = "canvas"
+    ctl.paletteVisible = true
+    var field = findChild(surface, "command-query")
+    tryCompare(field, "activeFocus", true)
+    keyClick("I")
+    keyClick("n")
+    keyClick("k")
+    compare(ctl.paletteQuery, "Ink")
+    keyClick(Qt.Key_Backspace)
+    compare(ctl.paletteQuery, "In")
+    compare(ctl.paletteGroup, "canvas")
+    keyClick(Qt.Key_Backspace)
+    keyClick(Qt.Key_Backspace)
+    compare(ctl.paletteQuery, "")
+    keyClick(Qt.Key_Backspace)
+    compare(ctl.paletteGroup, "")
+    verify(ctl.paletteVisible)
+    keyClick(Qt.Key_Escape)
+    verify(!ctl.paletteVisible)
+  }
+
+  function test_connectorIndexFollowsModelRows() {
+    surface.repaintLinks()
+    tryCompare(surface, "linkIndexDirty", false)
+    compare(surface.linkIndex[1], 0)
+    ctl.items.move(0, 2, 1)
+    tryCompare(surface, "linkIndexDirty", false)
+    compare(surface.linkIndex[1], 2)
+    ctl.items.remove(0)
+    tryCompare(surface, "linkIndexDirty", false)
+    compare(surface.linkIndex[1], 1)
+    compare(surface.linkIndex[2], undefined)
+    ctl.items.append({ iid: 9, kind: "rect", ix: 600, iy: 200, iw: 100, ih: 100,
+      itint: "foreground", itexture: "plain", itext: "", ipinned: false, isrc: "" })
+    tryCompare(surface, "linkIndexDirty", false)
+    compare(surface.linkIndex[9], 2)
+  }
 
   // The displacement is the pointer's, in screen pixels, wherever it started.
   function test_middleDragPansFromAnywhere_data() {
@@ -381,8 +201,8 @@ TestCase {
       : row.where === "image" ? [ctl.toScreenX(180), ctl.toScreenY(460)]
       : row.where === "pinned" || row.where === "pinnedMode"
         ? [ctl.toScreenX(480), ctl.toScreenY(260)]
-      : [ctl.toScreenX(itemModel.get(0).ix + itemModel.get(0).iw - 8),
-         ctl.toScreenY(itemModel.get(0).iy + itemModel.get(0).ih - 8)]
+      : [ctl.toScreenX(ctl.items.get(0).ix + ctl.items.get(0).iw - 8),
+         ctl.toScreenY(ctl.items.get(0).iy + ctl.items.get(0).ih - 8)]
     var before = geometry()
 
     drag(Qt.MiddleButton, at[0], at[1], 60, -40)
@@ -409,8 +229,8 @@ TestCase {
     // screen, so the same press is on the note at 25% as at 400%. A note is
     // 200x150, which is 50x37 on screen at the smallest of these.
     ctl.zoom = row.zoom
-    ctl.camX = 250 - itemModel.get(0).ix * row.zoom
-    ctl.camY = 300 - itemModel.get(0).iy * row.zoom
+    ctl.camX = 250 - ctl.items.get(0).ix * row.zoom
+    ctl.camY = 300 - ctl.items.get(0).iy * row.zoom
     wait(0)
     var at = [270, 320]
     verify(at[1] > surface.headerHeight, "clear of the header at " + row.tag)
@@ -436,7 +256,7 @@ TestCase {
 
     mouseClick(surface, at[0], at[1], Qt.MiddleButton)
 
-    compare(itemModel.count, 3, "the item is still there")
+    compare(ctl.items.count, 3, "the item is still there")
     compare(geometry(), before, "unchanged")
     compare(ctl.camX, 0, "the camera did not move either")
     compare(ctl.camY, 0)
@@ -462,7 +282,7 @@ TestCase {
 
     compare(ctl.camX, 35, "the board moved")
     compare(ctl.camY, 25)
-    compare(itemModel.get(0).itext, "hello", "and nothing was pasted into the note")
+    compare(ctl.items.get(0).itext, "hello", "and nothing was pasted into the note")
     compare(ctl.editIndex, 0, "which is still being typed in")
     compare(ctl.saveCount, 0, "and was not written to")
   }
@@ -473,8 +293,8 @@ TestCase {
     var at = onTheNote()
     drag(Qt.LeftButton, at[0], at[1], 40, 20)
     compare(ctl.selectedIndex, 0, "pressing on it selects it")
-    compare(itemModel.get(0).ix, 140, "and dragging moves it")
-    compare(itemModel.get(0).iy, 220)
+    compare(ctl.items.get(0).ix, 140, "and dragging moves it")
+    compare(ctl.items.get(0).iy, 220)
     compare(ctl.undoCount, 1, "once, for the whole drag")
     compare(ctl.camX, 0, "and the camera stayed put")
     compare(ctl.camY, 0)
@@ -489,10 +309,10 @@ TestCase {
   function test_resizeGripStillResizes() {
     ctl.selectOnly(0)
     wait(0)
-    var n = itemModel.get(0)
+    var n = ctl.items.get(0)
     drag(Qt.LeftButton, ctl.toScreenX(n.ix + n.iw - 8), ctl.toScreenY(n.iy + n.ih - 8), 40, 30)
-    compare(itemModel.get(0).iw, 240, "wider")
-    compare(itemModel.get(0).ih, 180, "and taller")
+    compare(ctl.items.get(0).iw, 240, "wider")
+    compare(ctl.items.get(0).ih, 180, "and taller")
     compare(ctl.camX, 0, "without moving the camera")
   }
 
@@ -519,7 +339,7 @@ TestCase {
 
   function test_doubleClickOnCanvasStillLeavesANote() {
     mouseDoubleClickSequence(surface, 700, 520, Qt.LeftButton)
-    compare(itemModel.count, 4, "a new note")
+    compare(ctl.items.count, 4, "a new note")
   }
 
   // Two middle clicks in the same place, inside the interval that makes a
@@ -538,7 +358,7 @@ TestCase {
     var at = row.x < 0 ? onTheNote() : [row.x, row.y]
     var before = geometry()
     mouseDoubleClickSequence(surface, at[0], at[1], Qt.MiddleButton)
-    compare(itemModel.count, 3, "nothing was added " + row.tag)
+    compare(ctl.items.count, 3, "nothing was added " + row.tag)
     compare(geometry(), before, "and nothing already there changed")
     compare(ctl.editIndex, -1, "nothing was opened for typing")
     compare(ctl.undoCount, 0, "and there is nothing to undo")
@@ -556,7 +376,7 @@ TestCase {
     compare(ctl.editIndex, 0, "and the note is still being typed in")
 
     keyClick(Qt.Key_Z)
-    compare(itemModel.get(0).itext, "helloz", "and the keyboard still reaches it")
+    compare(ctl.items.get(0).itext, "helloz", "and the keyboard still reaches it")
   }
 
   // The windowed mode is a smaller surface, not a different one. This is the
@@ -574,10 +394,10 @@ TestCase {
     compare(ctl.camY, 25)
     compare(ctl.selectedIndex, -1, "without touching the selection")
 
-    var was = itemModel.get(0).ix
+    var was = ctl.items.get(0).ix
     at = onTheNote()
     drag(Qt.LeftButton, at[0], at[1], 30, 0)
-    compare(itemModel.get(0).ix, was + 30, "and a left drag still moves an item")
+    compare(ctl.items.get(0).ix, was + 30, "and a left drag still moves an item")
 
     at = onTheNote()
     mouseWheel(surface, at[0], at[1], 0, 120)
@@ -905,7 +725,7 @@ TestCase {
   }
 
   function test_canvasPatterns(row) {
-    itemModel.clear()
+    ctl.items.clear()
     ctl.canvasPattern = row.pattern
     ctl.zoom = row.zoom
     var step = 40 * row.zoom
@@ -929,7 +749,7 @@ TestCase {
   }
 
   function test_patternVisibilityAndTheme() {
-    itemModel.clear()
+    ctl.items.clear()
     ctl.showGrid = false
     ctl.canvasPattern = "Grid"
     tryVerify(function () { return grabImage(surface).pixel(360, 340) === ctl.theme.canvasBackground })
@@ -952,23 +772,23 @@ TestCase {
   // drawn on top, since the stand-in draws every picture red and every note in
   // the same dark fill.
   function test_theItemOnTopIsTheOneTheBoardSaysIsOnTop() {
-    itemModel.clear()
-    itemModel.append({ iid: 1, kind: "rect", ix: 60, iy: 180, iw: 420, ih: 300,
-                       itint: "foreground", itext: "", ipinned: true, isrc: "" })
-    itemModel.append({ iid: 2, kind: "image", ix: 100, iy: 220, iw: 200, ih: 150,
-                       itint: "foreground", itext: "", ipinned: false, isrc: "red.png" })
-    itemModel.append({ iid: 3, kind: "note", ix: 200, iy: 280, iw: 200, ih: 150,
-                       itint: "foreground", itext: "", ipinned: false, isrc: "" })
+    ctl.items.clear()
+    ctl.items.append({ iid: 1, kind: "rect", ix: 60, iy: 180, iw: 420, ih: 300,
+                       itint: "foreground", itexture: "plain", itext: "", ipinned: true, isrc: "" })
+    ctl.items.append({ iid: 2, kind: "image", ix: 100, iy: 220, iw: 200, ih: 150,
+                       itint: "foreground", itexture: "plain", itext: "", ipinned: false, isrc: "red.png" })
+    ctl.items.append({ iid: 3, kind: "note", ix: 200, iy: 280, iw: 200, ih: 150,
+                       itint: "foreground", itexture: "plain", itext: "", ipinned: false, isrc: "" })
     var red = Qt.rgba(1, 0, 0, 1)
     // Where only the picture is, so the wait is for the picture and nothing else.
     tryVerify(function () { return grabImage(surface).pixel(150, 300) === red }, 2000, "the picture arrived")
     function pictureOnTop() { return grabImage(surface).pixel(240, 330) === red }
 
     verify(!pictureOnTop(), "the note, last on the board, is drawn over the picture")
-    itemModel.move(2, 1, 1)
+    ctl.items.move(2, 1, 1)
     wait(0)
     verify(pictureOnTop(), "sent back one, the note goes under the picture")
-    itemModel.move(1, 2, 1)
+    ctl.items.move(1, 2, 1)
     wait(0)
     verify(!pictureOnTop(), "brought forward again, it comes back over it")
   }
@@ -990,8 +810,8 @@ TestCase {
   }
   function test_eachItemSitsInItsLayerInBoardOrder(row) {
     function check(when) {
-      for (var i = 0; i < itemModel.count; i++) {
-        var item = itemModel.get(i)
+      for (var i = 0; i < ctl.items.count; i++) {
+        var item = ctl.items.get(i)
         var node = findChild(surface, "board-item-" + item.iid)
         verify(node, when + ": item " + item.iid + " is drawn")
         compare(node.parent.objectName, item.ipinned ? "background-world" : "foreground-world",
@@ -999,16 +819,16 @@ TestCase {
         compare(node.z, i, when + ": item " + item.iid + " stands where the board puts it")
       }
     }
-    itemModel.clear()
+    ctl.items.clear()
     for (var i = 0; i < row.pins.length; i++)
-      itemModel.append({ iid: i + 1, kind: "rect", ix: 60 + i * 30, iy: 200, iw: 100, ih: 100,
-                         itint: "foreground", itext: "", ipinned: row.pins[i], isrc: "" })
+      ctl.items.append({ iid: i + 1, kind: "rect", ix: 60 + i * 30, iy: 200, iw: 100, ih: 100,
+                         itint: "foreground", itexture: "plain", itext: "", ipinned: row.pins[i], isrc: "" })
     wait(0)
     check("loaded")
-    itemModel.setProperty(2, "ipinned", !itemModel.get(2).ipinned)
+    ctl.items.setProperty(2, "ipinned", !ctl.items.get(2).ipinned)
     wait(0)
     check("after item 3 changed layer")
-    itemModel.move(0, 3, 1)
+    ctl.items.move(0, 3, 1)
     wait(0)
     check("after the first moved to the top")
   }

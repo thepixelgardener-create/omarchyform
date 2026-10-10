@@ -2,8 +2,9 @@ import QtQuick
 import Quickshell.Io
 import "BoardStore.js" as Store
 
-// Owns loading, autosave, and the transition between boards. The controller
-// supplies the document models and presentation state; BoardPersistence owns I/O.
+// Owns loading, autosave, and the transition between boards. Its controller is
+// the document, which holds the models and passes what the session asks of the
+// view on to the panes showing it; BoardPersistence owns I/O.
 Item {
   id: session
   required property var ctl
@@ -84,11 +85,8 @@ Item {
     session.lastSavedCount = -1
     session.ctl.undoStack = []
     session.ctl.redoStack = []
-    session.ctl.markedIds = []
-    session.ctl.showPinned = false
-    session.ctl.selectedIndex = -1
-    session.ctl.editIndex = -1
-    session.ctl.linkingFrom = -1
+    session.ctl.resetSelection(true)
+    session.ctl.abandonHistory()
     session.ctl.currentBoard = path
     session.ctl.resetView()
     // Again once it has loaded: the view frames what is on the board, and until
@@ -99,13 +97,23 @@ Item {
 
   function save(allowEmpty) {
     if (!session.boardLoaded || session.diskReading) return
+    // A pointer gesture can still be canceled. A preceding write completing
+    // must not publish its intermediate geometry.
+    if (session.ctl.pointerOwner) return
+    // Nothing is written while the board's history is being read: what the
+    // file holds is not known to be something this may write over. Nothing can
+    // have changed meanwhile — the board is not editable until then — so a
+    // switch or a close that asks for a save here loses nothing by going on.
+    if (session.ctl.historyChecking) return
     // Something else wrote this board and the screen disagrees with it. Waiting
     // is the only safe answer: a debounced keystroke must not be what decides
     // whose version survives.
     if (session.conflict) return
     if (session.ctl.items.count === 0 && session.lastSavedCount > 0 && allowEmpty !== true) return
     if (persistence.busy) return // Completion serializes the latest model again.
-    var text = Store.writeFile(session.ctl.items, session.ctl.links, session.ctl.nextId)
+    // What would be written: the edit in progress is recorded first, so the
+    // file never holds a board its history does not reach.
+    var text = session.ctl.fileText()
     session.saveError = ""
     if (text === session.lastSavedText && !session.forceNextSave) return
     // Remember what this write contains, so completing it does not have to
@@ -160,7 +168,7 @@ Item {
     session.revision = revision
     if (path !== session.ctl.boardPath) return
     var raw = session.readDisk()
-    var mine = Store.writeFile(session.ctl.items, session.ctl.links, session.ctl.nextId)
+    var mine = session.ctl.fileText()
     session.resolving = ""
     // Not a version this session knows about: someone else wrote it, and only
     // a person can say which of the two survives.
@@ -171,7 +179,7 @@ Item {
     // Ours after all — a revision read before the file had settled, or a write
     // recorded late. The baseline moves to what is actually there, and
     // anything still unsaved is written again against the revision it has.
-    var data = Store.readFile(raw)
+    var data = Store.readBoardFile(raw).data
     session.lastSavedText = raw
     session.lastSavedCount = data ? data.items.length : 0
     session.save(true)
@@ -219,7 +227,7 @@ Item {
   function requestDisk(resolve) {
     if (session.diskReading || persistence.busy) return
     diskRead.board = session.ctl.currentBoard
-    diskRead.localText = Store.writeFile(session.ctl.items, session.ctl.links, session.ctl.nextId)
+    diskRead.localText = session.ctl.fileText()
     diskRead.resolve = resolve
     diskRead.command = session.ctl.fileCommand("snapshot",
       [session.ctl.boardPath, session.ctl.lockPathFor(session.ctl.currentBoard), session.ctl.boardsDir])
@@ -230,11 +238,11 @@ Item {
     if (board !== session.ctl.currentBoard) return
     var split = result.indexOf("\n")
     var raw = split >= 0 ? result.slice(split + 1) : ""
-    if (split < 1 || !Store.readFile(raw)) {
+    if (split < 1 || !Store.readBoardFile(raw).data) {
       session.diskReadFailed(board)
       return
     }
-    var mine = Store.writeFile(session.ctl.items, session.ctl.links, session.ctl.nextId)
+    var mine = session.ctl.fileText()
     if (mine !== localText || (!resolve && (session.conflict || mine !== session.lastSavedText))) {
       session.raiseConflict()
       return
@@ -265,9 +273,25 @@ Item {
     }
   }
 
+  // The board turned out to be one this must not write: shown, read-only, and
+  // its file left as it is.
+  function refuse(reason) {
+    if (saveTimer.running) saveTimer.stop()
+    session.damaged = true
+    session.damageReason = reason
+    session.boardLoaded = false
+  }
+
   // Only a confirmed missing file may become a new, writable empty board.
-  function loadBoard(raw, missing) {
-    var data = Store.readFile(raw)
+  // `whole` reads the file whole even when its history could be left as text:
+  // the worker found the board read from in front of it is not the board the
+  // file holds.
+  function loadBoard(raw, missing, whole) {
+    if (session.ctl.pointerOwner) session.ctl.pointerOwner.discardPointerEdit()
+    // The board in front of its history, which stays text: the document hands
+    // it to a worker rather than parse it here.
+    var parts = Store.readBoardFile(raw, whole === true)
+    var data = parts.data
     // A note too long to lay out without holding the shell up. The board is
     // opened the way an unreadable one is, empty and read-only, so nothing
     // waits on the text and nothing saves over it; the command line can still
@@ -287,11 +311,20 @@ Item {
       session.ctl.nextId = Store.nextFreeId(session.ctl.items, data.nextId)
       session.ctl.nextColor = session.ctl.items.count
     }
-    session.ctl.markedIds = []
-    session.ctl.showPinned = false
-    session.ctl.selectedIndex = -1
+    session.ctl.resetSelection(false)
     session.ctl.undoStack = []
     session.ctl.redoStack = []
+    // A board that cannot be read has no history to take; one that can has
+    // its history taken, unless it is from a newer Omarchyform, which makes
+    // the board read-only like any newer board.
+    // Read in front of its history, the worker is handed the whole file as
+    // well, to prove the board read is the board the file holds.
+    var refusal = data ? session.ctl.adoptHistory(parts.history, parts.board, parts.split ? raw : "")
+                       : session.ctl.adoptHistory("", "", "")
+    if (refusal !== "") {
+      session.damaged = true
+      session.damageReason = refusal
+    }
     // Only for a board being opened. A reload because the file changed under an
     // open board keeps the view where it is.
     if (session.frameWhenLoaded) {
@@ -300,7 +333,7 @@ Item {
     }
     session.lastSavedCount = session.ctl.items.count
     // A damaged board is displayed empty but stays read-only.
-    session.lastSavedText = data ? Store.writeFile(session.ctl.items, session.ctl.links, session.ctl.nextId) : ""
+    session.lastSavedText = data && !session.damaged ? session.ctl.fileText() : ""
     session.boardLoaded = !session.damaged
     if (session.createWhenLoaded && session.boardLoaded) session.save(true)
     session.createWhenLoaded = false
@@ -338,7 +371,7 @@ Item {
     // recognise it cost as much as the save had: 31ms on a 3000-item board,
     // after every save, on the shell's thread.
     if (raw === session.lastSavedText || raw === persistence.contents) return
-    var mine = Store.writeFile(session.ctl.items, session.ctl.links, session.ctl.nextId)
+    var mine = session.ctl.fileText()
     if (raw === mine) return
     if (mine === session.lastSavedText) {
       // Nothing unsaved on screen, so the newer version simply wins: a board

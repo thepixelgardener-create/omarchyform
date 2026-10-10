@@ -1,8 +1,8 @@
 # Omarchyform, for the thing reading this
 
-The README is the manual for the person at the keyboard. This is the same
-program explained to something that will drive it through files and a command
-line, and will not see the screen.
+[Using the board](guide.md) is the manual for the person at the keyboard. This
+is the same program explained to something that will drive it through files and
+a command line, and will not see the screen.
 
 Read it before building a board. Most of what makes a generated board bad is
 not a wrong call — every call here is easy — it is not knowing how big a note
@@ -102,6 +102,10 @@ normal navigation, mark-all, editing and deletion skip it. Use it for the panel
 a cluster sits on, or a label for a region. Pin the shape *after* the items
 that go on top of it exist, and give it a `muted` tint.
 
+**`texture`** is optional on notes and shapes: `plain` (default), `ruled`,
+`grid`, `dots`, or `hatch`. Textured boards use format 7 even without history.
+Images stay plain. Unknown texture values load as plain. `setTexture` sets one.
+
 **Links.** Directed, drawn as an arrow from `from` to `to`. **Only one runs
 between any pair.** A connector pointing at an item that is not there is
 dropped on load rather than breaking the board.
@@ -118,6 +122,17 @@ So `link` is safe to repeat and `x` is a toggle. Use `unlink` to remove one
 from here; it takes the pair in either order.
 
 **`nextId`** is the next id to hand out. `apply` maintains it; do not set it.
+
+**`history`**, last in the file, is every edit the board remembers, so its
+timeline can play it back. A board with history or textures is `"version": 7`;
+one with neither is still 5. Version 6 histories still load. `apply` adds one record per run, labelled "Command line",
+however many operations it carries, and keeps the newest 10,000. Never edit
+the history by hand. If the board itself was edited by hand, the next `apply`
+records the difference as one record, "Changed outside Omarchyform". A history
+that cannot be played back makes `apply` refuse and leave the file as it was;
+`validate` reports it under `history` and `warnings`, and opening the board in
+Omarchyform keeps it aside and starts a new one. A copy made to share never
+carries a history.
 
 ### What a board tolerates
 

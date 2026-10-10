@@ -4,5 +4,11 @@
 # Agent skills installed for development; never part of the distributed plugin.
 .claude/
 
+# Instructions read by coding agents (Codex, Claude Code). Kept out of the
+# distributed plugin: the marketplace installs the whole checkout. The rules
+# themselves are in docs/contributing.md.
+/AGENTS.md
+/CLAUDE.md
+
 # Pictures tests/ui.js makes for the Qt tests and removes afterwards.
 tests/qt/generated/

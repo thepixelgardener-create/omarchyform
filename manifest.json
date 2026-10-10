@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "thepixelgardener.omarchyform",
   "name": "Omarchyform",
-  "version": "0.4.6",
+  "version": "0.4.7",
   "author": "frueh",
   "description": "An offline whiteboard for brainstorming, mind maps and diagrams. Arrange sticky notes, images and shapes on an infinite canvas, with keyboard controls and Omarchy themes.",
   "kinds": [

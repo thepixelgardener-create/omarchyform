@@ -37,6 +37,7 @@ an external service.
 | Notes and edits | Helper commit stdin → board/backup | Atomic replacement, revision check, lock, no content in diagnostics, private modes for newly committed files and the folders made for them. Filesystem, CLI and QML persistence tests. |
 | Shared boards and PNG exports | Staging → chosen external destination | Explicit user action, refuse app-data overwrite, keep unrelated files on failure. Filesystem/exchange tests. |
 | CLI operations | stdin/file → model → helper | Parse as data, no evaluation. Invalid JSON must not echo content. CLI/security tests. |
+| Board history | Board file → worker thread → replay models → text layout | Parsed off the shell's thread, never evaluated. Text past 64 MiB is not parsed; more than twice 10,000 records is refused before replay; every record is checked against the board it plays to. A step whose notes break the 1 MiB rule is not shown. Labels are plain text; image names go through the same validation as the live board. Unreadable histories are written whole beside the backups under a flattened name. `tests/history.js`, `tests/recording.js`, `tests/timeline.js`, CLI tests. |
 | Desktop install/open | Opt-in launcher files and summon payload | No automatic install hook; ownership/conflict checks, correct path encoding, no shell interpretation. Desktop tests and manual review. |
 
 ## Manual release checklist
@@ -87,7 +88,12 @@ These are review obligations, not claims covered by a green test:
   creates its own data folders 0700. Neither changes a folder or file that is
   already there, so this does not certify all existing storage as private.
 - Ordinary deletion is not secure erasure. Backups, trash, image assets,
-  exported copies and clipboard managers can retain content. Crashes can leave
+  exported copies and clipboard managers can retain content. A board's history
+  keeps text that was deleted from its notes, in the board file itself, until
+  the oldest records are trimmed or **Forget this board's history** is run;
+  the backup of the previous write still holds it after a forget, and a
+  history set aside as unreadable stays in the backups folder. Copies made to
+  share never carry history. Crashes can leave
   staging files; EXIT traps do not run after SIGKILL or power loss.
 - `bin/omarchyform new --note TEXT` deliberately accepts text in argv, so it
   can also enter shell history and process metadata. For sensitive text use

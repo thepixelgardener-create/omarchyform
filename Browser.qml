@@ -24,9 +24,12 @@ FocusScope {
     ? "~/trash/   " + browser.rows.length + (browser.rows.length === 1 ? " item" : " items")
     : "~/boards/" + (browser.library.dir ? browser.library.dir + "/" : "")
 
-  visible: browser.library.showing
+  // Whether this one is the browser on screen. With two panes there are two
+  // boards and one library, and it is drawn over the pane that opened it.
+  property bool shown: browser.library.showing
+  visible: browser.shown
   enabled: visible
-  focus: browser.library.showing
+  focus: browser.shown
   onVisibleChanged: if (visible) Qt.callLater(function () { browser.forceActiveFocus() })
 
   anchors.fill: parent
@@ -123,10 +126,16 @@ FocusScope {
           // the second of those lands in this field on its own, cursor at the
           // end and nothing selected. Selecting after both have arrived is what
           // makes one keystroke replace the name rather than extend it.
+          //
+          // Only the browser on screen answers: the library is shared, and the
+          // other pane's board has a browser too, hidden, that hears the same
+          // change and would otherwise take the keyboard into a field no one
+          // can see.
           onModeChanged: {
+            if (!browser.shown) return
             if (typed.mode === "") { browser.forceActiveFocus(); return }
             Qt.callLater(function () {
-              if (!browser.typing) return
+              if (!browser.typing || !browser.shown) return
               typed.text = browser.prompting ? browser.library.input : browser.library.query
               typed.forceActiveFocus()
               typed.selectAll()

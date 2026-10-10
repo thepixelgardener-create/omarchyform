@@ -249,7 +249,7 @@ try {
     for (const entry of listed.out.ops) {
       assert.ok(entry.args && entry.does, `${entry.op} says what it takes and does`)
       const sample = {
-        add: ['note', 0, 0], setText: [1, 'x'], setTint: [1, 'accent'], setKind: [1, 'rect'],
+        add: ['note', 0, 0], setText: [1, 'x'], setTint: [1, 'accent'], setKind: [1, 'rect'], setTexture: [1, 'grid'],
         move: [1, 10, 10], resize: [1, 100, 100], pin: [1, true], remove: [2], link: [1, 2],
         unlink: [1, 2]
       }[entry.op]
@@ -257,6 +257,27 @@ try {
     }
     assert.deepEqual(listed.out.kinds, S.KINDS, 'kinds come from the board, not a copy')
     assert.deepEqual(listed.out.tints, S.TINTS, 'and so do tints')
+    assert.deepEqual(listed.out.textures, S.TEXTURES, 'and textures')
+  }
+
+  {
+    // A texture set from the command line is the one the board draws, and a
+    // board carrying one is written in the format that keeps it.
+    const file = path.join(dir, 'textured.json')
+    run('new', file, '--note', 'a', '--note', 'b')
+    assert.equal(pipe(JSON.stringify([{ op: 'setTexture', args: [2, 'hatch'] }]), 'apply', file, '-').status, 0)
+    const written = JSON.parse(fs.readFileSync(file, 'utf8'))
+    assert.equal(written.version, S.FORMAT_VERSION)
+    assert.equal(written.items[1].texture, 'hatch')
+    assert.equal(written.items[0].texture, undefined, 'plain is not written down')
+    const unknown = pipe(JSON.stringify([{ op: 'setTexture', args: [1, 'tartan'] }]), 'apply', file, '-')
+    assert.equal(unknown.status, 1, 'a texture this does not know is refused')
+    const picture = path.join(dir, 'picture.json')
+    fs.writeFileSync(picture, JSON.stringify({ version: 5, nextId: 2, links: [],
+      items: [{ id: 1, kind: 'image', x: 0, y: 0, w: 100, h: 100, src: 'a.png' }] }))
+    const refused = pipe(JSON.stringify([{ op: 'setTexture', args: [1, 'grid'] }]), 'apply', picture, '-')
+    assert.equal(refused.status, 1, 'and so is a picture')
+    assert.match(refused.raw, /picture/)
   }
 
   {
@@ -367,6 +388,132 @@ try {
   }
 
   console.log('ok — command line: boards built headlessly, loaded the way the plugin loads them')
+
+  {
+    // A run that changes a board is one edit in its history, which plays back
+    // to the board it wrote, read the way the plugin reads it.
+    const H = require('../bin/store').loadStore(fs.readFileSync(path.join(__dirname, '..', 'BoardHistory.js'), 'utf8'))
+    const file = path.join(dir, 'history.json')
+    assert.equal(run('new', file, '--note', 'start').status, 0)
+    assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).version, 5, 'a new board has no history yet')
+    const plays = () => {
+      const text = fs.readFileSync(file, 'utf8')
+      const board = JSON.parse(text)
+      const parts = S.splitHistory(text)
+      assert.ok(parts.history !== '', 'the history is where the plugin looks for it')
+      return { board, records: board.history.records,
+               problem: H.verify(board.history, { items: board.items, links: board.links, nextId: board.nextId }) }
+    }
+    let applied = pipe(JSON.stringify([{ op: 'add', args: ['note', 300, 0, 220, 160, 'second'] }]), 'apply', file)
+    assert.equal(applied.status, 0, applied.raw)
+    assert.equal(applied.out.history, 1)
+    let h = plays()
+    assert.equal(h.board.version, 7)
+    assert.deepEqual(h.records.map(r => r.a), ['Command line'])
+    assert.equal(h.board.history.base.items.length, 1, 'starting from the board as it was read')
+    assert.equal(h.problem, '')
+
+    applied = pipe(JSON.stringify([{ op: 'setTint', args: [1, 'accent'] }, { op: 'move', args: [1, 40, 40] }]), 'apply', file)
+    assert.equal(applied.status, 0, applied.raw)
+    h = plays()
+    assert.equal(h.records.length, 2, 'one run, one record, however many operations')
+    assert.equal(h.problem, '')
+
+    // Edited by hand: the difference is recorded, not lost and not invented.
+    const edited = JSON.parse(fs.readFileSync(file, 'utf8'))
+    edited.items[0].text = 'changed in an editor'
+    fs.writeFileSync(file, JSON.stringify(edited, null, 2) + '\n')
+    applied = pipe(JSON.stringify([{ op: 'setTint', args: [2, 'urgent'] }]), 'apply', file)
+    assert.equal(applied.status, 0, applied.raw)
+    h = plays()
+    assert.deepEqual(h.records.map(r => r.a), ['Command line', 'Command line', H.OUTSIDE, 'Command line'])
+    assert.equal(h.problem, '')
+    assert.deepEqual(run('validate', file).out.history, { records: 4, plays: true })
+
+    // One that cannot be played, or comes from a newer Omarchyform, is not
+    // added to: the file is left exactly as it was.
+    const broken = JSON.parse(fs.readFileSync(file, 'utf8'))
+    broken.history.records[0].p = { d: [99] }
+    const brokenText = JSON.stringify(broken, null, 2) + '\n'
+    fs.writeFileSync(file, brokenText)
+    let refused = pipe(JSON.stringify([{ op: 'setTint', args: [1, 'muted'] }]), 'apply', file)
+    assert.equal(refused.status, 1)
+    assert.match(refused.raw, /history cannot be read/)
+    assert.equal(fs.readFileSync(file, 'utf8'), brokenText)
+    assert.equal(run('validate', file).out.history.plays, false)
+    for (const damage of [
+      h => { h.base.items = [null] },
+      h => { h.base.links = [null] },
+      h => { h.records[0].p = { a: [null] } }
+    ]) {
+      const malformed = JSON.parse(brokenText)
+      damage(malformed.history)
+      const text = JSON.stringify(malformed)
+      fs.writeFileSync(file, text)
+      const backups = path.join(dir, '.local/share/omarchyform/backups')
+      const inventory = () => fs.existsSync(backups) ? fs.readdirSync(backups, { recursive: true }).map(name => {
+        const p = path.join(backups, name)
+        return [name, fs.statSync(p).isFile() ? fs.readFileSync(p, 'utf8') : null]
+      }) : []
+      const before = inventory()
+      const validation = run('validate', file)
+      assert.equal(validation.status, 0, validation.raw)
+      assert.equal(validation.out.history.plays, false)
+      assert.ok(validation.out.warnings.length > 0)
+      for (const result of [run('inspect', file), pipe(JSON.stringify([{ op: 'setTint', args: [1, 'muted'] }]), 'apply', file)]) {
+        assert.equal(result.status, 1, result.raw)
+        assert.equal(result.out.ok, false, 'malformed nested history returns a JSON error')
+        assert.match(result.out.error, /history cannot be read/)
+      }
+      assert.equal(fs.readFileSync(file, 'utf8'), text)
+      assert.deepEqual(inventory(), before, 'rejected replay does not alter backups')
+    }
+    broken.history.v = 2
+    fs.writeFileSync(file, JSON.stringify(broken, null, 2) + '\n')
+    refused = pipe(JSON.stringify([{ op: 'setTint', args: [1, 'muted'] }]), 'apply', file)
+    assert.match(refused.raw, /newer Omarchyform/)
+    console.log('ok — command line: a run is one edit in the board\'s history')
+  }
+
+  {
+    // A board with its history moved before its items: the run changes what
+    // it was asked to and nothing else, and the history goes on.
+    const H = require('../bin/store').loadStore(fs.readFileSync(path.join(__dirname, '..', 'BoardHistory.js'), 'utf8'))
+    const file = path.join(dir, 'sorted.json')
+    assert.equal(run('new', file, '--note', 'one', '--note', 'two').status, 0)
+    assert.equal(pipe(JSON.stringify([{ op: 'setTint', args: [1, 'accent'] }]), 'apply', file).status, 0)
+    const before = JSON.parse(fs.readFileSync(file, 'utf8'))
+    const moved = {}
+    for (const key of ['kind', 'version', 'history', 'nextId', 'items', 'links']) moved[key] = before[key]
+    fs.writeFileSync(file, JSON.stringify(moved, null, 2) + '\n')
+    const applied = pipe(JSON.stringify([{ op: 'setText', args: [2, 'changed'] }]), 'apply', file)
+    assert.equal(applied.status, 0, applied.raw)
+    const after = JSON.parse(fs.readFileSync(file, 'utf8'))
+    assert.deepEqual(after.items.map(r => [r.id, r.text, r.tint]), [[1, 'one', 'accent'], [2, 'changed', 'foreground']],
+      'the one edit, and every item kept')
+    assert.deepEqual(after.links, before.links)
+    assert.equal(after.nextId, before.nextId)
+    assert.deepEqual(after.history.records.map(r => r.a), ['Command line', 'Command line'], 'no change from outside invented')
+    assert.equal(H.verify(after.history, { items: after.items, links: after.links, nextId: after.nextId }), '')
+    console.log('ok — command line: a board with its keys in another order loses nothing')
+
+    // A history from a newer Omarchyform, pretty-printed or moved: refused,
+    // and the file left exactly as it was.
+    const newer = JSON.parse(fs.readFileSync(file, 'utf8'))
+    newer.history.v = 2
+    const forms = [JSON.stringify(newer, null, 2) + '\n']
+    const reordered = {}
+    for (const key of ['kind', 'version', 'history', 'nextId', 'items', 'links']) reordered[key] = newer[key]
+    forms.push(JSON.stringify(reordered, null, 4) + '\n')
+    for (const text of forms) {
+      fs.writeFileSync(file, text)
+      const refused = pipe(JSON.stringify([{ op: 'setText', args: [1, 'no'] }]), 'apply', file)
+      assert.equal(refused.status, 1)
+      assert.match(refused.raw, /newer Omarchyform/)
+      assert.equal(fs.readFileSync(file, 'utf8'), text, 'the file is untouched')
+    }
+    console.log('ok — command line: a newer history is refused, however it is laid out')
+  }
 } finally {
   fs.rmSync(dir, { recursive: true, force: true })
 }

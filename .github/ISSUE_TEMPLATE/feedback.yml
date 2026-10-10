@@ -1,0 +1,37 @@
+name: Feedback or an idea
+description: Tell me how Omarchyform works for you, or what it should do next.
+title: "Feedback: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. Short answers are fine, and every field but the first is optional.
+  - type: textarea
+    id: used-for
+    attributes:
+      label: What did you use it for?
+      description: A brainstorm, a mind map, a diagram, a to-do wall, or just trying it out.
+    validations:
+      required: true
+  - type: textarea
+    id: worked
+    attributes:
+      label: What worked well?
+  - type: textarea
+    id: in-the-way
+    attributes:
+      label: What got in your way, or what did you expect that was not there?
+  - type: dropdown
+    id: keep-using
+    attributes:
+      label: Will you keep using it?
+      options:
+        - "Yes"
+        - Maybe
+        - "No"
+        - Too early to say
+  - type: input
+    id: version
+    attributes:
+      label: Omarchy version
+      description: The output of `omarchy-version`, if you know it.

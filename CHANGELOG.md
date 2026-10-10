@@ -3,6 +3,90 @@
 Notable changes, newest first. Board file versions are noted where they moved,
 since older boards are migrated on load rather than rejected.
 
+## 0.4.7 — 2026-10-10
+
+### Added
+
+- Per-item textures for notes and shapes: Plain (the default), Ruled, Grid,
+  Dots, and Hatch. Kept through undo, duplication, history, sharing and PNG export.
+- Canvas colours: Theme, Lighter, Darker, Paper and Ink, remembered across
+  restarts and shared by both panes. Paper and Ink adapt item and text colours.
+
+- Split view: `v` puts a second pane beside the board, `V` stacks it below, and
+  the same key again goes back to one pane. Each pane has its own camera,
+  selection and board; two panes on one board share it, and each keeps its
+  cursor on its item when the other edits. `o` or a click moves between them.
+  A board only one pane shows is saved before that pane leaves it, and two
+  versions or a failed save keep the pane open. Drag the line between the
+  panes to resize them; a window too small for two shows the pane you are in.
+  The layout is remembered. A picture dropped on a pane goes on that pane's
+  board, wherever the keyboard is.
+- Boards remember their edits: every command, drag, pause in typing and undo
+  is one step in a history kept in the board's file, newest 10,000 kept.
+  **Forget this board's history** clears it. A board with history is format
+  version 7, which older versions open read-only; boards without history or
+  item textures and plain copies made to share stay version 5. A board is read-only while its history
+  is checked on opening, under a second at 10,000 edits, and says **Checking
+  history…**. A file another tool has reformatted or reordered keeps its
+  whole board, and one whose history is from a newer Omarchyform stays
+  read-only and untouched. `bin/omarchyform apply` records each run as one
+  step.
+- A timeline: `t` steps back through a board's history in the pane you are
+  in, `space` plays it forward at up to four times the speed, and `esc` comes
+  back to now. An earlier version is read-only. `T` shows one beside the board
+  as it is.
+
+### Changed
+
+- Item creation accepts its initial content and dimensions before adding it to
+  the model. Paste no longer needs a separate deferred-save path, and pasted
+  notes are centered using their final size.
+- The README is a short start page that asks for feedback, with issue forms
+  for feedback and bugs. The manual moved word for word to `docs/install.md`,
+  `docs/guide.md`, `docs/files.md` and `docs/development.md`.
+- Development docs distinguish unreleased work, remaining checks and historical
+  reviews. Shared history-worker test setup replaces duplicate implementations.
+- Related commands open groups, while search still finds individual commands.
+  Backspace with an empty query returns from a group to the full list.
+- Connections have clearer arrows and highlight the selected item's links.
+  Clicking a destination preserves the source; `x` confirms and Escape cancels.
+- Connector drawing reuses item lookups, skips offscreen links and batches
+  drawing by colour. Item fill weights are read once per theme change.
+
+- The controller is split in three, ahead of split view: `BoardPane.qml` is
+  one view of a board and the controller its views read, `BoardDocument.qml`
+  is one open board with its undo history and session, and `Omarchyform.qml`
+  is the workspace around them. Nothing changes on screen.
+
+### Fixed
+
+- Prevent late history worker replies from saving an old board under a newly opened board's path.
+- Preserve valid history when one oversized edit is fully absorbed into the baseline.
+- Keep import/export results with their originating pane through completion.
+- Keep delayed split closures and board opens correct when focus or another pane's board changes.
+- Discard foreign history on import so deleted image references cannot address local library images.
+- Return structured CLI diagnostics for malformed nested history without changing boards or backups.
+
+- Escape during a drag or resize cancels only that gesture, without also
+  dismissing the board.
+- Pasted notes and pictures create one complete history step, without an
+  empty placeholder. Dropped pictures use the same transaction.
+- External history extensions preserve open timelines, retained cursors and
+  playback endpoints. Reformatted files no longer create false conflicts on
+  the next external update; replacement histories close the old timeline.
+- Canceled drags and resizes restore their starting state and preserve undo
+  and redo. Intermediate pointer positions are not saved. Movement and resize
+  key gestures finish on release, focus loss or a different command.
+- Theme and bar colours explicitly use Omarchy's colour provider, avoiding a
+  runtime name collision that silently substituted the fallback palette.
+- A board with its format version after its history now receives the same
+  version check as any other board. Newer formats cannot be opened for editing
+  and overwritten as version 6 because their JSON properties were reordered.
+- Malformed nested history now returns a worker error instead of leaving the
+  board stuck at **Checking history…**. The existing recovery keeps the bad
+  history aside and preserves the live board. Trimming failures also return
+  an error without replacing the history.
+
 ## 0.4.6 — 2026-10-05
 
 ### Changed

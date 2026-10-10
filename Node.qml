@@ -1,4 +1,6 @@
-pragma ComponentBehavior: Bound
+// Qt 6.4 Loader creates a child context for the texture component. Keep this
+// file unbound so that component can be instantiated there; model roles still
+// arrive through explicit required properties below.
 
 import QtQuick
 import QtQuick.Shapes
@@ -11,7 +13,7 @@ Item {
   objectName: "board-item-" + iid
 
   required property var ctl
-  readonly property var theme: node.ctl.theme
+  readonly property var theme: node.ctl.sceneTheme
   required property int index
   required property int iid
   required property string kind
@@ -22,6 +24,8 @@ Item {
   required property string itint
   required property string itext
   required property bool ipinned
+  required property string itexture
+  readonly property string textureStyle: Store.normalizeTexture(node.itexture)
   required property string isrc
 
   // Deliberately not carrying Accessible properties. Attaching them to the
@@ -200,6 +204,26 @@ Item {
       strokeWidth: node.cursor || node.linkSource ? node.theme.borderWidth * 2 : node.theme.borderWidth
       joinStyle: ShapePath.MiterJoin
       PathSvg { path: Store.shapePath(node.kind, node.width, node.height) }
+    }
+  }
+
+  // Plain and offscreen items allocate no texture geometry.
+  Loader {
+    objectName: "item-texture"
+    anchors.fill: parent
+    active: node.live && !node.isImage && node.textureStyle !== "plain"
+    sourceComponent: Component {
+      Shape {
+        antialiasing: true
+        opacity: node.textureStyle === "dots" ? 0.3 : 0.2
+        ShapePath {
+          fillColor: "transparent"
+          strokeColor: node.outline
+          strokeWidth: node.textureStyle === "dots" ? 1.6 : 1
+          capStyle: ShapePath.RoundCap
+          PathSvg { path: Store.texturePath(node.kind, node.textureStyle, node.width, node.height, node.theme.cornerRadius) }
+        }
+      }
     }
   }
 
@@ -404,10 +428,13 @@ Item {
   // rather than ignoring it in the handler matters: an accepted button is a
   // consumed one, and the board's pan surface is above this anyway.
   MouseArea {
+    objectName: "node-drag"
     anchors.fill: parent
     enabled: node.ctl.editIndex !== node.index && (node.ipinned ? node.ctl.showPinned : !node.ctl.showPinned)
     acceptedButtons: Qt.LeftButton
-    cursorShape: node.ipinned ? Qt.PointingHandCursor : dragging ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+    // While the far end of a connector is chosen, a click picks; it does not
+    // drag, resize or start typing.
+    cursorShape: node.ipinned || node.ctl.linkingFrom >= 0 ? Qt.PointingHandCursor : dragging ? Qt.ClosedHandCursor : Qt.OpenHandCursor
 
     property real pressX: 0
     property real pressY: 0
@@ -420,33 +447,36 @@ Item {
       node.ctl.pointerSelect(node.index, (mouse.modifiers & Qt.ShiftModifier) !== 0)
     }
     onPositionChanged: function (mouse) {
-      if (node.ipinned || !node.ctl.canEdit || !pressed || mouse.buttons !== Qt.LeftButton) return
+      if (node.ipinned || !node.ctl.canEdit || node.ctl.linkingFrom >= 0 || !pressed || mouse.buttons !== Qt.LeftButton) return
+      if (dragging && !node.ctl.pointerEdit) return
       var dx = mouse.x - pressX
       var dy = mouse.y - pressY
       // A few pixels of slack so a click to select never nudges it.
       if (!dragging && Math.abs(dx) + Math.abs(dy) < 3) return
-      if (!dragging) node.ctl.pushUndo()
+      if (!dragging) node.ctl.beginPointerEdit("Move")
       dragging = true
       node.ctl.moveTargets(dx, dy)
     }
     onReleased: {
-      if (dragging) node.ctl.save()
+      if (dragging) node.ctl.finishPointerEdit(false)
       dragging = false
     }
+    onCanceled: { if (dragging) node.ctl.finishPointerEdit(true); dragging = false }
     onDoubleClicked: {
-      if (node.ipinned || !node.ctl.canEdit) return
-      node.ctl.pushUndo()
+      if (node.ipinned || !node.ctl.canEdit || node.ctl.linkingFrom >= 0) return
+      node.ctl.pushUndo("Typing", node.iid)
       node.ctl.editIndex = node.index
     }
   }
 
   // Resize grip, bottom-right.
   MouseArea {
+    objectName: "node-resize"
     width: 16
     height: 16
     anchors { right: parent.right; bottom: parent.bottom }
     cursorShape: Qt.SizeFDiagCursor
-    enabled: node.ctl.canEdit && !node.ipinned && !node.ctl.showPinned
+    enabled: node.ctl.canEdit && !node.ipinned && !node.ctl.showPinned && node.ctl.linkingFrom < 0
 
     property real pressX: 0
     property real pressY: 0
@@ -460,15 +490,17 @@ Item {
     }
     onPositionChanged: function (mouse) {
       if (!pressed) return
-      if (!sizing) { node.ctl.pushUndo(); sizing = true }
+      if (sizing && !node.ctl.pointerEdit) return
+      if (!sizing) { node.ctl.beginPointerEdit("Resize"); sizing = true }
       node.ctl.resizeTargets(mouse.x - pressX, mouse.y - pressY)
     }
     onReleased: {
-      if (sizing) node.ctl.save()
+      if (sizing) node.ctl.finishPointerEdit(false)
       sizing = false
     }
+    onCanceled: { if (sizing) node.ctl.finishPointerEdit(true); sizing = false }
 
-    visible: !node.ipinned && (node.selected || hover.hovered)
+    visible: !node.ipinned && node.ctl.linkingFrom < 0 && (node.selected || hover.hovered)
     Rectangle {
       anchors.centerIn: parent
       width: 8

@@ -108,9 +108,10 @@ TestCase {
     property string paletteScope: "all"
     property bool paletteVisible: true
     property string paletteQuery: ""
+    property string paletteGroup: ""
     property int paletteIndex: 0
     property int paletteRows: 9
-    readonly property var paletteMatches: Store.matchCommands(ctl.paletteQuery)
+    readonly property var paletteMatches: Store.matchCommands(ctl.paletteQuery, ctl.paletteScope, ctl.paletteGroup)
     function commandReady(needs) { return needs !== "target" }
     function commandExcuse(needs) { return "nothing is selected" }
     function setPaletteQuery(text) { ctl.paletteQuery = text }
@@ -130,6 +131,8 @@ TestCase {
   QtObject { id: keyboardless; function paletteKey(event) {} }
   Commands { id: commandList; ctl: ctl; board: keyboardless; y: 40; anchors.horizontalCenter: parent.horizontalCenter }
   Conflict { id: decision; ctl: ctl; y: 40; anchors.horizontalCenter: parent.horizontalCenter }
+  function cleanup() { ctl.paletteQuery = ""; ctl.paletteGroup = "" }
+
   function test_untrustedTitleIsPlainText() {
     const oldTitle = ctl.boardTitle
     try {
@@ -191,9 +194,18 @@ TestCase {
   }
 
   // Narrowing the query shrinks the panel rather than leaving empty rows.
+  function test_groupPromptFitsThePanel() {
+    ctl.paletteGroup = "canvas"
+    verify(waitForRendering(commandList))
+    var prompt = findChild(commandList, "command-prompt")
+    verify(prompt.text.indexOf("Canvas background") === 0)
+    verify(prompt.width > 0)
+    verify(prompt.x + prompt.width <= prompt.parent.width)
+  }
+
   function test_paletteShrinksToWhatMatches() {
     const many = commandList.height
-    ctl.paletteQuery = "colour"
+    ctl.paletteQuery = "Change colour"
     verify(waitForRendering(commandList))
     compare(ctl.paletteMatches.length, 1)
     verify(commandList.height < many, "one match is a shorter panel than thirty")

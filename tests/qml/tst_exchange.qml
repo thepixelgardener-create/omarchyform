@@ -60,7 +60,10 @@ ShellRoot {
   BoardExchange {
     id: exchange
     ctl: ctl
-    onCreated: function (path, editFirst) { test.importedBoard = path }
+    onCreated: function (path, editFirst) {
+      test.check(exchange.busy, "publication retains its owner through the completion signal")
+      test.importedBoard = path
+    }
     onFinished: function (message, kind) {
       test.lastMessage = message; test.lastKind = kind; test.lastFailed = false
     }

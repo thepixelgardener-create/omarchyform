@@ -30,8 +30,9 @@ const run = (...args) => spawnSync('bash', [script, ...args],
   { encoding: 'utf8', env: { ...process.env, XDG_DATA_HOME: dir, XDG_BIN_HOME: bin } })
 
 try {
-  // The README tells people to run `./desktop/install.sh`, which only works if
-  // the bit survives a clone. It did not, and every user hit permission denied.
+  // The install guide tells people to run `./desktop/install.sh`, which only
+  // works if the bit survives a clone. It did not, and every user hit
+  // permission denied.
   assert.ok(fs.statSync(script).mode & 0o111, 'the installer ships executable')
 
   // Every shipped file carries the two keys the installer decides ownership by;

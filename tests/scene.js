@@ -6,6 +6,7 @@
 //
 //   node tests/scene.js                 100, 500, 1000 and 3000 items
 //   node tests/scene.js 3000            one size
+//   node tests/scene.js 3000 --textures every item textured
 //
 // Columns are milliseconds per frame, mean and 95th percentile. A phase at
 // the refresh interval (6.9ms at 144Hz, 16.7ms at 60) is vsync-bound and has
@@ -61,7 +62,7 @@ function provenance() {
     ['OS', ask(`. /etc/os-release 2>/dev/null && echo "$PRETTY_NAME"`)],
     // The two ways this machine names its Omarchy disagree — the version file
     // says the release, the package says the revision. A bug report carries the
-    // package version, so that is the one recorded here and in the README.
+    // package version, so that is the one recorded here and in docs/install.md.
     ['Omarchy', ask(`omarchy-version 2>/dev/null || cat ${omarchy}/version 2>/dev/null`)],
     ['Display', display()]
   ].filter(row => row[1])
@@ -71,7 +72,8 @@ const args = process.argv.slice(2)
 // --record writes docs/performance.md as well as printing, so the numbers a
 // changelog quotes have a checked-in record of the machine that produced them.
 const record = args.includes('--record')
-const sizes = args.filter(a => a !== '--record').map(Number).filter(n => n > 0)
+const textures = args.includes('--textures')
+const sizes = args.filter(a => !['--record', '--textures'].includes(a)).map(Number).filter(n => n > 0)
 const plan = sizes.length ? sizes : [100, 500, 1000, 3000]
 
 function measure(size) {
@@ -103,7 +105,8 @@ function measure(size) {
         XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR,
         WAYLAND_DISPLAY: path.isAbsolute(display) ? display
           : path.join(process.env.XDG_RUNTIME_DIR || '', display),
-        OMARCHYFORM_BENCH_ITEMS: String(size), OMARCHYFORM_TEST_DIR: dir }
+        OMARCHYFORM_BENCH_ITEMS: String(size), OMARCHYFORM_BENCH_TEXTURES: textures ? '1' : '0',
+        OMARCHYFORM_TEST_DIR: dir }
     })
     const output = (result.stdout || '') + (result.stderr || '')
     if (!output.includes('BENCH_DONE')) {
@@ -128,6 +131,7 @@ if (!process.env.WAYLAND_DISPLAY) {
 }
 
 const facts = provenance()
+facts.push(['Item textures', textures ? 'Ruled, Grid, Dots and Hatch, alternating on every item' : 'Plain'])
 const factWidth = Math.max(...facts.map(f => f[0].length))
 for (const [label, value] of facts) process.stdout.write(`${label.padEnd(factWidth)}  ${value}\n`)
 process.stdout.write('\n')

@@ -16,18 +16,22 @@ Item {
   required property string trashIndexPath
   // BoardFiles.sh, as a path: every change to the library goes through it.
   required property string helperScript
-  // The board that is open. Browsing starts in its folder, and neither it nor
-  // a folder holding it can be sent to the trash from under it.
+  // The board the keyboard's pane has open. Browsing starts in its folder, and
+  // renaming "this board" renames it.
   property string currentBoard: ""
-  // Whether the open board can be renamed now: not while two versions of it
-  // are outstanding, nor while a save is in flight or has failed.
+  // Every board open in any pane, the current one among them. None of them, nor
+  // a folder holding one, can be sent to the trash from under the pane showing
+  // it, and a rename that moves one moves the pane along with it.
+  property var openBoards: []
+  // Whether boards can be renamed now: not while two versions of an open one
+  // are outstanding, nor while a save of one is in flight or has failed.
   property bool boardConflicted: false
   property bool boardSettled: true
 
   // --------------------------------------------------------- what it asks for
   signal openRequested(string path, bool fresh)
-  // The open board was renamed, or a folder it is in was: this is where it is.
-  signal currentMoved(string path)
+  // An open board was renamed, or a folder it is in was: this is where it is.
+  signal openBoardMoved(string from, string to)
   // A word on the board, for something that finished after the browser had
   // nothing left to say it in.
   signal notice(string message)
@@ -222,10 +226,14 @@ Item {
     library.hide()
   }
 
-  // True when this entry is, or contains, the board that is open.
+  // True when this entry is, or contains, a board that is open.
   function holdsOpenBoard(e) {
-    if (!e.dir) return e.path === library.currentBoard
-    return library.currentBoard.indexOf(e.path + "/") === 0
+    var open = library.openBoards.concat([library.currentBoard])
+    for (var i = 0; i < open.length; i++) {
+      if (!e.dir && e.path === open[i]) return true
+      if (e.dir && open[i].indexOf(e.path + "/") === 0) return true
+    }
+    return false
   }
 
   function deleteCurrent() {
@@ -251,7 +259,7 @@ Item {
 
     // Refuse to delete the open board, or the folder it lives in.
     if (library.holdsOpenBoard(e)) {
-      library.message = "that is the board you have open — switch away first"
+      library.message = "that is a board you have open — switch away first"
       return
     }
     if (library.pendingDelete !== e.path) {
@@ -411,13 +419,19 @@ Item {
     property string renamedFrom: ""
     property string renamedTo: ""
     onExited: function (code) {
-      // Follow the open board, whether it was renamed itself or sits inside a
-      // folder that was.
+      // Follow every open board, whether it was renamed itself or sits inside
+      // a folder that was. The list is read once: following one changes it.
       if (code === 0) {
         var from = moveProc.renamedFrom
-        if (library.currentBoard === from) library.currentMoved(moveProc.renamedTo)
-        else if (library.currentBoard.indexOf(from + "/") === 0)
-          library.currentMoved(moveProc.renamedTo + library.currentBoard.slice(from.length))
+        var open = library.openBoards.concat([library.currentBoard])
+        var moved = {}
+        for (var i = 0; i < open.length; i++) {
+          if (moved[open[i]] === true) continue
+          moved[open[i]] = true
+          if (open[i] === from) library.openBoardMoved(from, moveProc.renamedTo)
+          else if (open[i].indexOf(from + "/") === 0)
+            library.openBoardMoved(open[i], moveProc.renamedTo + open[i].slice(from.length))
+        }
       }
       if (code !== 0) library.message = "could not rename that; destination exists or path is unavailable"
       library.rescan()

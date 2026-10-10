@@ -8,7 +8,7 @@ const FakeModel = RowModel
 
 function item(over) {
   return Object.assign(
-    { iid: 1, kind: "note", ix: 0, iy: 0, iw: 100, ih: 100, itint: "foreground", itext: "", ipinned: false, isrc: "" },
+    { iid: 1, kind: "note", ix: 0, iy: 0, iw: 100, ih: 100, itint: "foreground", itexture: "plain", itext: "", ipinned: false, isrc: "" },
     over)
 }
 

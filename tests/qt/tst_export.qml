@@ -33,12 +33,22 @@ TestCase {
       property int fontSubtitle: 13
       property int fontBody: 11
       property color muted: "#999999"
+      property color urgent: "#ff5555"
       property color canvasBackground: "#111111"
+      property bool isLight: false
+      property color dotColor: "#202020"
+      property int fontHeading: 16
+      property color panelScrim: "#80000000"
       readonly property var markupColors: ({ foreground: "#cccccc", accent: "#00ffff",
                                              urgent: "#ff5555", muted: "#888888" })
       function sp(n) { return n }
-      function tintFill(tint, strong) { return "#333333" }
+      function tintFill(tint, strong, under) { return "#333333" }
       function tintBorder(tint, strong) { return "#999999" }
+    }
+    // The board's own canvas colour, which a picture "as it looks" follows.
+    property QtObject sceneTheme: QtObject {
+      property var chosen: null
+      property string shade: "Theme"
     }
     function imagePath(name) { return Qt.resolvedUrl("generated/" + name) }
     ListModel { id: itemModel }
@@ -46,6 +56,7 @@ TestCase {
   }
 
   property var outcome: null
+  property color expectedCanvas: "transparent"
   property int told: 0
   BoardImage {
     id: picture
@@ -67,6 +78,9 @@ TestCase {
     if (probe.status !== Image.Ready) skip("tests/ui.js makes the picture this test needs")
     probe.source = ""
     test.outcome = null
+    ctl.sceneTheme.chosen = null
+    ctl.sceneTheme.shade = "Theme"
+    picture.exportColors = "theme"
     test.told = 0
     picture.quietMs = 1000
     picture.patienceMs = 15000
@@ -101,6 +115,35 @@ TestCase {
       var c = shot.pixel(32 + (j % 3) * 110 + 50, 32 + Math.floor(j / 3) * 85 + 37)
       verify(c.r > 0.7 && c.g < 0.3 && c.b < 0.3, "picture " + (j + 1) + " is in the file, not " + c)
     }
+  }
+
+  function test_canvasPaletteAndTextureInSavedPng_data() {
+    return [{tag:"Theme", colour:"Theme"}, {tag:"Paper", colour:"Paper"}, {tag:"Ink", colour:"Ink"}]
+  }
+  function test_canvasPaletteAndTextureInSavedPng(row) {
+    ctl.sceneTheme.chosen = Store.canvasPalette(row.colour)
+    ctl.sceneTheme.shade = row.colour
+    Store.fillItems(itemModel, [{id:1, kind:"rect", x:0, y:0, w:180, h:140,
+      text:"", tint:"foreground", texture:"grid"}])
+    linkModel.clear()
+    var patternedFile = "texture-" + row.colour + ".png"
+    picture.save(test.file(patternedFile))
+    tryVerify(function () { return test.outcome !== null }, 15000)
+    verify(test.outcome.success)
+    readBack.source = Qt.resolvedUrl("generated/" + patternedFile)
+    compare(readBack.status, Image.Ready)
+    var textured = grabImage(readBack)
+    test.expectedCanvas = row.colour === "Theme" ? ctl.theme.canvasBackground : ctl.sceneTheme.chosen.background
+    compare(textured.pixel(5, 5), test.expectedCanvas, "canvas colour reaches PNG")
+    itemModel.setProperty(0, "itexture", "plain")
+    test.outcome = null
+    var plainFile = "plain-" + row.colour + ".png"
+    picture.save(test.file(plainFile))
+    tryVerify(function () { return test.outcome !== null }, 15000)
+    verify(test.outcome.success)
+    readBack.source = Qt.resolvedUrl("generated/" + plainFile)
+    compare(readBack.status, Image.Ready)
+    verify(!textured.equals(grabImage(readBack)), "texture reaches PNG")
   }
 
   // With no patience at all, the first look finds pictures still loading: the

@@ -5,11 +5,14 @@
 // past a green PR twice.
 //
 // This reads the names out of the source and checks three things:
-//   - everything the views read off ctl exists on the controller
-//   - everything the session reads off ctl exists on the controller
+//   - everything the views read off ctl exists on the pane, BoardPane.qml,
+//     which is the controller every view is given
+//   - everything the session reads off ctl exists on the document,
+//     BoardDocument.qml, which is the controller the session is given
 //   - the session test's stub carries the same members the session reads,
 //     so the stub cannot quietly fall behind the thing it stands in for
-// and the same of the library, which the views reach as a second object.
+// and the same of the library, which the views reach as a second object, and
+// of the pane, the document and the workspace, which reach into each other.
 
 const fs = require("fs")
 const path = require("path")
@@ -20,9 +23,10 @@ const read = f => fs.readFileSync(path.join(root, f), "utf8")
 // Members declared at the top level of a QML object: two spaces of indent.
 function declaredMembers(source) {
   const names = new Set()
-  for (const m of source.matchAll(/^ {2}(?:readonly\s+)?property\s+(?:alias\s+)?[\w.<>]+\s+(\w+)/gm))
+  for (const m of source.matchAll(/^ {2}(?:readonly\s+|required\s+)?property\s+(?:alias\s+)?[\w.<>]+\s+(\w+)/gm))
     names.add(m[1])
   for (const m of source.matchAll(/^ {2}function\s+(\w+)\s*\(/gm)) names.add(m[1])
+  for (const m of source.matchAll(/^ {2}signal\s+(\w+)\s*\(/gm)) names.add(m[1])
   return names
 }
 
@@ -70,7 +74,9 @@ function referenced(source, prefix) {
   return names
 }
 
-const controller = declaredMembers(read("Omarchyform.qml"))
+const controller = declaredMembers(read("BoardPane.qml"))
+const documentMembers = declaredMembers(read("BoardDocument.qml"))
+const workspaceMembers = declaredMembers(read("Omarchyform.qml"))
 
 const failures = []
 function expect(names, available, what, where) {
@@ -79,7 +85,7 @@ function expect(names, available, what, where) {
 }
 
 // The views address the controller as ctl.
-for (const file of ["Board.qml", "Node.qml", "Browser.qml", "Help.qml", "BoardToolbar.qml", "BoardExchange.qml", "BoardImage.qml", "ScrollHint.qml", "Commands.qml", "Conflict.qml"]) {
+for (const file of ["Board.qml", "Node.qml", "Browser.qml", "Help.qml", "BoardToolbar.qml", "BoardExchange.qml", "BoardImage.qml", "ScrollHint.qml", "Commands.qml", "Conflict.qml", "TimelineStrip.qml"]) {
   const source = read(file)
   expect(referenced(source, "ctl."), controller, "the controller", file)
 }
@@ -88,14 +94,49 @@ for (const file of ["Board.qml", "Node.qml", "Browser.qml", "Help.qml", "BoardTo
 // than off the controller, so the same check applies to it: a panel that reads
 // a token Theme.qml does not declare is a TypeError on a desktop.
 const themeTokens = declaredMembers(read("Theme.qml"))
-const themed = ["Board.qml", "Node.qml", "Browser.qml", "Help.qml", "BoardToolbar.qml",
-                "BoardImage.qml", "ScrollHint.qml", "Commands.qml", "Conflict.qml", "Surface.qml"]
+// The board and its items read BoardPalette instead, checked further down.
+const themed = ["Browser.qml", "Help.qml", "BoardToolbar.qml",
+                "BoardImage.qml", "ScrollHint.qml", "Commands.qml", "Conflict.qml", "Surface.qml", "TimelineStrip.qml"]
 for (const file of themed) expect(referenced(read(file), "theme."), themeTokens, "Theme.qml", file)
 
-// The session addresses it as session.ctl.
+// The session addresses its document as session.ctl.
 const session = read("BoardSession.qml")
 const sessionReads = referenced(session, "session.ctl.")
-expect(sessionReads, controller, "the controller", "BoardSession.qml")
+expect(sessionReads, documentMembers, "the document", "BoardSession.qml")
+
+// The split surface reads the workspace, and so does the stand-in for it that
+// tst_split mounts the surface against.
+const splitReads = referenced(read("BoardSplit.qml"), "split.workspace.")
+expect(splitReads, declaredMembers(read("Omarchyform.qml")), "the workspace", "BoardSplit.qml")
+expect(splitReads, nestedMembers(read("tests/qt/tst_split.qml"), "ws"), "the tst_split workspace", "BoardSplit.qml")
+
+// The pane, the document and the workspace reach into each other by name too,
+// through whichever handle each holds on the other. Every handle is listed:
+// a pane reached as `pane.` in one function and `root.panes[i].` in the next is
+// the same object, and a name missing from it is the same TypeError.
+function referencedBy(source, pattern) {
+  const names = new Set()
+  for (const m of source.matchAll(new RegExp(pattern + "\\.([A-Za-z_]\\w*)", "g"))) names.add(m[1])
+  return names
+}
+const pane = read("BoardPane.qml")
+const documentSource = read("BoardDocument.qml")
+const workspace = read("Omarchyform.qml")
+expect(referenced(pane, "root.workspace."), workspaceMembers, "the workspace", "BoardPane.qml")
+expect(referenced(pane, "root.doc."), documentMembers, "the document", "BoardPane.qml")
+expect(referenced(documentSource, "doc.workspace."), workspaceMembers, "the workspace", "BoardDocument.qml")
+expect(referencedBy(documentSource, "\\b(?:pane|panes\\[\\w+\\])"), controller, "the pane", "BoardDocument.qml")
+expect(referencedBy(workspace, "(?:root\\.activePane|root\\.panes\\[\\w+\\]|\\bpane|\\bfirst)"), controller,
+  "the pane", "Omarchyform.qml")
+// destroy() is every object's own, and the one thing the workspace does to a
+// document that is not declared on it.
+expect(referencedBy(workspace, "(?:root\\.documents\\[\\w+\\]|\\.doc|\\bdoc)"), new Set([...documentMembers, "destroy"]),
+  "the document", "Omarchyform.qml")
+
+// What the exchange reads off the pane a picture was dropped or pasted on,
+// which it is handed rather than finding it as `ctl`.
+expect(referencedBy(read("BoardExchange.qml"), "(?:\\.pane|\\bpane|pastePane)"), controller, "the pane",
+  "BoardExchange.qml")
 
 // And the stub that stands in for it during the QML session test.
 const stub = nestedMembers(read("tests/qml/tst_session.qml"), "ctl")
@@ -147,11 +188,13 @@ for (const reads of [helpReads, read("Surface.qml")])
 // header and every panel it hosts — against one stub, so that stub stands in
 // for the controller in front of more of the tree than any other. Same reason
 // as above: an undefined read there is silent on one Qt and fatal on another.
-const panSource = read("tests/qt/tst_pan.qml")
-const panStub = nestedMembers(panSource, "ctl")
-const panTheme = membersAt(blockBody(panSource, "property QtObject theme:"), 6)
+// It lives in a file of its own, so the split suite can mount two boards
+// against two of it.
+const panSource = read("tests/qt/PaneStub.qml")
+const panStub = declaredMembers(panSource)
+const panTheme = membersAt(blockBody(panSource, "property QtObject theme:"), 4)
 for (const file of ["Board.qml", "Node.qml", "BoardToolbar.qml", "Help.qml", "Browser.qml",
-                    "ScrollHint.qml", "Commands.qml", "Conflict.qml", "BoardImage.qml", "Surface.qml"]) {
+                    "ScrollHint.qml", "Commands.qml", "Conflict.qml", "BoardImage.qml", "Surface.qml", "TimelineStrip.qml"]) {
   expect(referenced(read(file), "ctl."), panStub, "the tst_pan stub", file)
   expect(referenced(read(file), "theme."), panTheme, "the tst_pan stub's theme", file)
 }
@@ -165,13 +208,15 @@ const libraryReads = {
   "Browser.qml": referenced(read("Browser.qml"), "browser.library."),
   "Board.qml": referenced(read("Board.qml"), "ctl.library."),
   "BoardSession.qml": referenced(session, "session.ctl.library."),
-  "Omarchyform.qml": referenced(read("Omarchyform.qml"), "root.library.")
+  "BoardPane.qml": referenced(pane, "root.library."),
+  "Omarchyform.qml": referenced(workspace, "root.library.")
 }
 for (const [file, reads] of Object.entries(libraryReads)) expect(reads, libraryMembers, "BoardLibrary.qml", file)
 const libraryStub = source => membersAt(blockBody(source, "property QtObject library:"), 6)
 expect(libraryReads["Browser.qml"], libraryStub(layoutSource), "the tst_layout stub's library", "Browser.qml")
 for (const file of ["Browser.qml", "Board.qml"])
-  expect(libraryReads[file], libraryStub(panSource), "the tst_pan stub's library", file)
+  expect(libraryReads[file], membersAt(blockBody(panSource, "property QtObject library:"), 4),
+    "the tst_pan stub's library", file)
 expect(libraryReads["BoardSession.qml"], libraryStub(read("tests/qml/tst_session.qml")),
   "the tst_session stub's library", "BoardSession.qml")
 
@@ -184,9 +229,19 @@ expect(nodeReads, nestedMembers(read("tests/qt/tst_node.qml"), "ctl"),
 // added to Node would have gone missing from every exported image in silence.
 expect(nodeReads, nestedMembers(read("BoardImage.qml"), "renderCtl"),
   "the PNG export's renderCtl", "BoardImage.qml")
-expect(referenced(read("Node.qml"), "theme."),
-  membersAt(blockBody(read("BoardImage.qml"), "property QtObject theme:"), 6),
-  "the PNG export's theme", "BoardImage.qml")
+
+// The board and its items draw through BoardPalette, on screen and in a PNG:
+// what either reads off its theme is declared there, and what the palette
+// reads off the theme it is based on is the theme's.
+const paletteMembers = declaredMembers(read("BoardPalette.qml"))
+expect(referenced(read("Node.qml"), "theme."), paletteMembers, "BoardPalette", "Node.qml")
+expect(referenced(read("Board.qml"), "board.theme."), paletteMembers, "BoardPalette", "Board.qml")
+expect(referenced(read("BoardPalette.qml"), "colours.base."), declaredMembers(read("Theme.qml")),
+  "the theme", "BoardPalette.qml")
+// And the export suite's theme, which a BoardPalette is built on there.
+expect(referenced(read("BoardPalette.qml"), "colours.base."),
+  membersAt(blockBody(read("tests/qt/tst_export.qml"), "property QtObject theme:"), 6),
+  "the tst_export stub's theme", "BoardPalette.qml")
 
 // A file also reaches into itself by its own id, and QML resolves that name the
 // same way it resolves ctl. — at runtime, in code paths a green suite may never
@@ -207,10 +262,10 @@ function declaredSignals(source) {
 
 // BoardBar is left out: it extends the shell's own BarWidget, so setting() and
 // bar come from a type that is not in this repository.
-for (const file of ["Omarchyform.qml", "BoardSession.qml", "BoardPersistence.qml", "BoardExchange.qml", "BoardLibrary.qml",
+for (const file of ["Omarchyform.qml", "BoardPane.qml", "BoardDocument.qml", "BoardSession.qml", "BoardPersistence.qml", "BoardExchange.qml", "BoardLibrary.qml",
                     "Board.qml", "Node.qml", "Browser.qml", "Help.qml", "BoardToolbar.qml",
                     "BoardImage.qml", "ScrollHint.qml", "Commands.qml", "Conflict.qml",
-                    "Theme.qml", "Surface.qml"]) {
+                    "Theme.qml", "Surface.qml", "TimelineStrip.qml"]) {
   const source = read(file)
   const rootId = (source.match(/^\s*id:\s*(\w+)\s*$/m) || [])[1]
   if (!rootId) { failures.push(`${file}: no id on the root object to check against`); continue }
@@ -219,6 +274,33 @@ for (const file of ["Omarchyform.qml", "BoardSession.qml", "BoardPersistence.qml
   for (const m of source.matchAll(new RegExp("\\b" + rootId + "\\.(\\w+)\\s*\\(", "g"))) called.add(m[1])
   for (const name of [...called].sort())
     if (!own.has(name) && !inheritedMethods.has(name)) failures.push(`${file}: ${rootId} has no ${name}()`)
+}
+
+// The pane, the document and the workspace were one file until the split, and
+// a name that moved out of one of them can still be read through its old id:
+// `root.dialogOpen` in the fullscreen surface outlived its move to the pane,
+// and the only sign was keyboard focus taken while a file dialog was up. These
+// three use nothing their base Item brings, so every read through their own id
+// is checked, not only calls.
+for (const [file, id] of [["Omarchyform.qml", "root"], ["BoardPane.qml", "root"], ["BoardDocument.qml", "doc"]]) {
+  const source = read(file)
+  const own = new Set([...declaredMembers(source), ...declaredSignals(source)])
+  const reads = new Set()
+  for (const m of source.matchAll(new RegExp("\\b" + id + "\\.(\\w+)", "g"))) reads.add(m[1])
+  for (const name of [...reads].sort())
+    if (!own.has(name)) failures.push(`${file}: ${id} has no '${name}'`)
+}
+
+// A name declared twice on one object is two things QML cannot both have:
+// a document once had a historyTrimmed flag and a historyTrimmed() handler,
+// and the handler overwrote the flag in every test that ran it.
+for (const file of fs.readdirSync(root).filter(f => f.endsWith(".qml"))) {
+  const source = read(file)
+  const seen = new Map()
+  for (const m of source.matchAll(/^ {2}(?:readonly\s+|required\s+)?(?:property\s+(?:alias\s+)?[\w.<>]+|function|signal)\s+(\w+)/gm))
+    seen.set(m[1], (seen.get(m[1]) || 0) + 1)
+  for (const [name, count] of seen)
+    if (count > 1) failures.push(`${file}: ${name} is declared ${count} times`)
 }
 
 // The palette and the keyboard have to agree about which letter does what.
@@ -360,7 +442,7 @@ function checkKinds(file, callee, allowNone) {
 checkKinds("BoardExchange.qml", "exchange.finished", true)
 checkKinds("BoardExchange.qml", "exchange.failed", false)
 checkKinds("BoardExchange.qml", "exchange.fail", false)
-checkKinds("Omarchyform.qml", "root.report", false)
+checkKinds("BoardPane.qml", "root.report", false)
 
 // The live suite walks numbered stages down one if/else chain, so a number used
 // twice makes the second one unreachable — and which of the blocks between them
@@ -400,8 +482,8 @@ const reservedIds = new Set([
 ])
 
 for (const file of [...fs.readdirSync(root).filter(f => f.endsWith(".qml")),
-                    ...fs.readdirSync(path.join(root, "tests/qml")).map(f => "tests/qml/" + f),
-                    ...fs.readdirSync(path.join(root, "tests/qt")).map(f => "tests/qt/" + f)]) {
+                    ...fs.readdirSync(path.join(root, "tests/qml")).filter(f => f.endsWith(".qml")).map(f => "tests/qml/" + f),
+                    ...fs.readdirSync(path.join(root, "tests/qt")).filter(f => f.endsWith(".qml")).map(f => "tests/qt/" + f)]) {
   for (const m of read(file).matchAll(/^\s*id:\s*(\w+)\s*$/gm))
     if (reservedIds.has(m[1]))
       failures.push(`${file}: "${m[1]}" is a property every Item has, so it is not a safe id`)
@@ -417,4 +499,4 @@ if (failures.length) {
   console.error(`FAILED — ${failures.length} missing member(s)`)
   process.exit(1)
 }
-console.log(`ok — contract: ${controller.size} controller members, ${sessionReads.size} read by the session`)
+console.log(`ok — contract: ${controller.size} pane members, ${sessionReads.size} read by the session`)

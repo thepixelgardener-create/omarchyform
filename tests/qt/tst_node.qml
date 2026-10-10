@@ -20,9 +20,10 @@ TestCase {
     property int linkingFrom: -1
     property int minItemSize: 60
     property color itemFill: "#222222"
-    // Shaped like Theme.qml, because a node cannot tell the difference between
-    // this and the real one. tests/contract.js checks that every token a node
-    // reads is declared in both.
+    // Shaped like BoardPalette.qml, because a node cannot tell the difference
+    // between this and the real one. tests/contract.js checks that every token
+    // a node reads is declared in both.
+    readonly property QtObject sceneTheme: ctl.theme
     property QtObject theme: QtObject {
       property int cornerRadius: 0
       property int borderWidth: 1
@@ -42,6 +43,13 @@ TestCase {
     property int undoCount: 0
     property int saveCount: 0
     property int flushCount: 0
+    property var pointerEdit: null
+    property int cancels: 0
+    function beginPointerEdit(label) { pointerEdit = {}; pushUndo() }
+    function finishPointerEdit(cancel) {
+      if (pointerEdit) { if (cancel) cancels++; else save() }
+      pointerEdit = null
+    }
     function isMarked(id) { return false }
     // The camera a node culls itself against. Off by default: these tests are
     // about what one node draws, and a node outside the viewport draws itself
@@ -82,7 +90,7 @@ TestCase {
     function removeItem(index) { model.remove(index) }
     ListModel {
       id: model
-      ListElement { ix: 100; iy: 100; iw: 180; ih: 140; itext: "" }
+      ListElement { ix: 100; iy: 100; iw: 180; ih: 140; itext: ""; itexture: "plain" }
     }
   }
   property int backgroundDoubleClicks: 0
@@ -111,6 +119,7 @@ TestCase {
     iw: model.get(0).iw
     ih: model.get(0).ih
     itint: "foreground"
+    itexture: model.get(0).itexture
     itext: model.get(0).itext
     isrc: ""
   }
@@ -130,11 +139,49 @@ TestCase {
     ctl.canEdit = true
     ctl.selectedIndex = -1
     ctl.editIndex = -1
+    ctl.linkingFrom = -1
     ctl.undoCount = 0
     ctl.saveCount = 0
     ctl.flushCount = 0
+    ctl.pointerEdit = null
+    ctl.cancels = 0
     backgroundMiddlePresses = 0
-    model.set(0, {ix:100, iy:100, iw:180, ih:140, itext:""})
+    model.set(0, {ix:100, iy:100, iw:180, ih:140, itext:"", itexture:"plain"})
+  }
+  // Choosing the far end of a connector: a click picks the item, and neither
+  // drags it nor starts typing in it.
+  function test_linkTargetDoesNotDragOrEdit() {
+    ctl.linkingFrom = 2
+    mousePress(test, 140, 140, Qt.LeftButton)
+    mouseMove(test, 200, 160, -1, Qt.LeftButton)
+    mouseRelease(test, 200, 160, Qt.LeftButton)
+    compare(model.get(0).ix, 100)
+    compare(ctl.undoCount, 0)
+    mouseDoubleClickSequence(test, 140, 140, Qt.LeftButton)
+    compare(ctl.editIndex, -1)
+  }
+  function test_textureChangesLiveAndCulls() {
+    var layer = findChild(subject, "item-texture")
+    compare(layer.active, false)
+    model.setProperty(0, "itexture", "grid")
+    tryCompare(subject, "textureStyle", "grid")
+    tryCompare(layer, "active", true)
+    tryCompare(layer, "status", Loader.Ready)
+    verify(layer.item !== null, "the texture component actually instantiated")
+    verify(waitForRendering(subject))
+    var textured = grabImage(subject)
+    model.setProperty(0, "itexture", "plain")
+    tryCompare(layer, "active", false)
+    verify(waitForRendering(subject))
+    verify(!textured.equals(grabImage(subject)))
+    model.setProperty(0, "itexture", "hatch")
+    ctl.culling = true
+    ctl.camX = -2000
+    tryCompare(layer, "active", false)
+    ctl.camX = 0
+    tryCompare(layer, "active", true)
+    subject.kind = "image"
+    tryCompare(layer, "active", false)
   }
   function test_drag() {
     mousePress(test, 140, 140, Qt.LeftButton)
@@ -146,13 +193,37 @@ TestCase {
     compare(ctl.saveCount, 1)
   }
   function test_resize() {
+    // The grip appears on hover: a synthetic press alone can arrive before
+    // HoverHandler makes it visible, depending on the preceding test.
+    var grip = findChild(subject, "node-resize")
+    mouseMove(test, 272, 232)
+    tryCompare(grip, "visible", true)
     mousePress(test, 272, 232, Qt.LeftButton)
+    compare(grip.pressed, true)
     mouseMove(test, 312, 252, -1, Qt.LeftButton)
     mouseRelease(test, 312, 252, Qt.LeftButton)
     compare(model.get(0).iw, 220)
     compare(model.get(0).ih, 160)
     compare(ctl.undoCount, 1)
     compare(ctl.saveCount, 1)
+  }
+  function test_canceledGesture_data() {
+    return [{ tag: "drag", area: "node-drag", x: 140, y: 140 },
+            { tag: "resize", area: "node-resize", x: 272, y: 232 }]
+  }
+  function test_canceledGesture(data) {
+    ctl.selectedIndex = 0
+    wait(1)
+    mousePress(test, data.x, data.y, Qt.LeftButton)
+    mouseMove(test, data.x + 40, data.y + 20, -1, Qt.LeftButton)
+    var area = findChild(subject, data.area)
+    verify(area !== null)
+    // Exercise Qt's cancellation signal directly; disabling a MouseArea does
+    // not itself revoke an existing grab on the offscreen platform.
+    area.canceled()
+    compare(ctl.cancels, 1, "the cancellation signal cancels the controller transaction")
+    compare(ctl.saveCount, 0, "cancellation does not commit")
+    mouseRelease(test, data.x + 40, data.y + 20, Qt.LeftButton)
   }
   function test_pinnedPointer() {
     subject.ipinned = true

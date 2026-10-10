@@ -25,11 +25,13 @@ ShellRoot {
     path: Quickshell.env("OMARCHYFORM_TEST_DIR") + "/showcase.json"
   }
 
-  // The session is a child of the controller rather than a property of it.
+  // The session is a child of the open board's document rather than a
+  // property of it.
   function session() {
-    for (var i = 0; i < plugin.data.length; i++)
-      if (plugin.data[i] && typeof plugin.data[i].failedSave === "function") return plugin.data[i]
-    throw new Error("no board session under the controller")
+    var doc = plugin.activePane.doc
+    for (var i = 0; doc && i < doc.data.length; i++)
+      if (doc.data[i] && typeof doc.data[i].failedSave === "function") return doc.data[i]
+    throw new Error("no board session under the document")
   }
 
   // Each scene puts the board in a state and is photographed once it settles.
@@ -39,39 +41,58 @@ ShellRoot {
     {
       name: "02-one-of-everything",
       setup: function () {
-        plugin.addItem("note", 220, 180)
-        plugin.items.setProperty(0, "itext", "A thought worth keeping.\nIt runs to a second line.")
-        plugin.addItem("rect", 560, 180)
-        plugin.items.setProperty(1, "itext", "a box")
-        plugin.addItem("ellipse", 840, 180)
-        plugin.items.setProperty(2, "itext", "an ellipse")
-        plugin.addItem("diamond", 1100, 180)
-        plugin.items.setProperty(3, "itext", "a diamond")
-        plugin.addItem("note", 220, 460)
-        plugin.items.setProperty(4, "itext", "Overflowing: "
+        plugin.activePane.addItem("note", 220, 180)
+        plugin.activePane.items.setProperty(0, "itext", "A thought worth keeping.\nIt runs to a second line.")
+        plugin.activePane.addItem("rect", 560, 180)
+        plugin.activePane.items.setProperty(1, "itext", "a box")
+        plugin.activePane.addItem("ellipse", 840, 180)
+        plugin.activePane.items.setProperty(2, "itext", "an ellipse")
+        plugin.activePane.addItem("diamond", 1100, 180)
+        plugin.activePane.items.setProperty(3, "itext", "a diamond")
+        plugin.activePane.addItem("note", 220, 460)
+        plugin.activePane.items.setProperty(4, "itext", "Overflowing: "
           + "a long sentence that keeps going past the bottom edge of the note. ".repeat(4))
-        plugin.addItem("note", 560, 460)
-        plugin.items.setProperty(5, "itext", "a marked note")
-        plugin.addItem("note", 840, 460)
-        plugin.items.setProperty(6, "itext", "also marked")
-        plugin.addLink(1, 2)
-        plugin.addLink(6, 7)
-        plugin.stopEditing()
-        plugin.selectOnly(0)
-        plugin.fitToItems()
+        plugin.activePane.addItem("note", 560, 460)
+        plugin.activePane.items.setProperty(5, "itext", "a marked note")
+        plugin.activePane.addItem("note", 840, 460)
+        plugin.activePane.items.setProperty(6, "itext", "also marked")
+        plugin.activePane.addLink(1, 2)
+        plugin.activePane.addLink(6, 7)
+        plugin.activePane.stopEditing()
+        plugin.activePane.selectOnly(0)
+        plugin.activePane.fitToItems()
       }
     },
+    {
+      name: "02a-item-textures",
+      setup: function () {
+        var p = plugin.activePane
+        var styles = ["ruled", "grid", "dots", "hatch", "plain", "dots", "grid"]
+        for (var i = 0; i < styles.length; i++) p.items.setProperty(i, "itexture", styles[i])
+        p.addLink(2, 3)
+        p.addLink(3, 4)
+        p.selectOnly(1)
+        p.repaintLinks()
+      }
+    },
+    { name: "02b-paper", setup: function () { plugin.activePane.setCanvasColour("Paper"); plugin.activePane.statusText = "" } },
+    { name: "02c-ink", setup: function () { plugin.activePane.setCanvasColour("Ink"); plugin.activePane.statusText = "" } },
+    { name: "02d-canvas-group", setup: function () { plugin.activePane.openGroup("canvas") } },
+    { name: "02e-texture-group", setup: function () { plugin.activePane.openGroup("texture") } },
+    { name: "02f-theme-restored", setup: function () {
+      plugin.activePane.endPalette(); plugin.activePane.setCanvasColour("Theme"); plugin.activePane.statusText = ""
+    } },
     {
       // The header is one line until the menu is asked for.
       name: "02b-menu-open",
       // Walked two along, so the keyboard's place in it is visible.
-      setup: function () { plugin.toggleMenu(); plugin.moveMenu(2) }
+      setup: function () { plugin.activePane.toggleMenu(); plugin.activePane.moveMenu(2) }
     },
     {
       // The overflow marker and the resize grip both want a corner.
       name: "03-overflowing-and-selected",
       // The menu closes again first: every later scene wants the slim header.
-      setup: function () { plugin.menuVisible = false; plugin.selectOnly(4) }
+      setup: function () { plugin.activePane.menuVisible = false; plugin.activePane.selectOnly(4) }
     },
 
     {
@@ -79,60 +100,60 @@ ShellRoot {
       // whatever the two of them are tinted?
       name: "04-cursor-beside-marks",
       setup: function () {
-        plugin.markedIds = [plugin.items.get(5).iid, plugin.items.get(6).iid]
-        plugin.selectedIndex = 5
+        plugin.activePane.markedIds = [plugin.activePane.items.get(5).iid, plugin.activePane.items.get(6).iid]
+        plugin.activePane.selectedIndex = 5
       }
     },
     {
       name: "05-typing",
       setup: function () {
-        plugin.markedIds = []
-        plugin.selectedIndex = 0
-        plugin.editSelected()
+        plugin.activePane.markedIds = []
+        plugin.activePane.selectedIndex = 0
+        plugin.activePane.editSelected()
       }
     },
     {
       name: "06-backgrounds",
       setup: function () {
-        plugin.stopEditing()
-        plugin.selectedIndex = 3
-        plugin.togglePin()
-        plugin.togglePinnedSelection()
+        plugin.activePane.stopEditing()
+        plugin.activePane.selectedIndex = 3
+        plugin.activePane.togglePin()
+        plugin.activePane.togglePinnedSelection()
       }
     },
     {
       name: "07-finding",
       setup: function () {
-        plugin.showPinned = false
-        plugin.selectedIndex = 0
-        plugin.beginFind()
-        plugin.setFindQuery("ma")
+        plugin.activePane.showPinned = false
+        plugin.activePane.selectedIndex = 0
+        plugin.activePane.beginFind()
+        plugin.activePane.setFindQuery("ma")
       }
     },
     {
       name: "08-arranging",
       setup: function () {
-        plugin.endFind()
-        plugin.markedIds = [plugin.items.get(5).iid, plugin.items.get(6).iid]
-        plugin.selectedIndex = 5
-        plugin.beginArrange()
+        plugin.activePane.endFind()
+        plugin.activePane.markedIds = [plugin.activePane.items.get(5).iid, plugin.activePane.items.get(6).iid]
+        plugin.activePane.selectedIndex = 5
+        plugin.activePane.beginArrange()
       }
     },
     {
       name: "08b-commands",
       setup: function () {
-        plugin.cancelArrange()
-        plugin.markedIds = []
+        plugin.activePane.cancelArrange()
+        plugin.activePane.markedIds = []
         // Nothing selected, so the commands that need something to act on say
         // what they are waiting for rather than looking available.
-        plugin.selectedIndex = -1
-        plugin.beginPalette()
+        plugin.activePane.selectedIndex = -1
+        plugin.activePane.beginPalette()
       }
     },
     {
       name: "08c-commands-narrowed",
       setup: function () {
-        plugin.setPaletteQuery("co")
+        plugin.activePane.setPaletteQuery("co")
       }
     },
     {
@@ -140,11 +161,11 @@ ShellRoot {
       // commands that act on it, with the arrangement chord's answers named.
       name: "08d-selection-actions",
       setup: function () {
-        plugin.endPalette()
-        plugin.selectOnly(5)
-        plugin.markedIds = [plugin.items.get(5).iid, plugin.items.get(6).iid]
-        plugin.beginSelectionActions()
-        plugin.setPaletteQuery("a")
+        plugin.activePane.endPalette()
+        plugin.activePane.selectOnly(5)
+        plugin.activePane.markedIds = [plugin.activePane.items.get(5).iid, plugin.activePane.items.get(6).iid]
+        plugin.activePane.beginSelectionActions()
+        plugin.activePane.setPaletteQuery("a")
       }
     },
     {
@@ -152,24 +173,24 @@ ShellRoot {
       // is worth looking at in every theme the board is drawn in.
       name: "08e-two-versions",
       setup: function () {
-        plugin.endPalette()
-        plugin.conflictVisible = true
-        plugin.conflictIndex = 1
+        plugin.activePane.endPalette()
+        plugin.activePane.conflictVisible = true
+        plugin.activePane.conflictIndex = 1
       }
     },
     {
       name: "09-help",
       setup: function () {
-        plugin.conflictVisible = false
-        plugin.markedIds = []
-        plugin.helpVisible = true
+        plugin.activePane.conflictVisible = false
+        plugin.activePane.markedIds = []
+        plugin.activePane.helpVisible = true
       }
     },
     {
       name: "10-browser",
       setup: function () {
-        plugin.helpVisible = false
-        plugin.openBrowser()
+        plugin.activePane.helpVisible = false
+        plugin.activePane.openBrowser()
       }
     },
     {
@@ -201,14 +222,14 @@ ShellRoot {
       name: "11-working-zoom",
       setup: function () {
         plugin.library.hide()
-        plugin.resetView()
-        plugin.markedIds = [plugin.items.get(6).iid]
-        plugin.selectedIndex = 5
+        plugin.activePane.resetView()
+        plugin.activePane.markedIds = [plugin.activePane.items.get(6).iid]
+        plugin.activePane.selectedIndex = 5
         // Centred by the controller rather than by hand: world units are not
         // screen pixels, and picking camera values by eye went wrong twice.
         // The marked one sits to its right, which is the comparison worth
         // having at the size a person sees it.
-        plugin.centerOnSelected()
+        plugin.activePane.centerOnSelected()
       }
     },
     {
@@ -220,11 +241,11 @@ ShellRoot {
       // Nothing here is connected yet, so this is the plain case.
       name: "11b-connecting-create",
       setup: function () {
-        plugin.markedIds = []
-        plugin.fitToItems()
-        plugin.selectOnly(4)
-        plugin.toggleLinking()
-        plugin.selectedIndex = 5
+        plugin.activePane.markedIds = []
+        plugin.activePane.fitToItems()
+        plugin.activePane.selectOnly(4)
+        plugin.activePane.toggleLinking()
+        plugin.activePane.selectedIndex = 5
       }
     },
     {
@@ -232,10 +253,10 @@ ShellRoot {
       // one now turns that one round rather than adding a second.
       name: "11c-connecting-reverse",
       setup: function () {
-        plugin.linkingFrom = -1
-        plugin.selectOnly(6)
-        plugin.toggleLinking()
-        plugin.selectedIndex = 5
+        plugin.activePane.linkingFrom = -1
+        plugin.activePane.selectOnly(6)
+        plugin.activePane.toggleLinking()
+        plugin.activePane.selectedIndex = 5
       }
     },
     {
@@ -243,10 +264,10 @@ ShellRoot {
       // away. The line has to say so before the key is pressed, not after.
       name: "11d-connecting-remove",
       setup: function () {
-        plugin.linkingFrom = -1
-        plugin.selectOnly(5)
-        plugin.toggleLinking()
-        plugin.selectedIndex = 6
+        plugin.activePane.linkingFrom = -1
+        plugin.activePane.selectOnly(5)
+        plugin.activePane.toggleLinking()
+        plugin.activePane.selectedIndex = 6
       }
     },
     {
@@ -261,6 +282,48 @@ ShellRoot {
       }
     },
     {
+      // Two views of one board: the whole of it on the left, the right
+      // looking closer at one corner, with the keyboard there.
+      name: "12b-split-side",
+      setup: function () {
+        shots.session().saveError = ""
+        var left = plugin.activePane
+        left.statusText = ""
+        left.linkingFrom = -1
+        left.markedIds = []
+        left.selectedIndex = -1
+        left.toggleSplit("side-by-side")
+        var right = plugin.activePane
+        right.statusText = ""
+        left.fitToItems()
+        right.zoom = 1.25
+        right.selectOnly(0)
+        right.centerOnSelected()
+      }
+    },
+    {
+      name: "12c-split-stacked",
+      setup: function () {
+        plugin.activePane.toggleSplit("stacked")
+        plugin.panes[0].fitToItems()
+        plugin.activePane.centerOnSelected()
+      }
+    },
+    {
+      // Looking back: the board two steps ago, read-only, with the strip
+      // along the bottom saying which step it is.
+      name: "12d-timeline",
+      setup: function () {
+        if (plugin.split) plugin.activePane.toggleSplit(plugin.layout)
+        var p = plugin.activePane
+        p.statusText = ""
+        p.toggleTimeline()
+        p.timelineStep(-1)
+        p.timelineStep(-1)
+        p.statusText = ""
+      }
+    },
+    {
       // The picture in the README. Composed rather than caught in use: it is
       // the first thing a reader sees, so it says what the board is for in the
       // items themselves. It lives here because the last one was arranged by
@@ -268,22 +331,24 @@ ShellRoot {
       // hint row that had both since moved.
       name: "13-preview",
       setup: function () {
+        if (plugin.split) plugin.activePane.toggleSplit(plugin.layout)
+        if (plugin.activePane.timeline) plugin.activePane.leaveTimeline()
         shots.session().saveError = ""
-        plugin.linkingFrom = -1
-        plugin.statusText = ""
-        plugin.selectedIndex = -1
-        plugin.markedIds = []
-        plugin.restore(Store.readFile(showcase.text()))
-        plugin.stopEditing()
-        plugin.selectedIndex = -1
-        plugin.fitToItems()
+        plugin.activePane.linkingFrom = -1
+        plugin.activePane.statusText = ""
+        plugin.activePane.selectedIndex = -1
+        plugin.activePane.markedIds = []
+        plugin.activePane.restore(Store.readFile(showcase.text()))
+        plugin.activePane.stopEditing()
+        plugin.activePane.selectedIndex = -1
+        plugin.activePane.fitToItems()
         // Fit the complete example beneath the chrome, including on tall displays.
-        var available = plugin.viewH - plugin.activeBoard.canvasTop - 48
-        plugin.zoom = Math.min(1, (plugin.viewW - 96) / 1020, available / 725)
-        plugin.camX = (plugin.viewW - 1020 * plugin.zoom) / 2
-        plugin.camY = plugin.activeBoard.canvasTop + 24
-        plugin.repaintGrid()
-        plugin.repaintLinks()
+        var available = plugin.activePane.viewH - plugin.activePane.activeBoard.canvasTop - 48
+        plugin.activePane.zoom = Math.min(1, (plugin.activePane.viewW - 96) / 1020, available / 725)
+        plugin.activePane.camX = (plugin.activePane.viewW - 1020 * plugin.activePane.zoom) / 2
+        plugin.activePane.camY = plugin.activePane.activeBoard.canvasTop + 24
+        plugin.activePane.repaintGrid()
+        plugin.activePane.repaintLinks()
       }
     }
   ]
@@ -292,49 +357,49 @@ ShellRoot {
   // is composed for the README picture and has no picture and no background in
   // it. Built rather than photographed: nothing here is judged by eye.
   function buildHeldBoard() {
-    plugin.endPalette()
-    plugin.conflictVisible = false
-    plugin.helpVisible = false
+    plugin.activePane.endPalette()
+    plugin.activePane.conflictVisible = false
+    plugin.activePane.helpVisible = false
     plugin.library.hide()
-    plugin.cancelArrange()
-    plugin.statusText = ""
-    plugin.markedIds = []
-    plugin.selectedIndex = -1
-    plugin.items.clear()
-    plugin.links.clear()
+    plugin.activePane.cancelArrange()
+    plugin.activePane.statusText = ""
+    plugin.activePane.markedIds = []
+    plugin.activePane.selectedIndex = -1
+    plugin.activePane.items.clear()
+    plugin.activePane.links.clear()
 
-    plugin.addItem("rect", 120, 140)
-    plugin.items.setProperty(0, "iw", 900)
-    plugin.items.setProperty(0, "ih", 620)
-    plugin.items.setProperty(0, "itext", "a background")
+    plugin.activePane.addItem("rect", 120, 140)
+    plugin.activePane.items.setProperty(0, "iw", 900)
+    plugin.activePane.items.setProperty(0, "ih", 620)
+    plugin.activePane.items.setProperty(0, "itext", "a background")
 
-    plugin.addItem("note", 240, 260)
-    plugin.items.setProperty(1, "itext", "a note to type in")
-    plugin.addItem("ellipse", 600, 260)
-    plugin.items.setProperty(2, "itext", "a shape")
-    plugin.addItem("note", 240, 520)
-    plugin.items.setProperty(3, "itext", "another note")
-    plugin.addLink(plugin.items.get(1).iid, plugin.items.get(3).iid)
+    plugin.activePane.addItem("note", 240, 260)
+    plugin.activePane.items.setProperty(1, "itext", "a note to type in")
+    plugin.activePane.addItem("ellipse", 600, 260)
+    plugin.activePane.items.setProperty(2, "itext", "a shape")
+    plugin.activePane.addItem("note", 240, 520)
+    plugin.activePane.items.setProperty(3, "itext", "another note")
+    plugin.activePane.addLink(plugin.activePane.items.get(1).iid, plugin.activePane.items.get(3).iid)
 
     // The picture the harness wrote into this run's own images directory.
-    plugin.addItem("note", 620, 520)
-    plugin.items.setProperty(4, "kind", "image")
-    plugin.items.setProperty(4, "isrc", "held.png")
-    plugin.items.setProperty(4, "itext", "")
-    plugin.items.setProperty(4, "iw", 220)
-    plugin.items.setProperty(4, "ih", 160)
+    plugin.activePane.addItem("note", 620, 520)
+    plugin.activePane.items.setProperty(4, "kind", "image")
+    plugin.activePane.items.setProperty(4, "isrc", "held.png")
+    plugin.activePane.items.setProperty(4, "itext", "")
+    plugin.activePane.items.setProperty(4, "iw", 220)
+    plugin.activePane.items.setProperty(4, "ih", 160)
 
     // Pinned last, once every item exists. Pinning moves a delegate from the
     // foreground to the background, and adding items after that asks the
     // repeater to stack a new one behind one that is no longer its sibling —
     // which it says so about, in the terminal of whoever is driving the board.
-    plugin.selectOnly(0)
-    plugin.togglePin()
+    plugin.activePane.selectOnly(0)
+    plugin.activePane.togglePin()
 
-    plugin.stopEditing()
-    plugin.selectedIndex = -1
-    plugin.resetView()
-    plugin.save(true)
+    plugin.activePane.stopEditing()
+    plugin.activePane.selectedIndex = -1
+    plugin.activePane.resetView()
+    plugin.activePane.save(true)
   }
 
   function settle(frames) { shots.waitUntil = shots.ticks + frames }
@@ -408,7 +473,7 @@ ShellRoot {
       if (shots.failTheWrite) {
         breakWrites.command = ["chmod", "500", plugin.boardsDir]
         breakWrites.running = true
-        plugin.items.setProperty(1, "itext", "something to fail to save")
+        plugin.activePane.items.setProperty(1, "itext", "something to fail to save")
       }
       console.log("SHOTS_HELD_DISMISSING")
       plugin.dismiss()
@@ -427,11 +492,11 @@ ShellRoot {
     if (shots.phase !== "closing") return
     // Closing flushes; a board that could not be written is the one thing a
     // held run must not exit quietly on, because the point of it is the board.
-    if (plugin.saveError !== "") {
-      shots.finish("failed", "the board could not be written: " + plugin.saveError)
+    if (plugin.activePane.saveError !== "") {
+      shots.finish("failed", "the board could not be written: " + plugin.activePane.saveError)
       return
     }
-    if (plugin.saving || plugin.pendingBoard !== null || plugin.exchangeBusy || plugin.imageBusy) {
+    if (plugin.activePane.saving || plugin.activePane.pendingBoard !== null || plugin.activePane.exchangeBusy || plugin.activePane.imageBusy) {
       if (shots.ticks - shots.closingSince > shots.writeGrace)
         shots.finish("failed", "something was still being written five seconds after closing")
       return
@@ -462,7 +527,9 @@ ShellRoot {
   function grab() {
     shots.grabbing = true
     shots.grabWanted = false
-    plugin.activeBoard.grabToImage(function (result) {
+    // Split, the picture is of the surface both boards are on, divider and all.
+    var board = plugin.activePane.activeBoard
+    ;(plugin.split ? board.parent : board).grabToImage(function (result) {
       if (!result.saveToFile(shots.dir + "/" + shots.scenes[shots.scene].name + ".png")) {
         shots.finish("failed", "could not save screenshot " + shots.scenes[shots.scene].name)
         return
@@ -501,8 +568,8 @@ ShellRoot {
       if (shots.scene === -1) {
         // A window rather than the fullscreen overlay: a picture of a board
         // wants an edge around it.
-        if (!plugin.boardLoaded) return
-        if (!plugin.activeBoard) {
+        if (!plugin.activePane.boardLoaded) return
+        if (!plugin.activePane.activeBoard) {
           plugin.windowMode = true
           plugin.open("{}")
           shots.settle(10)

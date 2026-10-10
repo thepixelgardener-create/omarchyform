@@ -1,5 +1,5 @@
 import QtQuick
-import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 // Bar presence for Omarchyform: the only way to find the board without
@@ -49,12 +49,12 @@ BarWidget {
     // read thin and small beside its neighbours; a grid glyph, tried first,
     // read as a spreadsheet.
     text: ""
-    slotSize: Style.bar.statusSlot
-    fontSize: Style.bar.iconFont
+    slotSize: Commons.Style.bar.statusSlot
+    fontSize: Commons.Style.bar.iconFont
     // Accent rather than the default urgent: an open board is a state, not a
     // problem.
     active: root.boardOpen
-    activeColor: Color.accent
+    activeColor: Commons.Color.accent
     tooltipText: root.boardOpen ? "Omarchyform — open" : "Omarchyform"
     onPressed: root.toggleBoard()
   }

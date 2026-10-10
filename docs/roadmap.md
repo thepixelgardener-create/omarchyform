@@ -1,6 +1,6 @@
 # Roadmap
 
-Updated 2026-10-05. This is the current release direction. The dated
+Updated 2026-10-10. This is the current release direction. The dated
 [architecture review](architecture-review-0.4.5.md) and
 [competitor analysis](competitor-analysis-0.4.5.md) explain the findings behind it.
 
@@ -31,14 +31,27 @@ and a security pass; the [changelog](../CHANGELOG.md) has each one.
 
 - **Display-only nodes:** the PNG export draws `Node.qml` against a stand-in
   controller with empty editing methods (review finding 2).
-- **Connector drawing cost:** cache the item index between repaints and skip
-  connectors that cannot cross the view; keep either only if `bench:scene`
-  improves.
 - **Reads from slow storage:** a board read blocks the shell for as long as the
   read takes. 1ms on a local disk; network storage is unmeasured.
-- A docs index, and CI rejecting new lint diagnostics.
+- CI rejecting new lint diagnostics.
 
 These are planned. Completed changes are recorded in the changelog.
+
+## 0.4.7 — Split view, history and canvas customization
+
+Shipped.
+
+- Side-by-side and stacked panes, board history and timeline playback.
+- Per-item textures, canvas colours and grouped commands.
+- Connector item-index caching, offscreen rejection and drawing grouped by colour.
+- Confirming a connection after selecting its destination with the pointer.
+- A short README start page with feedback forms; the manual moved to `docs/`.
+
+The [split-view plan](splitview-timeline-plan.md#gate-6-results) records the
+follow-up fixes and checks. Native file-manager drop into the inactive pane was
+confirmed by hand; IME composition is still unverified. A fully textured
+3,000-item board is [measured](performance.md#fully-textured-large-board--2026-10-09),
+with frame-rate limits recorded. Boards with history or textures use format 7.
 
 ## 0.5 — Editable, labeled connectors
 
@@ -51,8 +64,8 @@ Planned scope:
 - Pointer selection of individual connectors and a keyboard-accessible list
   of connections for the selected item.
 - Named actions to edit a label, reverse a connector and remove it.
-- During connect mode, clicking a valid target preserves the source. Show the
-  outcome and require explicit confirmation to create, reverse or remove a line.
+- Retain the destination-selection and explicit-confirmation behavior already
+  implemented on `dev` when adding connector labels and individual selection.
 - Preserve the existing keyboard workflow and straight connectors.
 
 Completion checks:
@@ -73,9 +86,5 @@ Revisit these after 0.5 and feedback from real use:
 - Persistent groups with explicit membership.
 - SVG export and zoom to selection.
 - Explicit URL/file links if source collection proves a stronger need.
-- A timeline: play a board back from its first note to now. Items are numbered
-  in the order they were made, so a first version needs no new storage; moves,
-  edits and deletions would need history kept in the file.
-- Split view. Open question: two boards side by side, or two views of one
-  board. Either needs the camera to belong to the view rather than the
-  controller.
+
+Freehand drawing is outside the current scope.
