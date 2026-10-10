@@ -41,6 +41,25 @@ assert.ok(qmlPolicy('new XMLHttpRequest()').length)
 assert.ok(qmlPolicy('command: ["bash", "-c", note]').length)
 assert.deepEqual(qmlPolicy('Text {\n  textFormat: Text.PlainText\n}'), [])
 
+// A payload getter starts Qt's unbounded platform read before any later size
+// check. Reject entry and drop without consulting URL, text or raw data getters.
+function dropPolicy(source) {
+  const errors = []
+  for (const match of source.matchAll(/^( *)DropArea \{\n([\s\S]*?)^\1}/gm)) {
+    const body = match[2]
+    if (!/onEntered: function \(drag\) \{ drag\.accepted = false }/.test(body)
+        || !/onDropped: function \(drop\) \{ drop\.accepted = false }/.test(body))
+      errors.push('external drag offers must be rejected before payload access')
+    if (/\.(urls|text|html|getDataAsString|getDataAsArrayBuffer|acceptProposedAction)\b/.test(body))
+      errors.push('a drag handler reads or accepts an unbounded payload')
+  }
+  return errors
+}
+assert.ok(dropPolicy('  DropArea {\n    onDropped: function(drop) { use(drop.urls) }\n  }').length)
+assert.ok(dropPolicy('  DropArea {\n    onEntered: function (drag) { drag.accepted = false }\n    onDropped: function (drop) { drop.accepted = false }\n    onPositionChanged: use(drag.text)\n  }').length)
+for (const file of fs.readdirSync(root).filter(f => f.endsWith('.qml')))
+  assert.deepEqual(dropPolicy(fs.readFileSync(path.join(root, file), 'utf8')), [], file)
+
 function newBoundary(source) {
   return /\b(fetch|XMLHttpRequest|WebSocket)\s*\(|\b(?:require|import)\s*\(?\s*['"](?:node:)?(?:https?|net|tls|dgram|dns|undici|axios|ws)['"]|^\s*import\s+QtWeb|^\s*(?:exec\s+)?(?:curl|wget|ssh|scp|nc|sudo|pkexec)\s/m.test(source)
 }

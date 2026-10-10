@@ -137,8 +137,17 @@ button was already taken by the pan surface (`tst_pan.qml`,
 `test_middleDragOverAnEditorPansInsteadOfPasting`), and the three line fields,
 which the pan surface does not cover, now take it themselves.
 
-Remaining: whatever is dragged onto the board is read by Qt from the drag
-source in the same way, without a total limit, before `importDropped` sees it.
-That needs the person to drag from the hostile application onto the board,
-rather than to paste whatever happens to own the clipboard.
+The follow-up review identified the same unbounded read through `drop.urls`.
+External drag offers are now rejected on entry and on drop, without reading
+URLs, text or raw MIME payloads. Drag-and-drop image import is disabled; image
+paste still uses the bounded helper. Re-enabling external drops requires a
+transport that enforces byte/time limits before Qt collects the payload.
+
+`npm run test:drop` injects URI and text offers through Qt's window-system drag
+entry points in single and split views. Its instrumented `QMimeData` counts
+payload retrieval and requires zero reads and rejected drag/drop responses.
+This is not a native Wayland streaming attack test: it proves the production
+handlers do not request payload bytes at the Qt application boundary. The
+static security screen also rejects payload access or acceptance in DropAreas.
+
 The known limits above remain open hardening areas, not completed fixes.

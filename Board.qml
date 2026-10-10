@@ -404,29 +404,14 @@ FocusScope {
     }
   }
 
-  // Pictures dragged in from a file manager. Above the canvas so the whole
-  // board is a target, below the keyboard owner so nothing about typing
-  // changes. The world point is worked out here, while the drop still knows
-  // where it happened.
+  // Reject external offers before reading any payload. Qt's Wayland reader
+  // has no total byte limit, so checking URLs after access is already too late.
+  // Images can still be pasted through the bounded clipboard helper.
   DropArea {
-    id: dropTarget
+    objectName: "external-drop-guard"
     anchors.fill: parent
-    keys: ["text/uri-list"]
-    onDropped: function (drop) {
-      if (!drop.hasUrls) { drop.accepted = false; return }
-      board.ctl.dropFiles(drop.urls, board.ctl.toWorldX(drop.x), board.ctl.toWorldY(drop.y))
-      drop.acceptProposedAction()
-    }
-  }
-
-  // Says the board will take it, before it is let go of.
-  Rectangle {
-    anchors.fill: parent
-    visible: dropTarget.containsDrag
-    color: "transparent"
-    border.width: board.theme.borderWidth * 2
-    border.color: board.theme.accent
-    radius: board.theme.cornerRadius
+    onEntered: function (drag) { drag.accepted = false }
+    onDropped: function (drop) { drop.accepted = false }
   }
 
   // Keyboard owner. Lives above the canvas so Escape always lands here.

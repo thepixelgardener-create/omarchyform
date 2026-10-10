@@ -1,5 +1,5 @@
-// Files let go on a two-pane surface the way the platform delivers them, so
-// the boards' real DropAreas decide which pane each lands on. Builds
+// External offers delivered through Qt’s platform entry points must be
+// rejected without requesting their payload, on either pane. Builds
 // tests/qt/drop_inject.cpp against this machine's Qt, which needs its private
 // window-system header, and runs it offscreen.
 const { spawnSync } = require('child_process')
@@ -29,7 +29,7 @@ try {
     env: { ...process.env, QT_QPA_PLATFORM: 'offscreen', QT_QPA_PLATFORMTHEME: '' } })
   const out = (run.stdout || '') + (run.stderr || '')
   if (run.status !== 0 || !out.includes('DROP_TESTS_PASSED')) { console.error(out); process.exit(1) }
-  console.log('ok — drop: a file let go on either pane reaches that pane, at its own point')
+  console.log('ok — drop: all external offers rejected with zero payload reads in single and split views')
 } finally {
   fs.rmSync(dir, { recursive: true, force: true })
 }

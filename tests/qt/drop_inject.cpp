@@ -1,11 +1,7 @@
-// A file let go on a window, delivered the way the platform delivers it: a
-// drag and a drop carrying the file's address, into Qt's window system
-// interface, which hands them to whichever DropArea is under the point. A QML
-// test cannot do this. Its Drag.mimeData travels only with drags the platform
-// runs, so a drag inside the window reaches a DropArea with no address at all.
-//
-// The scene says where each drop goes, with `prepare(step)`, and what went
-// wrong, with `verdict()`. Built and run by tests/drop.js.
+// Deliver foreign offers through Qt's actual window-system drag entry points.
+// The production board must reject them without requesting payload bytes.
+// prepare(step) selects a pane/layout; verdict() checks that no import ran.
+// Built and run by tests/drop.js, without a hostile stream or real user data.
 #include <QElapsedTimer>
 #include <QGuiApplication>
 #include <QMimeData>
@@ -15,6 +11,18 @@
 #include <qpa/qplatformdrag.h>
 #include <qpa/qwindowsysteminterface.h>
 #include <cstdio>
+
+// Count requests for payload bytes, not MIME metadata. A real hostile sender
+// could stream forever here; the application must never request these bytes.
+class CountingMimeData final : public QMimeData {
+public:
+    mutable int reads = 0;
+protected:
+    QVariant retrieveData(const QString &format, QMetaType type) const override {
+        ++reads;
+        return QMimeData::retrieveData(format, type);
+    }
+};
 
 static void settle(int ms)
 {
@@ -42,8 +50,9 @@ int main(int argc, char **argv)
     settle(300);
 
     QObject *scene = view.rootObject();
-    QMimeData file;
+    CountingMimeData file;
     file.setUrls({ QUrl::fromLocalFile(QString::fromLocal8Bit(argv[2])) });
+    file.setText("foreign drag text must never be retrieved");
     for (int step = 0;; ++step) {
         QVariant at;
         QMetaObject::invokeMethod(scene, "prepare", Q_RETURN_ARG(QVariant, at), Q_ARG(QVariant, step));
@@ -52,9 +61,13 @@ int main(int argc, char **argv)
             break;
         settle(50);
         const QPoint p(point.value("x").toInt(), point.value("y").toInt());
-        QWindowSystemInterface::handleDrag(&view, &file, p, Qt::CopyAction, Qt::LeftButton, Qt::NoModifier);
+        const auto drag = QWindowSystemInterface::handleDrag(&view, &file, p, Qt::CopyAction, Qt::LeftButton, Qt::NoModifier);
         settle(20);
-        QWindowSystemInterface::handleDrop(&view, &file, p, Qt::CopyAction, Qt::LeftButton, Qt::NoModifier);
+        const auto drop = QWindowSystemInterface::handleDrop(&view, &file, p, Qt::CopyAction, Qt::LeftButton, Qt::NoModifier);
+        if (file.reads != 0 || drag.isAccepted() || drop.isAccepted()) {
+            std::fprintf(stderr, "FAIL: external offer %d accepted or read (%d payload requests)\n", step, file.reads);
+            return 1;
+        }
         settle(20);
     }
 

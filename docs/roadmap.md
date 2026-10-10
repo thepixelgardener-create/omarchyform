@@ -48,8 +48,9 @@ Shipped.
 - A short README start page with feedback forms; the manual moved to `docs/`.
 
 The [split-view plan](splitview-timeline-plan.md#gate-6-results) records the
-follow-up fixes and checks. Native file-manager drop into the inactive pane was
-confirmed by hand; IME composition is still unverified. A fully textured
+follow-up fixes and checks. External file-manager drops are now disabled
+pending a bounded drag transport; use clipboard image paste. IME composition
+is still unverified. A fully textured
 3,000-item board is [measured](performance.md#fully-textured-large-board--2026-10-09),
 with frame-rate limits recorded. Boards with history or textures use format 7.
 
