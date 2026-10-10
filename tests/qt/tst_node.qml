@@ -193,9 +193,13 @@ TestCase {
     compare(ctl.saveCount, 1)
   }
   function test_resize() {
-    // Let the preceding read-only case settle before targeting the resize grip.
-    verify(waitForRendering(subject))
+    // The grip appears on hover: a synthetic press alone can arrive before
+    // HoverHandler makes it visible, depending on the preceding test.
+    var grip = findChild(subject, "node-resize")
+    mouseMove(test, 272, 232)
+    tryCompare(grip, "visible", true)
     mousePress(test, 272, 232, Qt.LeftButton)
+    compare(grip.pressed, true)
     mouseMove(test, 312, 252, -1, Qt.LeftButton)
     mouseRelease(test, 312, 252, Qt.LeftButton)
     compare(model.get(0).iw, 220)
