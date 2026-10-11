@@ -150,4 +150,46 @@ This is not a native Wayland streaming attack test: it proves the production
 handlers do not request payload bytes at the Qt application boundary. The
 static security screen also rejects payload access or acceptance in DropAreas.
 
+The next follow-up, at `0f12e80`, found the three one-line fields still
+`TextInput`s, and Qt 6.12.0's `TextInput` reading the clipboard's whole text
+whenever the clipboard changes while it is editable, with nobody pasting:
+`QQuickTextInput::q_canPasteChanged` calls `QMimeData::text()` (qtdeclarative
+`v6.12.0`; 6.11, the 6.12 branch since and `dev` check `hasText()` only). No
+handler here runs before that read. `TextEdit` asks only which formats are on
+offer, and the note editor already was one.
+
+The find field, the board browser's field and the command list's query are now
+`LineField.qml`, a plain-text `TextEdit` held to one line: Return, Enter and Tab
+never reach the text, a paste is handed to the owner's bounded `pasteInto`, and
+the middle button stops at a guard. Input methods still compose into them. The
+static screen refuses `TextInput` anywhere in the plugin.
+
+`npm run test:clipboard` builds `tests/qt/clipboard_watch.cpp` against the
+installed Qt, opens each field in turn — find, the command list, the browser
+searching and naming a board, a note being typed in, and two panes at once —
+and changes the clipboard three times in each, counting
+`QMimeData::retrieveData`. It requires no requests, and checks that a
+deliberate read is counted. The Qt it runs on decides what it proves: Qt 6.4
+does not read on a change, so the old fields pass there too. On Qt 6.12.0 the
+same binary, built against the system Qt and run on PySide6 6.12.0's
+libraries, which Qt's binary compatibility allows:
+
+```
+g++ -std=c++17 -fPIC tests/qt/clipboard_watch.cpp -o /tmp/clipboard_watch \
+  $(pkg-config --cflags --libs Qt6Quick Qt6Gui)
+QT=<site-packages>/PySide6/Qt   # pip install pyside6-essentials==6.12.0
+LD_LIBRARY_PATH=$QT/lib QT_PLUGIN_PATH=$QT/plugins QML_IMPORT_PATH=$QT/qml \
+  CLIPBOARD_WATCH=/tmp/clipboard_watch npm run test:clipboard
+```
+
+| Fields at | Qt 6.4.2 | Qt 6.12.0 |
+|---|---|---|
+| `0f12e80` (`TextInput`) | 0 requests | 36 requests on 3 changes, with nothing open |
+| `LineField` | 0 requests | 0 requests, in every state |
+
+`npm run test:ui` passes on both versions the same way, with
+`LD_LIBRARY_PATH`, `QT_PLUGIN_PATH` and `QML_IMPORT_PATH` set. Like the drop
+test, this proves what the plugin asks Qt for, not behaviour under a real
+streaming Wayland owner.
+
 The known limits above remain open hardening areas, not completed fixes.

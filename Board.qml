@@ -863,58 +863,57 @@ FocusScope {
       font.pixelSize: board.theme.fontBody
     }
 
-    TextInput {
-      id: findField
-      objectName: "find-field"
-      // Wide enough to see the caret in an empty query, and it grows with what
-      // is typed rather than reserving a box the board has to look at.
-      width: Math.max(board.theme.sp(24), Math.min(implicitWidth + board.theme.sp(2), board.width / 3))
+    // Wide enough to see the caret in an empty query, and it grows with what
+    // is typed rather than reserving a box the board has to look at. Past a
+    // third of the board, the query scrolls inside it.
+    Item {
+      id: findView
+      width: Math.max(board.theme.sp(24), Math.min(findField.implicitWidth + board.theme.sp(2), board.width / 3))
+      height: findField.implicitHeight
       clip: true
-      color: board.theme.foreground
-      selectionColor: board.theme.accent
-      selectedTextColor: board.theme.canvasBackground
-      selectByMouse: true
-      font.family: board.theme.fontFamily
-      font.pixelSize: board.theme.fontBody
 
-      // Typed into, it is the query. Set from anywhere else — a test, the
-      // screenshot harness, a find reopened on the query it had — it follows,
-      // so the two cannot show different things. Both sides check before
-      // writing, so neither can chase the other.
-      Accessible.role: Accessible.EditableText
-      Accessible.name: "Find on this board"
-      Accessible.description: board.ctl.findCount + " matches"
+      LineField {
+        id: findField
+        objectName: "find-field"
+        color: board.theme.foreground
+        selectionColor: board.theme.accent
+        selectedTextColor: board.theme.canvasBackground
+        font.family: board.theme.fontFamily
+        font.pixelSize: board.theme.fontBody
 
-      onTextChanged: board.ctl.setFindQuery(text)
-      readonly property string query: board.ctl.findQuery
-      onQueryChanged: if (findField.query !== findField.text) findField.text = findField.query
+        // Typed into, it is the query. Set from anywhere else — a test, the
+        // screenshot harness, a find reopened on the query it had — it follows,
+        // so the two cannot show different things. Both sides check before
+        // writing, so neither can chase the other.
+        Accessible.role: Accessible.EditableText
+        Accessible.name: "Find on this board"
+        Accessible.description: board.ctl.findCount + " matches"
 
-      // Deferred for the same reason the browser's field defers: whatever
-      // else is being set as finding begins lands here on its own, and
-      // selecting has to be the last thing that happens.
-      readonly property bool wanted: board.ctl.finding
-      onWantedChanged: {
-        if (!wanted) { board.ctl.focusKeys(); return }
-        Qt.callLater(function () {
-          if (!board.ctl.finding) return
-          findField.text = board.ctl.findQuery
-          findField.forceActiveFocus()
-          findField.selectAll()
-        })
-      }
+        onTextChanged: board.ctl.setFindQuery(text)
+        readonly property string query: board.ctl.findQuery
+        onQueryChanged: if (findField.query !== findField.text) findField.text = findField.query
 
-      // Pasted text is read through the clipboard helper's limit rather than
-      // by Qt, which reads all of it first: see BoardExchange.pasteInto.
-      readonly property bool takesPaste: board.ctl.finding
-      readonly property int pasteLimit: findField.maximumLength
-      readonly property bool pasteLines: false
-      // The middle button pastes the primary selection, read the same way.
-      MouseArea { objectName: "find-field-middle"; anchors.fill: parent; acceptedButtons: Qt.MiddleButton }
+        // Deferred for the same reason the browser's field defers: whatever
+        // else is being set as finding begins lands here on its own, and
+        // selecting has to be the last thing that happens.
+        readonly property bool wanted: board.ctl.finding
+        onWantedChanged: {
+          if (!wanted) { board.ctl.focusKeys(); return }
+          Qt.callLater(function () {
+            if (!board.ctl.finding) return
+            findField.text = board.ctl.findQuery
+            findField.forceActiveFocus()
+            findField.selectAll()
+          })
+        }
 
-      // The board decides what these two mean; everything else is typing.
-      Keys.onPressed: function (event) {
-        if (event.matches(StandardKey.Paste)) { event.accepted = true; board.ctl.pasteInto(findField); return }
-        board.findKey(event)
+        // Pasted text is read through the clipboard helper's limit rather than
+        // by Qt, which reads all of it first: see BoardExchange.pasteInto.
+        takesPaste: board.ctl.finding
+        onPasteRequested: board.ctl.pasteInto(findField)
+
+        // The board decides what these two mean; everything else is typing.
+        onKeyPressed: function (event) { board.findKey(event) }
       }
     }
 
@@ -925,7 +924,7 @@ FocusScope {
       // centred in over to the left. A theme with large text in a small window
       // wraps it instead, the way the status line it stands in for wrapped.
       width: Math.min(implicitWidth,
-                      Math.max(0, board.width - board.theme.sp(32) - findLabel.width - findField.width))
+                      Math.max(0, board.width - board.theme.sp(32) - findLabel.width - findView.width))
       wrapMode: Text.Wrap
       color: board.theme.foreground
       opacity: 0.85

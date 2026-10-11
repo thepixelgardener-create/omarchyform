@@ -39,6 +39,10 @@ the CLI to create boards and is not a contribution guide.
   Qt's Wayland reader is not byte-bounded; a size check after a getter is too
   late. Keep `test:drop` proving rejection with zero payload retrieval. Do not
   restore external drag-and-drop without a bounded transport.
+- Build one-line text fields from `LineField`, never `TextInput`: Qt 6.12.0's
+  `TextInput` reads the clipboard's whole text on every clipboard change while
+  it is editable. Keep `test:clipboard` at zero content reads with every field
+  open, and run it on Qt 6.12.0 as `docs/security-review.md` describes.
 
 ## Regression checks
 

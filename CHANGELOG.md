@@ -13,6 +13,16 @@ since older boards are migrated on load rather than rejected.
   use bounded clipboard image paste instead. Regression coverage requires
   rejected offers and zero payload retrieval in single and split views.
 
+- Find, the board browser's field and the command list no longer read the
+  clipboard when it changes. On Qt 6.12.0 an editable `TextInput` reads the
+  clipboard's whole text on every change, with nobody pasting, so an
+  application that never stopped sending could stall the shell or exhaust its
+  memory while one of them was open. They are now `LineField`, a one-line
+  `TextEdit`, which only asks which formats are offered; typing, selection,
+  input methods and bounded paste work as before. `npm run test:clipboard`
+  counts the clipboard reads with every field open, and on Qt 6.12.0 went from
+  36 on three changes to none.
+
 ## 0.4.8 — 2026-10-10
 
 ### Fixed

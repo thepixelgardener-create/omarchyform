@@ -91,45 +91,68 @@ for (const file of fs.readdirSync(root).filter(f => f.endsWith('.qml'))) {
 // Qt's own paste reads everything a clipboard's owner sends before anything
 // here can count it, so an owner that never stops sending takes the shell's
 // memory. Every field that takes typing hands its paste keys to pasteInto,
-// which reads through the helper's 1 MiB limit; a line field also takes the
-// middle button, which pastes the primary selection the same way. The note
-// editor's middle button is taken by Board.qml's pan surface, above every item.
+// which reads through the helper's 1 MiB limit: directly, or as a LineField
+// whose owner connects pasteRequested to it. The note editor's middle button
+// is taken by Board.qml's pan surface, above every item; LineField takes its own.
+//
+// TextInput is refused outright. In Qt 6.12.0 an editable TextInput reads the
+// clipboard's whole text every time the clipboard changes, with nobody pasting
+// (QQuickTextInput::q_canPasteChanged calls QMimeData::text()), and no handler
+// here runs before that read. TextEdit asks only which formats are offered.
 function pastePolicy(source) {
   const errors = []
   const lines = source.split('\n')
   for (let i = 0; i < lines.length; i++) {
-    const start = /^( *)(TextInput|TextEdit) \{$/.exec(lines[i])
+    const start = /^( *)(TextInput|TextEdit|LineField) \{$/.exec(lines[i])
     if (!start) {
-      if (/\b(TextInput|TextEdit)\s*\{/.test(lines[i]) && !/^\s*\/\//.test(lines[i]))
+      if (/\b(TextInput|TextEdit|LineField)\s*\{/.test(lines[i]) && !/^\s*\/\//.test(lines[i]))
         errors.push(`line ${i+1}: unsupported text field layout`)
       continue
     }
     const end = lines.findIndex((line, n) => n > i && line === start[1] + '}')
     const field = lines.slice(i + 1, end)
     const body = field.join('\n')
-    // The paste keys, accepted, and handed over within the few lines after.
+    if (start[2] === 'TextInput') {
+      errors.push(`line ${i+1}: TextInput reads the clipboard on every change in Qt 6.12.0; use LineField`)
+      continue
+    }
+    if (start[2] === 'LineField') {
+      if (end < 0 || !/onPasteRequested: [^\n]*\.pasteInto\(/.test(body) || !/\btakesPaste: /.test(body))
+        errors.push(`line ${i+1}: a LineField's owner must hand its paste to pasteInto and say when it takes one`)
+      continue
+    }
+    // The paste keys, accepted, and handed over within the few lines after:
+    // to pasteInto, or to a pasteRequested signal this field declares.
     const keys = field.findIndex(line => /event\.matches\(StandardKey\.Paste\)/.test(line))
     const handled = keys >= 0 && field.slice(keys, keys + 4).join('\n')
-    if (end < 0 || !handled || !/event\.accepted = true/.test(handled) || !/\.pasteInto\(/.test(handled))
+    const handedOver = handled && (/\.pasteInto\(/.test(handled)
+      || (/\.pasteRequested\(\)/.test(handled) && /^\s*signal pasteRequested\(\)$/m.test(body)))
+    if (end < 0 || !handled || !/event\.accepted = true/.test(handled) || !handedOver)
       errors.push(`line ${i+1}: ${start[2]} must hand its paste keys to pasteInto`)
-    if (start[2] === 'TextInput' && !/MouseArea \{[^\n]*acceptedButtons: Qt\.MiddleButton/.test(body))
-      errors.push(`line ${i+1}: TextInput must take the middle button from Qt`)
   }
   // exchange.paste() is the board's own, through the helper; any other is Qt's.
   if (/(?<!exchange)\.paste\(\)/.test(source)) errors.push("Qt's own paste reads the clipboard without a limit")
   return errors
 }
-assert.ok(pastePolicy('  TextInput {\n    text: "x"\n  }').length, 'a field without the paste keys is refused')
+const pasteKeys = '    Keys.onPressed: function (event) {\n      if (event.matches(StandardKey.Paste)) { event.accepted = true; ctl.pasteInto(f); return }\n    }\n'
+assert.ok(pastePolicy('  TextInput {\n' + pasteKeys + '  }').length, 'a TextInput is refused, however its paste keys go')
+assert.ok(pastePolicy('  TextEdit {\n    text: "x"\n  }').length, 'a field without the paste keys is refused')
 assert.ok(pastePolicy('  TextEdit {\n    Keys.onPressed: function (event) {}\n  }').length)
-assert.ok(pastePolicy('  TextInput {\n    Keys.onPressed: function (event) {\n      if (event.matches(StandardKey.Paste)) { event.accepted = true; ctl.pasteInto(f); return }\n    }\n  }').length,
-  'a line field without the middle guard is refused')
-assert.ok(pastePolicy('  TextInput { id: f }').length, 'an unsupported layout is refused rather than skipped')
+assert.ok(pastePolicy('  TextEdit {\n    Keys.onPressed: function (event) {\n      if (event.matches(StandardKey.Paste)) { event.accepted = true; f.pasteRequested(); return }\n    }\n  }').length,
+  'a pasteRequested the field does not declare goes nowhere')
+assert.ok(pastePolicy('  LineField {\n    takesPaste: true\n  }').length, "a LineField whose paste goes nowhere is refused")
+assert.ok(pastePolicy('  LineField {\n    onPasteRequested: ctl.pasteInto(f)\n  }').length, 'and one that never says when it takes one')
+assert.ok(pastePolicy('  TextEdit { id: f }').length, 'an unsupported layout is refused rather than skipped')
 assert.ok(pastePolicy('editor.paste()').length)
 assert.deepEqual(pastePolicy('root.workspace.exchange.paste()'), [], "the board's own paste is the bounded one")
-assert.deepEqual(pastePolicy('  TextInput {\n    MouseArea { anchors.fill: parent; acceptedButtons: Qt.MiddleButton }\n' +
-  '    Keys.onPressed: function (event) {\n      if (event.matches(StandardKey.Paste)) { event.accepted = true; ctl.pasteInto(f); return }\n    }\n  }'), [])
+assert.deepEqual(pastePolicy('  TextEdit {\n' + pasteKeys + '  }'), [])
+assert.deepEqual(pastePolicy('  LineField {\n    takesPaste: open\n    onPasteRequested: ctl.pasteInto(f)\n  }'), [])
 for (const file of fs.readdirSync(root).filter(f => f.endsWith('.qml')))
   assert.deepEqual(pastePolicy(fs.readFileSync(path.join(root, file), 'utf8')), [], file)
+// LineField is what the line fields are, and it keeps the middle button from Qt.
+const lineField = fs.readFileSync(path.join(root, 'LineField.qml'), 'utf8')
+assert.match(lineField, /^TextEdit \{\n(?:.*\n)*?  textFormat: TextEdit\.PlainText\n/m, 'LineField is a plain-text TextEdit')
+assert.match(lineField, /\n  MouseArea \{\n(?:    .*\n)*?    acceptedButtons: Qt\.MiddleButton\n/, 'LineField takes the middle button')
 assert.match(fs.readFileSync(path.join(root, 'Board.qml'), 'utf8'),
   /MouseArea \{\n    id: panSurface\n[^}]*acceptedButtons: Qt\.MiddleButton/,
   'the pan surface takes the middle button from every item, the note editor included')
