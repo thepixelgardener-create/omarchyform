@@ -897,7 +897,7 @@ TestCase {
     verify(ctl.pastedInto === field, "on the field's behalf")
     verify(field.takesPaste, "which takes a paste while it is open")
     verify(!field.pasteLines, "on one line")
-    compare(field.pasteLimit, field.maximumLength, "and no longer than the field allows")
+    compare(field.pasteLimit, 32767, "and no longer than these fields have always allowed")
 
     var guard = findChild(field, row.guard)
     verify(guard !== null, row.guard)

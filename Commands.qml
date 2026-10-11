@@ -79,6 +79,8 @@ Item {
       width: parent.width
       implicitHeight: typed.implicitHeight
       height: query.implicitHeight
+      // A query wider than the list scrolls in here.
+      clip: true
 
       // Just after the caret rather than under it: both started at the left
       // edge, and the blinking caret sat over the first letter. Measured off
@@ -105,15 +107,12 @@ Item {
       // A real field: a query that only grew at the end could not be moved
       // through, selected in, pasted into, or composed in a language that
       // needs an input method — and the commands are found by typing.
-      TextInput {
+      LineField {
         id: typed
         objectName: "command-query"
-        width: parent.width
-        clip: true
         color: panel.theme.panelText
         selectionColor: panel.theme.accent
         selectedTextColor: panel.theme.panelBackground
-        selectByMouse: true
         font.family: panel.theme.menuFontFamily
         font.pixelSize: panel.theme.fontHeading
 
@@ -141,17 +140,11 @@ Item {
 
         // Pasted text is read through the clipboard helper's limit rather than
         // by Qt, which reads all of it first: see BoardExchange.pasteInto.
-        readonly property bool takesPaste: panel.ctl.paletteVisible
-        readonly property int pasteLimit: typed.maximumLength
-        readonly property bool pasteLines: false
-        // The middle button pastes the primary selection, read the same way.
-        MouseArea { objectName: "command-query-middle"; anchors.fill: parent; acceptedButtons: Qt.MiddleButton }
+        takesPaste: panel.ctl.paletteVisible
+        onPasteRequested: panel.ctl.pasteInto(typed)
 
         // The panel decides what these mean; everything else is typing.
-        Keys.onPressed: function (event) {
-          if (event.matches(StandardKey.Paste)) { event.accepted = true; panel.ctl.pasteInto(typed); return }
-          panel.board.paletteKey(event)
-        }
+        onKeyPressed: function (event) { panel.board.paletteKey(event) }
       }
     }
 

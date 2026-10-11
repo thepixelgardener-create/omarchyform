@@ -101,80 +101,79 @@ FocusScope {
           font.pixelSize: browser.theme.fontHeading
         }
 
-        TextInput {
-          id: typed
-          objectName: "browser-field"
+        // The field scrolls inside this once a name is wider than the panel.
+        Item {
           visible: browser.typing
-          enabled: browser.typing
           anchors.left: promptLabel.right
           anchors.right: parent.right
+          height: typed.implicitHeight
           clip: true
-          color: browser.theme.panelText
-          selectionColor: browser.theme.accent
-          selectedTextColor: browser.theme.panelBackground
-          selectByMouse: true
-          font.family: browser.theme.menuFontFamily
-          font.pixelSize: browser.theme.fontHeading
-          Accessible.role: Accessible.EditableText
-          Accessible.name: browser.prompting ? browser.library.promptLabel : "Search the boards"
 
-          // Which field this is standing in for. Renaming opens it with the
-          // current name in it and everything selected, so one keystroke
-          // replaces it and an arrow key edits it instead.
-          readonly property string mode: browser.prompting ? "prompt " + browser.library.promptLabel
-                                         : browser.searching ? "search" : ""
-          // Deferred: opening a prompt sets the label and then the name, and
-          // the second of those lands in this field on its own, cursor at the
-          // end and nothing selected. Selecting after both have arrived is what
-          // makes one keystroke replace the name rather than extend it.
-          //
-          // Only the browser on screen answers: the library is shared, and the
-          // other pane's board has a browser too, hidden, that hears the same
-          // change and would otherwise take the keyboard into a field no one
-          // can see.
-          onModeChanged: {
-            if (!browser.shown) return
-            if (typed.mode === "") { browser.forceActiveFocus(); return }
-            Qt.callLater(function () {
-              if (!browser.typing || !browser.shown) return
-              typed.text = browser.prompting ? browser.library.input : browser.library.query
-              typed.forceActiveFocus()
-              typed.selectAll()
-            })
-          }
+          LineField {
+            id: typed
+            objectName: "browser-field"
+            enabled: browser.typing
+            color: browser.theme.panelText
+            selectionColor: browser.theme.accent
+            selectedTextColor: browser.theme.panelBackground
+            font.family: browser.theme.menuFontFamily
+            font.pixelSize: browser.theme.fontHeading
+            Accessible.role: Accessible.EditableText
+            Accessible.name: browser.prompting ? browser.library.promptLabel : "Search the boards"
 
-          onTextChanged: {
-            if (browser.prompting) browser.library.input = typed.text
-            else if (browser.searching && typed.text !== browser.library.query) {
-              browser.library.query = typed.text
-              browser.library.index = 0
+            // Which field this is standing in for. Renaming opens it with the
+            // current name in it and everything selected, so one keystroke
+            // replaces it and an arrow key edits it instead.
+            readonly property string mode: browser.prompting ? "prompt " + browser.library.promptLabel
+                                           : browser.searching ? "search" : ""
+            // Deferred: opening a prompt sets the label and then the name, and
+            // the second of those lands in this field on its own, cursor at the
+            // end and nothing selected. Selecting after both have arrived is what
+            // makes one keystroke replace the name rather than extend it.
+            //
+            // Only the browser on screen answers: the library is shared, and the
+            // other pane's board has a browser too, hidden, that hears the same
+            // change and would otherwise take the keyboard into a field no one
+            // can see.
+            onModeChanged: {
+              if (!browser.shown) return
+              if (typed.mode === "") { browser.forceActiveFocus(); return }
+              Qt.callLater(function () {
+                if (!browser.typing || !browser.shown) return
+                typed.text = browser.prompting ? browser.library.input : browser.library.query
+                typed.forceActiveFocus()
+                typed.selectAll()
+              })
             }
-          }
 
-          // And it follows a value set from anywhere else, so the field and the
-          // controller cannot show different things. Both sides check before
-          // writing, so neither can chase the other.
-          readonly property string held: browser.prompting ? browser.library.input
-                                         : browser.searching ? browser.library.query : typed.text
-          onHeldChanged: if (typed.held !== typed.text) typed.text = typed.held
+            onTextChanged: {
+              if (browser.prompting) browser.library.input = typed.text
+              else if (browser.searching && typed.text !== browser.library.query) {
+                browser.library.query = typed.text
+                browser.library.index = 0
+              }
+            }
 
-          // Pasted text is read through the clipboard helper's limit rather
-          // than by Qt, which reads all of it first: see BoardExchange.pasteInto.
-          readonly property bool takesPaste: browser.typing && browser.shown
-          readonly property int pasteLimit: typed.maximumLength
-          readonly property bool pasteLines: false
-          // The middle button pastes the primary selection, read the same way.
-          MouseArea { objectName: "browser-field-middle"; anchors.fill: parent; acceptedButtons: Qt.MiddleButton }
+            // And it follows a value set from anywhere else, so the field and the
+            // controller cannot show different things. Both sides check before
+            // writing, so neither can chase the other.
+            readonly property string held: browser.prompting ? browser.library.input
+                                           : browser.searching ? browser.library.query : typed.text
+            onHeldChanged: if (typed.held !== typed.text) typed.text = typed.held
 
-          // The browser decides what these mean; everything else is typing, and
-          // is left to the field — including the caret keys, the selection and
-          // whatever an input method is in the middle of composing. Except a
-          // paste, which goes through the clipboard helper's limit.
-          Keys.onPressed: function (event) {
-            if (event.matches(StandardKey.Paste)) { event.accepted = true; browser.ctl.pasteInto(typed); return }
-            if (event.key === Qt.Key_Escape || event.key === Qt.Key_Return || event.key === Qt.Key_Enter
-                || event.key === Qt.Key_Up || event.key === Qt.Key_Down)
-              browser.library.key(event)
+            // Pasted text is read through the clipboard helper's limit rather
+            // than by Qt, which reads all of it first: see BoardExchange.pasteInto.
+            takesPaste: browser.typing && browser.shown
+            onPasteRequested: browser.ctl.pasteInto(typed)
+
+            // The browser decides what these mean; everything else is typing, and
+            // is left to the field — including the caret keys, the selection and
+            // whatever an input method is in the middle of composing.
+            onKeyPressed: function (event) {
+              if (event.key === Qt.Key_Escape || event.key === Qt.Key_Return || event.key === Qt.Key_Enter
+                  || event.key === Qt.Key_Up || event.key === Qt.Key_Down)
+                browser.library.key(event)
+            }
           }
         }
       }
