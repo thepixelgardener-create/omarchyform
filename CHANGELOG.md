@@ -23,6 +23,14 @@ since older boards are migrated on load rather than rejected.
   counts the clipboard reads with every field open, and on Qt 6.12.0 went from
   36 on three changes to none.
 
+- Refuse PNGs carrying compressed text, however they arrive: pasted, imported
+  or inside a shared board. Qt inflates and keeps every zTXt and compressed
+  iTXt chunk, nearly 8 MB each and up to about a thousand of them, so a PNG two
+  pixels square and well under the 32 MiB limit could ask the shell for tens of
+  gigabytes; a 392 KB one cost 1.9 GB on Qt 6.12.0. Such a picture is now
+  refused with a message saying why. Plain text metadata, as screenshot tools
+  write it, is still accepted.
+
 ## 0.4.8 — 2026-10-10
 
 ### Fixed

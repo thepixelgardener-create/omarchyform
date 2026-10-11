@@ -74,4 +74,41 @@ for (const operation of ['publish', 'copy', 'export']) {
   c.exited('publish', 0)
   assert.equal(c.signals[0].pane, c.a)
 }
+
+// A picture BoardFiles.sh refuses for the compressed text inside it (exit 9)
+// says so, on each way a picture comes in, rather than reading as unreadable.
+{
+  const c = fixture()
+  c.exchange.pasteBoard = 'x.json'
+  c.exchange.pastePane = { currentBoard: 'x.json' }
+  c.exchange.grabbed = { text: '' }
+  c.exchange.clipboard = { running: false }
+  c.exited('imageGrab', 9)
+  const said = c.signals[c.signals.length - 1]
+  assert.equal(said.name, 'failed')
+  assert.match(said.args[0], /compressed text/, 'a paste says why')
+  assert.equal(said.args[1], 'paste')
+  assert.equal(c.exchange.clipboard.running, false, 'and does not fall back to pasting text')
+}
+{
+  const c = fixture()
+  const reports = []
+  const pane = { doc: {}, report: (message, kind) => reports.push({ message, kind }) }
+  c.exchange.dropQueue = [{ pane, board: 'x.json', x: 0, y: 0 }]
+  c.exchange.importedName = { text: '' }
+  c.exchange.nextDrop = () => {}
+  c.exited('imageImport', 9)
+  assert.match(reports[0].message, /compressed text/, 'an imported picture says why')
+  assert.equal(reports[0].kind, 'picture')
+}
+for (const [code, says] of [[9, /carries compressed text.*nothing was imported/], [4, /^A picture in that board could not be read/]]) {
+  const c = fixture()
+  c.exchange.sharing = { at: 0, names: ['old.png'], base: 'board', landed: {}, raw: '{}' }
+  c.exchange.unbundled = { text: '' }
+  c.exited('unbundle', code)
+  const said = c.signals[c.signals.length - 1]
+  assert.equal(said.name, 'failed')
+  assert.match(said.args[0], says, 'a board carrying the picture, exit ' + code)
+  assert.equal(c.exchange.sharing, null, 'and nothing more of it is imported')
+}
 console.log('ok — exchange: every import stage and completion retains its originating pane')

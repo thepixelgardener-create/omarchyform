@@ -157,6 +157,26 @@ assert.match(fs.readFileSync(path.join(root, 'Board.qml'), 'utf8'),
   /MouseArea \{\n    id: panSurface\n[^}]*acceptedButtons: Qt\.MiddleButton/,
   'the pan surface takes the middle button from every item, the note editor included')
 
+// A picture that lands in images/ is loaded by Qt in the shell, so each way in
+// holds the bytes that land to their pixels and, for a PNG, to the compressed
+// text Qt would inflate, before placing them.
+function unguardedLandings(script) {
+  const errors = []
+  for (const op of script.split(/\n  [a-z]+\)\n/).slice(1)) {
+    const lands = op.indexOf('place_new "$temporary" "$images_root/')
+    if (lands < 0) continue
+    for (const guard of ['refuse_huge_pictures "$temporary"', 'refuse_compressed_text "$temporary"'])
+      if (op.indexOf(guard) < 0 || op.indexOf(guard) > lands) errors.push(`${op.split('\n')[0].trim()}: ${guard.split(' ')[0]} before it lands`)
+  }
+  return errors
+}
+const filesHelper = fs.readFileSync(path.join(root, 'BoardFiles.sh'), 'utf8')
+assert.ok(unguardedLandings('case x in\n  addimage)\n    refuse_huge_pictures "$temporary" png\n    place_new "$temporary" "$images_root/x"\n    ;;\n').length,
+  'a way in without the text check is refused')
+assert.deepEqual(unguardedLandings(filesHelper), [], 'every picture is checked before it lands')
+assert.equal((filesHelper.match(/place_new "\$temporary" "\$images_root\//g) || []).length, 3,
+  'paste, import and shared pictures; a new way in needs the same checks')
+
 const exchange = fs.readFileSync(path.join(root, 'BoardExchange.qml'), 'utf8')
 assert.match(exchange, /fileCommand\("clipcopy", \[\]\)/, 'QML copy helper has no content arguments')
 assert.doesNotMatch(exchange, /fileCommand\("clipcopy", \[(?!\])/,

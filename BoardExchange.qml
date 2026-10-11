@@ -177,7 +177,7 @@ Item {
     Qt.callLater(function () { bytes.setText(body) })
   }
 
-  function sharedImageDone(name) {
+  function sharedImageDone(name, refusal) {
     var job = exchange.sharing
     // A picture that did not arrive is not something to paper over: the board
     // would open with an item pointing at nothing, and nothing would say why.
@@ -185,7 +185,7 @@ Item {
     // the same way a picture whose item was deleted does.
     if (name === "") {
       exchange.sharing = null
-      exchange.fail("A picture in that board could not be read; nothing was imported", "board")
+      exchange.fail(refusal || "A picture in that board could not be read; nothing was imported", "board")
       return
     }
     job.landed[job.names[job.at]] = name
@@ -210,7 +210,8 @@ Item {
     id: unbundle
     stdout: StdioCollector { id: unbundled; waitForEnd: true }
     onExited: function (code) {
-      exchange.sharedImageDone(code === 0 && unbundled.text ? unbundled.text : "")
+      exchange.sharedImageDone(code === 0 && unbundled.text ? unbundled.text : "",
+        code === 9 ? "A picture in that board carries compressed text, which a board will not load; nothing was imported" : "")
     }
   }
 
@@ -559,6 +560,9 @@ Item {
       // 6 needs two pictures to arrive in the same millisecond, but saying the
       // wrong thing about it would be worse than the line it costs.
       else if (code === 6) exchange.dropReport(done, "A picture of that name is already there")
+      // 9: text inside the picture that would be inflated, in the shell, to
+      // far more than the file's size. BoardFiles.sh says why.
+      else if (code === 9) exchange.dropReport(done, "That picture carries compressed text, which a board will not load")
       else exchange.dropReport(done, "That is not an image this can read")
       exchange.nextDrop()
     }
@@ -576,6 +580,7 @@ Item {
       if (code === 8) { exchange.failed("Clipboard image is invalid or could not be read", "paste"); return }
       if (code === 6) { exchange.failed("A picture of that name is already there", "paste"); return }
       if (code === 7) { exchange.failed("That picture has too many pixels to put on a board", "paste"); return }
+      if (code === 9) { exchange.failed("That picture carries compressed text, which a board will not load", "paste"); return }
       if (code !== 0 || !grabbed.text) { exchange.failed("Could not read the clipboard image", "paste"); return }
       exchange.pastePane.imagePasted(grabbed.text)
     }

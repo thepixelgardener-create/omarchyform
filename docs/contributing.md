@@ -43,6 +43,10 @@ the CLI to create boards and is not a contribution guide.
   `TextInput` reads the clipboard's whole text on every clipboard change while
   it is editable. Keep `test:clipboard` at zero content reads with every field
   open, and run it on Qt 6.12.0 as `docs/security-review.md` describes.
+- Every picture that lands in `images/` goes through `BoardFiles.sh`, which
+  holds it to its bytes, its pixels (`refuse_huge_pictures`) and, for a PNG,
+  the compressed text Qt would inflate (`refuse_compressed_text`). A new way in
+  calls all three on the bytes that land.
 
 ## Regression checks
 

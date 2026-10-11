@@ -104,8 +104,11 @@ These are review obligations, not claims covered by a green test:
   paths can appear in process arguments and error messages.
 - Local board/CLI reads are not uniformly byte-bounded. Import size checks and
   bundle budgets can race concurrent file changes. Pixel checks cover PNG,
-  GIF and BMP headers; JPEG/WebP and aggregate decoded image memory require
-  further resource-limit work. Do not claim complete denial-of-service coverage.
+  GIF and BMP headers, and a PNG carrying compressed text (zTXt, compressed
+  iTXt) is refused; JPEG/WebP and aggregate decoded image memory require
+  further resource-limit work. Metadata in other formats is not inflated by Qt,
+  so it costs no more than the file's bytes. Do not claim complete
+  denial-of-service coverage.
 - The source guards are targeted pattern checks, not a QML parser, taint
   analysis, secret scanner, network monitor or dependency vulnerability audit.
   They do not catch indirect network access or prove every data flow safe.
@@ -191,5 +194,41 @@ LD_LIBRARY_PATH=$QT/lib QT_PLUGIN_PATH=$QT/plugins QML_IMPORT_PATH=$QT/qml \
 `LD_LIBRARY_PATH`, `QT_PLUGIN_PATH` and `QML_IMPORT_PATH` set. Like the drop
 test, this proves what the plugin asks Qt for, not behaviour under a real
 streaming Wayland owner.
+
+The review of `336e0e9` confirmed that and found that a pasted PNG was held
+only to its bytes (32 MiB) and its IHDR dimensions, which say nothing about
+the text inside it. Qt's PNG reader keeps every text chunk
+(`QPngHandlerPrivate::readPngTexts`, before and after the image data) and sets
+none of libpng's limits, so libpng's defaults apply: a zTXt or compressed iTXt
+chunk is inflated to just under 8 MB, and up to about a thousand are kept.
+Measured on Qt 6.12.0 with `QImageReader`, on a PNG two pixels square:
+
+| Compressed text | On disk | Extra memory to load it |
+|---|---|---|
+| none | 74 B | +1 MB |
+| 10 × 4 MB | 39 KB | +203 MB |
+| 10 × 7.9 MB | 77 KB | +400 MB |
+| 100 × 4 MB | 392 KB | +1.9 GB |
+
+About five bytes per inflated character, linear in the text: the thousand
+chunks libpng keeps, at 7.9 MB each, are a file of about 8 MB asking for some
+40 GB. Pasted through `0f12e80`'s `clipimage`, the 392 KB file landed and cost
+the shell 1.9 GB when loaded.
+
+`BoardFiles.sh` now refuses a PNG with a zTXt chunk or a compressed iTXt chunk
+on every way a picture arrives: pasted, dropped or picked, and carried inside a
+shared board. Exit 9 says so, and each route reports it as compressed text
+rather than as an unreadable picture. Plain tEXt and uncompressed iTXt cost no
+more than their bytes, so a screenshot tool's metadata still lands. A file
+without either chunk name in its bytes, which is every ordinary picture, costs
+one `grep`; one with the name is walked chunk by chunk in a single `od` pass
+into `awk`, so the same four bytes inside the image data are not taken for a
+chunk. That pass is bounded by the file's size rather than by how many chunks
+it holds (about a second for 8 MiB), and a walk that does not reach IEND is a
+refusal. `tests/filesystem.js` runs each route against zTXt before and after
+the image data, compressed and malformed iTXt, a file cut off before IEND, and
+the names inside image data and inside a tEXt value; `tests/exchange.js` checks
+the three messages, and the static screen requires every way a picture lands
+in `images/` to run both the pixel and the text check first.
 
 The known limits above remain open hardening areas, not completed fixes.

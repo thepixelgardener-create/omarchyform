@@ -87,6 +87,67 @@ refuse_huge_pictures() {
   (( width * height <= max_image_pixels )) || exit 7
 }
 
+# What a PNG may ask its reader to inflate, which the pixel count says nothing
+# about. Qt keeps the text of every zTXt and compressed iTXt chunk, and libpng
+# inflates each to nearly 8 MB and keeps up to a thousand of them, before and
+# after the image data: a PNG of a few megabytes, two pixels square, asks the
+# shell for gigabytes before a pixel is decoded. Plain tEXt and uncompressed
+# iTXt cost no more than their bytes on disk, so those stay.
+#
+# A file without either name anywhere in it cannot hold either chunk, which is
+# every ordinary picture, and that is all it costs. One with the name is walked
+# chunk by chunk, so the same four bytes inside the image data are not taken
+# for a chunk. The walk is one pass over the bytes, so what it costs is set by
+# the file's size, which is already held to max_image_bytes, rather than by how
+# many chunks someone packed into it. Exit 9 says the picture carries
+# compressed text; a walk that does not reach IEND says the same.
+refuse_compressed_text() {
+  local path=$1 kind=$2 found=0 verdict
+  [[ $kind == png ]] || return 0
+  LC_ALL=C grep -q -a -F -e zTXt -e iTXt -- "$path" || found=$?
+  (( found != 1 )) || return 0
+  (( found == 0 )) || exit 9
+  # After the signature: a 4-byte length, a 4-byte name, the data, a 4-byte CRC.
+  verdict=$(timeout 30 od -An -v -tu1 -w64 -j8 -- "$path" | awk '
+    function decide(answer) { print answer; decided = 1; exit }
+    BEGIN { state = "head"; got = 0 }
+    {
+      for (i = 1; i <= NF; i++) {
+        if (state == "skip") {
+          # Whole lines at a time: this is where the image data goes by.
+          if (skip >= NF - i + 1) { skip -= NF - i + 1; break }
+          i += skip; skip = 0; state = "head"
+          if (i > NF) break
+        }
+        b = $i + 0
+        if (state == "head") {
+          h[got++] = b
+          if (got < 8) continue
+          got = 0
+          size = ((h[0] * 256 + h[1]) * 256 + h[2]) * 256 + h[3]
+          name = h[4] " " h[5] " " h[6] " " h[7]
+          if (name == "122 84 88 116") decide("compressed")      # zTXt
+          if (name == "73 69 78 68") decide("clean")             # IEND
+          if (name == "105 84 88 116") { state = "keyword"; left = size; keyword = 0 }  # iTXt
+          else { state = "skip"; skip = size + 4 }
+        } else if (state == "keyword") {
+          # An iTXt keyword is 1 to 79 bytes and a NUL; the flag after it says
+          # whether the text is compressed.
+          left--
+          if (b == 0) { if (keyword < 1 || left < 1) decide("compressed"); state = "flag" }
+          else if (++keyword > 79 || left < 1) decide("compressed")
+        } else if (state == "flag") {
+          left--
+          if (b != 0) decide("compressed")
+          state = "skip"; skip = left + 4
+        }
+      }
+    }
+    # Out of bytes before IEND: cut short, or cut off by the timeout.
+    END { if (!decided) print "unfinished" }') || true
+  [[ $verdict == clean ]] || exit 9
+}
+
 # A name for a picture about to be written, without its extension. The caller
 # picks it, and it is still held to the names an image item may carry: no
 # slash, no leading dot or dash, nothing a path could be built out of.
@@ -182,7 +243,8 @@ case "$operation" in
   clipimage)
     # The clipboard picks the format; this picks the name and the folder, so
     # nothing the clipboard says can steer where the bytes land. Exit 4 means
-    # there is no image on it, which is the caller's cue to try text instead.
+    # there is no image on it, which is the caller's cue to try text instead;
+    # 9 that the picture carries compressed text (refuse_compressed_text).
     images_root=$1 base_name=$2
     plain_name "$base_name"
     mime=$(timeout 5 wl-paste --list-types 2>/dev/null | grep -m1 -E '^image/(png|jpeg|webp|gif|bmp)$' || true)
@@ -208,6 +270,7 @@ case "$operation" in
     extension=$(image_extension "$temporary") || exit 8
     confined "$images_root" "$base_name.$extension"
     refuse_huge_pictures "$temporary" "$extension"
+    refuse_compressed_text "$temporary" "$extension"
     place_new "$temporary" "$images_root/$base_name.$extension"
     printf '%s' "$base_name.$extension"
     ;;
@@ -246,7 +309,8 @@ case "$operation" in
     # A dropped path is untrusted: it names a file to read, never where bytes
     # land or what they are called. The type comes from the content rather than
     # the name, and a file too big to sit on a board is refused before it is
-    # copied. Exit 4 means "not an image this can take", 5 means "too large".
+    # copied. Exit 4 means "not an image this can take", 5 means "too large",
+    # 9 that it carries compressed text.
     images_root=$1 base_name=$2 source_path=$3
     plain_name "$base_name"
     [[ -f $source_path ]] || exit 4
@@ -264,6 +328,7 @@ case "$operation" in
     extension=$(image_extension "$temporary") || exit 4
     confined "$images_root" "$base_name.$extension"
     refuse_huge_pictures "$temporary" "$extension"
+    refuse_compressed_text "$temporary" "$extension"
     place_new "$temporary" "$images_root/$base_name.$extension"
     printf '%s' "$base_name.$extension"
     ;;
@@ -302,7 +367,8 @@ case "$operation" in
     # for anything: the caller picks the name, the type comes from the decoded
     # bytes, and the size is held to the same limit a dropped file is. Exit 4
     # means the bytes are not a picture, 5 that they are too big for a board,
-    # 7 that they decode to more pixels than a board will draw.
+    # 7 that they decode to more pixels than a board will draw, 9 that they
+    # carry compressed text the shell would inflate.
     images_root=$1 staged=$2 base_name=$3
     plain_name "$base_name"
     [[ -f $staged && ! -L $staged ]]
@@ -316,6 +382,7 @@ case "$operation" in
     # The path that matters most: this is a picture out of a board somebody
     # else made, and the only one that arrives without anybody choosing it.
     refuse_huge_pictures "$temporary" "$extension"
+    refuse_compressed_text "$temporary" "$extension"
     confined "$images_root" "$base_name.$extension"
     place_new "$temporary" "$images_root/$base_name.$extension"
     printf '%s' "$base_name.$extension"

@@ -362,6 +362,53 @@ try {
   assert.equal(drop('drop-big','big.png').status,0,'sixteen megapixels is a picture, not a bomb')
   assert.equal(fs.existsSync(path.join(images,'drop-big.png')),true)
 
+  // Text a PNG asks its reader to inflate, which neither the bytes nor the
+  // pixels say anything about. Qt keeps every zTXt and compressed iTXt chunk,
+  // inflated, and libpng allows nearly 8 MB a chunk and a thousand chunks, so a
+  // PNG two pixels square and a few megabytes on disk asks the shell for
+  // gigabytes. These are small: what is under test is which chunks get in.
+  const crcTable=Array.from({length:256},(_,n)=>{let c=n;for(let k=0;k<8;k++)c=c&1?0xedb88320^(c>>>1):c>>>1;return c>>>0})
+  const crc32=bytes=>{let c=0xffffffff;for(const b of bytes)c=crcTable[(c^b)&0xff]^(c>>>8);return (c^0xffffffff)>>>0}
+  const pngChunk=(name,data)=>{
+    const head=Buffer.alloc(4),tail=Buffer.alloc(4),body=Buffer.concat([Buffer.from(name,'latin1'),data])
+    head.writeUInt32BE(data.length); tail.writeUInt32BE(crc32(body))
+    return Buffer.concat([head,body,tail])
+  }
+  const twoByTwo=Buffer.from([0,16,32,48,255,16,32,48,255,0,16,32,48,255,16,32,48,255])
+  const pngWith=({before=[],after=[],pixels=twoByTwo,level=9,end=true}={})=>{
+    const ihdr=Buffer.alloc(13); ihdr.writeUInt32BE(2,0); ihdr.writeUInt32BE(2,4); ihdr[8]=8; ihdr[9]=6
+    return Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),pngChunk('IHDR',ihdr),...before,
+      pngChunk('IDAT',require('zlib').deflateSync(pixels,{level})),...after,...(end?[pngChunk('IEND',Buffer.alloc(0))]:[])])
+  }
+  const text=(name,body)=>pngChunk(name,Buffer.from(body,'latin1'))
+  const inflating=require('zlib').deflateSync(Buffer.alloc(1000000,65))
+  const zTXt=pngChunk('zTXt',Buffer.concat([Buffer.from('Comment\0\0','latin1'),inflating]))
+  const iTXt=compressed=>pngChunk('iTXt',Buffer.concat([Buffer.from('XML:com.adobe.xmp\0'+(compressed?'\x01':'\0')+'\0\0\0','latin1'),
+    compressed?inflating:Buffer.from('<x/>')]))
+  const textCases=[
+    ['zTXt before the image', pngWith({before:[zTXt]}), 9],
+    ['zTXt after the image', pngWith({after:[zTXt]}), 9],
+    ['compressed iTXt', pngWith({before:[iTXt(true)]}), 9],
+    ['an iTXt keyword with no end', pngWith({before:[pngChunk('iTXt',Buffer.alloc(100,65))]}), 9],
+    ['cut off before IEND, the name in it', pngWith({before:[text('tEXt','note\0zTXt')],end:false}), 9],
+    ['plain tEXt and uncompressed iTXt', pngWith({before:[text('tEXt','Software\0grim'),iTXt(false)]}), 0],
+    ['the names inside the image data', pngWith({pixels:Buffer.from('\0zTXtiTXt\0zTXtiTXt','latin1'),level:0}), 0],
+    ['the names inside a tEXt value', pngWith({before:[text('tEXt','note\0about zTXt and iTXt')]}), 0]
+  ]
+  textCases.forEach(([what,bytes,status],i)=>{
+    const file=path.join(source,`text-${i}.png`)
+    fs.writeFileSync(file,bytes)
+    // Every way a picture arrives: dropped or picked, pasted, and carried in a board.
+    for (const [how,attempt] of [['import',()=>drop(`text-${i}-drop`,`text-${i}.png`)],
+        ['paste',()=>paste('image/png','',images,`text-${i}-paste`,file)],
+        ['shared',()=>unbundle(`text-${i}-shared`,bytes.toString('base64'))]]) {
+      const result=attempt()
+      assert.equal(result.status,status,`${how}: ${what}`)
+      const name=`text-${i}-${how==='import'?'drop':how}.png`
+      assert.equal(fs.existsSync(path.join(images,name)),status===0,`${how}: ${what} ${status===0?'lands':'does not land'}`)
+    }
+  })
+
   assert.deepEqual(fs.readdirSync(images).filter(f=>f.startsWith('.')),[],'no temporaries left behind')
 
 } finally {fs.rmSync(dir,{recursive:true,force:true})}
