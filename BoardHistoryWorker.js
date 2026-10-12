@@ -32,9 +32,9 @@ function checkHistory(message, answer) {
   // If they differ, or the file is not JSON, the board is read again whole.
   var whole = null
   if (message.raw) {
-    try { whole = JSON.parse(message.raw) } catch (e) { whole = null }
+    try { whole = parseJson(message.raw) } catch (e) { whole = null }
     var front = null
-    try { front = JSON.parse(message.board) } catch (e) { front = null }
+    try { front = parseJson(message.board) } catch (e) { front = null }
     var same = function (a, b) { return JSON.stringify(a) === JSON.stringify(b) }
     if (!whole || typeof whole !== "object" || !front || whole.version !== front.version
         || !same(whole.items, front.items) || !same(whole.links, front.links) || whole.nextId !== front.nextId) {
@@ -48,7 +48,7 @@ function checkHistory(message, answer) {
     return answer
   }
   var h
-  try { h = JSON.parse(message.history) } catch (e) { h = null }
+  try { h = parseJson(message.history) } catch (e) { h = null }
   // What was left as text did not parse, but the file did: something follows
   // the history. It is the file's history, and goes back in this writer's
   // shape.
@@ -65,7 +65,7 @@ function checkHistory(message, answer) {
     return answer
   }
   var live
-  try { live = JSON.parse(message.board) } catch (e) { live = null }
+  try { live = parseJson(message.board) } catch (e) { live = null }
   if (!live || !Array.isArray(live.items)) {
     answer.error = "the board it belongs to could not be read"
     answer.unreadable = true
@@ -108,7 +108,7 @@ function shorten(message) {
 
 function trimHistory(message, answer) {
   var h
-  try { h = JSON.parse(message.history) } catch (e) { h = null }
+  try { h = parseJson(message.history) } catch (e) { h = null }
   var shape = checkShape(h)
   if (shape !== "") { answer.error = shape; return answer }
   // The request boundary survives even when every record is absorbed into base.

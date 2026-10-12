@@ -98,6 +98,11 @@ function makeDocument(workspace, board, Store) {
   // they fetch is what matters here, so they fetch it from the test instead.
   session.diskText = ''
   session.readDisk = () => session.diskText
+  // How big the helper says the file is: the text's length, unless a test
+  // says otherwise to stand for a file too large to have been read.
+  session.diskBytes = null
+  session.measureDisk = () => session.measuredDisk(doc.currentBoard,
+    session.diskBytes === null ? session.diskText.length : session.diskBytes)
   session.requestDisk = resolve => session.acceptDisk(doc.currentBoard,
     doc.fileText(), resolve, 'rev-fresh\n' + session.diskText)
   let revisions = 0
@@ -227,7 +232,9 @@ function controller() {
     showGrid: true, canvasPattern: 'Dots', canvasBackgroundChosen: false, canvasColour: 'Theme', startWindowed: false,
     boardsDir: '/boards', backupsDir: '/backups', dataDir: '/data', imagesDir: '/data/images',
     locksDir: '/data/locks', helperScript: '/BoardFiles.sh', launchNewBoard: false, launchOpenPath: '',
-    copyingFor: null, documents: [], panes: [], layout: 'single', splitRatio: 0.5, pendingLeave: null }
+    copyingFor: null, documents: [], panes: [], layout: 'single', splitRatio: 0.5, pendingLeave: null,
+    // The picture checks' properties, as Omarchyform.qml declares them.
+    pictures: {}, pictureQueue: { names: [], revisions: {}, queued: false }, pictureBatch: 32 }
   Object.defineProperty(workspace, 'split', { get: () => workspace.layout !== 'single' })
   Object.defineProperty(workspace, 'imageBusy', { get: () => workspace.paneSlots.some(p => p.imageBusy) })
   const states = []
@@ -316,14 +323,34 @@ function controller() {
   workspace.library = library
   loadFunctions(library, sources.library, vm.createContext({ library, Store, trashIndexFile,
     scanProc, mkdirProc, moveProc, trashProc, restoreProc, purgeProc }))
-  loadFunctions(workspace, sources.workspace, vm.createContext({ root: workspace, Store, boardExchange: exchange,
-    documentComponent, stateFile: { setText(text) { states.push(text) } } }))
+  // The picture check runs when the test says: what Qt.callLater was handed
+  // waits in `later`, and the helper's answer is played back through the
+  // workspace's own onExited.
+  const later = []
+  const pictureCheck = { running: false, asked: [], input: '', command: null, stdinEnabled: false }
+  const pictureVerdicts = { text: '' }
+  const workspaceContext = vm.createContext({ root: workspace, Store, boardExchange: exchange,
+    documentComponent, stateFile: { setText(text) { states.push(text) } },
+    Qt: { callLater(f) { later.push(f) } }, pictureCheck, pictureVerdicts })
+  loadFunctions(workspace, sources.workspace, workspaceContext)
+  const checked = sources.workspace.match(/id: pictureCheck\n[\s\S]*?onExited: function \(code\) \{ (.*) \}$/m)
+  const pictureExited = vm.runInContext(`(function(code) {${checked[1]}})`, workspaceContext)
   return { root: first, second, doc: opened.doc, workspace, session: opened.session, library,
     items: opened.items, links: opened.links, writes: opened.writes, states, persistence: opened.persistence,
     exchange, store: Store, complete: opened.complete, refuse: opened.refuse,
     // The helper finishing the dropped file it is copying: its exit code, and
     // the name it printed for the copy.
     imageImport,
+    pictureCheck,
+    // Runs whatever was handed to Qt.callLater, as the next turn of the loop.
+    runLater() { while (later.length) later.shift()() },
+    // The helper answering the pictures it was asked about.
+    finishPictures(code, text) {
+      assert.equal(pictureCheck.running, true, 'pictures are being checked')
+      pictureCheck.running = false
+      pictureVerdicts.text = text
+      pictureExited(code)
+    },
     finishDrop(code, name) {
       assert.equal(imageImport.running, true, 'a dropped file is being copied')
       imageImport.running = false

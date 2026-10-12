@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell.Io
+import "BoardStore.js" as Store
 
 // One coordinated write at a time. This writer is independent of the file
 // being browsed, so a late completion cannot write into a different board —
@@ -87,6 +88,8 @@ Item {
         return
       }
       if (code === 3) { persistence.fail("Board path goes through a symlink; not saved"); return }
+      // Larger than a board is opened at: written, it could not be read back.
+      if (code === 5) { persistence.fail("Board is " + Store.TOO_LARGE + ", so it was not saved; shorten or remove a note"); return }
       if (code !== 0) { persistence.fail("Could not replace the board; the version on disk is untouched"); return }
       persistence.busy = false
       persistence.completed(persistence.target, persistence.contents, committed.text)

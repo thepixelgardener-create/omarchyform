@@ -430,7 +430,7 @@ Item {
   // dragging one machine's window preference along with it.
   function applyState(raw) {
     var st = null
-    try { st = JSON.parse(raw) } catch (e) { st = null }
+    try { st = Store.parseJson(raw) } catch (e) { st = null }
     var board = st && Store.safeRelative(st.lastBoard) ? st.lastBoard : ""
     // The first pane's board is the one the state names. Until now nothing was
     // open: there was no board to say what is on it.
@@ -482,7 +482,7 @@ Item {
   // the bar, and the keybinding opens the same board the same way.
   function applyPayload(payloadJson) {
     var p = null
-    try { p = JSON.parse(payloadJson || "{}") } catch (e) { return false }
+    try { p = Store.parseJson(payloadJson || "{}") } catch (e) { return false }
     if (!p || !p.settings) return false
     var st = p.settings
     if (typeof st.autosaveMs === "number") root.autosaveMs = Math.max(100, Math.min(5000, st.autosaveMs))
@@ -502,7 +502,7 @@ Item {
 
   function open(payloadJson) {
     var request = null
-    try { request = JSON.parse(payloadJson || "{}") } catch (e) {}
+    try { request = Store.parseJson(payloadJson || "{}") } catch (e) {}
     if (request && request.action === "new") root.launchNewBoard = true
     if (request && request.action === "open" && typeof request.path === "string" && request.path !== "")
       root.launchOpenPath = request.path
@@ -569,9 +569,99 @@ Item {
     return root.locksDir + "/" + Store.lockKey(String(relative)) + ".lock"
   }
 
-  // The only way a file name out of a board file becomes a URL to load.
+  // The only way a file name out of a board file becomes a URL to load, and
+  // only once the file behind it has been checked (pictureState).
   function imagePath(name) {
-    return Store.imageIsValid(name) ? "file://" + root.imagesDir + "/" + name : ""
+    return root.pictureState(name) === "" ? "file://" + root.imagesDir + "/" + name : ""
+  }
+
+  // Qt reads every byte of a picture it draws, in the shell. The ways a picture
+  // lands check it as it lands, but one can be copied or synced into the
+  // folder, or have landed before a check existed, so each is checked before
+  // it is first drawn: by BoardFiles.sh checkimages, in the background, a few
+  // at a time, so a board full of pictures fills in rather than waits. ""
+  // means draw it, "waiting" that it is being checked, and anything else says
+  // why it is not drawn ("missing" for a file that is not there).
+  property var pictures: ({})
+  // Asked for and not yet sent, with the revision each was last found fit at.
+  // Asking happens inside bindings, so nothing binds to this.
+  readonly property var pictureQueue: ({ names: [], revisions: {}, queued: false })
+  readonly property int pictureBatch: 32
+  function pictureState(name) {
+    if (!Store.imageIsValid(name)) return "missing"
+    var known = root.pictures[name]
+    if (known === undefined) { root.askPicture(name, ""); return "waiting" }
+    return known.checking ? "waiting" : known.refused
+  }
+  function askPicture(name, revision) {
+    var queue = root.pictureQueue
+    if (queue.revisions.hasOwnProperty(name)) return
+    queue.revisions[name] = revision
+    queue.names.push(name)
+    if (!queue.queued) {
+      queue.queued = true
+      Qt.callLater(root.checkPictures)
+    }
+  }
+  // A board just read: what it draws is checked again before it is drawn, in
+  // case a file changed under its name. One unchanged since it was found fit
+  // costs a share of one stat.
+  function recheckPictures(names) {
+    var next = Object.assign({}, root.pictures)
+    for (var i = 0; i < names.length; i++) {
+      var known = next[names[i]]
+      if (known === undefined) continue
+      next[names[i]] = { refused: known.refused, revision: known.revision, checking: true }
+      root.askPicture(names[i], known.revision)
+    }
+    root.pictures = next
+  }
+  function checkPictures() {
+    var queue = root.pictureQueue
+    queue.queued = false
+    if (pictureCheck.running || queue.names.length === 0) return
+    var batch = queue.names.splice(0, root.pictureBatch)
+    var next = Object.assign({}, root.pictures)
+    var lines = []
+    for (var i = 0; i < batch.length; i++) {
+      var known = next[batch[i]]
+      lines.push(batch[i] + "\t" + queue.revisions[batch[i]] + "\n")
+      delete queue.revisions[batch[i]]
+      next[batch[i]] = { refused: known ? known.refused : "", revision: known ? known.revision : "", checking: true }
+    }
+    root.pictures = next
+    pictureCheck.asked = batch
+    pictureCheck.input = lines.join("")
+    pictureCheck.command = root.fileCommand("checkimages", [root.imagesDir])
+    pictureCheck.stdinEnabled = true
+    pictureCheck.running = true
+  }
+  // An answer the helper did not give, because it failed or was cut short, is
+  // not a picture to draw.
+  function checkedPictures(asked, code, text) {
+    var answers = code === 0 ? Store.pictureAnswers(text) : ({})
+    var next = Object.assign({}, root.pictures)
+    for (var i = 0; i < asked.length; i++) {
+      var found = answers.hasOwnProperty(asked[i]) ? answers[asked[i]] : null
+      next[asked[i]] = found ? { refused: found.refused, revision: found.revision, checking: false }
+                             : { refused: "could not be checked", revision: "", checking: false }
+    }
+    root.pictures = next
+    root.checkPictures()
+  }
+
+  Process {
+    id: pictureCheck
+    property var asked: []
+    property string input: ""
+    stdout: StdioCollector { id: pictureVerdicts; waitForEnd: true }
+    // Written once the pipe is there, and closed straight after, or the helper
+    // waits for an end of file that never comes.
+    onStarted: {
+      pictureCheck.write(pictureCheck.input)
+      pictureCheck.stdinEnabled = false
+    }
+    onExited: function (code) { root.checkedPictures(pictureCheck.asked, code, pictureVerdicts.text) }
   }
 
   function backupPathFor(relative) {
@@ -583,15 +673,16 @@ Item {
   // The boards directory has to exist before the first atomic write, otherwise
   // the board silently fails to save on a fresh install. A board from before
   // there were folders is copied in rather than moved, so the old file stays
-  // put as a fallback. Private like everything BoardFiles.sh creates: -m sets
-  // the mode of each folder named, whatever the shell's umask, and only when
-  // this creates it — a folder that is already there keeps the mode it has.
-  // The data folder is named first so it is one of them, not a parent made in
-  // passing with the umask's mode.
+  // put as a fallback. Every folder is private (BoardFiles.sh private): made
+  // 0700 whatever the shell's umask, and one already there made so too, with
+  // what is in it, whatever an older version or a sync tool left it as. The
+  // shell writes its state, staged imports and the trash index itself, with
+  // its own umask; only the folder keeps those to their owner. The data folder
+  // is named first, so it is one of them rather than a parent made in passing.
   Process {
     id: initProc
     running: true
-    command: ["mkdir", "-p", "-m", "700", root.dataDir, root.boardsDir, root.backupsDir, root.trashDir, root.imagesDir, root.locksDir]
+    command: root.fileCommand("private", [root.dataDir, root.boardsDir, root.backupsDir, root.trashDir, root.imagesDir, root.locksDir])
     onExited: migrateProc.running = true
   }
 

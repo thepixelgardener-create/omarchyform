@@ -64,6 +64,34 @@ for (const operation of ['publish', 'copy', 'export']) {
   assert.equal(c.signals[0].pane, c.a)
 }
 {
+  // A board with more in it than a board holds is refused with the reason,
+  // not imported to open read-only; one exactly full arrives.
+  const rows = n => Array.from({ length: n }, (_, i) => ({ id: i + 1, kind: 'rect', x: i, y: 0, w: 60, h: 60 }))
+  for (const [items, links, says] of [
+    [rows(5001), [], 'That board has more than 5,000 items'],
+    [rows(2), Array.from({ length: 20001 }, () => ({ from: 1, to: 2 })), 'That board has more than 20,000 connectors']]) {
+    const c = fixture()
+    c.exchange.input.raw = JSON.stringify({ version: 5, nextId: items.length + 1, items, links })
+    c.exited('measure', 0)
+    assert.equal(c.signals.length, 1)
+    assert.equal(c.signals[0].name, 'failed')
+    assert.deepEqual(c.signals[0].args, [says, 'board'])
+    assert.equal(c.staged.length, 0, 'nothing of it is staged')
+  }
+  for (const [raw, says] of [
+    ['{"version":5,"items":[],"links":[' + '0,'.repeat(100000) + '0]}', 'That board has a list too long to read'],
+    ['not a board', 'That file is not a supported board']]) {
+    const c = fixture()
+    c.exchange.input.raw = raw
+    c.exited('measure', 0)
+    assert.deepEqual(c.signals[0].args, [says, 'board'])
+  }
+  const c = fixture()
+  c.exchange.input.raw = JSON.stringify({ version: 5, nextId: 5001, items: rows(5000), links: [] })
+  c.exited('measure', 0)
+  assert.equal(c.staged.length, 1, 'a board exactly full is imported')
+}
+{
   const c = fixture()
   c.exchange.sharing = { at: 1, names: ['old.png'], base: 'board', landed: { 'old.png': 'new.png' },
     raw: JSON.stringify({ version: 5, items: [{ id: 1, kind: 'image', src: 'old.png' }], links: [] }) }
@@ -73,5 +101,42 @@ for (const operation of ['publish', 'copy', 'export']) {
   assert.equal(JSON.parse(c.staged[0].text).items[0].src, 'new.png')
   c.exited('publish', 0)
   assert.equal(c.signals[0].pane, c.a)
+}
+
+// A picture BoardFiles.sh refuses for the compressed text inside it (exit 9)
+// says so, on each way a picture comes in, rather than reading as unreadable.
+{
+  const c = fixture()
+  c.exchange.pasteBoard = 'x.json'
+  c.exchange.pastePane = { currentBoard: 'x.json' }
+  c.exchange.grabbed = { text: '' }
+  c.exchange.clipboard = { running: false }
+  c.exited('imageGrab', 9)
+  const said = c.signals[c.signals.length - 1]
+  assert.equal(said.name, 'failed')
+  assert.match(said.args[0], /compressed text/, 'a paste says why')
+  assert.equal(said.args[1], 'paste')
+  assert.equal(c.exchange.clipboard.running, false, 'and does not fall back to pasting text')
+}
+{
+  const c = fixture()
+  const reports = []
+  const pane = { doc: {}, report: (message, kind) => reports.push({ message, kind }) }
+  c.exchange.dropQueue = [{ pane, board: 'x.json', x: 0, y: 0 }]
+  c.exchange.importedName = { text: '' }
+  c.exchange.nextDrop = () => {}
+  c.exited('imageImport', 9)
+  assert.match(reports[0].message, /compressed text/, 'an imported picture says why')
+  assert.equal(reports[0].kind, 'picture')
+}
+for (const [code, says] of [[9, /carries compressed text.*nothing was imported/], [4, /^A picture in that board could not be read/]]) {
+  const c = fixture()
+  c.exchange.sharing = { at: 0, names: ['old.png'], base: 'board', landed: {}, raw: '{}' }
+  c.exchange.unbundled = { text: '' }
+  c.exited('unbundle', code)
+  const said = c.signals[c.signals.length - 1]
+  assert.equal(said.name, 'failed')
+  assert.match(said.args[0], says, 'a board carrying the picture, exit ' + code)
+  assert.equal(c.exchange.sharing, null, 'and nothing more of it is imported')
 }
 console.log('ok — exchange: every import stage and completion retains its originating pane')

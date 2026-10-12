@@ -51,6 +51,7 @@ TestCase {
       property string shade: "Theme"
     }
     function imagePath(name) { return Qt.resolvedUrl("generated/" + name) }
+    function pictureState(name) { return "" }
     ListModel { id: itemModel }
     ListModel { id: linkModel }
   }

@@ -141,10 +141,14 @@ coming in is coerced to something the canvas can draw: a string where a number
 belongs, a tint this version has never heard of, a size below the minimum, a
 connector to nothing. `validate` prints what loading had to repair.
 
-One thing is not repaired: a note longer than 1048576 characters. The board
-opens such a file read-only and empty rather than hold the shell up laying it
-out, and refuses to import one. `add` and `setText` refuse text that long,
-`validate` lists one under `warnings`, and `setText` is how to shorten it.
+Some things are not repaired, because the board would hold the shell up
+drawing them: a note longer than 1048576 characters, more than 5,000 items,
+more than 20,000 connectors, or a file larger than 32 MB. The board opens such
+a file read-only and empty, leaves it as it is, and refuses to import one.
+`add` and `setText` refuse text that long, `add` and `link` refuse past the
+counts (`ops` reports `maximumItems` and `maximumConnectors`), and `apply`
+refuses to write a file past 32 MB. `validate` lists each under `warnings`;
+`setText` and `remove` are how to bring the board back under them.
 
 A board reported as **newer than this understands** is not broken. A later
 Omarchyform wrote it, and it opens read-only rather than losing what it cannot

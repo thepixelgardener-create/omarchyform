@@ -36,6 +36,22 @@ try {
   assert.equal(snapshot.stdout.slice(0, split), run('revision', path.join(boards, 'a.json')).stdout)
   assert.equal(snapshot.stdout.slice(split + 1), 'new', 'snapshot carries exact bytes with their revision')
   assert.notEqual(run('snapshot', path.join(boards, 'escape/a.json'), path.join(dir, 'snapshot.lock'), boards).status, 0)
+  // A board larger than a board may be is refused by its size, before any of
+  // it is read: exit 5, as for a picture.
+  const heavy = path.join(boards, 'heavy.json')
+  fs.writeFileSync(heavy, '')
+  fs.truncateSync(heavy, 33554433)
+  assert.equal(run('check', boards, 'heavy.json').status, 5)
+  const heavySnapshot = run('snapshot', heavy, path.join(dir, 'snapshot.lock'), boards)
+  assert.equal(heavySnapshot.status, 5)
+  assert.equal(heavySnapshot.stdout, '', 'and nothing of it is passed on')
+  fs.truncateSync(heavy, 33554432)
+  assert.equal(run('check', boards, 'heavy.json').status, 0, 'exactly the limit is not')
+  const fits = spawnSync('bash', [path.join(__dirname, '../BoardFiles.sh'), 'snapshot', heavy,
+    path.join(dir, 'snapshot.lock'), boards], { maxBuffer: 64 * 1048576 })
+  assert.equal(fits.status, 0)
+  assert.equal(fits.stdout.length - fits.stdout.indexOf(10) - 1, 33554432, 'and all of it is passed on')
+  fs.unlinkSync(heavy)
   // A symlinked root is where the user keeps their data, not an escape.
   const linkedBoards=path.join(dir,'linked-boards'),linkedBackups=path.join(dir,'linked-backups')
   fs.mkdirSync(path.join(dir,'backups'))
@@ -50,10 +66,12 @@ try {
   fs.writeFileSync(path.join(boards,'a.json'),'new')
   assert.equal(run('purge',trash,'another').status,0)
   const staged=path.join(dir,'staged.json')
-  fs.writeFileSync(staged,'{"version":4,"items":[]}')
+  // Staged by the shell with its own umask, as FileView writes it.
+  fs.writeFileSync(staged,'{"version":4,"items":[]}',{mode:0o644}); fs.chmodSync(staged,0o644)
   const first=run('publish',boards,'untitled',staged)
   assert.equal(first.status,0)
   assert.equal(first.stdout,'untitled.json')
+  assert.equal(fs.statSync(path.join(boards,'untitled.json')).mode&0o777,0o600,'an imported board is private from the moment it has a name')
   fs.writeFileSync(staged,'second')
   const second=run('publish',boards,'untitled',staged)
   assert.equal(second.status,0)
@@ -92,7 +110,7 @@ try {
   assert.equal(paste('image/png','',images,'paste-1',clipFile).status,6)
   assert.deepEqual(fs.readFileSync(path.join(images,'paste-1.png')),clipPixels)
 
-  const pasteText=(file)=>spawnSync('bash',[path.join(__dirname,'../BoardFiles.sh'),'cliptext'],
+  const pasteText=(file)=>spawnSync('bash',[path.join(__dirname,'../BoardFiles.sh'),'cliptext',dir],
     {encoding:'utf8',maxBuffer:2*1024*1024,env:{...process.env,PATH:stubs+':'+process.env.PATH,FAKE_FILE:file}})
   const clipTextFile=path.join(dir,'clipboard.txt')
   fs.writeFileSync(clipTextFile,'<b>literal</b>\nsecond line')
@@ -258,6 +276,18 @@ try {
   assert.equal(fs.readFileSync(board,'utf8'),winner,'and the file holds that one, whole')
   assert.equal(fs.readFileSync(backup,'utf8'),'four','with the version it replaced kept')
 
+  // Larger than a board is opened at, it is not written: it could not be read
+  // back. Nothing of it is left behind, and the board there stays.
+  const heavyText='x'.repeat(33554433)
+  const tooLarge=commit(heavyText,run('revision',board).stdout)
+  assert.equal(tooLarge.status,5)
+  assert.equal(fs.readFileSync(board,'utf8'),winner,'the board there is untouched')
+  assert.equal(fs.readFileSync(backup,'utf8'),'four','and so is its backup')
+  assert.deepEqual(fs.readdirSync(boards).filter(f=>f.startsWith('.omarchyform-')),[],'and nothing staged is left')
+  const atLimit=commit(heavyText.slice(1),run('revision',board).stdout)
+  assert.equal(atLimit.status,0,'exactly the limit is written')
+  assert.equal(fs.statSync(board).size,33554432)
+
   // The rules the old backup step had, kept: a path through a symlink is
   // refused before anything is written.
   const behindLink=spawnSync('bash',[path.join(__dirname,'../BoardFiles.sh'),'commit',
@@ -362,7 +392,168 @@ try {
   assert.equal(drop('drop-big','big.png').status,0,'sixteen megapixels is a picture, not a bomb')
   assert.equal(fs.existsSync(path.join(images,'drop-big.png')),true)
 
+  // Text a PNG asks its reader to inflate, which neither the bytes nor the
+  // pixels say anything about. Qt keeps every zTXt and compressed iTXt chunk,
+  // inflated, and libpng allows nearly 8 MB a chunk and a thousand chunks, so a
+  // PNG two pixels square and a few megabytes on disk asks the shell for
+  // gigabytes. These are small: what is under test is which chunks get in.
+  const crcTable=Array.from({length:256},(_,n)=>{let c=n;for(let k=0;k<8;k++)c=c&1?0xedb88320^(c>>>1):c>>>1;return c>>>0})
+  const crc32=bytes=>{let c=0xffffffff;for(const b of bytes)c=crcTable[(c^b)&0xff]^(c>>>8);return (c^0xffffffff)>>>0}
+  const pngChunk=(name,data)=>{
+    const head=Buffer.alloc(4),tail=Buffer.alloc(4),body=Buffer.concat([Buffer.from(name,'latin1'),data])
+    head.writeUInt32BE(data.length); tail.writeUInt32BE(crc32(body))
+    return Buffer.concat([head,body,tail])
+  }
+  const twoByTwo=Buffer.from([0,16,32,48,255,16,32,48,255,0,16,32,48,255,16,32,48,255])
+  const pngWith=({before=[],after=[],pixels=twoByTwo,level=9,end=true}={})=>{
+    const ihdr=Buffer.alloc(13); ihdr.writeUInt32BE(2,0); ihdr.writeUInt32BE(2,4); ihdr[8]=8; ihdr[9]=6
+    return Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),pngChunk('IHDR',ihdr),...before,
+      pngChunk('IDAT',require('zlib').deflateSync(pixels,{level})),...after,...(end?[pngChunk('IEND',Buffer.alloc(0))]:[])])
+  }
+  const text=(name,body)=>pngChunk(name,Buffer.from(body,'latin1'))
+  const inflating=require('zlib').deflateSync(Buffer.alloc(1000000,65))
+  const zTXt=pngChunk('zTXt',Buffer.concat([Buffer.from('Comment\0\0','latin1'),inflating]))
+  const iTXt=compressed=>pngChunk('iTXt',Buffer.concat([Buffer.from('XML:com.adobe.xmp\0'+(compressed?'\x01':'\0')+'\0\0\0','latin1'),
+    compressed?inflating:Buffer.from('<x/>')]))
+  const textCases=[
+    ['zTXt before the image', pngWith({before:[zTXt]}), 9],
+    ['zTXt after the image', pngWith({after:[zTXt]}), 9],
+    ['compressed iTXt', pngWith({before:[iTXt(true)]}), 9],
+    ['an iTXt keyword with no end', pngWith({before:[pngChunk('iTXt',Buffer.alloc(100,65))]}), 9],
+    ['cut off before IEND, the name in it', pngWith({before:[text('tEXt','note\0zTXt')],end:false}), 9],
+    ['plain tEXt and uncompressed iTXt', pngWith({before:[text('tEXt','Software\0grim'),iTXt(false)]}), 0],
+    ['the names inside the image data', pngWith({pixels:Buffer.from('\0zTXtiTXt\0zTXtiTXt','latin1'),level:0}), 0],
+    ['the names inside a tEXt value', pngWith({before:[text('tEXt','note\0about zTXt and iTXt')]}), 0]
+  ]
+  textCases.forEach(([what,bytes,status],i)=>{
+    const file=path.join(source,`text-${i}.png`)
+    fs.writeFileSync(file,bytes)
+    // Every way a picture arrives: dropped or picked, pasted, and carried in a board.
+    for (const [how,attempt] of [['import',()=>drop(`text-${i}-drop`,`text-${i}.png`)],
+        ['paste',()=>paste('image/png','',images,`text-${i}-paste`,file)],
+        ['shared',()=>unbundle(`text-${i}-shared`,bytes.toString('base64'))]]) {
+      const result=attempt()
+      assert.equal(result.status,status,`${how}: ${what}`)
+      const name=`text-${i}-${how==='import'?'drop':how}.png`
+      assert.equal(fs.existsSync(path.join(images,name)),status===0,`${how}: ${what} ${status===0?'lands':'does not land'}`)
+    }
+  })
+
   assert.deepEqual(fs.readdirSync(images).filter(f=>f.startsWith('.')),[],'no temporaries left behind')
+
+  // The plugin's own folders are private, whatever umask the shell started
+  // with and whatever an older version, a sync tool or a hand left them as:
+  // the shell writes its state, staged imports and the trash index itself,
+  // with its own umask, and only the folder keeps those to their owner.
+  {
+    const home=path.join(dir,'private-home'), data=path.join(home,'.local/share/omarchyform')
+    const kept=path.join(dir,'kept-elsewhere')
+    for (const d of [data,path.join(data,'backups'),path.join(data,'trash'),path.join(data,'images'),kept,path.join(kept,'work')]) {
+      fs.mkdirSync(d,{recursive:true}); fs.chmodSync(d,0o755)
+    }
+    fs.symlinkSync(kept,path.join(data,'boards'))
+    const loose=[[path.join(data,'state.json'),0o644],[path.join(kept,'a.json'),0o644],[path.join(kept,'work','b.json'),0o664],
+      [path.join(data,'images','paste-1.png'),0o644],[path.join(data,'trash','index.json'),0o666]]
+    for (const [f,mode] of loose) { fs.writeFileSync(f,'private'); fs.chmodSync(f,mode) }
+    const folders=['', 'boards', 'backups', 'trash', 'images', 'locks'].map(f=>f?path.join(data,f):data)
+    const privately=(...args)=>spawnSync('bash',['-c','umask 022; exec bash "$@"','private-test',path.join(__dirname,'../BoardFiles.sh'),'private',...args],
+      {encoding:'utf8',env:{...process.env,HOME:home}})
+    const made=privately(...folders)
+    assert.equal(made.status,0,made.stderr)
+    for (const f of [...folders,kept,path.join(kept,'work')])
+      assert.equal(fs.statSync(f).mode&0o777,0o700,`${path.relative(dir,f)} is its owner's alone`)
+    for (const [f] of loose) assert.equal(fs.statSync(f).mode&0o077,0,`${path.relative(dir,f)} is too`)
+    assert.equal(fs.lstatSync(path.join(data,'boards')).isSymbolicLink(),true,'a folder kept elsewhere stays where it is kept')
+    assert.equal(fs.readFileSync(path.join(kept,'a.json'),'utf8'),'private','and nothing in it is changed but its mode')
+    // A fresh install: every folder made 0700, parents included, under umask 022.
+    const fresh=path.join(dir,'fresh-home/.local/share/omarchyform')
+    assert.equal(privately(fresh,path.join(fresh,'boards')).status,0)
+    for (const f of [path.dirname(fresh),fresh,path.join(fresh,'boards')]) assert.equal(fs.statSync(f).mode&0o777,0o700,path.relative(dir,f))
+    // Never the home folder, never a path that is not a full one; and what
+    // is not this user's is left as it is, said, and the rest still done.
+    fs.chmodSync(home,0o755)
+    assert.equal(privately(home).status,3)
+    assert.equal(fs.statSync(home).mode&0o777,0o755,'the home folder is not the plugin\'s to change')
+    assert.equal(privately('relative/folder').status,3)
+    if (process.getuid && process.getuid()===0) {
+      const theirs=path.join(data,'images','theirs.png')
+      fs.writeFileSync(theirs,'not mine'); fs.chmodSync(theirs,0o644); fs.chownSync(theirs,65534,65534)
+      fs.chmodSync(path.join(data,'images'),0o755)
+      const mixed=privately(...folders)
+      assert.equal(mixed.status,3)
+      assert.match(mixed.stderr,/holds something not this user's/)
+      assert.equal(fs.statSync(theirs).mode&0o777,0o644,'another account\'s file is left as it is')
+      assert.equal(fs.statSync(path.join(data,'images')).mode&0o777,0o700,'and the rest is still made private')
+      fs.unlinkSync(theirs)
+    } else console.log('skipped: leaving another account\'s file alone needs a second account')
+
+    // Staging never uses the shared temporary folder.
+    // (A shared temporary folder that is not there: anything staged in it fails.)
+    const lock=path.join(data,'locks','a.lock'), nowhere={...process.env,TMPDIR:path.join(dir,'no-shared-tmp')}
+    const viaLock=spawnSync('bash',[path.join(__dirname,'../BoardFiles.sh'),'snapshot',path.join(data,'boards','a.json'),lock,path.join(data,'boards')],
+      {encoding:'utf8',env:nowhere})
+    assert.equal(viaLock.status,0,'a snapshot is staged beside its lock, not in the shared temporary folder: '+viaLock.stderr)
+    assert.deepEqual(fs.readdirSync(path.join(data,'locks')),['a.lock'],'and is gone afterwards')
+  }
+
+  // A picture can be in the folder without having come through any of those:
+  // copied or synced in, or landed before a check existed. Before Qt is asked
+  // to draw one, checkimages holds it to what landing would, and says so per
+  // name: ok, missing, or the exit landing would refuse it with.
+  const shelf=path.join(dir,'shelf')
+  fs.mkdirSync(shelf)
+  const checkimages=lines=>{
+    const out=spawnSync('bash',[path.join(__dirname,'../BoardFiles.sh'),'checkimages',shelf],{encoding:'utf8',input:lines})
+    assert.equal(out.status,0,out.stderr)
+    return Object.fromEntries(out.stdout.trim().split('\n').filter(Boolean).map(l=>{const [n,v,r]=l.split('\t');return [n,{verdict:v,revision:r}]}))
+  }
+  textCases.forEach(([,bytes,status],i)=>fs.writeFileSync(path.join(shelf,`text-${i}.png`),bytes))
+  const tooMany=Buffer.from(pngWith()); tooMany.writeUInt32BE(30000,16); tooMany.writeUInt32BE(30000,20)
+  fs.writeFileSync(path.join(shelf,'huge.png'),tooMany)
+  fs.writeFileSync(path.join(shelf,'words.png'),'this is not a picture')
+  fs.writeFileSync(path.join(shelf,'renamed.jpg'),textCases[0][1])
+  fs.writeFileSync(path.join(shelf,'empty.png'),'')
+  fs.writeFileSync(path.join(shelf,'heavy.png'),Buffer.concat([pngWith(),Buffer.alloc(33554433-pngWith().length)]))
+  fs.symlinkSync(path.join(shelf,'text-5.png'),path.join(shelf,'linked.png'))
+  const names=[...textCases.map((c,i)=>`text-${i}.png`),'huge.png','words.png','renamed.jpg','empty.png','heavy.png','linked.png',
+    'gone.png','../text-5.png','.hidden.png']
+  const shelved=checkimages(names.map(n=>n+'\t\n').join(''))
+  textCases.forEach(([what,,status],i)=>assert.equal(shelved[`text-${i}.png`].verdict,status===0?'ok':'9',what))
+  assert.equal(shelved['huge.png'].verdict,'7','too many pixels')
+  assert.equal(shelved['words.png'].verdict,'4','not a picture')
+  assert.equal(shelved['empty.png'].verdict,'4','nothing at all')
+  assert.equal(shelved['heavy.png'].verdict,'5','larger than a picture may be')
+  assert.equal(shelved['renamed.jpg'].verdict,'9','the type is the bytes, not the name')
+  assert.equal(shelved['linked.png'].verdict,'3','a link is not followed')
+  assert.equal(shelved['gone.png'].verdict,'missing')
+  assert.equal(shelved['../text-5.png'].verdict,'3','nor is a name no board writes')
+  assert.equal(shelved['.hidden.png'].verdict,'3')
+  assert.equal(shelved['text-5.png'].revision.split('|').length,4,'a picture found fit says at what size, inode and times')
+  assert.equal(shelved['gone.png'].revision,'')
+  // Found fit at a revision it is still at, it is not read again, so the
+  // revision has to change whenever the bytes can: a file rewritten in place
+  // at the same size, its modification time put back, still has a new change
+  // time.
+  const bomb=textCases[0][1], fit=path.join(shelf,'padded.png')
+  fs.writeFileSync(fit,pngWith({before:[text('tEXt','pad\0'+'x'.repeat(bomb.length))]}))
+  const before=checkimages('padded.png\t\n')['padded.png']
+  assert.equal(before.verdict,'ok')
+  assert.equal(checkimages(`padded.png\t${before.revision}\n`)['padded.png'].verdict,'ok','unchanged, it is not read again')
+  const modified=spawnSync('stat',['-c','%y',fit],{encoding:'utf8'}).stdout.trim()
+  const handle=fs.openSync(fit,'r+')
+  fs.writeSync(handle,Buffer.concat([bomb,Buffer.alloc(fs.statSync(fit).size-bomb.length)]),0,fs.statSync(fit).size,0)
+  fs.closeSync(handle)
+  assert.equal(spawnSync('touch',['-m','-d',modified,fit]).status,0)
+  assert.equal(spawnSync('stat',['-c','%y',fit],{encoding:'utf8'}).stdout.trim(),modified,'same size, inode and modification time')
+  assert.equal(checkimages(`padded.png\t${before.revision}\n`)['padded.png'].verdict,'9',
+    'and still read again: the change time cannot be put back')
+  assert.equal(checkimages('text-6.png\tnot its revision\n')['text-6.png'].verdict,'ok','an unknown revision is checked')
+  // A folder not made yet holds nothing.
+  const nowhere=spawnSync('bash',[path.join(__dirname,'../BoardFiles.sh'),'checkimages',path.join(dir,'no-such-folder')],
+    {encoding:'utf8',input:'a.png\t\n'})
+  assert.equal(nowhere.status,0)
+  assert.equal(nowhere.stdout,'a.png\tmissing\t\n')
+  assert.deepEqual(fs.readdirSync(shelf).filter(f=>f.startsWith('.')),[],'and nothing is written')
 
 } finally {fs.rmSync(dir,{recursive:true,force:true})}
 console.log('ok — filesystem confinement and restore collisions')

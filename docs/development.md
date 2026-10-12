@@ -115,6 +115,7 @@ the suite loads the very file the plugin loads — there is no copy to drift.
 ./tests/run     # everything available on this machine, skipping what is not installed
 npm test        # pure logic and controller regression tests, no dependencies
 npm run test:security # portable security/privacy screen and boundary regressions
+npm run review:marketplace # the marketplace's own security baseline, pinned, against HEAD
 npm run test:security:full # also run Quickshell and Qt tests
 npm run mutate  # mutation testing
 npm run bench   # board marshalling cost at size

@@ -3,7 +3,7 @@
 Notable changes, newest first. Board file versions are noted where they moved,
 since older boards are migrated on load rather than rejected.
 
-## Unreleased
+## 0.4.9 — 2026-10-12
 
 ### Fixed
 
@@ -28,6 +28,52 @@ since older boards are migrated on load rather than rejected.
   input methods and bounded paste work as before. `npm run test:clipboard`
   counts the clipboard reads with every field open, and on Qt 6.12.0 went from
   36 on three changes to none.
+
+- Refuse PNGs carrying compressed text, however they arrive: pasted, imported
+  or inside a shared board. Qt inflates and keeps every zTXt and compressed
+  iTXt chunk, nearly 8 MB each and up to about a thousand of them, so a PNG two
+  pixels square and well under the 32 MiB limit could ask the shell for tens of
+  gigabytes; a 392 KB one cost 1.9 GB on Qt 6.12.0. Such a picture is now
+  refused with a message saying why. Plain text metadata, as screenshot tools
+  write it, is still accepted. A picture already in the images folder, copied
+  or synced in or pasted before this, is held to the same before it is first
+  drawn: until it has been checked it is not loaded, and one refused shows
+  why in its place. On Qt 6.12.0 the 392 KB picture, already in the folder,
+  held 1.15 GB once drawn; now it is never loaded.
+
+- The plugin's folders are private on every install, not only new ones. As
+  the shell starts, its data, boards, backups, trash, images and locks folders
+  are made 0700, and group and other access is taken off everything in them
+  that is the user's own, whatever an older version, a sync tool or the
+  shell's umask left behind. The shell writes its state, staged imports and the
+  trash index itself, with its own umask, so those folders are what keep them
+  private. An imported board is 0600 from the moment it has a name, and the
+  clipboard and a board being read are staged in the plugin's own folders
+  rather than the shared `/tmp`. Something in them that is not the user's own
+  is left as it is.
+
+- A board holds at most 5,000 items and 20,000 connectors, and its file at
+  most 32 MB. Every item is built on the shell's thread: on Qt 6.12.0 5,000
+  took 12 seconds and 675 MB to open and 20,000 took 92 seconds and 2.7 GB,
+  from a file under 1 MB, with the bar and everything else waiting. A board
+  past any of these opens read-only and empty with the reason, and its file is
+  left as it is; one larger than 32 MB is refused by its size before any of it
+  is read, as is a version written over the open board from outside. Import
+  refuses such a board, and adding, duplicating and connecting stop at the
+  limit with a message. Nothing writes a board past 32 MB, so a save that
+  would is refused with the reason and the edits stay on screen. The command
+  line refuses the same, `ops` reports the limits, and `validate` says which
+  one a board is over; `remove` and `setText` bring it back.
+
+- Nothing the shell reads as JSON can crash it any more. Qt's `JSON.parse`
+  keeps each element of an array it is still reading on a stack nothing
+  checks, so on Qt 6.12.0 a board file of 1.1 MB holding one long list (or
+  lists inside lists adding up to the same) segfaulted the shell, and with it
+  the bar, every time the board was opened. Boards, histories, imports, the
+  workspace state, the trash index and requests from `qs ipc` are now counted
+  before they are parsed, and refused as unreadable past 100,000 elements held
+  at once, well above anything this writes and well below the crash. A board
+  refused this way opens read-only and says so.
 
 ## 0.4.8 — 2026-10-10
 

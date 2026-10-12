@@ -69,8 +69,12 @@ TestCase {
     // A two-pixel red PNG, inline: a real decode with no file to create, clean
     // up, or have the runner refuse to read.
     readonly property string redPixels: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP4z8AARAwQCgAf7gP9i18U1AAAAABJRU5ErkJggg=="
+    // Stands in for the workspace's check of the file behind a picture: ""
+    // draws it, "waiting" is being checked, anything else is why not.
+    property var pictureStates: ({})
+    function pictureState(name) { return pictureStates[name] !== undefined ? pictureStates[name] : "" }
     function imagePath(name) {
-      if (name === "") return ""
+      if (name === "" || pictureState(name) !== "") return ""
       return name === "gone.png" ? "file:///nonexistent/gone.png" : redPixels
     }
     function newBoard() {}
@@ -280,6 +284,25 @@ TestCase {
     // The frame stays, so a board that lost its pictures still reads as a
     // board rather than as a hole.
     tryVerify(function () { return grabImage(subject).pixel(90, 70) === Qt.rgba(34/255, 34/255, 34/255, 1) })
+  }
+
+  function test_pictureWaitsForItsCheck() {
+    ctl.pictureStates = { "slow.png": "waiting", "bomb.png": "carries compressed text" }
+    subject.kind = "image"
+    subject.isrc = "slow.png"
+    var note = findChild(subject, "picture-note")
+    compare(subject.pictureState, "waiting")
+    verify(subject.pictureLoading, "a picture being checked counts as loading, so an export waits for it")
+    verify(!note.visible, "and says nothing yet")
+    subject.isrc = "bomb.png"
+    verify(!subject.pictureLoading, "one refused has finished")
+    verify(note.visible, "and says why it is not drawn")
+    compare(note.text, "picture not shown\nbomb.png\ncarries compressed text")
+    ctl.pictureStates = { "slow.png": "" }
+    subject.isrc = "slow.png"
+    tryVerify(function () { return !subject.pictureLoading }, 2000, "checked, it loads")
+    verify(!note.visible)
+    ctl.pictureStates = {}
   }
 
   function test_findMatchStandsOut() {

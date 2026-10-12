@@ -157,6 +157,167 @@ assert.match(fs.readFileSync(path.join(root, 'Board.qml'), 'utf8'),
   /MouseArea \{\n    id: panSurface\n[^}]*acceptedButtons: Qt\.MiddleButton/,
   'the pan surface takes the middle button from every item, the note editor included')
 
+// Qt's JSON.parse keeps an array's elements on an engine stack nothing checks,
+// and a 1.1 MB file overflows it (Store.MAX_JSON_OPEN). Everything the shell
+// parses goes through parseJson, which counts first; only the two copies of
+// it call JSON.parse. The command line runs in node, whose parser has no such
+// limit.
+function bareParse(source, guard) {
+  return source.split('\n').map((line, i) => [line, i + 1])
+    .filter(([line]) => /\bJSON\.parse\s*\(/.test(line) && !/^\s*\/\//.test(line)
+      && !(guard && line === '  return JSON.parse(text)'))
+    .map(([, n]) => `line ${n}: JSON.parse outside parseJson can take the shell down; use parseJson`)
+}
+const guards = ['BoardStore.js', 'BoardHistory.js']
+assert.ok(bareParse('    try { st = JSON.parse(raw) } catch (e) {}').length)
+assert.ok(bareParse('  return JSON.parse(text)', false).length, "parseJson's own line, anywhere else")
+assert.deepEqual(bareParse('    try { st = Store.parseJson(raw) } catch (e) {}\n  // JSON.parse(text) here'), [])
+for (const file of fs.readdirSync(root).filter(f => /\.(qml|js)$/.test(f)))
+  assert.deepEqual(bareParse(fs.readFileSync(path.join(root, file), 'utf8'), guards.includes(file)), [], file)
+for (const file of guards)
+  assert.equal((fs.readFileSync(path.join(root, file), 'utf8').match(/^  return JSON\.parse\(text\)$/gm) || []).length, 1,
+    `${file}: JSON.parse is called once, by parseJson`)
+
+// A picture that lands in images/ is loaded by Qt in the shell, so each way in
+// holds the bytes that land to their pixels and, for a PNG, to the compressed
+// text Qt would inflate, before placing them.
+function unguardedLandings(script) {
+  const errors = []
+  for (const op of script.split(/\n  [a-z]+\)\n/).slice(1)) {
+    const lands = op.indexOf('place_new "$temporary" "$images_root/')
+    if (lands < 0) continue
+    for (const guard of ['refuse_huge_pictures "$temporary"', 'refuse_compressed_text "$temporary"'])
+      if (op.indexOf(guard) < 0 || op.indexOf(guard) > lands) errors.push(`${op.split('\n')[0].trim()}: ${guard.split(' ')[0]} before it lands`)
+  }
+  return errors
+}
+const filesHelper = fs.readFileSync(path.join(root, 'BoardFiles.sh'), 'utf8')
+assert.ok(unguardedLandings('case x in\n  addimage)\n    refuse_huge_pictures "$temporary" png\n    place_new "$temporary" "$images_root/x"\n    ;;\n').length,
+  'a way in without the text check is refused')
+assert.deepEqual(unguardedLandings(filesHelper), [], 'every picture is checked before it lands')
+assert.equal((filesHelper.match(/place_new "\$temporary" "\$images_root\//g) || []).length, 3,
+  'paste, import and shared pictures; a new way in needs the same checks')
+// And one already in the folder, however it got there, is drawn only once
+// checkimages has found it fit: imagePath is the only file URL into the
+// folder, and it answers one only for a picture pictureState has cleared.
+const gate = '    return root.pictureState(name) === "" ? "file://" + root.imagesDir + "/" + name : ""'
+function ungatedPictures(sources) {
+  const errors = []
+  for (const [file, source] of sources)
+    source.split('\n').forEach((line, i) => {
+      if (/^\s*\/\//.test(line) || (file === 'Omarchyform.qml' && line === gate)) return
+      if (/(imagesDir|\/images\/)/.test(line) && /file:|resolvedUrl|Qt\.url|source\s*[:=]/.test(line))
+        errors.push(`${file}:${i + 1}: a picture URL that is not imagePath's, which waits for its check`)
+    })
+  return errors
+}
+assert.ok(ungatedPictures([['Node.qml', '    source: "file://" + node.ctl.imagesDir + "/" + node.isrc']]).length)
+assert.ok(ungatedPictures([['Node.qml', '    picture.source = Qt.resolvedUrl(dataDir + "/images/" + name)']]).length)
+assert.ok(ungatedPictures([['Omarchyform.qml', '    return Store.imageIsValid(name) ? "file://" + root.imagesDir + "/" + name : ""']]).length,
+  'nor one that does not wait for the check')
+assert.deepEqual(ungatedPictures(fs.readdirSync(root).filter(f => /\.(qml|js)$/.test(f))
+  .map(f => [f, fs.readFileSync(path.join(root, f), 'utf8')])), [], 'every picture waits for its check')
+assert.ok(fs.readFileSync(path.join(root, 'Omarchyform.qml'), 'utf8').includes('  function imagePath(name) {\n' + gate + '\n  }'),
+  'imagePath is the gate')
+
+// What the marketplace's reviewers have raised against other plugins, held
+// here as rules: docs/security-review.md, "Before submitting", lists each class
+// and where it is checked.
+//
+// Process arguments are readable by every account through /proc/<pid>/cmdline,
+// so nothing private may ride on them: note text, clipboard contents, a whole
+// board. Every helper call's arguments are listed here as reviewed: folders,
+// paths, board and picture names, generated names and numbers. Contents go on
+// stdin or in a staged file in a private folder. A new or changed argument
+// fails until it is reviewed and added. (Board and file names are names; they
+// appear on command lines as in any program that opens a file.)
+function calls(source, fn) {
+  const found = []
+  for (let at = source.indexOf(fn + '('); at >= 0; at = source.indexOf(fn + '(', at + 1)) {
+    let end = at + fn.length + 1, depth = 1
+    while (depth && end < source.length) { if (source[end] === '(') depth++; else if (source[end] === ')') depth--; end++ }
+    found.push(source.slice(at + fn.length + 1, end - 1).replace(/\s+/g, ' ').trim())
+  }
+  return found
+}
+const reviewedArguments = [
+  'BoardExchange.qml: "filesize", [path]',
+  'BoardExchange.qml: "unbundleimage", [exchange.ctl.imagesDir, bytes.path, "shared-" + Date.now() + "-" + exchange.sharing.at]',
+  'BoardExchange.qml: "bundleimages", [exchange.ctl.imagesDir, String(exchange.bundleBudget)].concat(exchange.snapshot.names)',
+  'BoardExchange.qml: "clipimage", [exchange.ctl.imagesDir, "paste-" + Date.now()]',
+  'BoardExchange.qml: "publish", [exchange.ctl.boardsDir, exchange.baseName, output.path]',
+  'BoardExchange.qml: "export", [output.path, exchange.snapshot.destination, exchange.ctl.dataDir]',
+  'BoardExchange.qml: "clipcopyimage", [exchange.ctl.imagesDir, only.isrc]',
+  'BoardExchange.qml: "clipcopy", []',
+  'BoardExchange.qml: "importimage", [next.pane.imagesDir, "drop-" + Date.now() + "-" + exchange.dropSeq, next.path]',
+  'BoardExchange.qml: "cliptext", [exchange.ctl.dataDir]',
+  'BoardLibrary.qml: "mkdir", [library.boardsDir, dir]',
+  'BoardLibrary.qml: "move", [library.boardsDir, e.path, library.boardsDir, target]',
+  'BoardLibrary.qml: "purge", [library.trashDir, e.file]',
+  'BoardLibrary.qml: "move", [library.boardsDir, e.path, library.trashDir, file]',
+  'BoardLibrary.qml: "move", [library.trashDir, e.file, library.boardsDir, e.path]',
+  'BoardPane.qml: "export", [root.dataDir + "/.image-export.png", path, root.dataDir]',
+  'BoardSession.qml: "snapshot", [session.ctl.boardPath, session.ctl.lockPathFor(session.ctl.currentBoard), session.ctl.boardsDir]',
+  'BoardSession.qml: "filesize", [session.ctl.boardPath]',
+  'BoardSession.qml: "check", [session.ctl.boardsDir, session.ctl.currentBoard]',
+  'Omarchyform.qml: "checkimages", [root.imagesDir]',
+  'Omarchyform.qml: "private", [root.dataDir, root.boardsDir, root.backupsDir, root.trashDir, root.imagesDir, root.locksDir]',
+  'bin/omarchyform: "revision", [path.resolve(file)]',
+  'bin/omarchyform: "commit", [target, aside(target, "backup"), aside(target, "lock"), expected === undefined ? "-" : expected], text',
+  'BoardLibrary.qml: ["find", library.boardsDir, "-mindepth", "1", "-printf", "%y\\\\t%P\\\\n"]',
+  'Omarchyform.qml: ["cp", "-n", root.legacyPath, root.boardsDir + "/board.json"]'
+]
+const runtimeQml = fs.readdirSync(root).filter(f => f.endsWith('.qml'))
+const usedArguments = []
+for (const file of runtimeQml) {
+  const source = fs.readFileSync(path.join(root, file), 'utf8')
+  for (const call of calls(source, 'fileCommand')) if (call !== 'action, args') usedArguments.push(`${file}: ${call}`)
+  for (const m of source.matchAll(/command: (\["(?!bash")[^\n]*\])/g)) usedArguments.push(`${file}: ${m[1]}`)
+}
+for (const call of calls(fs.readFileSync(path.join(root, 'bin/omarchyform'), 'utf8'), 'helper'))
+  if (call !== 'verb, args, input') usedArguments.push(`bin/omarchyform: ${call}`)
+assert.deepEqual(usedArguments.filter(a => !reviewedArguments.includes(a)), [],
+  'a helper call with arguments not yet reviewed for private contents')
+assert.deepEqual(reviewedArguments.filter(a => !usedArguments.includes(a)), [], 'a reviewed call that is gone: take it off the list')
+const content = /\b(text|itext|contents|body|clipboard|note|query|needle|secret|token|password|payload)\b/i
+assert.deepEqual(reviewedArguments.filter(a => content.test(a.replace(/, text$/, ''))), [],
+  'contents never ride on arguments, whatever the list says')
+assert.match(fs.readFileSync(path.join(root, 'BoardPersistence.qml'), 'utf8'), /onStarted: \{\n\s*commit\.write\(persistence\.contents\)/,
+  'a board goes to the helper on stdin')
+
+// Private files stay private: the helper makes everything 0600 or 0700, the
+// plugin's folders are made private by it (existing ones too) rather than by
+// a bare mkdir, and the files the shell writes itself go only into them.
+assert.match(filesHelper, /^umask 077$/m, 'the helper writes with umask 077')
+assert.match(filesHelper, /\n  publish\)\n(?:.*\n)*?    chmod 600 -- "\$staged"\n(?:.*\n)*?    while ! ln -T/, 'an imported board is made private before it has a name')
+for (const file of runtimeQml) {
+  const source = fs.readFileSync(path.join(root, file), 'utf8')
+  assert.ok(!/command: \["mkdir"|\["mkdir",/.test(source), `${file}: folders are made private by the helper, not by mkdir`)
+  for (const id of new Set([...source.matchAll(/(\w+)\.setText\(/g)].map(m => m[1]))) {
+    const assigned = [...source.matchAll(new RegExp(`\\b${id}\\.path = ([^\\n]+)`, 'g'))].map(m => m[1].trim())
+    const declared = (new RegExp(`id: ${id}\\b[^}]*?\\n\\s*path: ([^\\n]+)`).exec(source) || [])[1]
+    for (const where of [...assigned, ...(declared ? [declared] : [])].filter(w => w !== '""'))
+      assert.match(where, /^(\w+\.)*(dataDir|backupsDir|trashDir|boardsDir|statePath|trashIndexPath)\b/,
+        `${file}: ${id} is written by the shell itself, so only into the plugin's private folders`)
+  }
+}
+assert.match(fs.readFileSync(path.join(root, 'Omarchyform.qml'), 'utf8'),
+  /command: root\.fileCommand\("private", \[root\.dataDir, root\.boardsDir, root\.backupsDir, root\.trashDir, root\.imagesDir, root\.locksDir\]\)/,
+  'every folder of the plugin\'s is made private as the shell starts, the data folder first')
+
+// Nothing is staged in the shared /tmp: every temporary file is made inside a
+// folder of the plugin's own, or of the user's choosing.
+for (const line of filesHelper.split('\n').filter(l => /\bmktemp\b/.test(l) && !/^\s*#/.test(l)))
+  assert.match(line, /mktemp (-p "[^"]+"|-- "[^"]+")/, `a temporary file in a folder of its own: ${line.trim()}`)
+for (const file of [...runtimeQml, ...fs.readdirSync(root).filter(f => f.endsWith('.js')), 'bin/omarchyform', 'bin/store.js', 'BoardFiles.sh'])
+  assert.ok(!/["'`]\/tmp\b|\btmpdir\(|\$\{?TMPDIR/.test(fs.readFileSync(path.join(root, file), 'utf8')), `${file}: nothing private in the shared /tmp`)
+
+// Nothing listens: no socket another account could connect to.
+const listening = /createServer|\.listen\(|SocketServer|LocalServer|WebSocketServer|\bnc\s+-l|\bsocat\b|http\.server|SimpleHTTPRequestHandler/
+assert.ok(listening.test('net.createServer(handler).listen(8080)'))
+for (const file of runtimeFiles)
+  assert.ok(!listening.test(fs.readFileSync(path.join(root, file), 'utf8')), `${file}: a listening socket needs per-user authentication and review`)
+
 const exchange = fs.readFileSync(path.join(root, 'BoardExchange.qml'), 'utf8')
 assert.match(exchange, /fileCommand\("clipcopy", \[\]\)/, 'QML copy helper has no content arguments')
 assert.doesNotMatch(exchange, /fileCommand\("clipcopy", \[(?!\])/,
@@ -202,8 +363,8 @@ cat /proc/$$/environ /proc/$PPID/environ > "$SCREEN_DIR/env"
 cat > "$SCREEN_DIR/clipboard"
 `, {mode:0o755})
   const env = {...process.env, HOME:dir, TMPDIR:dir, SCREEN_DIR:dir, PATH:stubs+':'+process.env.PATH}
-  const run = (args, input='') => spawnSync('bash', [path.join(root, 'BoardFiles.sh'), ...args],
-    {env, input, encoding:'utf8', timeout:10000, maxBuffer:2*1024*1024})
+  const run = (args, input='', extra={}) => spawnSync('bash', [path.join(root, 'BoardFiles.sh'), ...args],
+    {env: {...env, ...extra}, input, encoding:'utf8', timeout:10000, maxBuffer:2*1024*1024})
   function success(result) { assert.ifError(result.error); assert.equal(result.status,0,result.stderr) }
   const copied = run(['clipcopy'], secret)
   success(copied)
@@ -216,13 +377,19 @@ cat > "$SCREEN_DIR/clipboard"
 
   fs.writeFileSync(path.join(stubs, 'wl-paste'), '#!/bin/bash\ncat "$SCREEN_DIR/clipboard"\n', {mode:0o755})
   const before = fs.readdirSync(dir).sort()
-  const pasted = run(['cliptext'])
+  // Staged in the private folder it is given, never the shared /tmp.
+  const pasted = run(['cliptext', dir], '', { TMPDIR: '/nonexistent' })
   success(pasted)
   assert.equal(pasted.stdout,secret)
   assert.equal(pasted.stderr,'')
   assert.deepEqual(fs.readdirSync(dir).sort(), before, 'clipboard temporary file removed')
+  assert.equal(run(['cliptext']).status === 0, false, 'not without a folder of its own to stage in')
+  const shared = fs.mkdtempSync(path.join(os.tmpdir(), 'omarchyform-shared-')); fs.chmodSync(shared, 0o777)
+  fs.symlinkSync(dir, path.join(shared, 'link'))
+  assert.equal(run(['cliptext', path.join(shared, 'link')]).status, 3, 'nor through a link')
+  fs.rmSync(shared, { recursive: true, force: true })
   fs.writeFileSync(path.join(dir,'clipboard'),Buffer.alloc(1048577,0x78))
-  const oversized = run(['cliptext'])
+  const oversized = run(['cliptext', dir])
   assert.equal(oversized.status,5)
   assert.equal(oversized.stdout,'', 'oversized clipboard never reaches QML')
   assert.deepEqual(fs.readdirSync(dir).sort(),before, 'failure removes clipboard temporary file')

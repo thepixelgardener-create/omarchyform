@@ -494,6 +494,19 @@ for (const entry of [...Store.MENU_COMMANDS, ...Store.ZOOM_COMMANDS]) {
   if (!controller.has(entry.run)) failures.push(`Menu action ${entry.run} is missing`)
 }
 
+// The history worker reads only BoardHistory.js, so it carries its own copy of
+// the store's JSON guard. A fix to one that misses the other leaves a parse
+// the shell can still be taken down through.
+const guardOf = file => {
+  const text = read(file)
+  const from = text.indexOf("var MAX_JSON_OPEN = ")
+  const to = text.indexOf("\n}\n", text.indexOf("function parseJson(", from))
+  return from >= 0 && to >= 0 ? text.slice(from, to) : null
+}
+if (guardOf("BoardStore.js") === null) failures.push("BoardStore.js: MAX_JSON_OPEN to parseJson not found")
+else if (guardOf("BoardHistory.js") !== guardOf("BoardStore.js"))
+  failures.push("BoardHistory.js: its JSON guard is not the same as BoardStore.js's")
+
 if (failures.length) {
   for (const line of failures) console.error("  " + line)
   console.error(`FAILED — ${failures.length} missing member(s)`)

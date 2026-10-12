@@ -1,6 +1,6 @@
 {
   "name": "omarchyform",
-  "version": "0.4.8",
+  "version": "0.4.9",
   "private": true,
   "description": "Development and regression checks for the Omarchyform whiteboard",
   "scripts": {
@@ -19,6 +19,7 @@
     "shots": "node tests/shots.js",
     "preview": "node tests/preview.js",
     "test:security": "node tests/security.js && node tests/filesystem.js && node tests/desktop.js && node tests/cli.js",
+    "review:marketplace": "node tests/marketplace.js",
     "test:security:full": "npm run test:security && npm run test:qml && npm run test:ui",
     "bench:history": "node tests/history-bench.js"
   }

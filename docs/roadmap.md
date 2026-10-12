@@ -1,6 +1,6 @@
 # Roadmap
 
-Updated 2026-10-10. This is the current release direction. The dated
+Updated 2026-10-12. This is the current release direction. The dated
 [architecture review](architecture-review-0.4.5.md) and
 [competitor analysis](competitor-analysis-0.4.5.md) explain the findings behind it.
 
@@ -59,6 +59,17 @@ with frame-rate limits recorded. Boards with history or textures use format 7.
 Shipped. Every text field reads a paste through the clipboard helper's 1 MiB
 limit instead of Qt's unbounded reader, from the marketplace review of 0.4.7;
 see the [security review](security-review.md#marketplace-review-of-047).
+
+## 0.4.9 — Hardening from the marketplace review
+
+Shipped. From the follow-up reviews of 0.4.8: external drops are refused
+before Qt reads them, the one-line fields no longer read the clipboard when it
+changes, and a PNG carrying compressed text is refused, including one already
+in the images folder. A board holds at most 5,000 items, 20,000 connectors and
+32 MB, nothing the shell reads as JSON can crash it, and the plugin's folders
+are private on existing installs too. The [security review](security-review.md#before-submitting-to-the-marketplace)
+has the checks to run before submitting. Changing the bar's **Open in a window
+rather than fullscreen** setting now takes effect after the first open too.
 
 ## 0.5 — Editable, labeled connectors
 

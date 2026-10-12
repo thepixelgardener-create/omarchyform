@@ -94,6 +94,7 @@ Item {
     }
     property int minItemSize: picture.ctl.minItemSize
     function imagePath(name) { return picture.ctl.imagePath(name) }
+    function pictureState(name) { return picture.ctl.pictureState(name) }
     function isMarked(id) { return false }
     // An export has no viewport to fall outside of, so nothing is culled and
     // the camera it would be culled against is never read.

@@ -44,8 +44,6 @@ the directory's `?text=` searches:
 
 This checks whether the entry matches. It does not measure ranking or traffic.
 
-## Publish with the release
-
 ## What a push changes
 
 The section above expected the listing text to wait for a verified update. It

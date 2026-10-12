@@ -218,3 +218,29 @@ function session(seed, items, edits, mix) {
   assert.equal(H.stateAt(ix, stored, 2).items[0].texture, undefined)
   console.log('ok — history: textures and return to plain survive playback')
 }
+
+{
+  // The history is parsed on a worker thread, but in the same process: a list
+  // too long for Qt's JSON.parse takes the shell down from there too. The
+  // worker's copy of the guard answers as it does for text that does not parse.
+  const { historyWorker } = require('./history-worker')
+  const W = historyWorker()
+  const long = '[' + '0,'.repeat(H.MAX_JSON_OPEN) + '0]'
+  const asked = text => {
+    const reply = W.check({ token: 7, history: text })
+    return { error: reply.error, unreadable: reply.unreadable }
+  }
+  const garbled = asked('not a history')
+  assert.notEqual(garbled.error, '', 'text that does not parse is an error')
+  assert.deepEqual(asked(long), garbled, 'and so is one too long to parse')
+  assert.deepEqual(asked(JSON.stringify({ version: 1, lineage: 'x', began: 1, base: {}, records: [], pad: JSON.parse(long) })),
+    garbled, 'wherever the list is')
+  let threw = null
+  try { H.parseJson(long) } catch (e) { threw = e }
+  assert.ok(threw instanceof SyntaxError, 'parseJson throws as JSON.parse does')
+  // The facts at a history's front are read without its baseline, and are
+  // held to the same: anything can be put in front of "base".
+  assert.deepEqual(H.headerFacts('{"version":1,"lineage":"x","began":5,"base":'), { version: 1, lineage: 'x', began: 5 })
+  assert.equal(H.headerFacts('{"version":1,"pad":' + long + ',"base":'), null)
+  console.log('ok — history: a list too long to parse is refused before the parser sees it')
+}

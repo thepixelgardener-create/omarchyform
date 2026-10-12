@@ -85,6 +85,7 @@ Item {
   readonly property string backupsDir: doc.workspace.backupsDir
   readonly property var library: doc.workspace.library
   function backupPathFor(relative) { return doc.workspace.backupPathFor(relative) }
+  function recheckPictures(names) { doc.workspace.recheckPictures(names) }
   function lockPathFor(relative) { return doc.workspace.lockPathFor(relative) }
   function fileCommand(action, args) { return doc.workspace.fileCommand(action, args) }
   function writeState() { doc.workspace.writeState() }
@@ -438,7 +439,7 @@ Item {
 
   function readReplay(continuationOnly) {
     var h
-    try { h = JSON.parse(History.joinText(doc.historyHeader, doc.historyRecords)) } catch (e) { h = null }
+    try { h = History.parseJson(History.joinText(doc.historyHeader, doc.historyRecords)) } catch (e) { h = null }
     if (!h || History.checkShape(h) !== "") { doc.dropReplay(); return false }
     var previous = doc.replay
     if (continuationOnly && (!previous || !History.extendsHistory(previous.h, h, previous.ix))) {

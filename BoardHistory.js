@@ -40,6 +40,56 @@ var MAX_HISTORY_RECORDS = 10000
 // before it, and parsing one far larger is memory the shell does not have to
 // spend to find out it is not one.
 var MAX_HISTORY_TEXT = 4 * 16777216
+
+// What JSON.parse is kept from: see MAX_JSON_OPEN in BoardStore.js, which says
+// why. A copy, not an import, because the history worker reads only this
+// file; tests/contract.js holds the two to each other.
+var MAX_JSON_OPEN = 100000
+
+// Whether JSON.parse can read this without holding more than MAX_JSON_OPEN.
+// A text with fewer commas and brackets than that in all is settled by
+// counting them; anything else is walked, strings stepped over, which took
+// 208ms for a 34 MiB board and a second for a full history (its own parse
+// took 186ms and 875ms). The walk also refuses anything nested deeper than
+// the parser goes, rather than keep every level: the parser stops there.
+function jsonFits(text) {
+  text = String(text)
+  var seen = 0, at = -1
+  while (seen < MAX_JSON_OPEN && (at = text.indexOf(",", at + 1)) >= 0) seen++
+  at = -1
+  while (seen < MAX_JSON_OPEN && (at = text.indexOf("[", at + 1)) >= 0) seen++
+  if (seen < MAX_JSON_OPEN) return true
+  var open = [], held = 0, n = text.length
+  for (var i = 0; i < n; i++) {
+    var c = text.charCodeAt(i)
+    if (c === 34) {
+      // A quote is the string's end unless an odd run of backslashes escapes it.
+      var end = i, slashes
+      do {
+        end = text.indexOf('"', end + 1)
+        if (end < 0) return true
+        slashes = 0
+        while (text.charCodeAt(end - 1 - slashes) === 92) slashes++
+      } while (slashes % 2 === 1)
+      i = end
+      continue
+    }
+    if (c === 91) { if (open.length >= 1024) return false; open.push(1); held++ }
+    else if (c === 123) { if (open.length >= 1024) return false; open.push(0) }
+    else if (c === 44) { if (open.length > 0 && open[open.length - 1] > 0) { open[open.length - 1]++; held++ } }
+    else if (c === 93 || c === 125) held -= open.length > 0 ? open.pop() : 0
+    else continue
+    if (held > MAX_JSON_OPEN) return false
+  }
+  return true
+}
+
+// JSON.parse, for text from anywhere but this script: one that would hold too
+// much at once throws the way unreadable text does.
+function parseJson(text) {
+  if (!jsonFits(text)) throw new SyntaxError("JSON holds more at once than can be read")
+  return JSON.parse(text)
+}
 // Edits that continue the record in progress rather than starting one, when
 // the next one is the same: typing in one note, a held key moving or resizing.
 var MERGING = ["Typing", "Move", "Resize"]
@@ -528,7 +578,7 @@ function headerFacts(header) {
   var at = header.indexOf(',"base":')
   if (at < 0) return null
   try {
-    var facts = JSON.parse(header.slice(0, at) + "}")
+    var facts = parseJson(header.slice(0, at) + "}")
     return facts && typeof facts === "object" ? facts : null
   } catch (e) { return null }
 }

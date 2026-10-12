@@ -23,6 +23,15 @@ place_new() {
 # arrived: dropped, pasted, or carried inside a shared copy.
 max_image_bytes=33554432
 
+# The most a board's file may weigh before the shell reads it, the same as
+# MAX_BOARD_BYTES in BoardStore.js: an import is held to it, and so is a board
+# in the library, which is a folder people sync and commit. Exit 5 says a
+# board is larger than this, and nothing of it was read.
+max_board_bytes=33554432
+board_fits() {
+  [[ ! -f $1 ]] || (( $(stat -Lc %s -- "$1") <= max_board_bytes ))
+}
+
 # What a picture costs to draw is its pixels, not its bytes, and the two are not
 # related: a PNG of one flat colour compresses to almost nothing and still asks
 # for four bytes a pixel when it is decoded. Twelve thousand square is a hundred
@@ -86,6 +95,80 @@ refuse_huge_pictures() {
   (( width <= max_image_side && height <= max_image_side )) || exit 7
   (( width * height <= max_image_pixels )) || exit 7
 }
+
+# What a PNG may ask its reader to inflate, which the pixel count says nothing
+# about. Qt keeps the text of every zTXt and compressed iTXt chunk, and libpng
+# inflates each to nearly 8 MB and keeps up to a thousand of them, before and
+# after the image data: a PNG of a few megabytes, two pixels square, asks the
+# shell for gigabytes before a pixel is decoded. Plain tEXt and uncompressed
+# iTXt cost no more than their bytes on disk, so those stay.
+#
+# A file without either name anywhere in it cannot hold either chunk, which is
+# every ordinary picture, and that is all it costs. One with the name is walked
+# chunk by chunk, so the same four bytes inside the image data are not taken
+# for a chunk. The walk is one pass over the bytes, so what it costs is set by
+# the file's size, which is already held to max_image_bytes, rather than by how
+# many chunks someone packed into it. Exit 9 says the picture carries
+# compressed text; a walk that does not reach IEND says the same.
+refuse_compressed_text() {
+  local path=$1 kind=$2 found=0 verdict
+  [[ $kind == png ]] || return 0
+  LC_ALL=C grep -q -a -F -e zTXt -e iTXt -- "$path" || found=$?
+  (( found != 1 )) || return 0
+  (( found == 0 )) || exit 9
+  # After the signature: a 4-byte length, a 4-byte name, the data, a 4-byte CRC.
+  verdict=$(timeout 30 od -An -v -tu1 -w64 -j8 -- "$path" | awk '
+    function decide(answer) { print answer; decided = 1; exit }
+    BEGIN { state = "head"; got = 0 }
+    {
+      for (i = 1; i <= NF; i++) {
+        if (state == "skip") {
+          # Whole lines at a time: this is where the image data goes by.
+          if (skip >= NF - i + 1) { skip -= NF - i + 1; break }
+          i += skip; skip = 0; state = "head"
+          if (i > NF) break
+        }
+        b = $i + 0
+        if (state == "head") {
+          h[got++] = b
+          if (got < 8) continue
+          got = 0
+          size = ((h[0] * 256 + h[1]) * 256 + h[2]) * 256 + h[3]
+          name = h[4] " " h[5] " " h[6] " " h[7]
+          if (name == "122 84 88 116") decide("compressed")      # zTXt
+          if (name == "73 69 78 68") decide("clean")             # IEND
+          if (name == "105 84 88 116") { state = "keyword"; left = size; keyword = 0 }  # iTXt
+          else { state = "skip"; skip = size + 4 }
+        } else if (state == "keyword") {
+          # An iTXt keyword is 1 to 79 bytes and a NUL; the flag after it says
+          # whether the text is compressed.
+          left--
+          if (b == 0) { if (keyword < 1 || left < 1) decide("compressed"); state = "flag" }
+          else if (++keyword > 79 || left < 1) decide("compressed")
+        } else if (state == "flag") {
+          left--
+          if (b != 0) decide("compressed")
+          state = "skip"; skip = left + 4
+        }
+      }
+    }
+    # Out of bytes before IEND: cut short, or cut off by the timeout.
+    END { if (!decided) print "unfinished" }') || true
+  [[ $verdict == clean ]] || exit 9
+}
+
+# The checks a picture is held to as it lands, for one already in the folder:
+# its bytes, its type, its pixels and the compressed text Qt would inflate. In
+# a subshell, so a refusal comes back as the answer rather than ending the
+# caller, with the exit the landing routes refuse it with.
+picture_verdict() (
+  size=$(stat -Lc %s -- "$1") || exit 4
+  (( size > 0 )) || exit 4
+  (( size <= max_image_bytes )) || exit 5
+  kind=$(image_extension "$1") || exit 4
+  refuse_huge_pictures "$1" "$kind"
+  refuse_compressed_text "$1" "$kind"
+)
 
 # A name for a picture about to be written, without its extension. The caller
 # picks it, and it is still held to the names an image item may carry: no
@@ -158,6 +241,9 @@ case "$operation" in
     [[ $base_name != */* ]]
     confined "$board_root" "$base_name.json"
     [[ -f $staged && ! -L $staged ]]
+    # The shell staged it with its own umask; the board it becomes is private
+    # from the moment it has a name, like every board the helper writes.
+    chmod 600 -- "$staged"
     number=1
     candidate=$base_name.json
     while ! ln -T -- "$staged" "$board_root/$candidate" 2>/dev/null; do
@@ -182,7 +268,8 @@ case "$operation" in
   clipimage)
     # The clipboard picks the format; this picks the name and the folder, so
     # nothing the clipboard says can steer where the bytes land. Exit 4 means
-    # there is no image on it, which is the caller's cue to try text instead.
+    # there is no image on it, which is the caller's cue to try text instead;
+    # 9 that the picture carries compressed text (refuse_compressed_text).
     images_root=$1 base_name=$2
     plain_name "$base_name"
     mime=$(timeout 5 wl-paste --list-types 2>/dev/null | grep -m1 -E '^image/(png|jpeg|webp|gif|bmp)$' || true)
@@ -208,12 +295,17 @@ case "$operation" in
     extension=$(image_extension "$temporary") || exit 8
     confined "$images_root" "$base_name.$extension"
     refuse_huge_pictures "$temporary" "$extension"
+    refuse_compressed_text "$temporary" "$extension"
     place_new "$temporary" "$images_root/$base_name.$extension"
     printf '%s' "$base_name.$extension"
     ;;
   cliptext)
     # Bound the bytes before QML collects stdout. Never return a partial note.
-    temporary=$(mktemp)
+    # Staged in a folder of this user's own, never the shared /tmp: what is on
+    # the clipboard is somebody's private text until it is pasted.
+    private_dir=$1
+    [[ -d $private_dir && -O $private_dir && ! -L $private_dir ]] || exit 3
+    temporary=$(mktemp -p "$private_dir" .omarchyform-clip-XXXXXX)
     trap 'rm -f -- "$temporary"' EXIT
     read_status=0
     timeout 3 wl-paste --no-newline --type text | head -c 1048577 > "$temporary" || read_status=$?
@@ -246,7 +338,8 @@ case "$operation" in
     # A dropped path is untrusted: it names a file to read, never where bytes
     # land or what they are called. The type comes from the content rather than
     # the name, and a file too big to sit on a board is refused before it is
-    # copied. Exit 4 means "not an image this can take", 5 means "too large".
+    # copied. Exit 4 means "not an image this can take", 5 means "too large",
+    # 9 that it carries compressed text.
     images_root=$1 base_name=$2 source_path=$3
     plain_name "$base_name"
     [[ -f $source_path ]] || exit 4
@@ -264,6 +357,7 @@ case "$operation" in
     extension=$(image_extension "$temporary") || exit 4
     confined "$images_root" "$base_name.$extension"
     refuse_huge_pictures "$temporary" "$extension"
+    refuse_compressed_text "$temporary" "$extension"
     place_new "$temporary" "$images_root/$base_name.$extension"
     printf '%s' "$base_name.$extension"
     ;;
@@ -302,7 +396,8 @@ case "$operation" in
     # for anything: the caller picks the name, the type comes from the decoded
     # bytes, and the size is held to the same limit a dropped file is. Exit 4
     # means the bytes are not a picture, 5 that they are too big for a board,
-    # 7 that they decode to more pixels than a board will draw.
+    # 7 that they decode to more pixels than a board will draw, 9 that they
+    # carry compressed text the shell would inflate.
     images_root=$1 staged=$2 base_name=$3
     plain_name "$base_name"
     [[ -f $staged && ! -L $staged ]]
@@ -316,6 +411,7 @@ case "$operation" in
     # The path that matters most: this is a picture out of a board somebody
     # else made, and the only one that arrives without anybody choosing it.
     refuse_huge_pictures "$temporary" "$extension"
+    refuse_compressed_text "$temporary" "$extension"
     confined "$images_root" "$base_name.$extension"
     place_new "$temporary" "$images_root/$base_name.$extension"
     printf '%s' "$base_name.$extension"
@@ -325,6 +421,7 @@ case "$operation" in
     # The revision comes back with the answer: what is read now is what the
     # next write will expect to still be there.
     confined "$1" "$2" || exit 3
+    board_fits "$1/$2" || exit 5
     revision_of "$1/$2"
     ;;
   snapshot)
@@ -335,8 +432,10 @@ case "$operation" in
     exec 9>"$lock"
     flock 9
     [[ -f $board && ! -L $board ]] || exit 3
+    board_fits "$board" || exit 5
     before=$(revision_of "$board")
-    snapshot=$(mktemp)
+    # Staged beside the lock, in the plugin's own folder, not the shared /tmp.
+    snapshot=$(mktemp -p "$(dirname -- "$lock")" .omarchyform-snapshot-XXXXXX)
     trap 'rm -f -- "$snapshot"' EXIT
     cp -T -- "$board" "$snapshot"
     # Also detect a non-cooperating editor changing the file during the copy.
@@ -353,6 +452,50 @@ case "$operation" in
     # is not there answers 0, and the caller says so.
     if [[ -f $1 ]]; then printf '%s' "$(stat -Lc '%s' -- "$1")"; else printf 0; fi
     ;;
+  checkimages)
+    # Pictures already in the folder, asked about before Qt is asked to draw
+    # them. The landing routes check what comes in through them; this is for
+    # what did not: a picture copied or synced in, or one that landed before
+    # a check existed. Names come on stdin, one a line, each with the revision
+    # it was last found fit at, if any, and one still at that revision is not
+    # read again. Each is answered on a line of its own: the name, then ok,
+    # missing, or the exit a landing route would refuse it with (3 for a name
+    # or a link no board would draw through), then the revision it was found
+    # at. A folder not made yet holds nothing: every name is missing. Nothing
+    # is written.
+    images_root=$1
+    declare -a names=() knowns=() present=()
+    declare -A revisions=()
+    while IFS=$'\t' read -r name known || [[ -n $name ]]; do
+      names+=("$name") knowns+=("$known")
+      if plain_name "$name" && [[ ! -L $images_root/$name && -f $images_root/$name ]]; then
+        present+=("$images_root/$name")
+      fi
+    done
+    # Every revision in one stat: one process a picture costs more than the
+    # check it saves when nothing has changed. A name cannot hold a tab. The
+    # change time is in it as well as the modification time: a file rewritten
+    # in place at the same size can have its modification time put back, but
+    # not its change time.
+    if (( ${#present[@]} > 0 )); then
+      while IFS=$'\t' read -r path revision; do
+        revisions[${path##*/}]=${revision// /}
+      done < <(stat -Lc $'%n\t%s|%i|%y|%z' -- "${present[@]}" 2>/dev/null || true)
+    fi
+    for i in "${!names[@]}"; do
+      name=${names[i]} known=${knowns[i]} verdict="" revision=""
+      if ! plain_name "$name" || [[ -L $images_root/$name ]]; then verdict=3
+      elif [[ -z ${revisions[$name]+set} ]]; then verdict=missing
+      else
+        revision=${revisions[$name]}
+        if [[ -n $known && $known == "$revision" ]]; then verdict=ok
+        elif picture_verdict "$images_root/$name"; then verdict=ok
+        else verdict=$?
+        fi
+      fi
+      printf '%s\t%s\t%s\n' "$name" "$verdict" "$revision"
+    done
+    ;;
   commit)
     # The one write both ends of a board go through, with the board itself on
     # stdin. Under a lock, and only if the file is still the revision the
@@ -362,7 +505,8 @@ case "$operation" in
     #
     # Exit 7 means the file moved underneath, and prints what is there now. The
     # caller still holds what it meant to write; this refuses to guess which of
-    # the two versions a person wanted.
+    # the two versions a person wanted. Exit 5 means the board is larger than a
+    # board is opened at, so it is not written: it could not be read back.
     board=$1 backup=$2 lock=$3 expected=$4 root=${5:-} backup_root=${6:-}
     if [[ -n $root ]]; then
       [[ $board == "$root/"* ]] || exit 3
@@ -381,6 +525,7 @@ case "$operation" in
     # people are invited to read. The caller still holds what it sent.
     trap 'rm -f -- "$staged"' EXIT
     cat > "$staged"
+    board_fits "$staged" || exit 5
     mkdir -p -- "$(dirname -- "$lock")"
     exec 9>"$lock"
     flock 9
@@ -401,6 +546,43 @@ case "$operation" in
   mkdir)
     confined "$1" "$2"
     mkdir -- "$1/$2"
+    ;;
+  private)
+    # The plugin's own folders, made, or made private: 0700, and whatever is
+    # in them only its owner's, whatever umask the shell started with and
+    # whatever an older version, a sync tool or a hand left them as. The
+    # shell writes some files into them itself (its state, a staged import,
+    # the trash index, a history set aside) with its own umask; inside a
+    # folder only its owner can enter, no other account reaches them.
+    #
+    # A folder may be a link to where it is kept, and what it leads to is
+    # made private if it is this user's. Nothing below it is followed, and
+    # nothing that is not this user's is changed: it is named on stderr, and
+    # exit 3 says something could not be made private. Never the home folder.
+    # A failure with one folder (one that could not be made, a file that went
+    # away while it was being looked at) is said and the rest are still done.
+    unprivate=0
+    home=$(realpath -m -- "${HOME:-/}")
+    for folder in "$@"; do
+      if [[ $folder != /* || $folder =~ [[:cntrl:]] || $(realpath -m -- "$folder") == "$home" ]]; then
+        printf 'not a folder of the plugin'"'"'s: %s\n' "$folder" >&2
+        unprivate=1
+        continue
+      fi
+      mkdir -p -- "$folder" 2>/dev/null || true
+      if [[ ! -d $folder || ! -O $folder ]] || ! chmod 700 -- "$folder"; then
+        printf 'not this user'"'"'s, left as it is: %s\n' "$folder" >&2
+        unprivate=1
+        continue
+      fi
+      find -H "$folder" -mindepth 1 -xdev -user "$(id -u)" -perm /077 \
+        \( \( -type d -exec chmod 700 -- {} + \) -o \( -type f -exec chmod go= -- {} + \) \) 2>/dev/null || unprivate=1
+      if [[ -n $(find -H "$folder" -mindepth 1 -xdev ! -user "$(id -u)" -print -quit 2>/dev/null) ]]; then
+        printf 'holds something not this user'"'"'s: %s\n' "$folder" >&2
+        unprivate=1
+      fi
+    done
+    (( unprivate == 0 )) || exit 3
     ;;
   purge)
     [[ $2 != */* ]]

@@ -100,6 +100,13 @@ function edited() {
   a.showRecord(a.firstRecord() + 2)
   assert.match(a.statusText, /too long to show/)
   assert.deepEqual(rows(a.items), c.snaps[3], 'and the step on screen stays')
+  // Nor a step with more on it than a board holds.
+  long.p = { a: Array.from({ length: S.MAX_ITEMS + 1 }, (_, i) =>
+    [0, { id: 100000 + i, kind: 'rect', x: i, y: 0, w: 60, h: 60 }]) }
+  a.statusText = ''
+  a.showRecord(a.firstRecord() + 2)
+  assert.match(a.statusText, /^the board at step 2 has more than 5,000 items, too many to show/)
+  assert.deepEqual(rows(a.items), c.snaps[3], 'and the step on screen stays')
   long.p = JSON.parse(kept)
   a.statusText = ''
 

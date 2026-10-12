@@ -43,6 +43,32 @@ the CLI to create boards and is not a contribution guide.
   `TextInput` reads the clipboard's whole text on every clipboard change while
   it is editable. Keep `test:clipboard` at zero content reads with every field
   open, and run it on Qt 6.12.0 as `docs/security-review.md` describes.
+- Every picture that lands in `images/` goes through `BoardFiles.sh`, which
+  holds it to its bytes, its pixels (`refuse_huge_pictures`) and, for a PNG,
+  the compressed text Qt would inflate (`refuse_compressed_text`). A new way in
+  calls all three on the bytes that land.
+- Nothing private goes on a command line: another account can read it in
+  `/proc`. Send contents on stdin or in a staged file in a private folder; a
+  new helper argument fails `tests/security.js` until it is added, reviewed,
+  to its table.
+- Folders are made through the helper's `private`, never a bare `mkdir`; the
+  shell writes its own files only inside the plugin's folders; temporary
+  files go in those folders, never the shared `/tmp`; nothing listens on a
+  socket.
+- Before submitting, or asking for an update to be verified, work through
+  "Before submitting to the marketplace" in `docs/security-review.md`.
+- A picture is drawn only through `imagePath`, which waits for `checkimages`
+  to clear the file (`pictureState`). Never build a URL into `images/`
+  anywhere else; `tests/security.js` refuses one.
+- Parse JSON in shell code with `parseJson`, never `JSON.parse`: Qt's parser
+  segfaults on a 1.1 MB array (`MAX_JSON_OPEN` in `BoardStore.js`), and
+  `tests/security.js` refuses any other call. Change the guard in
+  `BoardStore.js` and `BoardHistory.js` together; `tests/contract.js` holds
+  them equal.
+- A board holds at most `MAX_ITEMS` items, `MAX_LINKS` connectors and
+  `MAX_BOARD_BYTES` on disk. Anything new that adds items or connectors stops
+  at the limit with `FULL_ITEMS` or `FULL_LINKS`, and anything that reads a
+  board asks `boardLimit` before building it.
 
 ## Regression checks
 
