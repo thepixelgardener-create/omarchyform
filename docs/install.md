@@ -24,6 +24,8 @@ The sticky-note icon opens and closes the board, and carries the accent colour w
 open. Its defaults — autosave delay, keyboard step, canvas pattern, and whether the
 board opens windowed — live on the bar entry and are handed to the board when
 it opens, then remembered, so opening from the keyboard uses the same values.
+New installs open as a tiled window. Press `w` to switch to fullscreen and back;
+the board remembers your choice.
 Choose the canvas appearance inside the board with **Menu → Background**;
 that choice takes precedence over the bar's canvas defaults.
 

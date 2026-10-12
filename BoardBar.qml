@@ -29,7 +29,7 @@ BarWidget {
         step: root.setting("step", 40),
         showGrid: root.setting("showGrid", true),
         canvasPattern: root.setting("canvasPattern", "Dots"),
-        startWindowed: root.setting("startWindowed", false)
+        startWindowed: root.setting("startWindowed", true)
       }
     })
   }

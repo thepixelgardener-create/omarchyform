@@ -3,6 +3,13 @@
 Notable changes, newest first. Board file versions are noted where they moved,
 since older boards are migrated on load rather than rejected.
 
+## 0.4.10 — Tiled by default
+
+### Changed
+
+- Open as a tiled window by default, from both the bar and keyboard. Existing
+  saved window choices are preserved; `w` still switches to fullscreen and back.
+
 ## 0.4.9 — 2026-10-12
 
 ### Fixed

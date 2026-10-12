@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "thepixelgardener.omarchyform",
   "name": "Omarchyform",
-  "version": "0.4.9",
+  "version": "0.4.10",
   "author": "frueh",
   "description": "An offline whiteboard for brainstorming, mind maps and diagrams. Arrange sticky notes, images and shapes on an infinite canvas, with keyboard controls and Omarchy themes.",
   "kinds": [
@@ -27,7 +27,7 @@
       "step": 40,
       "showGrid": true,
       "canvasPattern": "Dots",
-      "startWindowed": false
+      "startWindowed": true
     },
     "schema": [
       {
@@ -69,7 +69,7 @@
         "key": "startWindowed",
         "type": "boolean",
         "label": "Open in a window rather than fullscreen",
-        "defaultValue": false
+        "defaultValue": true
       }
     ]
   }

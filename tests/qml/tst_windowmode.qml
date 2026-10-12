@@ -6,7 +6,7 @@ import Quickshell.Io
 // Real surfaces, state writes and reopenings, in the live runner's private home.
 ShellRoot {
   id: test
-  property int stage: 0
+  property int stage: -2
   property int ticks: 0
   function check(ok, message) {
     if (!ok) { console.error("FAIL: " + message); Qt.quit(); throw new Error(message) }
@@ -36,7 +36,15 @@ ShellRoot {
     running: true
     onTriggered: {
       test.check(++test.ticks < 100, "window mode test completes at stage " + test.stage)
-      if (test.stage === 0 && plugin.activePane.boardLoaded) {
+      if (test.stage === -2 && plugin.activePane.boardLoaded) {
+        // A fresh keyboard launch has neither saved state nor bar settings.
+        plugin.open("{}")
+        test.stage = -1
+      } else if (test.stage === -1 && plugin.activePane.activeBoard) {
+        test.surface(true)
+        plugin.close()
+        test.stage = 0
+      } else if (test.stage === 0 && !plugin.activePane.activeBoard) {
         test.openWith(false)
         test.stage = 1
       } else if (test.stage === 1 && plugin.activePane.activeBoard) {
