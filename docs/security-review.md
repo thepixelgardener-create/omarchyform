@@ -368,4 +368,8 @@ on Qt 6.12.0 now reads as unreadable in about 150 ms, and the real worker,
 included the way the shell includes it, answers it as it answers text that
 does not parse. A board refused this way opens read-only with the reason.
 
+Everything from the follow-up on drops onward, with the private folders and
+the routine in [Before submitting](#before-submitting-to-the-marketplace), was
+released in 0.4.9.
+
 The known limits above remain open hardening areas, not completed fixes.

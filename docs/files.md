@@ -22,12 +22,20 @@
 └── state.json
 ```
 
+These folders are yours alone. Each time the shell starts, the plugin makes
+them 0700 and takes group and other access off everything in them that is
+yours, so an older version, a sync tool or a loose umask cannot leave a board
+readable by another account. A boards folder that is a link is tightened where
+it lives; something in them that belongs to another account is left as it is.
+
 Each board is plain JSON, written atomically. One generation back is kept in
 `~/.local/share/omarchyform/backups/`, under `v2/`, mirroring the board directory tree — out of the boards tree, which is meant to be browsed, hand-edited
 and committed without `.bak` files in the way. Older flattened backups are
 left untouched; new saves use the mirrored paths to avoid naming collisions. The backup completes before replacement, and saves
 with unchanged contents do not rotate it. Malformed or unsupported board files
-open read-only; no edits or saves are allowed over them. Back it up, sync it,
+open read-only; no edits or saves are allowed over them. So does a board past
+5,000 items, 20,000 connectors or 32 MB, or one holding a list too long to
+read safely; `validate` below says which. Back it up, sync it,
 edit it by hand, put it in git — it is your file, and a board that changes while
 it is open is noticed rather than overwritten.
 

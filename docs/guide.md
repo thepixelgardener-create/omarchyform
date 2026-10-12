@@ -273,6 +273,15 @@ Escape first if you want `a`, `r` or `x`.
 The browser opens in the folder of the board you are on, and the board you are
 on is marked `·open`.
 
+A board holds at most 5,000 items and 20,000 connectors, and its file at most
+32 MB. Every item is drawn by the shell itself, and past that a board takes
+long enough to open that the bar waits with it. Adding, duplicating or
+connecting past a limit is refused with a message; deleting, and turning a
+connector round, still work. A board over a limit, written by something else,
+opens read-only and empty with the reason, and its file is left as it is;
+`bin/omarchyform validate` names the limit, and its `remove` and `setText`
+bring the board back under ([the command line](files.md)).
+
 ### Two at once
 
 `v` splits the board side by side and `V` stacks it. The new pane starts as a
@@ -338,6 +347,14 @@ re-importing your own copy without its pictures on the machine that saved it.
 sharing. `ctrl+v` asks the clipboard for a picture first and drops it on the board at its
 own proportions; failing that, it turns the text into a note, however many lines
 it is.
+
+A picture is refused, with the reason, if it is over 32 MB, more than 20,000
+pixels on a side or 40 million in all, or a PNG carrying compressed text,
+which Qt would unpack whole however small the picture; the plain text a
+screenshot tool writes is fine. That holds whether it is pasted or carried in
+a board you import. A picture that reaches `images/` some other way, copied or
+synced in, is held to the same before it is first drawn: until then it shows
+as loading, and one that fails shows *picture not shown* and why in its place.
 
 `ctrl+c` goes the other way. A picture on its own lands on the clipboard as a
 picture, ready to paste into a chat or an editor; anything else goes as its text,
