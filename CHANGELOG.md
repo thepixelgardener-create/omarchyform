@@ -3,7 +3,7 @@
 Notable changes, newest first. Board file versions are noted where they moved,
 since older boards are migrated on load rather than rejected.
 
-## Unreleased
+## 0.4.9 — 2026-10-12
 
 ### Security
 

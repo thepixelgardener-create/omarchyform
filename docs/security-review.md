@@ -63,7 +63,7 @@ fetched at a pinned commit), answering the GitHub requests it makes from git,
 so it reads exactly the files it would read there. It fails on any finding, on
 any capability other than those accepted in it for the paths named, on a
 policy version it was not written for, and within a quarter of a scan limit.
-CI runs it. At 0.4.8 it reports `review-required` for one capability,
+CI runs it. At 0.4.9 it reports `review-required` for one capability,
 `installer` (`desktop/install.sh`), with the reason in the file; that reason
 belongs in the submission's maintainer notes.
 
