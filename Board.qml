@@ -97,7 +97,7 @@ FocusScope {
   function probeImage(name) {
     sizeProbe.pending = name
     sizeProbe.source = ""
-    sizeProbe.source = board.ctl.imagePath(name)
+    sizeProbe.load()
   }
 
   function focusKeys() { keys.forceActiveFocus() }
@@ -391,16 +391,30 @@ FocusScope {
     cache: false
     asynchronous: true
     property string pending: ""
-    onStatusChanged: {
-      if (pending === "" || (sizeProbe.status !== Image.Ready && sizeProbe.status !== Image.Error)) return
+    // Loaded only once the file has been checked, like every picture
+    // (ctl.pictureState); one refused is finished as one that could not be
+    // read is.
+    readonly property string checked: pending !== "" ? board.ctl.pictureState(pending) : ""
+    // On the next turn: finishing clears pending, which this is bound to.
+    onCheckedChanged: Qt.callLater(sizeProbe.load)
+    function load() {
+      if (pending === "" || checked === "waiting") return
+      if (checked !== "") { finish(0, 0); return }
+      var url = board.ctl.imagePath(pending)
+      if (String(source) !== url) source = url
+    }
+    function finish(w, h) {
       var name = pending
-      // Read off before the source is cleared: clearing it takes the natural
-      // size with it.
-      var w = sizeProbe.status === Image.Ready ? sizeProbe.implicitWidth : 0
-      var h = sizeProbe.status === Image.Ready ? sizeProbe.implicitHeight : 0
       pending = ""
       source = ""
       board.ctl.pasteImage(name, w, h)
+    }
+    onStatusChanged: {
+      if (pending === "" || (sizeProbe.status !== Image.Ready && sizeProbe.status !== Image.Error)) return
+      // Read off before the source is cleared: clearing it takes the natural
+      // size with it.
+      finish(sizeProbe.status === Image.Ready ? sizeProbe.implicitWidth : 0,
+             sizeProbe.status === Image.Ready ? sizeProbe.implicitHeight : 0)
     }
   }
 

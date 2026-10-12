@@ -439,5 +439,64 @@ try {
 
   assert.deepEqual(fs.readdirSync(images).filter(f=>f.startsWith('.')),[],'no temporaries left behind')
 
+  // A picture can be in the folder without having come through any of those:
+  // copied or synced in, or landed before a check existed. Before Qt is asked
+  // to draw one, checkimages holds it to what landing would, and says so per
+  // name: ok, missing, or the exit landing would refuse it with.
+  const shelf=path.join(dir,'shelf')
+  fs.mkdirSync(shelf)
+  const checkimages=lines=>{
+    const out=spawnSync('bash',[path.join(__dirname,'../BoardFiles.sh'),'checkimages',shelf],{encoding:'utf8',input:lines})
+    assert.equal(out.status,0,out.stderr)
+    return Object.fromEntries(out.stdout.trim().split('\n').filter(Boolean).map(l=>{const [n,v,r]=l.split('\t');return [n,{verdict:v,revision:r}]}))
+  }
+  textCases.forEach(([,bytes,status],i)=>fs.writeFileSync(path.join(shelf,`text-${i}.png`),bytes))
+  const tooMany=Buffer.from(pngWith()); tooMany.writeUInt32BE(30000,16); tooMany.writeUInt32BE(30000,20)
+  fs.writeFileSync(path.join(shelf,'huge.png'),tooMany)
+  fs.writeFileSync(path.join(shelf,'words.png'),'this is not a picture')
+  fs.writeFileSync(path.join(shelf,'renamed.jpg'),textCases[0][1])
+  fs.writeFileSync(path.join(shelf,'empty.png'),'')
+  fs.writeFileSync(path.join(shelf,'heavy.png'),Buffer.concat([pngWith(),Buffer.alloc(33554433-pngWith().length)]))
+  fs.symlinkSync(path.join(shelf,'text-5.png'),path.join(shelf,'linked.png'))
+  const names=[...textCases.map((c,i)=>`text-${i}.png`),'huge.png','words.png','renamed.jpg','empty.png','heavy.png','linked.png',
+    'gone.png','../text-5.png','.hidden.png']
+  const shelved=checkimages(names.map(n=>n+'\t\n').join(''))
+  textCases.forEach(([what,,status],i)=>assert.equal(shelved[`text-${i}.png`].verdict,status===0?'ok':'9',what))
+  assert.equal(shelved['huge.png'].verdict,'7','too many pixels')
+  assert.equal(shelved['words.png'].verdict,'4','not a picture')
+  assert.equal(shelved['empty.png'].verdict,'4','nothing at all')
+  assert.equal(shelved['heavy.png'].verdict,'5','larger than a picture may be')
+  assert.equal(shelved['renamed.jpg'].verdict,'9','the type is the bytes, not the name')
+  assert.equal(shelved['linked.png'].verdict,'3','a link is not followed')
+  assert.equal(shelved['gone.png'].verdict,'missing')
+  assert.equal(shelved['../text-5.png'].verdict,'3','nor is a name no board writes')
+  assert.equal(shelved['.hidden.png'].verdict,'3')
+  assert.equal(shelved['text-5.png'].revision.split('|').length,4,'a picture found fit says at what size, inode and times')
+  assert.equal(shelved['gone.png'].revision,'')
+  // Found fit at a revision it is still at, it is not read again, so the
+  // revision has to change whenever the bytes can: a file rewritten in place
+  // at the same size, its modification time put back, still has a new change
+  // time.
+  const bomb=textCases[0][1], fit=path.join(shelf,'padded.png')
+  fs.writeFileSync(fit,pngWith({before:[text('tEXt','pad\0'+'x'.repeat(bomb.length))]}))
+  const before=checkimages('padded.png\t\n')['padded.png']
+  assert.equal(before.verdict,'ok')
+  assert.equal(checkimages(`padded.png\t${before.revision}\n`)['padded.png'].verdict,'ok','unchanged, it is not read again')
+  const modified=spawnSync('stat',['-c','%y',fit],{encoding:'utf8'}).stdout.trim()
+  const handle=fs.openSync(fit,'r+')
+  fs.writeSync(handle,Buffer.concat([bomb,Buffer.alloc(fs.statSync(fit).size-bomb.length)]),0,fs.statSync(fit).size,0)
+  fs.closeSync(handle)
+  assert.equal(spawnSync('touch',['-m','-d',modified,fit]).status,0)
+  assert.equal(spawnSync('stat',['-c','%y',fit],{encoding:'utf8'}).stdout.trim(),modified,'same size, inode and modification time')
+  assert.equal(checkimages(`padded.png\t${before.revision}\n`)['padded.png'].verdict,'9',
+    'and still read again: the change time cannot be put back')
+  assert.equal(checkimages('text-6.png\tnot its revision\n')['text-6.png'].verdict,'ok','an unknown revision is checked')
+  // A folder not made yet holds nothing.
+  const nowhere=spawnSync('bash',[path.join(__dirname,'../BoardFiles.sh'),'checkimages',path.join(dir,'no-such-folder')],
+    {encoding:'utf8',input:'a.png\t\n'})
+  assert.equal(nowhere.status,0)
+  assert.equal(nowhere.stdout,'a.png\tmissing\t\n')
+  assert.deepEqual(fs.readdirSync(shelf).filter(f=>f.startsWith('.')),[],'and nothing is written')
+
 } finally {fs.rmSync(dir,{recursive:true,force:true})}
 console.log('ok — filesystem confinement and restore collisions')

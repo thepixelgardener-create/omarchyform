@@ -133,6 +133,27 @@ function tests(S) {
     eq(S.TOO_LARGE, "larger than 32 MB")
   })
 
+  test("what the helper says of each picture is read as whether to draw it, and why not", () => {
+    const said = S.pictureAnswers("../up.png\tok\t1\nfit.png\tok\t10|20|30|40\ngone.png\tmissing\t\nlink.png\t3\t\n"
+      + "words.png\t4\t1|2|3|4\nbig.png\t5\t\nhuge.png\t7\t\nbomb.png\t9\t5|6|7|8\nodd.png\t42\t\n"
+      + "short.png\tok\nlong.png\tok\t1\textra\n\n")
+    eq(said["fit.png"], { refused: "", revision: "10|20|30|40" })
+    eq(said["gone.png"], { refused: "missing", revision: "" })
+    eq(said["link.png"].refused, "is a link, which a board does not follow")
+    eq(said["words.png"], { refused: "is not a picture a board can show", revision: "" }, "a refused one keeps no revision")
+    eq(said["big.png"].refused, "is larger than 32 MB")
+    eq(said["huge.png"].refused, "has too many pixels")
+    eq(said["bomb.png"].refused, "carries compressed text")
+    eq(said["odd.png"].refused, "could not be checked", "an answer this does not know is not a yes")
+    eq(Object.keys(said).sort(), ["big.png", "bomb.png", "fit.png", "gone.png", "huge.png", "link.png", "odd.png", "words.png"],
+       "and a line that is not a name and two fields says nothing")
+    eq(S.pictureAnswers(""), {})
+    eq(S.pictureNames([{ kind: "image", src: "a.png" }, { kind: "image", src: "a.png" }, { kind: "note", src: "n.png" },
+      { kind: "image", src: "../x.png" }, null, { kind: "image", src: "b.png" }]), ["a.png", "b.png"],
+      "each picture a board draws, once, and nothing it does not")
+    eq(S.pictureNames(null), [])
+  })
+
   test("a revision says how big the board was, when it says anything", () => {
     eq(S.revisionBytes("33554433|1234|2026-10-11 10:00:00"), 33554433)
     eq(S.revisionBytes("0|1|x"), 0)
@@ -163,6 +184,8 @@ function tests(S) {
        "however little it holds: the walk would otherwise keep every level")
     eq(S.jsonFits("[".repeat(1024) + '{"a":"' + ",".repeat(N) + '"}'), false, "of arrays or objects")
     eq(S.jsonFits("[".repeat(1024) + zeros(N - 1023)), true, "as deep as it goes, holding up to the limit")
+    eq(S.jsonFits("[".repeat(1100) + "0,0"), true,
+       "a text with few commas and brackets is settled by counting them, not walked: the parser refuses this itself")
     eq(S.jsonFits(""), true)
     eq(S.jsonFits(undefined), true, "anything else is the parser's to refuse")
     // parseJson is JSON.parse, refusing what would not fit the way it refuses

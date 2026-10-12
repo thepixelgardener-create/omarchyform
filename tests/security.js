@@ -197,6 +197,28 @@ assert.ok(unguardedLandings('case x in\n  addimage)\n    refuse_huge_pictures "$
 assert.deepEqual(unguardedLandings(filesHelper), [], 'every picture is checked before it lands')
 assert.equal((filesHelper.match(/place_new "\$temporary" "\$images_root\//g) || []).length, 3,
   'paste, import and shared pictures; a new way in needs the same checks')
+// And one already in the folder, however it got there, is drawn only once
+// checkimages has found it fit: imagePath is the only file URL into the
+// folder, and it answers one only for a picture pictureState has cleared.
+const gate = '    return root.pictureState(name) === "" ? "file://" + root.imagesDir + "/" + name : ""'
+function ungatedPictures(sources) {
+  const errors = []
+  for (const [file, source] of sources)
+    source.split('\n').forEach((line, i) => {
+      if (/^\s*\/\//.test(line) || (file === 'Omarchyform.qml' && line === gate)) return
+      if (/(imagesDir|\/images\/)/.test(line) && /file:|resolvedUrl|Qt\.url|source\s*[:=]/.test(line))
+        errors.push(`${file}:${i + 1}: a picture URL that is not imagePath's, which waits for its check`)
+    })
+  return errors
+}
+assert.ok(ungatedPictures([['Node.qml', '    source: "file://" + node.ctl.imagesDir + "/" + node.isrc']]).length)
+assert.ok(ungatedPictures([['Node.qml', '    picture.source = Qt.resolvedUrl(dataDir + "/images/" + name)']]).length)
+assert.ok(ungatedPictures([['Omarchyform.qml', '    return Store.imageIsValid(name) ? "file://" + root.imagesDir + "/" + name : ""']]).length,
+  'nor one that does not wait for the check')
+assert.deepEqual(ungatedPictures(fs.readdirSync(root).filter(f => /\.(qml|js)$/.test(f))
+  .map(f => [f, fs.readFileSync(path.join(root, f), 'utf8')])), [], 'every picture waits for its check')
+assert.ok(fs.readFileSync(path.join(root, 'Omarchyform.qml'), 'utf8').includes('  function imagePath(name) {\n' + gate + '\n  }'),
+  'imagePath is the gate')
 
 const exchange = fs.readFileSync(path.join(root, 'BoardExchange.qml'), 'utf8')
 assert.match(exchange, /fileCommand\("clipcopy", \[\]\)/, 'QML copy helper has no content arguments')

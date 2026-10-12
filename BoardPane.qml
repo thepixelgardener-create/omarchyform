@@ -1912,6 +1912,7 @@ Item {
   readonly property string boardsDir: root.workspace.boardsDir
   readonly property string imagesDir: root.workspace.imagesDir
   function imagePath(name) { return root.workspace.imagePath(name) }
+  function pictureState(name) { return root.workspace.pictureState(name) }
 
   readonly property string currentBoard: root.doc ? root.doc.currentBoard : ""
   readonly property string boardTitle: root.doc ? root.doc.boardTitle : ""

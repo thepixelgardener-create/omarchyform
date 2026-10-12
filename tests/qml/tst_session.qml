@@ -72,6 +72,7 @@ ShellRoot {
     ListModel { id: links }
     function resetView() {}
     function writeState() {}
+    function recheckPictures(names) {}
     function repaintLinks() {}
     function focusKeys() {}
     function flash(text) {}

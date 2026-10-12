@@ -98,6 +98,46 @@ function imageIsValid(name) {
     && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name) && name.indexOf("..") < 0
 }
 
+// A plain name is not the whole of it: the file behind it is read by Qt in the
+// shell, so it is held to what a picture is held to as it lands before it is
+// drawn, however it came to be in the folder (BoardFiles.sh checkimages). What
+// the helper answers, by name: "" for a picture that may be drawn, or why not,
+// and the revision it was found fit at.
+var PICTURE_REFUSALS = {
+  "missing": "missing",
+  "3": "is a link, which a board does not follow",
+  "4": "is not a picture a board can show",
+  "5": "is larger than 32 MB",
+  "7": "has too many pixels",
+  "9": "carries compressed text"
+}
+function pictureAnswers(text) {
+  var found = {}
+  var lines = String(text).split("\n")
+  for (var i = 0; i < lines.length; i++) {
+    var parts = lines[i].split("\t")
+    if (parts.length !== 3 || !imageIsValid(parts[0])) continue
+    var fit = parts[1] === "ok"
+    found[parts[0]] = {
+      refused: fit ? "" : PICTURE_REFUSALS.hasOwnProperty(parts[1]) ? PICTURE_REFUSALS[parts[1]] : "could not be checked",
+      revision: fit ? parts[2] : ""
+    }
+  }
+  return found
+}
+
+// The pictures a board's rows draw, each named once.
+function pictureNames(rows) {
+  var seen = {}, names = []
+  for (var i = 0; rows && i < rows.length; i++) {
+    var row = rows[i]
+    if (!row || row.kind !== "image" || !imageIsValid(row.src) || seen[row.src]) continue
+    seen[row.src] = true
+    names.push(row.src)
+  }
+  return names
+}
+
 // Far enough that the copy is visibly its own item, near enough that it is
 // obviously related to the one it came from.
 var DUPLICATE_OFFSET = 24
@@ -1253,8 +1293,8 @@ var MAX_JSON_OPEN = 100000
 // A text with fewer commas and brackets than that in all is settled by
 // counting them; anything else is walked, strings stepped over, which took
 // 208ms for a 34 MiB board and a second for a full history (its own parse
-// took 186ms and 875ms). Anything nested deeper than the parser goes is
-// refused here too: it stops there.
+// took 186ms and 875ms). The walk also refuses anything nested deeper than
+// the parser goes, rather than keep every level: the parser stops there.
 function jsonFits(text) {
   text = String(text)
   var seen = 0, at = -1

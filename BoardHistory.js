@@ -50,8 +50,8 @@ var MAX_JSON_OPEN = 100000
 // A text with fewer commas and brackets than that in all is settled by
 // counting them; anything else is walked, strings stepped over, which took
 // 208ms for a 34 MiB board and a second for a full history (its own parse
-// took 186ms and 875ms). Anything nested deeper than the parser goes is
-// refused here too: it stops there.
+// took 186ms and 875ms). The walk also refuses anything nested deeper than
+// the parser goes, rather than keep every level: the parser stops there.
 function jsonFits(text) {
   text = String(text)
   var seen = 0, at = -1

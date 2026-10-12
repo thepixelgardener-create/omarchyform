@@ -29,7 +29,11 @@ since older boards are migrated on load rather than rejected.
   pixels square and well under the 32 MiB limit could ask the shell for tens of
   gigabytes; a 392 KB one cost 1.9 GB on Qt 6.12.0. Such a picture is now
   refused with a message saying why. Plain text metadata, as screenshot tools
-  write it, is still accepted.
+  write it, is still accepted. A picture already in the images folder, copied
+  or synced in or pasted before this, is held to the same before it is first
+  drawn: until it has been checked it is not loaded, and one refused shows
+  why in its place. On Qt 6.12.0 the 392 KB picture, already in the folder,
+  held 1.15 GB once drawn; now it is never loaded.
 
 - A board holds at most 5,000 items and 20,000 connectors, and its file at
   most 32 MB. Every item is built on the shell's thread: on Qt 6.12.0 5,000

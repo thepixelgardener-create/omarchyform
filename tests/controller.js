@@ -1870,3 +1870,69 @@ console.log('ok — controller: the canvas colour is a remembered setting, not p
   assert.equal(c.items.get(0).itext, 'kept', 'and what is on screen stays')
   console.log('ok — controller: a board too large to read back is not written, and says so')
 }
+{
+  // Qt reads every byte of a picture it draws, in the shell, so no picture is
+  // drawn before the file behind it has been checked, however it came to be in
+  // the folder: one copied or synced in, or one that landed before there was a
+  // check, is held to what a picture landing now is held to.
+  const c = controller()
+  const ws = c.workspace
+  assert.equal(c.root.imagePath('photo.png'), '', 'not before it is checked')
+  assert.equal(c.root.pictureState('photo.png'), 'waiting')
+  assert.equal(c.pictureCheck.running, false, 'asked in a binding, sent on the next turn')
+  c.root.imagePath('photo.png')
+  c.root.imagePath('bomb.png')
+  c.runLater()
+  assert.equal(c.pictureCheck.running, true)
+  assert.deepEqual(Array.from(c.pictureCheck.command), ['bash', '/BoardFiles.sh', 'checkimages', '/data/images'])
+  assert.equal(c.pictureCheck.input, 'photo.png\t\nbomb.png\t\n', 'each asked once, with nothing known of it yet')
+  assert.equal(c.pictureCheck.stdinEnabled, true, 'down the pipe')
+  c.finishPictures(0, 'photo.png\tok\t10|20|30\nbomb.png\t9\t40|50|60\n')
+  assert.equal(c.root.imagePath('photo.png'), 'file:///data/images/photo.png', 'found fit, it is drawn')
+  assert.equal(c.root.pictureState('photo.png'), '')
+  assert.equal(c.root.imagePath('bomb.png'), '', 'refused, it is not')
+  assert.equal(c.root.pictureState('bomb.png'), 'carries compressed text', 'and says why')
+  assert.equal(c.root.imagePath('../escape.png'), '', 'a name no board would write is never even asked about')
+  assert.equal(c.root.pictureState('../escape.png'), 'missing')
+
+  // A board read from disk has what it draws checked again, with the
+  // revision each was found fit at, so one unchanged costs a stat; until it
+  // is answered, nothing of it is drawn.
+  const board = JSON.stringify({ version: 5, nextId: 3, links: [], items: [
+    { id: 1, kind: 'image', x: 0, y: 0, w: 100, h: 100, src: 'photo.png' },
+    { id: 2, kind: 'image', x: 0, y: 0, w: 100, h: 100, src: 'photo.png' }] })
+  c.session.loadBoard(board, false)
+  assert.equal(c.root.imagePath('photo.png'), '', 'not while it is checked again')
+  c.runLater()
+  assert.equal(c.pictureCheck.input, 'photo.png\t10|20|30\n', 'once, with the revision it was found fit at')
+  c.finishPictures(0, 'photo.png\t9\t11|20|31\n')
+  assert.equal(c.root.pictureState('photo.png'), 'carries compressed text', 'a file changed under its name is refused')
+  c.session.loadBoard(board, false)
+  c.runLater()
+  assert.equal(c.pictureCheck.input, 'photo.png\t\n', 'and one refused is checked from the start')
+
+  // An answer that did not come is not a picture to draw, and nor is one from
+  // a check that failed part way, whatever it printed first.
+  c.finishPictures(1, 'photo.png\tok\t1|1|1|1\n')
+  assert.equal(c.root.pictureState('photo.png'), 'could not be checked')
+  c.root.imagePath('a.png'); c.root.imagePath('b.png')
+  c.runLater()
+  c.finishPictures(0, 'a.png\tok\t1|1|1\n')
+  assert.equal(c.root.pictureState('a.png'), '')
+  assert.equal(c.root.pictureState('b.png'), 'could not be checked', 'nor is one the helper left out')
+
+  // A few at a time, so a board full of pictures fills in rather than waits;
+  // what is asked while a check runs goes with the next.
+  for (let i = 0; i < 40; i++) c.root.imagePath(`p${i}.png`)
+  c.runLater()
+  assert.equal(c.pictureCheck.input.split('\n').length - 1, ws.pictureBatch)
+  c.root.imagePath('late.png')
+  c.runLater()
+  assert.equal(c.pictureCheck.input.split('\n').length - 1, ws.pictureBatch, 'one check at a time')
+  c.finishPictures(0, Array.from({ length: 32 }, (_, i) => `p${i}.png\tok\t${i}|0|0\n`).join(''))
+  assert.equal(c.pictureCheck.running, true, 'the rest go as soon as it is done')
+  assert.equal(c.pictureCheck.input, Array.from({ length: 8 }, (_, i) => `p${i + 32}.png\t\n`).join('') + 'late.png\t\n')
+  assert.equal(c.root.imagePath('p3.png'), 'file:///data/images/p3.png')
+  assert.equal(c.root.pictureState('p35.png'), 'waiting')
+  console.log('ok — controller: no picture is drawn before the file behind it is checked')
+}

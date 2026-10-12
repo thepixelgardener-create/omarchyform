@@ -157,6 +157,19 @@ refuse_compressed_text() {
   [[ $verdict == clean ]] || exit 9
 }
 
+# The checks a picture is held to as it lands, for one already in the folder:
+# its bytes, its type, its pixels and the compressed text Qt would inflate. In
+# a subshell, so a refusal comes back as the answer rather than ending the
+# caller, with the exit the landing routes refuse it with.
+picture_verdict() (
+  size=$(stat -Lc %s -- "$1") || exit 4
+  (( size > 0 )) || exit 4
+  (( size <= max_image_bytes )) || exit 5
+  kind=$(image_extension "$1") || exit 4
+  refuse_huge_pictures "$1" "$kind"
+  refuse_compressed_text "$1" "$kind"
+)
+
 # A name for a picture about to be written, without its extension. The caller
 # picks it, and it is still held to the names an image item may carry: no
 # slash, no leading dot or dash, nothing a path could be built out of.
@@ -430,6 +443,50 @@ case "$operation" in
     # refused without being loaded. Nothing is a size of its own: a file that
     # is not there answers 0, and the caller says so.
     if [[ -f $1 ]]; then printf '%s' "$(stat -Lc '%s' -- "$1")"; else printf 0; fi
+    ;;
+  checkimages)
+    # Pictures already in the folder, asked about before Qt is asked to draw
+    # them. The landing routes check what comes in through them; this is for
+    # what did not: a picture copied or synced in, or one that landed before
+    # a check existed. Names come on stdin, one a line, each with the revision
+    # it was last found fit at, if any, and one still at that revision is not
+    # read again. Each is answered on a line of its own: the name, then ok,
+    # missing, or the exit a landing route would refuse it with (3 for a name
+    # or a link no board would draw through), then the revision it was found
+    # at. A folder not made yet holds nothing: every name is missing. Nothing
+    # is written.
+    images_root=$1
+    declare -a names=() knowns=() present=()
+    declare -A revisions=()
+    while IFS=$'\t' read -r name known || [[ -n $name ]]; do
+      names+=("$name") knowns+=("$known")
+      if plain_name "$name" && [[ ! -L $images_root/$name && -f $images_root/$name ]]; then
+        present+=("$images_root/$name")
+      fi
+    done
+    # Every revision in one stat: one process a picture costs more than the
+    # check it saves when nothing has changed. A name cannot hold a tab. The
+    # change time is in it as well as the modification time: a file rewritten
+    # in place at the same size can have its modification time put back, but
+    # not its change time.
+    if (( ${#present[@]} > 0 )); then
+      while IFS=$'\t' read -r path revision; do
+        revisions[${path##*/}]=${revision// /}
+      done < <(stat -Lc $'%n\t%s|%i|%y|%z' -- "${present[@]}" 2>/dev/null || true)
+    fi
+    for i in "${!names[@]}"; do
+      name=${names[i]} known=${knowns[i]} verdict="" revision=""
+      if ! plain_name "$name" || [[ -L $images_root/$name ]]; then verdict=3
+      elif [[ -z ${revisions[$name]+set} ]]; then verdict=missing
+      else
+        revision=${revisions[$name]}
+        if [[ -n $known && $known == "$revision" ]]; then verdict=ok
+        elif picture_verdict "$images_root/$name"; then verdict=ok
+        else verdict=$?
+        fi
+      fi
+      printf '%s\t%s\t%s\n' "$name" "$verdict" "$revision"
+    done
     ;;
   commit)
     # The one write both ends of a board go through, with the board itself on

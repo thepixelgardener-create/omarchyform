@@ -47,6 +47,9 @@ the CLI to create boards and is not a contribution guide.
   holds it to its bytes, its pixels (`refuse_huge_pictures`) and, for a PNG,
   the compressed text Qt would inflate (`refuse_compressed_text`). A new way in
   calls all three on the bytes that land.
+- A picture is drawn only through `imagePath`, which waits for `checkimages`
+  to clear the file (`pictureState`). Never build a URL into `images/`
+  anywhere else; `tests/security.js` refuses one.
 - Parse JSON in shell code with `parseJson`, never `JSON.parse`: Qt's parser
   segfaults on a 1.1 MB array (`MAX_JSON_OPEN` in `BoardStore.js`), and
   `tests/security.js` refuses any other call. Change the guard in

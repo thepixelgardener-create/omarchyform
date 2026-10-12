@@ -90,7 +90,11 @@ Item {
   // image on this board is an image rather than an empty frame standing in
   // for one. The same picture tst_node uses.
   readonly property string redPixels: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP4z8AARAwQCgAf7gP9i18U1AAAAABJRU5ErkJggg=="
-  function imagePath(name) { return name === "" ? "" : ctl.redPixels }
+  // Stands in for the workspace's check of the file behind a picture: ""
+  // draws it, "waiting" is being checked, anything else is why not.
+  property var pictureStates: ({})
+  function pictureState(name) { return pictureStates[name] !== undefined ? pictureStates[name] : "" }
+  function imagePath(name) { return name === "" || pictureState(name) !== "" ? "" : ctl.redPixels }
   function pointerSelect(index, additive) { ctl.selectedIndex = index; ctl.editIndex = -1 }
   function selectOnly(index) { ctl.selectedIndex = index }
   function markInRect(x0, y0, x1, y1, additive) { ctl.markedRect = [x0, y0, x1, y1] }
@@ -238,7 +242,8 @@ Item {
   property var pastedInto: null
   property int pasteAsks: 0
   function pasteInto(field) { pasteAsks++; pastedInto = field }
-  function pasteImage(name, w, h) {}
+  property var pastedImages: []
+  function pasteImage(name, w, h) { pastedImages = pastedImages.concat([[name, w, h]]) }
   function recolorItem() {}
   function redo() {}
   function renameBoard() {}

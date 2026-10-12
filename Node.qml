@@ -78,11 +78,14 @@ Item {
   // shell up. See LONG_RUN in BoardStore.js.
   readonly property bool longRun: Store.hasLongRun(node.itext)
   readonly property bool isImage: node.kind === "image"
-  // A picture is decoded off the main thread and draws nothing until it is
-  // done. An export waits for this to clear on every item before it takes its
-  // picture; a picture that failed has finished loading too, and draws as the
-  // "missing image" line.
-  readonly property bool pictureLoading: node.isImage && picture.status === Image.Loading
+  // Whether the file behind a picture may be drawn: "" once it has been
+  // checked, "waiting" while it is, or why it is not drawn (ctl.pictureState).
+  readonly property string pictureState: node.isImage ? node.ctl.pictureState(node.isrc) : ""
+  // A picture is checked, then decoded off the main thread, and draws nothing
+  // until both are done. An export waits for this to clear on every item
+  // before it takes its picture; a picture that failed or was refused has
+  // finished loading too, and draws as a line saying so.
+  readonly property bool pictureLoading: node.isImage && (picture.status === Image.Loading || node.pictureState === "waiting")
   readonly property bool painted: node.kind === "ellipse" || node.kind === "diamond"
   readonly property bool foundMatch: node.live && node.ctl.matchesFind(node.itext)
   readonly property bool emphasised: node.selected || node.linkSource
@@ -162,13 +165,16 @@ Item {
 
   // A board can outlive the picture it points at: an image folder cleared by
   // hand, or a board copied to another machine without it. Say so rather than
-  // leaving an empty box that looks like a bug.
+  // leaving an empty box that looks like a bug, and say why when the file is
+  // there but was refused.
   Text {
+    objectName: "picture-note"
     textFormat: Text.PlainText
     anchors.centerIn: parent
     width: parent.width - node.theme.sp(16)
-    visible: node.isImage && picture.status === Image.Error
-    text: "missing image\n" + node.isrc
+    visible: node.isImage && (picture.status === Image.Error || (node.pictureState !== "" && node.pictureState !== "waiting"))
+    text: node.pictureState === "" || node.pictureState === "missing" ? "missing image\n" + node.isrc
+        : "picture not shown\n" + node.isrc + "\n" + node.pictureState
     horizontalAlignment: Text.AlignHCenter
     wrapMode: Text.Wrap
     elide: Text.ElideMiddle

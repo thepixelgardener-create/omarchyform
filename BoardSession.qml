@@ -323,6 +323,9 @@ Item {
     session.ctl.nextId = 1
     session.ctl.nextColor = 0
     if (data) {
+      // Read from disk, so a picture it draws may have changed under its name
+      // since it was checked: each is checked again before it is drawn.
+      session.ctl.recheckPictures(Store.pictureNames(data.items))
       Store.fillItems(session.ctl.items, data.items)
       Store.fillLinks(session.ctl.links, session.ctl.items, data.links)
       session.ctl.nextId = Store.nextFreeId(session.ctl.items, data.nextId)

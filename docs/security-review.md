@@ -36,7 +36,8 @@ an external service.
 | Long note text | Board file, import, editor, CLI → text layout on the shell's thread | A note is at most 1 MiB: a board with a longer one opens read-only and empty, import and the CLI refuse one, the editor refuses to grow one. Unbroken runs wrap anywhere, and the editor holds a note only while open, so layout stays linear. Store, controller, node, exchange and CLI tests. |
 | Board size | Board file, import, outside writes, CLI → delegates on the shell's thread | At most 5,000 items, 20,000 connectors and 32 MiB. The helper refuses a larger file by its size before any of it is read (`check`, `snapshot`, `filesize`, exit 5) and refuses to commit one; a board over a count opens read-only and empty with the reason and is never written over. Adding, duplicating, connecting, import, timeline steps and the CLI stop at the limits. Store, controller, exchange, timeline, filesystem and CLI tests. |
 | JSON text | Board, history, import, state, trash index, IPC → `JSON.parse` on the shell's engines | Qt's parser holds each element of an open array on an unchecked stack and segfaults past about 557,000. Every shell-side parse goes through `parseJson`, which refuses more than 100,000 held at once; the history worker carries an identical copy. Store, history, controller and exchange tests; `contract.js` holds the copies equal; `security.js` refuses any other `JSON.parse` in shell code. |
-| Image names from boards | Local image URL, bundle/copy helper | Plain validated names, no URL or traversal; helper rejects symlink components. Logic/filesystem tests; manually inspect direct Qt loads. |
+| Image names from boards | Local image URL, bundle/copy helper | Plain validated names, no URL or traversal; helper rejects symlink components. Logic/filesystem tests. |
+| Pictures already in `images/` | File → Qt image reader in the shell | Whatever put it there, a picture is drawn only after `checkimages` holds it to what landing would (size, type, pixels, compressed text). `imagePath` answers a URL only for a picture `pictureState` has cleared; a board read from disk has its pictures checked again, unchanged ones by revision (size, inode, modification and change time). Filesystem, controller and `tst_node` tests; `security.js` refuses any other picture URL. |
 | Notes and edits | Helper commit stdin → board/backup | Atomic replacement, revision check, lock, no content in diagnostics, private modes for newly committed files and the folders made for them. Filesystem, CLI and QML persistence tests. |
 | Shared boards and PNG exports | Staging → chosen external destination | Explicit user action, refuse app-data overwrite, keep unrelated files on failure. Filesystem/exchange tests. |
 | CLI operations | stdin/file → model → helper | Parse as data, no evaluation. Invalid JSON must not echo content. CLI/security tests. |
@@ -83,7 +84,10 @@ These are review obligations, not claims covered by a green test:
 - The plugin shares the shell's user privileges. It does not defend against
   arbitrary code running as that user, or a concurrent attacker swapping
   symlinks between checks and use. A user-chosen symlinked library root is
-  supported. Direct Qt image reads need separate review from helper confinement.
+  supported. A picture is checked before Qt reads it, but by a separate step:
+  a file replaced in between is read as it is then. The next time its board
+  is read, the replacement shows in the picture's revision and it is checked
+  again.
 - Board files are plaintext. Existing files, QML staging/state files and
   user-chosen directories can have different permissions from helper-created
   board files. The mode test covers new helper commits and their backups, and
@@ -236,6 +240,26 @@ the image data, compressed and malformed iTXt, a file cut off before IEND, and
 the names inside image data and inside a tEXt value; `tests/exchange.js` checks
 the three messages, and the static screen requires every way a picture lands
 in `images/` to run both the pixel and the text check first.
+
+That check is on the way in. A picture already in the folder, copied or
+synced in by hand, or pasted before the check existed, never went through it,
+and Qt read it all the same. Every picture is now checked before it is first
+drawn: `imagePath`, the only place a picture's name becomes a URL, answers one
+only once `BoardFiles.sh checkimages` has held the file to everything landing
+holds it to. Until then the picture counts as loading, so an export waits for
+it; a refused one shows why in its place. A board read from disk has its
+pictures checked again. One unchanged since it was found fit is known by its
+revision, which includes the change time, so a file rewritten in place with
+its modification time put back is still read again. That costs one `stat` for
+the lot: 65 ms for 300 pictures. A fresh check took about 14 ms a picture where
+this was measured, and goes 32 at a time so a board fills in rather than waits. On
+Qt 6.12.0, with the real `Node.qml` and the 392 KB picture already in the
+folder:
+
+| Picture already in `images/` | `336e0e9` | Checked first |
+|---|---|---|
+| plain PNG | drawn, +2 MB | drawn, +2 MB |
+| 100 × 4 MB zTXt, 392 KB | drawn, +1,154 MB still held, 6.9 s | not loaded, +0 MB, "carries compressed text" |
 
 While that was open, two more ways a board alone could stop or crash the
 shell were found and closed here.

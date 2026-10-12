@@ -564,9 +564,99 @@ Item {
     return root.locksDir + "/" + Store.lockKey(String(relative)) + ".lock"
   }
 
-  // The only way a file name out of a board file becomes a URL to load.
+  // The only way a file name out of a board file becomes a URL to load, and
+  // only once the file behind it has been checked (pictureState).
   function imagePath(name) {
-    return Store.imageIsValid(name) ? "file://" + root.imagesDir + "/" + name : ""
+    return root.pictureState(name) === "" ? "file://" + root.imagesDir + "/" + name : ""
+  }
+
+  // Qt reads every byte of a picture it draws, in the shell. The ways a picture
+  // lands check it as it lands, but one can be copied or synced into the
+  // folder, or have landed before a check existed, so each is checked before
+  // it is first drawn: by BoardFiles.sh checkimages, in the background, a few
+  // at a time, so a board full of pictures fills in rather than waits. ""
+  // means draw it, "waiting" that it is being checked, and anything else says
+  // why it is not drawn ("missing" for a file that is not there).
+  property var pictures: ({})
+  // Asked for and not yet sent, with the revision each was last found fit at.
+  // Asking happens inside bindings, so nothing binds to this.
+  readonly property var pictureQueue: ({ names: [], revisions: {}, queued: false })
+  readonly property int pictureBatch: 32
+  function pictureState(name) {
+    if (!Store.imageIsValid(name)) return "missing"
+    var known = root.pictures[name]
+    if (known === undefined) { root.askPicture(name, ""); return "waiting" }
+    return known.checking ? "waiting" : known.refused
+  }
+  function askPicture(name, revision) {
+    var queue = root.pictureQueue
+    if (queue.revisions.hasOwnProperty(name)) return
+    queue.revisions[name] = revision
+    queue.names.push(name)
+    if (!queue.queued) {
+      queue.queued = true
+      Qt.callLater(root.checkPictures)
+    }
+  }
+  // A board just read: what it draws is checked again before it is drawn, in
+  // case a file changed under its name. One unchanged since it was found fit
+  // costs a share of one stat.
+  function recheckPictures(names) {
+    var next = Object.assign({}, root.pictures)
+    for (var i = 0; i < names.length; i++) {
+      var known = next[names[i]]
+      if (known === undefined) continue
+      next[names[i]] = { refused: known.refused, revision: known.revision, checking: true }
+      root.askPicture(names[i], known.revision)
+    }
+    root.pictures = next
+  }
+  function checkPictures() {
+    var queue = root.pictureQueue
+    queue.queued = false
+    if (pictureCheck.running || queue.names.length === 0) return
+    var batch = queue.names.splice(0, root.pictureBatch)
+    var next = Object.assign({}, root.pictures)
+    var lines = []
+    for (var i = 0; i < batch.length; i++) {
+      var known = next[batch[i]]
+      lines.push(batch[i] + "\t" + queue.revisions[batch[i]] + "\n")
+      delete queue.revisions[batch[i]]
+      next[batch[i]] = { refused: known ? known.refused : "", revision: known ? known.revision : "", checking: true }
+    }
+    root.pictures = next
+    pictureCheck.asked = batch
+    pictureCheck.input = lines.join("")
+    pictureCheck.command = root.fileCommand("checkimages", [root.imagesDir])
+    pictureCheck.stdinEnabled = true
+    pictureCheck.running = true
+  }
+  // An answer the helper did not give, because it failed or was cut short, is
+  // not a picture to draw.
+  function checkedPictures(asked, code, text) {
+    var answers = code === 0 ? Store.pictureAnswers(text) : ({})
+    var next = Object.assign({}, root.pictures)
+    for (var i = 0; i < asked.length; i++) {
+      var found = answers.hasOwnProperty(asked[i]) ? answers[asked[i]] : null
+      next[asked[i]] = found ? { refused: found.refused, revision: found.revision, checking: false }
+                             : { refused: "could not be checked", revision: "", checking: false }
+    }
+    root.pictures = next
+    root.checkPictures()
+  }
+
+  Process {
+    id: pictureCheck
+    property var asked: []
+    property string input: ""
+    stdout: StdioCollector { id: pictureVerdicts; waitForEnd: true }
+    // Written once the pipe is there, and closed straight after, or the helper
+    // waits for an end of file that never comes.
+    onStarted: {
+      pictureCheck.write(pictureCheck.input)
+      pictureCheck.stdinEnabled = false
+    }
+    onExited: function (code) { root.checkedPictures(pictureCheck.asked, code, pictureVerdicts.text) }
   }
 
   function backupPathFor(relative) {
