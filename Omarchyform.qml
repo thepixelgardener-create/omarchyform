@@ -491,7 +491,12 @@ Item {
       if (typeof st.showGrid === "boolean") root.showGrid = st.showGrid
       if (Store.CANVAS_PATTERNS.indexOf(st.canvasPattern) >= 0) root.canvasPattern = st.canvasPattern
     }
-    if (typeof st.startWindowed === "boolean") root.startWindowed = st.startWindowed
+    if (typeof st.startWindowed === "boolean" && st.startWindowed !== root.startWindowed) {
+      // A changed bar preference chooses the surface; an unchanged one leaves
+      // the mode last chosen with W alone, including after a restart.
+      root.startWindowed = st.startWindowed
+      root.windowMode = st.startWindowed
+    }
     return true
   }
 

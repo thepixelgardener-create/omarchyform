@@ -5,6 +5,12 @@ since older boards are migrated on load rather than rejected.
 
 ## 0.4.9 — 2026-10-12
 
+### Fixed
+
+- Changing the bar's **Open in a window rather than fullscreen** setting now
+  takes effect even after the board has been opened before. Reopening with
+  the same setting preserves the mode last chosen with `w`. Fixes #57.
+
 ### Security
 
 - Reject external drag offers before Qt reads their payload. A hostile source

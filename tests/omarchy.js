@@ -12,6 +12,7 @@ if (!process.argv.includes('--live')) {
 }
 const keep = process.argv.includes('--keep')
 const paste = process.argv.includes('--paste')
+const windowmode = process.argv.includes('--windowmode')
 const omarchy = process.env.OMARCHY_PATH || '/usr/share/omarchy'
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'omarchyform-compat-'))
 try {
@@ -23,7 +24,7 @@ try {
     fs.cpSync(path.join(omarchy, 'shell', module), path.join(dir, module), { recursive: true })
   fs.mkdirSync(path.join(dir, 'services'))
   fs.copyFileSync(path.join(omarchy, 'shell/services/PluginShellApi.qml'), path.join(dir, 'services/PluginShellApi.qml'))
-  fs.copyFileSync(path.join(__dirname, paste ? 'qml/tst_paste.qml' : 'qml/tst_omarchy.qml'), path.join(dir, 'shell.qml'))
+  fs.copyFileSync(path.join(__dirname, windowmode ? 'qml/tst_windowmode.qml' : paste ? 'qml/tst_paste.qml' : 'qml/tst_omarchy.qml'), path.join(dir, 'shell.qml'))
   // A picture: what the clipboard stub hands over, and what the main run
   // drops on a pane.
   fs.writeFileSync(path.join(dir, 'pixels.png'), Buffer.from(
@@ -80,6 +81,8 @@ try {
   if (result.error || result.status !== 0 || !output.includes('OMARCHY_TESTS_PASSED') || /FAIL:|TypeError|ReferenceError|Binding loop|WARN scene|ERROR/.test(output)) {
     console.error(output, result.error || '')
     process.exitCode = 1
+  } else if (windowmode) {
+    console.log('ok — bar window preference, W and reopened surfaces (live Wayland)')
   } else if (paste) {
     console.log('ok — clipboard images reach the live canvas, repeat, undo and save')
   } else {
