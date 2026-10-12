@@ -68,7 +68,8 @@ changes, and a PNG carrying compressed text is refused, including one already
 in the images folder. A board holds at most 5,000 items, 20,000 connectors and
 32 MB, nothing the shell reads as JSON can crash it, and the plugin's folders
 are private on existing installs too. The [security review](security-review.md#before-submitting-to-the-marketplace)
-has the checks to run before submitting.
+has the checks to run before submitting. Changing the bar's **Open in a window
+rather than fullscreen** setting now takes effect after the first open too.
 
 ## 0.5 — Editable, labeled connectors
 
