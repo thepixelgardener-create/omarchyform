@@ -66,10 +66,12 @@ try {
   fs.writeFileSync(path.join(boards,'a.json'),'new')
   assert.equal(run('purge',trash,'another').status,0)
   const staged=path.join(dir,'staged.json')
-  fs.writeFileSync(staged,'{"version":4,"items":[]}')
+  // Staged by the shell with its own umask, as FileView writes it.
+  fs.writeFileSync(staged,'{"version":4,"items":[]}',{mode:0o644}); fs.chmodSync(staged,0o644)
   const first=run('publish',boards,'untitled',staged)
   assert.equal(first.status,0)
   assert.equal(first.stdout,'untitled.json')
+  assert.equal(fs.statSync(path.join(boards,'untitled.json')).mode&0o777,0o600,'an imported board is private from the moment it has a name')
   fs.writeFileSync(staged,'second')
   const second=run('publish',boards,'untitled',staged)
   assert.equal(second.status,0)
@@ -108,7 +110,7 @@ try {
   assert.equal(paste('image/png','',images,'paste-1',clipFile).status,6)
   assert.deepEqual(fs.readFileSync(path.join(images,'paste-1.png')),clipPixels)
 
-  const pasteText=(file)=>spawnSync('bash',[path.join(__dirname,'../BoardFiles.sh'),'cliptext'],
+  const pasteText=(file)=>spawnSync('bash',[path.join(__dirname,'../BoardFiles.sh'),'cliptext',dir],
     {encoding:'utf8',maxBuffer:2*1024*1024,env:{...process.env,PATH:stubs+':'+process.env.PATH,FAKE_FILE:file}})
   const clipTextFile=path.join(dir,'clipboard.txt')
   fs.writeFileSync(clipTextFile,'<b>literal</b>\nsecond line')
@@ -438,6 +440,61 @@ try {
   })
 
   assert.deepEqual(fs.readdirSync(images).filter(f=>f.startsWith('.')),[],'no temporaries left behind')
+
+  // The plugin's own folders are private, whatever umask the shell started
+  // with and whatever an older version, a sync tool or a hand left them as:
+  // the shell writes its state, staged imports and the trash index itself,
+  // with its own umask, and only the folder keeps those to their owner.
+  {
+    const home=path.join(dir,'private-home'), data=path.join(home,'.local/share/omarchyform')
+    const kept=path.join(dir,'kept-elsewhere')
+    for (const d of [data,path.join(data,'backups'),path.join(data,'trash'),path.join(data,'images'),kept,path.join(kept,'work')]) {
+      fs.mkdirSync(d,{recursive:true}); fs.chmodSync(d,0o755)
+    }
+    fs.symlinkSync(kept,path.join(data,'boards'))
+    const loose=[[path.join(data,'state.json'),0o644],[path.join(kept,'a.json'),0o644],[path.join(kept,'work','b.json'),0o664],
+      [path.join(data,'images','paste-1.png'),0o644],[path.join(data,'trash','index.json'),0o666]]
+    for (const [f,mode] of loose) { fs.writeFileSync(f,'private'); fs.chmodSync(f,mode) }
+    const folders=['', 'boards', 'backups', 'trash', 'images', 'locks'].map(f=>f?path.join(data,f):data)
+    const privately=(...args)=>spawnSync('bash',['-c','umask 022; exec bash "$@"','private-test',path.join(__dirname,'../BoardFiles.sh'),'private',...args],
+      {encoding:'utf8',env:{...process.env,HOME:home}})
+    const made=privately(...folders)
+    assert.equal(made.status,0,made.stderr)
+    for (const f of [...folders,kept,path.join(kept,'work')])
+      assert.equal(fs.statSync(f).mode&0o777,0o700,`${path.relative(dir,f)} is its owner's alone`)
+    for (const [f] of loose) assert.equal(fs.statSync(f).mode&0o077,0,`${path.relative(dir,f)} is too`)
+    assert.equal(fs.lstatSync(path.join(data,'boards')).isSymbolicLink(),true,'a folder kept elsewhere stays where it is kept')
+    assert.equal(fs.readFileSync(path.join(kept,'a.json'),'utf8'),'private','and nothing in it is changed but its mode')
+    // A fresh install: every folder made 0700, parents included, under umask 022.
+    const fresh=path.join(dir,'fresh-home/.local/share/omarchyform')
+    assert.equal(privately(fresh,path.join(fresh,'boards')).status,0)
+    for (const f of [path.dirname(fresh),fresh,path.join(fresh,'boards')]) assert.equal(fs.statSync(f).mode&0o777,0o700,path.relative(dir,f))
+    // Never the home folder, never a path that is not a full one; and what
+    // is not this user's is left as it is, said, and the rest still done.
+    fs.chmodSync(home,0o755)
+    assert.equal(privately(home).status,3)
+    assert.equal(fs.statSync(home).mode&0o777,0o755,'the home folder is not the plugin\'s to change')
+    assert.equal(privately('relative/folder').status,3)
+    if (process.getuid && process.getuid()===0) {
+      const theirs=path.join(data,'images','theirs.png')
+      fs.writeFileSync(theirs,'not mine'); fs.chmodSync(theirs,0o644); fs.chownSync(theirs,65534,65534)
+      fs.chmodSync(path.join(data,'images'),0o755)
+      const mixed=privately(...folders)
+      assert.equal(mixed.status,3)
+      assert.match(mixed.stderr,/holds something not this user's/)
+      assert.equal(fs.statSync(theirs).mode&0o777,0o644,'another account\'s file is left as it is')
+      assert.equal(fs.statSync(path.join(data,'images')).mode&0o777,0o700,'and the rest is still made private')
+      fs.unlinkSync(theirs)
+    } else console.log('skipped: leaving another account\'s file alone needs a second account')
+
+    // Staging never uses the shared temporary folder.
+    // (A shared temporary folder that is not there: anything staged in it fails.)
+    const lock=path.join(data,'locks','a.lock'), nowhere={...process.env,TMPDIR:path.join(dir,'no-shared-tmp')}
+    const viaLock=spawnSync('bash',[path.join(__dirname,'../BoardFiles.sh'),'snapshot',path.join(data,'boards','a.json'),lock,path.join(data,'boards')],
+      {encoding:'utf8',env:nowhere})
+    assert.equal(viaLock.status,0,'a snapshot is staged beside its lock, not in the shared temporary folder: '+viaLock.stderr)
+    assert.deepEqual(fs.readdirSync(path.join(data,'locks')),['a.lock'],'and is gone afterwards')
+  }
 
   // A picture can be in the folder without having come through any of those:
   // copied or synced in, or landed before a check existed. Before Qt is asked

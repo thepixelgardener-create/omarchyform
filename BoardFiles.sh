@@ -241,6 +241,9 @@ case "$operation" in
     [[ $base_name != */* ]]
     confined "$board_root" "$base_name.json"
     [[ -f $staged && ! -L $staged ]]
+    # The shell staged it with its own umask; the board it becomes is private
+    # from the moment it has a name, like every board the helper writes.
+    chmod 600 -- "$staged"
     number=1
     candidate=$base_name.json
     while ! ln -T -- "$staged" "$board_root/$candidate" 2>/dev/null; do
@@ -298,7 +301,11 @@ case "$operation" in
     ;;
   cliptext)
     # Bound the bytes before QML collects stdout. Never return a partial note.
-    temporary=$(mktemp)
+    # Staged in a folder of this user's own, never the shared /tmp: what is on
+    # the clipboard is somebody's private text until it is pasted.
+    private_dir=$1
+    [[ -d $private_dir && -O $private_dir && ! -L $private_dir ]] || exit 3
+    temporary=$(mktemp -p "$private_dir" .omarchyform-clip-XXXXXX)
     trap 'rm -f -- "$temporary"' EXIT
     read_status=0
     timeout 3 wl-paste --no-newline --type text | head -c 1048577 > "$temporary" || read_status=$?
@@ -427,7 +434,8 @@ case "$operation" in
     [[ -f $board && ! -L $board ]] || exit 3
     board_fits "$board" || exit 5
     before=$(revision_of "$board")
-    snapshot=$(mktemp)
+    # Staged beside the lock, in the plugin's own folder, not the shared /tmp.
+    snapshot=$(mktemp -p "$(dirname -- "$lock")" .omarchyform-snapshot-XXXXXX)
     trap 'rm -f -- "$snapshot"' EXIT
     cp -T -- "$board" "$snapshot"
     # Also detect a non-cooperating editor changing the file during the copy.
@@ -538,6 +546,43 @@ case "$operation" in
   mkdir)
     confined "$1" "$2"
     mkdir -- "$1/$2"
+    ;;
+  private)
+    # The plugin's own folders, made, or made private: 0700, and whatever is
+    # in them only its owner's, whatever umask the shell started with and
+    # whatever an older version, a sync tool or a hand left them as. The
+    # shell writes some files into them itself (its state, a staged import,
+    # the trash index, a history set aside) with its own umask; inside a
+    # folder only its owner can enter, no other account reaches them.
+    #
+    # A folder may be a link to where it is kept, and what it leads to is
+    # made private if it is this user's. Nothing below it is followed, and
+    # nothing that is not this user's is changed: it is named on stderr, and
+    # exit 3 says something could not be made private. Never the home folder.
+    # A failure with one folder (one that could not be made, a file that went
+    # away while it was being looked at) is said and the rest are still done.
+    unprivate=0
+    home=$(realpath -m -- "${HOME:-/}")
+    for folder in "$@"; do
+      if [[ $folder != /* || $folder =~ [[:cntrl:]] || $(realpath -m -- "$folder") == "$home" ]]; then
+        printf 'not a folder of the plugin'"'"'s: %s\n' "$folder" >&2
+        unprivate=1
+        continue
+      fi
+      mkdir -p -- "$folder" 2>/dev/null || true
+      if [[ ! -d $folder || ! -O $folder ]] || ! chmod 700 -- "$folder"; then
+        printf 'not this user'"'"'s, left as it is: %s\n' "$folder" >&2
+        unprivate=1
+        continue
+      fi
+      find -H "$folder" -mindepth 1 -xdev -user "$(id -u)" -perm /077 \
+        \( \( -type d -exec chmod 700 -- {} + \) -o \( -type f -exec chmod go= -- {} + \) \) 2>/dev/null || unprivate=1
+      if [[ -n $(find -H "$folder" -mindepth 1 -xdev ! -user "$(id -u)" -print -quit 2>/dev/null) ]]; then
+        printf 'holds something not this user'"'"'s: %s\n' "$folder" >&2
+        unprivate=1
+      fi
+    done
+    (( unprivate == 0 )) || exit 3
     ;;
   purge)
     [[ $2 != */* ]]

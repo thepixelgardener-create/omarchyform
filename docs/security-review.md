@@ -39,10 +39,57 @@ an external service.
 | Image names from boards | Local image URL, bundle/copy helper | Plain validated names, no URL or traversal; helper rejects symlink components. Logic/filesystem tests. |
 | Pictures already in `images/` | File → Qt image reader in the shell | Whatever put it there, a picture is drawn only after `checkimages` holds it to what landing would (size, type, pixels, compressed text). `imagePath` answers a URL only for a picture `pictureState` has cleared; a board read from disk has its pictures checked again, unchanged ones by revision (size, inode, modification and change time). Filesystem, controller and `tst_node` tests; `security.js` refuses any other picture URL. |
 | Notes and edits | Helper commit stdin → board/backup | Atomic replacement, revision check, lock, no content in diagnostics, private modes for newly committed files and the folders made for them. Filesystem, CLI and QML persistence tests. |
+| The plugin's folders and what the shell writes in them | `private` as the shell starts → data, boards, backups, trash, images, locks | 0700 folders and owner-only files under any umask, existing installs tightened, another account's files left alone and named, never the home folder; the shell writes its own files only inside them; imports are 0600 before they have a name; nothing is staged in the shared `/tmp`. `tests/filesystem.js` (umask 022, an old 0755 install, a linked boards folder, a second account), `tests/security.js`. |
 | Shared boards and PNG exports | Staging → chosen external destination | Explicit user action, refuse app-data overwrite, keep unrelated files on failure. Filesystem/exchange tests. |
 | CLI operations | stdin/file → model → helper | Parse as data, no evaluation. Invalid JSON must not echo content. CLI/security tests. |
 | Board history | Board file → worker thread → replay models → text layout | Parsed off the shell's thread, never evaluated. Text past 64 MiB is not parsed; more than twice 10,000 records is refused before replay; every record is checked against the board it plays to. A step whose notes break the 1 MiB rule is not shown. Labels are plain text; image names go through the same validation as the live board. Unreadable histories are written whole beside the backups under a flattened name. `tests/history.js`, `tests/recording.js`, `tests/timeline.js`, CLI tests. |
 | Desktop install/open | Opt-in launcher files and summon payload | No automatic install hook; ownership/conflict checks, correct path encoding, no shell interpretation. Desktop tests and manual review. |
+
+## Before submitting to the marketplace
+
+A listing passes two checks on the exact commit submitted. The bot's
+Automated Security Baseline reads it without running it and matches a short
+list of patterns (the marketplace's `SECURITY.md`). Then a maintainer reads
+every runtime file of that commit by hand, against no written list, and each
+new commit is read again. Documenting a risk does not stand in for fixing it.
+
+```sh
+npm run review:marketplace             # the baseline, pinned, against HEAD
+npm run review:marketplace -- --latest # against the marketplace's current scanner
+```
+
+`tests/marketplace.js` runs the marketplace's own scanner (its `scripts/`,
+fetched at a pinned commit), answering the GitHub requests it makes from git,
+so it reads exactly the files it would read there. It fails on any finding, on
+any capability other than those accepted in it for the paths named, on a
+policy version it was not written for, and within a quarter of a scan limit.
+CI runs it. At 0.4.8 it reports `review-required` for one capability,
+`installer` (`desktop/install.sh`), with the reason in the file; that reason
+belongs in the submission's maintainer notes.
+
+What the maintainer review has raised, from 22 recent submission threads, and
+where this plugin answers each:
+
+| Raised against plugins | Here | Checked by |
+|---|---|---|
+| Private files readable by other accounts: a default umask, files in `/tmp`, a file replaced without its mode, an existing install left loose | The helper writes with `umask 077`; the six folders are made private as the shell starts, existing ones and what is in them too; the shell writes only inside them; imports are 0600 before they are named; temporary files are made in the plugin's own folders | `tests/filesystem.js`, `tests/security.js` |
+| Private data in process arguments (`/proc/<pid>/cmdline`): message text, dictation, tokens, `sh -c` payloads, search terms | Every helper argument is a reviewed folder, path, name or number; notes, clipboard contents and boards go on stdin or in a staged file; a new argument fails until reviewed | `tests/security.js` (argument table), clipboard and commit tests |
+| Downloads not pinned to a digest, `curl \| sh`, unpinned remote git | No network at all; the baseline finds nothing | `tests/security.js`, `npm run review:marketplace` |
+| Freezing or exhausting the shared shell: clipboard auto-reads (hidden fields included), Qt's own paste, drag-and-drop payloads, PNG text bombs | No `TextInput`; bounded paste through the helper; drops refused unread; pictures checked on the way in and before they are drawn; JSON guarded; board, note and file limits | `test:clipboard`, `test:drop`, `tests/security.js`, filesystem and controller tests |
+| Local services without per-user authentication | Nothing listens; IPC is Quickshell's own | `tests/security.js` |
+| Changes outside the plugin without consent | The launcher entry is installed only by hand and replaces or removes only its own unchanged files | `tests/desktop.js` |
+| Privilege (setuid, `sudo`) | None | `npm run review:marketplace` |
+
+Submitting, or asking for an update to be verified:
+
+- [ ] `npm test`, `npm run test:security`, `npm run test:ui`, `npm run test:drop`,
+  `npm run test:clipboard` and `npm run review:marketplace` pass on the commit
+  to be named, and `-- --latest` reports nothing new.
+- [ ] The issue names that exact commit, in full, and keeps the form's headings
+  as they are: a changed heading stops validation before any scan.
+- [ ] A finding is fixed in code for its whole class, not the one line quoted:
+  search for every other place the same thing happens. The reply names the
+  commit, what changed and the test that shows it.
 
 ## Manual release checklist
 
@@ -88,12 +135,14 @@ These are review obligations, not claims covered by a green test:
   a file replaced in between is read as it is then. The next time its board
   is read, the replacement shows in the picture's revision and it is checked
   again.
-- Board files are plaintext. Existing files, QML staging/state files and
-  user-chosen directories can have different permissions from helper-created
-  board files. The mode test covers new helper commits and their backups, and
-  the folders and locks the helper creates, under a umask of 000. The plugin
-  creates its own data folders 0700. Neither changes a folder or file that is
-  already there, so this does not certify all existing storage as private.
+- Board files are plaintext, and private only by their modes. As the shell
+  starts, the helper makes the plugin's six folders 0700 and removes group and
+  other access from everything in them that is this user's, existing installs
+  included; the files the shell writes itself (its state, staged imports, the
+  trash index, a history set aside) take the shell's umask and are kept to
+  their owner by those folders. Something in them that is not this user's is
+  left as it is and named. A file copied out of them, or an export saved where
+  the user chooses, is 0600 when this writes it and then the user's to keep.
 - Ordinary deletion is not secure erasure. Backups, trash, image assets,
   exported copies and clipboard managers can retain content. A board's history
   keeps text that was deleted from its notes, in the board file itself, until

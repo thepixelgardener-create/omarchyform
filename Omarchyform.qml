@@ -668,15 +668,16 @@ Item {
   // The boards directory has to exist before the first atomic write, otherwise
   // the board silently fails to save on a fresh install. A board from before
   // there were folders is copied in rather than moved, so the old file stays
-  // put as a fallback. Private like everything BoardFiles.sh creates: -m sets
-  // the mode of each folder named, whatever the shell's umask, and only when
-  // this creates it — a folder that is already there keeps the mode it has.
-  // The data folder is named first so it is one of them, not a parent made in
-  // passing with the umask's mode.
+  // put as a fallback. Every folder is private (BoardFiles.sh private): made
+  // 0700 whatever the shell's umask, and one already there made so too, with
+  // what is in it, whatever an older version or a sync tool left it as. The
+  // shell writes its state, staged imports and the trash index itself, with
+  // its own umask; only the folder keeps those to their owner. The data folder
+  // is named first, so it is one of them rather than a parent made in passing.
   Process {
     id: initProc
     running: true
-    command: ["mkdir", "-p", "-m", "700", root.dataDir, root.boardsDir, root.backupsDir, root.trashDir, root.imagesDir, root.locksDir]
+    command: root.fileCommand("private", [root.dataDir, root.boardsDir, root.backupsDir, root.trashDir, root.imagesDir, root.locksDir])
     onExited: migrateProc.running = true
   }
 

@@ -24,6 +24,11 @@ jobs:
       - name: Security and privacy regression screen
         run: node tests/security.js
 
+      # The marketplace's own Automated Security Baseline, at a pinned commit,
+      # run against this one: what a submission of it would be told.
+      - name: Marketplace security baseline
+        run: npm run review:marketplace
+
       - name: Mutation testing
         run: npm run mutate
 

@@ -35,6 +35,17 @@ since older boards are migrated on load rather than rejected.
   why in its place. On Qt 6.12.0 the 392 KB picture, already in the folder,
   held 1.15 GB once drawn; now it is never loaded.
 
+- The plugin's folders are private on every install, not only new ones. As
+  the shell starts, its data, boards, backups, trash, images and locks folders
+  are made 0700, and group and other access is taken off everything in them
+  that is the user's own, whatever an older version, a sync tool or the
+  shell's umask left behind. The shell writes its state, staged imports and the
+  trash index itself, with its own umask, so those folders are what keep them
+  private. An imported board is 0600 from the moment it has a name, and the
+  clipboard and a board being read are staged in the plugin's own folders
+  rather than the shared `/tmp`. Something in them that is not the user's own
+  is left as it is.
+
 - A board holds at most 5,000 items and 20,000 connectors, and its file at
   most 32 MB. Every item is built on the shell's thread: on Qt 6.12.0 5,000
   took 12 seconds and 675 MB to open and 20,000 took 92 seconds and 2.7 GB,

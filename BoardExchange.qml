@@ -592,7 +592,8 @@ Item {
   }
   Process {
     id: clipboard
-    command: exchange.ctl.fileCommand("cliptext", [])
+    // Staged in the plugin's own folder, which only its owner can enter.
+    command: exchange.ctl.fileCommand("cliptext", [exchange.ctl.dataDir])
     stdout: StdioCollector { id: pasted; waitForEnd: true }
     onExited: function(code) {
       if (exchange.pasteForField) { exchange.fieldPasted(code, pasted.text); return }

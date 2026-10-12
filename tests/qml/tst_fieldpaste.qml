@@ -27,6 +27,8 @@ ShellRoot {
   // meant for a field must never turn into.
   component Pane: QtObject {
     property string currentBoard: "board.json"
+    // The private folder the clipboard is staged in: the test's own.
+    readonly property string dataDir: test.dir
     property bool canEdit: true
     property var reports: []
     property int notesMade: 0

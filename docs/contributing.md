@@ -47,6 +47,16 @@ the CLI to create boards and is not a contribution guide.
   holds it to its bytes, its pixels (`refuse_huge_pictures`) and, for a PNG,
   the compressed text Qt would inflate (`refuse_compressed_text`). A new way in
   calls all three on the bytes that land.
+- Nothing private goes on a command line: another account can read it in
+  `/proc`. Send contents on stdin or in a staged file in a private folder; a
+  new helper argument fails `tests/security.js` until it is added, reviewed,
+  to its table.
+- Folders are made through the helper's `private`, never a bare `mkdir`; the
+  shell writes its own files only inside the plugin's folders; temporary
+  files go in those folders, never the shared `/tmp`; nothing listens on a
+  socket.
+- Before submitting, or asking for an update to be verified, work through
+  "Before submitting to the marketplace" in `docs/security-review.md`.
 - A picture is drawn only through `imagePath`, which waits for `checkimages`
   to clear the file (`pictureState`). Never build a URL into `images/`
   anywhere else; `tests/security.js` refuses one.
