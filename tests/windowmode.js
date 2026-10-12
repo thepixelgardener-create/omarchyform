@@ -1,8 +1,68 @@
 // Bar preferences and the W toggle, using the workspace's production functions.
 const assert = require('assert/strict')
+const fs = require('fs')
+const path = require('path')
+const vm = require('vm')
 const { controller } = require('./workspace-harness')
 
 const payload = startWindowed => JSON.stringify({ settings: { startWindowed } })
+
+// Exercise the real bar payload with both omitted and host-supplied defaults.
+const bar = fs.readFileSync(path.join(__dirname, '..', 'BoardBar.qml'), 'utf8')
+const barPayload = bar.match(/^  function payload\(\) \{\n([\s\S]*?)^  }/m)[1]
+const fromBar = settings => vm.runInNewContext(`(function () {${barPayload}})()`,
+  { root: { setting: (key, fallback) => settings[key] === undefined ? fallback : settings[key] } })
+const widget = require('../manifest.json').barWidget
+for (const settings of [{}, widget.defaults,
+  Object.fromEntries(widget.schema.map(field => [field.key, field.defaultValue]))]) {
+  const c = controller()
+  c.workspace.applyState('')
+  c.workspace.applyPayload(fromBar(settings))
+  assert.equal(c.workspace.windowMode, true, 'a fresh bar launch opens a tiled window')
+}
+
+for (const raw of ['', '{}', '{broken']) {
+  const c = controller()
+  c.workspace.applyState(raw)
+  c.workspace.applyPayload('{}')
+  assert.equal(c.workspace.windowMode, true, 'without a saved choice, keyboard launch defaults to tiled')
+}
+for (const windowed of [true, false]) {
+  const c = controller()
+  c.workspace.applyState(JSON.stringify({ windowMode: windowed, startWindowed: windowed }))
+  c.workspace.applyPayload('{}')
+  assert.equal(c.workspace.windowMode, windowed, 'keyboard launch restores an existing saved choice')
+  const legacy = controller()
+  legacy.workspace.applyState(JSON.stringify({ startWindowed: windowed }))
+  assert.equal(legacy.workspace.windowMode, windowed, 'a legacy preference still decides the first surface')
+}
+console.log('ok — window mode: tiled defaults for bar and keyboard, existing and legacy choices preserved')
+
+// Coming from 0.4.9, whose bar sent false when its setting was never touched:
+// state.json then holds startWindowed false. The bar now sends true, a changed
+// preference, so the first bar open is tiled; W back to fullscreen then holds.
+// A bar entry with the setting turned off is unchanged and keeps fullscreen.
+const upgraded = JSON.stringify({ version: 1, windowMode: false, startWindowed: false })
+{
+  const c = controller()
+  c.workspace.applyState(upgraded)
+  c.workspace.applyPayload('{}')
+  assert.equal(c.workspace.windowMode, false, 'a keyboard open after updating keeps fullscreen')
+  c.workspace.applyPayload(fromBar({}))
+  assert.equal(c.workspace.windowMode, true, 'the first bar open after updating is tiled')
+  c.workspace.toggleWindowMode()
+  const restarted = controller()
+  restarted.workspace.applyState(c.states.at(-1))
+  restarted.workspace.applyPayload(fromBar({}))
+  assert.equal(restarted.workspace.windowMode, false, 'W back to fullscreen holds across bar opens and restarts')
+}
+{
+  const c = controller()
+  c.workspace.applyState(upgraded)
+  c.workspace.applyPayload(fromBar({ startWindowed: false }))
+  assert.equal(c.workspace.windowMode, false, 'a bar entry set to fullscreen keeps fullscreen after updating')
+}
+console.log('ok — window mode: updating from 0.4.9 with the bar setting untouched and turned off')
 
 for (const windowed of [true, false]) {
   const c = controller()

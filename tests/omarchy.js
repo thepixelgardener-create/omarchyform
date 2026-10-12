@@ -48,7 +48,7 @@ try {
   const built = spawnSync(process.execPath,
     [path.join(__dirname, '..', 'bin', 'omarchyform'), 'new', path.join(boards, 'from-cli.json'),
      '--note', 'built headlessly', '--note', 'by the command line'],
-    { encoding: 'utf8' })
+    { encoding: 'utf8', timeout: 10000, env: { ...process.env, HOME: home } })
   if (built.status !== 0) {
     console.error('could not build the board for the round trip:', built.stdout, built.stderr)
     process.exitCode = 1
@@ -59,7 +59,7 @@ try {
   const outside = spawnSync(process.execPath,
     [path.join(__dirname, '..', 'bin', 'omarchyform'), 'new', path.join(dir, 'sent-to-me.omarchyform.json'),
      '--note', 'from somebody else'],
-    { encoding: 'utf8' })
+    { encoding: 'utf8', timeout: 10000, env: { ...process.env, HOME: home } })
   if (outside.status !== 0) {
     console.error('could not build the board to open by path:', outside.stdout, outside.stderr)
     process.exitCode = 1

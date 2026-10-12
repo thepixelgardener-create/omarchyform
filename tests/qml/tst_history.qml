@@ -55,6 +55,7 @@ ShellRoot {
     function fileCommand(action, args) { return ["bash", test.dir + "/BoardFiles.sh", action].concat(args) }
     function writeState() {}
     function panesViewing(doc) { return [] }
+    function recheckPictures(names) {}
   }
 
   Component {

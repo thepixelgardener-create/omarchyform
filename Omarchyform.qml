@@ -341,8 +341,8 @@ Item {
   // Chosen in the board only, and remembered in state.json: one of
   // Store.CANVAS_COLOURS.
   property string canvasColour: "Theme"
-  property bool startWindowed: false
-  property bool windowMode: false
+  property bool startWindowed: true
+  property bool windowMode: true
 
   property bool stateReady: false
 

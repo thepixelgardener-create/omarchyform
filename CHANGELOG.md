@@ -3,6 +3,26 @@
 Notable changes, newest first. Board file versions are noted where they moved,
 since older boards are migrated on load rather than rejected.
 
+## 0.4.10 — 2026-10-12
+
+### Changed
+
+- The board opens as an ordinary tiled window by default, from the bar and
+  from the keyboard. `w` still switches to fullscreen and back, and the choice
+  is remembered.
+- Coming from 0.4.9: if the bar's **Open in a window rather than fullscreen**
+  setting was never changed, the first open from the bar after updating is
+  tiled, even when the board was last fullscreen. Press `w` once to go back;
+  it stays from then on. Opening from the keyboard keeps the last surface, and
+  a bar entry with the setting turned off keeps opening fullscreen.
+
+### Fixed
+
+- `npm run test:qml` passes again: the history test's stand-in workspace had
+  no `recheckPictures`, which 0.4.9's picture checks call. `tests/contract.js`
+  now holds that stand-in to what a document reads, so `npm test` catches the
+  next missing member in CI, which does not run the QML suite.
+
 ## 0.4.9 — 2026-10-12
 
 ### Fixed

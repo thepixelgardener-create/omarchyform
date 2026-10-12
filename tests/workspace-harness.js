@@ -228,8 +228,8 @@ function controller() {
   // One copy of BoardStore for everything, so a test that changes a table in
   // it changes it for every object reading it, as the one import does in QML.
   const Store = loadStore()
-  const workspace = { opened: true, stateReady: true, windowMode: false, autosaveMs: 700, step: 40,
-    showGrid: true, canvasPattern: 'Dots', canvasBackgroundChosen: false, canvasColour: 'Theme', startWindowed: false,
+  const workspace = { opened: true, stateReady: true, windowMode: true, autosaveMs: 700, step: 40,
+    showGrid: true, canvasPattern: 'Dots', canvasBackgroundChosen: false, canvasColour: 'Theme', startWindowed: true,
     boardsDir: '/boards', backupsDir: '/backups', dataDir: '/data', imagesDir: '/data/images',
     locksDir: '/data/locks', helperScript: '/BoardFiles.sh', launchNewBoard: false, launchOpenPath: '',
     copyingFor: null, documents: [], panes: [], layout: 'single', splitRatio: 0.5, pendingLeave: null,

@@ -12,15 +12,17 @@ process — no webview, no Electron, and no separate application service.
 The controller stays loaded between opens; canvas surfaces exist only while
 open, and pending saves can finish after closing.
 
-It has two surfaces, and `w` switches between them:
+It opens as a tiled window by default, and `w` switches between two surfaces:
 
-- **Fullscreen** — a Hyprland layer-shell overlay above everything, with its
-  own keyboard grab. Summon it, think, dismiss it.
 - **Windowed** — an ordinary toplevel, so Hyprland tiles it beside your editor
   and browser like any other app.
+- **Fullscreen** — a Hyprland layer-shell overlay above everything, with its
+  own keyboard grab. Summon it, think, dismiss it.
 
 The camera, the notes and the selection are shared, so toggling never loses
-your place. The mode is remembered between sessions.
+your place. The mode is remembered between sessions. Before 0.4.10 the board
+opened fullscreen; the [changelog](../CHANGELOG.md) says what updating does to
+a board last used that way.
 
 ## Keys
 

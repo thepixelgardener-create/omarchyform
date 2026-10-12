@@ -125,6 +125,10 @@ const workspace = read("Omarchyform.qml")
 expect(referenced(pane, "root.workspace."), workspaceMembers, "the workspace", "BoardPane.qml")
 expect(referenced(pane, "root.doc."), documentMembers, "the document", "BoardPane.qml")
 expect(referenced(documentSource, "doc.workspace."), workspaceMembers, "the workspace", "BoardDocument.qml")
+// tst_history mounts a real document on a stand-in workspace, and test:qml,
+// which runs it, is not in CI: `recheckPictures` went missing from it unseen.
+expect(referenced(documentSource, "doc.workspace."), nestedMembers(read("tests/qml/tst_history.qml"), "stubWorkspace"),
+  "the tst_history workspace", "BoardDocument.qml")
 expect(referencedBy(documentSource, "\\b(?:pane|panes\\[\\w+\\])"), controller, "the pane", "BoardDocument.qml")
 expect(referencedBy(workspace, "(?:root\\.activePane|root\\.panes\\[\\w+\\]|\\bpane|\\bfirst)"), controller,
   "the pane", "Omarchyform.qml")

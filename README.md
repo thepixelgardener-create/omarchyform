@@ -53,7 +53,7 @@ right-click lists what can be done with the selection. The mouse works too.
 
 - Notes, boxes, ellipses, diamonds and pictures pasted from the clipboard, joined by connectors
 - Headings, bold, italic, key labels and theme colours inside a note
-- A fullscreen overlay or an ordinary tiled window; `w` switches between them
+- An ordinary tiled window by default; `w` switches to a fullscreen overlay and back
 - Split view, `v` or `V`: two boards side by side, or two views of one
 - A timeline, `t`, that plays back how a board was built
 - Boards in folders, with search and a trash, on `b`
