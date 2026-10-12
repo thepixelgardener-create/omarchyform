@@ -71,6 +71,11 @@ are private on existing installs too. The [security review](security-review.md#b
 has the checks to run before submitting. Changing the bar's **Open in a window
 rather than fullscreen** setting now takes effect after the first open too.
 
+## 0.4.10 — Tiled by default
+
+Shipped. The board opens as an ordinary tiled window, after feedback that a
+forced fullscreen got in the way; `w` still switches to the overlay and back.
+
 ## 0.5 — Editable, labeled connectors
 
 Make relationships useful in a decision diagram: connect “Ready?” to “Ship”,

@@ -20,8 +20,9 @@ It opens as a tiled window by default, and `w` switches between two surfaces:
   own keyboard grab. Summon it, think, dismiss it.
 
 The camera, the notes and the selection are shared, so toggling never loses
-your place. The mode is remembered between sessions; updating preserves an
-existing saved choice.
+your place. The mode is remembered between sessions. Before 0.4.10 the board
+opened fullscreen; the [changelog](../CHANGELOG.md) says what updating does to
+a board last used that way.
 
 ## Keys
 

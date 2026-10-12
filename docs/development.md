@@ -124,7 +124,6 @@ npm run bench:history # what keeping a board's edit history costs, in node and o
 npm run test:qml # headless persistence tests; requires installed Quickshell
 npm run test:paste # live canvas image paste test; uses an isolated clipboard stub and board library
 npm run test:windowmode # live tiled default, bar preference, window switching and reopening; isolated board data
-npm run test:windowmode # live bar preference, window switching and reopening; isolated board data
 npm run test:ui  # Qt Quick pointer, theme, and layout tests
 npm run shots -- --hold # leave an isolated board up for docs/pointer-checks.md
 npm run test:hold # that held board starts, survives a mode switch, and ends
