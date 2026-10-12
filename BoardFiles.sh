@@ -23,6 +23,15 @@ place_new() {
 # arrived: dropped, pasted, or carried inside a shared copy.
 max_image_bytes=33554432
 
+# The most a board's file may weigh before the shell reads it, the same as
+# MAX_BOARD_BYTES in BoardStore.js: an import is held to it, and so is a board
+# in the library, which is a folder people sync and commit. Exit 5 says a
+# board is larger than this, and nothing of it was read.
+max_board_bytes=33554432
+board_fits() {
+  [[ ! -f $1 ]] || (( $(stat -Lc %s -- "$1") <= max_board_bytes ))
+}
+
 # What a picture costs to draw is its pixels, not its bytes, and the two are not
 # related: a PNG of one flat colour compresses to almost nothing and still asks
 # for four bytes a pixel when it is decoded. Twelve thousand square is a hundred
@@ -392,6 +401,7 @@ case "$operation" in
     # The revision comes back with the answer: what is read now is what the
     # next write will expect to still be there.
     confined "$1" "$2" || exit 3
+    board_fits "$1/$2" || exit 5
     revision_of "$1/$2"
     ;;
   snapshot)
@@ -402,6 +412,7 @@ case "$operation" in
     exec 9>"$lock"
     flock 9
     [[ -f $board && ! -L $board ]] || exit 3
+    board_fits "$board" || exit 5
     before=$(revision_of "$board")
     snapshot=$(mktemp)
     trap 'rm -f -- "$snapshot"' EXIT
@@ -429,7 +440,8 @@ case "$operation" in
     #
     # Exit 7 means the file moved underneath, and prints what is there now. The
     # caller still holds what it meant to write; this refuses to guess which of
-    # the two versions a person wanted.
+    # the two versions a person wanted. Exit 5 means the board is larger than a
+    # board is opened at, so it is not written: it could not be read back.
     board=$1 backup=$2 lock=$3 expected=$4 root=${5:-} backup_root=${6:-}
     if [[ -n $root ]]; then
       [[ $board == "$root/"* ]] || exit 3
@@ -448,6 +460,7 @@ case "$operation" in
     # people are invited to read. The caller still holds what it sent.
     trap 'rm -f -- "$staged"' EXIT
     cat > "$staged"
+    board_fits "$staged" || exit 5
     mkdir -p -- "$(dirname -- "$lock")"
     exec 9>"$lock"
     flock 9

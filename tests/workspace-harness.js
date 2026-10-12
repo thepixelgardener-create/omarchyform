@@ -98,6 +98,11 @@ function makeDocument(workspace, board, Store) {
   // they fetch is what matters here, so they fetch it from the test instead.
   session.diskText = ''
   session.readDisk = () => session.diskText
+  // How big the helper says the file is: the text's length, unless a test
+  // says otherwise to stand for a file too large to have been read.
+  session.diskBytes = null
+  session.measureDisk = () => session.measuredDisk(doc.currentBoard,
+    session.diskBytes === null ? session.diskText.length : session.diskBytes)
   session.requestDisk = resolve => session.acceptDisk(doc.currentBoard,
     doc.fileText(), resolve, 'rev-fresh\n' + session.diskText)
   let revisions = 0

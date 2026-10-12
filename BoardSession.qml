@@ -167,6 +167,13 @@ Item {
   function staleSave(path, revision) {
     session.revision = revision
     if (path !== session.ctl.boardPath) return
+    // The revision says how big what is there now is. Larger than a board may
+    // be, it is not read to find out whose it is: it is not this session's.
+    if (Store.revisionBytes(revision) > Store.MAX_BOARD_BYTES) {
+      session.resolving = ""
+      session.raiseConflict(session.largeOnDisk())
+      return
+    }
     var raw = session.readDisk()
     var mine = session.ctl.fileText()
     session.resolving = ""
@@ -187,11 +194,17 @@ Item {
 
   // Nothing of the disk version is kept: whichever way out is chosen reads the
   // file again, with the revision that goes with what it reads.
-  function raiseConflict() {
+  function raiseConflict(message) {
     // A refused switch is cancelled; resolving stays on the current board.
     session.pendingBoard = null
     session.conflict = true
-    session.ctl.flash("Board changed on disk · ctrl+s to choose which version to keep")
+    session.ctl.flash(message || "Board changed on disk · ctrl+s to choose which version to keep")
+  }
+
+  // What is said when the version on disk is larger than a board may be. It is
+  // not read; keeping the version on screen is still a choice there is.
+  function largeOnDisk() {
+    return "Board changed on disk to something " + Store.TOO_LARGE + " · ctrl+s to choose which version to keep"
   }
 
   function clearConflict() {
@@ -254,10 +267,10 @@ Item {
     session.ctl.flash(resolve ? "Kept the version from disk" : "Board changed on disk; reloaded")
   }
 
-  function diskReadFailed(board) {
+  function diskReadFailed(board, why) {
     if (board !== session.ctl.currentBoard) return
     session.pendingBoard = null
-    session.saveError = "Could not read the disk version; local edits kept — ctrl+s to retry"
+    session.saveError = (why || "Could not read the disk version") + "; local edits kept — ctrl+s to retry"
     session.ctl.flash(session.saveError)
   }
 
@@ -268,7 +281,9 @@ Item {
     property bool resolve: false
     stdout: StdioCollector { id: diskContents; waitForEnd: true }
     onExited: function (code) {
-      if (code !== 0) session.diskReadFailed(diskRead.board)
+      // 5: the helper found it larger than a board may be, and read none of it.
+      if (code === 5) session.diskReadFailed(diskRead.board, "The disk version is " + Store.TOO_LARGE)
+      else if (code !== 0) session.diskReadFailed(diskRead.board)
       else session.acceptDisk(diskRead.board, diskRead.localText, diskRead.resolve, diskContents.text)
     }
   }
@@ -292,16 +307,18 @@ Item {
     // it to a worker rather than parse it here.
     var parts = Store.readBoardFile(raw, whole === true)
     var data = parts.data
-    // A note too long to lay out without holding the shell up. The board is
-    // opened the way an unreadable one is, empty and read-only, so nothing
-    // waits on the text and nothing saves over it; the command line can still
-    // read it and shorten the note.
-    var overlong = data !== null && Store.overlongNote(data.items) >= 0
-    if (overlong) data = null
+    // A note too long to lay out, or more items or connectors than a board
+    // holds, would hold the shell up while it was drawn. The board is opened
+    // the way an unreadable one is, empty and read-only, so nothing waits on
+    // it and nothing saves over it; the command line can still read it and cut
+    // it down (Store.boardLimit). One with a list too long to parse at all
+    // never got that far, and says so (Store.jsonFits).
+    var refused = data !== null ? Store.boardLimit(data) : Store.jsonFits(raw) ? "" : Store.TOO_LONG_LIST
+    if (refused !== "") data = null
     session.ctl.items.clear()
     session.ctl.links.clear()
     session.damaged = !data && !missing
-    session.damageReason = overlong ? "has a note longer than 1 MB" : ""
+    session.damageReason = refused
     session.saveError = ""
     session.ctl.nextId = 1
     session.ctl.nextColor = 0
@@ -358,8 +375,28 @@ Item {
     return reader.text()
   }
 
+  // What changed on disk is read on the shell's thread, whole, so how big it
+  // is is asked first, of the helper. A notification that arrives while that
+  // is being asked is asked about again afterwards rather than dropped.
   function externalWrite() {
     if (!session.boardLoaded || session.pendingBoard !== null || session.conflict) return
+    session.measureDisk()
+  }
+
+  function measureDisk() {
+    if (diskSize.running) { diskSize.again = true; return }
+    diskSize.board = session.ctl.currentBoard
+    diskSize.command = session.ctl.fileCommand("filesize", [session.ctl.boardPath])
+    diskSize.running = true
+  }
+
+  function measuredDisk(board, bytes) {
+    if (board !== session.ctl.currentBoard) return
+    if (!session.boardLoaded || session.pendingBoard !== null || session.conflict) return
+    if (bytes > Store.MAX_BOARD_BYTES) {
+      session.raiseConflict(session.largeOnDisk())
+      return
+    }
     var raw = session.readDisk()
     if (raw === "") return
     // Our own writes arrive here as well, and the content is what tells them
@@ -380,6 +417,22 @@ Item {
       return
     }
     session.raiseConflict()
+  }
+
+  Process {
+    id: diskSize
+    property string board: ""
+    property bool again: false
+    stdout: StdioCollector { id: diskBytes; waitForEnd: true }
+    onExited: function (code) {
+      // A file that is not there answers 0, and reading it then reads nothing.
+      var bytes = code === 0 ? Number(diskBytes.text) : 0
+      session.measuredDisk(diskSize.board, isFinite(bytes) ? bytes : 0)
+      if (diskSize.again) {
+        diskSize.again = false
+        session.externalWrite()
+      }
+    }
   }
 
   FileView {
@@ -423,6 +476,12 @@ Item {
     session.damageReason = "goes through a symlink"
   }
 
+  // The helper found the file larger than a board may be, and read none of it.
+  function refuseLarge() {
+    session.loadBoard("", false)
+    session.damageReason = "is " + Store.TOO_LARGE
+  }
+
   Process {
     id: pathCheck
     property string checking: ""
@@ -436,7 +495,10 @@ Item {
         session.revision = checkedRevision.text
         session.checkedPath = pathCheck.checking
       }
-      else if (!session.boardLoaded) session.refusePath()
+      else if (!session.boardLoaded) {
+        if (code === 5) session.refuseLarge()
+        else session.refusePath()
+      }
     }
   }
 

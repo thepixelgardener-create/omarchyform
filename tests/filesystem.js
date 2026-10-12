@@ -36,6 +36,22 @@ try {
   assert.equal(snapshot.stdout.slice(0, split), run('revision', path.join(boards, 'a.json')).stdout)
   assert.equal(snapshot.stdout.slice(split + 1), 'new', 'snapshot carries exact bytes with their revision')
   assert.notEqual(run('snapshot', path.join(boards, 'escape/a.json'), path.join(dir, 'snapshot.lock'), boards).status, 0)
+  // A board larger than a board may be is refused by its size, before any of
+  // it is read: exit 5, as for a picture.
+  const heavy = path.join(boards, 'heavy.json')
+  fs.writeFileSync(heavy, '')
+  fs.truncateSync(heavy, 33554433)
+  assert.equal(run('check', boards, 'heavy.json').status, 5)
+  const heavySnapshot = run('snapshot', heavy, path.join(dir, 'snapshot.lock'), boards)
+  assert.equal(heavySnapshot.status, 5)
+  assert.equal(heavySnapshot.stdout, '', 'and nothing of it is passed on')
+  fs.truncateSync(heavy, 33554432)
+  assert.equal(run('check', boards, 'heavy.json').status, 0, 'exactly the limit is not')
+  const fits = spawnSync('bash', [path.join(__dirname, '../BoardFiles.sh'), 'snapshot', heavy,
+    path.join(dir, 'snapshot.lock'), boards], { maxBuffer: 64 * 1048576 })
+  assert.equal(fits.status, 0)
+  assert.equal(fits.stdout.length - fits.stdout.indexOf(10) - 1, 33554432, 'and all of it is passed on')
+  fs.unlinkSync(heavy)
   // A symlinked root is where the user keeps their data, not an escape.
   const linkedBoards=path.join(dir,'linked-boards'),linkedBackups=path.join(dir,'linked-backups')
   fs.mkdirSync(path.join(dir,'backups'))
@@ -257,6 +273,18 @@ try {
   const winner=codes[0]===0?'racer A':'racer B'
   assert.equal(fs.readFileSync(board,'utf8'),winner,'and the file holds that one, whole')
   assert.equal(fs.readFileSync(backup,'utf8'),'four','with the version it replaced kept')
+
+  // Larger than a board is opened at, it is not written: it could not be read
+  // back. Nothing of it is left behind, and the board there stays.
+  const heavyText='x'.repeat(33554433)
+  const tooLarge=commit(heavyText,run('revision',board).stdout)
+  assert.equal(tooLarge.status,5)
+  assert.equal(fs.readFileSync(board,'utf8'),winner,'the board there is untouched')
+  assert.equal(fs.readFileSync(backup,'utf8'),'four','and so is its backup')
+  assert.deepEqual(fs.readdirSync(boards).filter(f=>f.startsWith('.omarchyform-')),[],'and nothing staged is left')
+  const atLimit=commit(heavyText.slice(1),run('revision',board).stdout)
+  assert.equal(atLimit.status,0,'exactly the limit is written')
+  assert.equal(fs.statSync(board).size,33554432)
 
   // The rules the old backup step had, kept: a path through a symlink is
   // refused before anything is written.

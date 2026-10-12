@@ -438,7 +438,7 @@ Item {
 
   function readReplay(continuationOnly) {
     var h
-    try { h = JSON.parse(History.joinText(doc.historyHeader, doc.historyRecords)) } catch (e) { h = null }
+    try { h = History.parseJson(History.joinText(doc.historyHeader, doc.historyRecords)) } catch (e) { h = null }
     if (!h || History.checkShape(h) !== "") { doc.dropReplay(); return false }
     var previous = doc.replay
     if (continuationOnly && (!previous || !History.extendsHistory(previous.h, h, previous.ix))) {

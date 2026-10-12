@@ -1212,10 +1212,121 @@ function overlongNote(rows) {
   return -1
 }
 
+// The most a board holds. Every item is a delegate the shell builds on its own
+// thread, and the bar and everything else wait while it does: measured on
+// 2026-10-11 on Qt 6.12.0, offscreen with the real board, 1,000 items took
+// 2.1s and 138 MB to open, 5,000 took 12.3s and 675 MB, and 20,000 took 92s
+// and 2.7 GB, from a file under 1 MB. The largest board benchmarked is 3,000
+// (docs/performance.md), and pan and zoom are already over the frame budget
+// there. A board is a file anyone can write, so this is checked where a board
+// arrives and wherever one grows, not trusted to have been kept elsewhere.
+var MAX_ITEMS = 5000
+var MAX_LINKS = 20000
+// What a board's file may weigh: the most an import reads, and the most a
+// board in the library is read at, whoever put it there. BoardFiles.sh holds
+// max_board_bytes to the same.
+var MAX_BOARD_BYTES = 33554432
+
+function thousands(n) {
+  return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",")
+}
+var FULL_ITEMS = "A board holds at most " + thousands(MAX_ITEMS) + " items"
+var FULL_LINKS = "A board holds at most " + thousands(MAX_LINKS) + " connectors"
+// What a board past MAX_BOARD_BYTES is, wherever it is turned away.
+var TOO_LARGE = "larger than " + MAX_BOARD_BYTES / 1048576 + " MB"
+
+// Qt's JSON.parse keeps every element of an array it is still reading on the
+// engine's own stack, and nothing checks that stack as it grows: past about
+// 557,000 at once (4 MiB of 8-byte values, and the margin kept past it) the
+// shell segfaults. Measured on 2026-10-12 on Qt 6.12.0: an array of 540,000
+// zeros parsed in 70ms, and one of 560,000, a 1.1 MB file, took the process
+// down, as did 300,000 held inside another 300,000. Arrays side by side are
+// each let go of, and an object keeps nothing. So what is counted is what is
+// open at once on the way in; anything this writes stays under 40,000 (a full
+// history's 10,000 records, one holding 20,000 connectors).
+//
+// BoardHistory.js keeps the same three, for the history worker, which reads
+// only that file; tests/contract.js holds the two copies to each other.
+var MAX_JSON_OPEN = 100000
+
+// Whether JSON.parse can read this without holding more than MAX_JSON_OPEN.
+// A text with fewer commas and brackets than that in all is settled by
+// counting them; anything else is walked, strings stepped over, which took
+// 208ms for a 34 MiB board and a second for a full history (its own parse
+// took 186ms and 875ms). Anything nested deeper than the parser goes is
+// refused here too: it stops there.
+function jsonFits(text) {
+  text = String(text)
+  var seen = 0, at = -1
+  while (seen < MAX_JSON_OPEN && (at = text.indexOf(",", at + 1)) >= 0) seen++
+  at = -1
+  while (seen < MAX_JSON_OPEN && (at = text.indexOf("[", at + 1)) >= 0) seen++
+  if (seen < MAX_JSON_OPEN) return true
+  var open = [], held = 0, n = text.length
+  for (var i = 0; i < n; i++) {
+    var c = text.charCodeAt(i)
+    if (c === 34) {
+      // A quote is the string's end unless an odd run of backslashes escapes it.
+      var end = i, slashes
+      do {
+        end = text.indexOf('"', end + 1)
+        if (end < 0) return true
+        slashes = 0
+        while (text.charCodeAt(end - 1 - slashes) === 92) slashes++
+      } while (slashes % 2 === 1)
+      i = end
+      continue
+    }
+    if (c === 91) { if (open.length >= 1024) return false; open.push(1); held++ }
+    else if (c === 123) { if (open.length >= 1024) return false; open.push(0) }
+    else if (c === 44) { if (open.length > 0 && open[open.length - 1] > 0) { open[open.length - 1]++; held++ } }
+    else if (c === 93 || c === 125) held -= open.length > 0 ? open.pop() : 0
+    else continue
+    if (held > MAX_JSON_OPEN) return false
+  }
+  return true
+}
+
+// JSON.parse, for text from anywhere but this script: one that would hold too
+// much at once throws the way unreadable text does.
+function parseJson(text) {
+  if (!jsonFits(text)) throw new SyntaxError("JSON holds more at once than can be read")
+  return JSON.parse(text)
+}
+
+// What a board that jsonFits turns away is said to have.
+var TOO_LONG_LIST = "has a list too long to read"
+
+// Why a board's rows are more than a board holds, or "". Counted as they are in
+// the file, before anything is dropped as unusable: they all cost reading.
+function tooManyRows(data) {
+  if (!data) return ""
+  if (data.items && data.items.length > MAX_ITEMS) return "has more than " + thousands(MAX_ITEMS) + " items"
+  if (data.links && data.links.length > MAX_LINKS) return "has more than " + thousands(MAX_LINKS) + " connectors"
+  return ""
+}
+
+// Why a board cannot be opened as it is, said after its name, or "". Such a
+// board is shown the way an unreadable one is: empty, read-only, and its file
+// left alone for the command line to read and cut down.
+function boardLimit(data) {
+  if (!data) return ""
+  if (overlongNote(data.items) >= 0) return "has a note longer than 1 MB"
+  return tooManyRows(data)
+}
+
+// The size at the front of a revision, as BoardFiles.sh writes one
+// ("size|inode|modified"), or -1 when it does not say.
+function revisionBytes(revision) {
+  var at = String(revision).indexOf("|")
+  var bytes = at > 0 ? Number(String(revision).slice(0, at)) : NaN
+  return isFinite(bytes) && bytes >= 0 ? bytes : -1
+}
+
 // A v1 board stored a flat notes[] with no ids or kinds.
 function readFile(raw) {
   var parsed
-  try { parsed = JSON.parse(raw) } catch (e) { return null }
+  try { parsed = parseJson(raw) } catch (e) { return null }
   return boardOf(parsed)
 }
 
@@ -1268,7 +1379,7 @@ function readBoardFile(raw, whole) {
   if (at > 0 && text.charAt(at - 1) === "," && text.charAt(end - 1) === "}") {
     var board = text.slice(0, at - 1) + "\n}\n"
     var parsed = null
-    try { parsed = JSON.parse(board) } catch (e) { parsed = null }
+    try { parsed = parseJson(board) } catch (e) { parsed = null }
     var whole = parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)
       && Array.isArray(parsed.items) && Array.isArray(parsed.links) && typeof parsed.nextId === "number"
     if (whole) {
@@ -1417,7 +1528,7 @@ function imageNames(items) {
 // read out of the library.
 function withEmbeddedImages(raw, images) {
   var parsed
-  try { parsed = JSON.parse(raw) } catch (e) { return raw }
+  try { parsed = parseJson(raw) } catch (e) { return raw }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return raw
   if (images && Object.keys(images).length > 0) parsed.images = images
   return JSON.stringify(parsed, null, 2) + "\n"
@@ -1447,7 +1558,7 @@ function decodedSize(base64) {
 // is how much of the board did not arrive.
 function declaredImageCount(raw) {
   var parsed
-  try { parsed = JSON.parse(raw) } catch (e) { return 0 }
+  try { parsed = parseJson(raw) } catch (e) { return 0 }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return 0
   var images = parsed.images
   if (!images || typeof images !== "object" || Array.isArray(images)) return 0
@@ -1456,7 +1567,7 @@ function declaredImageCount(raw) {
 
 function sharedImages(raw) {
   var parsed
-  try { parsed = JSON.parse(raw) } catch (e) { return {} }
+  try { parsed = parseJson(raw) } catch (e) { return {} }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {}
   var images = parsed.images
   if (!images || typeof images !== "object" || Array.isArray(images)) return {}
@@ -1490,7 +1601,7 @@ function sharedImages(raw) {
 // at all: leaving the `images` key out must not be a way to keep the names.
 function withSharedImages(raw, landed) {
   var parsed
-  try { parsed = JSON.parse(raw) } catch (e) { return raw }
+  try { parsed = parseJson(raw) } catch (e) { return raw }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return raw
   delete parsed.images
   // Foreign replay can contain deleted images with names from another library.
@@ -1661,7 +1772,7 @@ function uniquePath(entries, dir, base, isDir) {
 
 function readTrash(raw) {
   var parsed
-  try { parsed = JSON.parse(raw) } catch (e) { return [] }
+  try { parsed = parseJson(raw) } catch (e) { return [] }
   if (!parsed || !Array.isArray(parsed.entries)) return []
   var out = []
   for (var i = 0; i < parsed.entries.length; i++) {

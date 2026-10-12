@@ -37,6 +37,160 @@ const { controller } = require('./workspace-harness')
   assert.equal(c.items.count, 1)
 }
 {
+  // More items or connectors than a board holds is opened the same way, and
+  // says which. Every item is a delegate built on the shell's thread.
+  const c = controller()
+  const S = c.store
+  const rows = n => Array.from({ length: n }, (_, i) => ({ id: i + 1, kind: 'rect', x: i, y: 0, w: 60, h: 60 }))
+  const board = (items, links) => JSON.stringify({ version: 5, nextId: items.length + 1, items, links })
+  c.session.loadBoard(board(rows(S.MAX_ITEMS + 1), []), false)
+  assert.equal(c.items.count, 0, 'none of it is built')
+  assert.equal(c.session.damaged, true)
+  assert.equal(c.session.damageReason, 'has more than 5,000 items')
+  assert.equal(c.root.canEdit, false)
+  c.root.save(true)
+  assert.equal(c.writes.length, 0, 'and nothing is written over it')
+  c.session.loadBoard(board(rows(2), Array.from({ length: S.MAX_LINKS + 1 }, () => ({ from: 1, to: 2 }))), false)
+  assert.equal(c.session.damageReason, 'has more than 20,000 connectors')
+  assert.equal(c.links.count, 0)
+
+  // At the limit it opens, and it is full: nothing more is added.
+  c.session.loadBoard(board(rows(S.MAX_ITEMS), []), false)
+  assert.equal(c.session.damaged, false, 'exactly the limit opens')
+  assert.equal(c.items.count, S.MAX_ITEMS)
+  c.root.statusText = ''
+  c.root.addItem('note', 0, 0)
+  assert.equal(c.items.count, S.MAX_ITEMS, 'a board at the limit takes no more')
+  assert.match(c.root.statusText, /at most 5,000 items/, 'and says why')
+}
+{
+  // A duplicate that would go past the limit is refused whole; one that fits
+  // is not.
+  const c = controller()
+  const S = c.store
+  const rows = Array.from({ length: S.MAX_ITEMS - 1 }, (_, i) => ({ id: i + 1, kind: 'rect', x: i, y: 0, w: 60, h: 60 }))
+  c.session.loadBoard(JSON.stringify({ version: 5, nextId: rows.length + 1, items: rows, links: [] }), false)
+  c.root.selectedIndex = 0
+  c.root.markedIds = [1, 2]
+  c.root.statusText = ''
+  c.root.duplicateTargets()
+  assert.equal(c.items.count, S.MAX_ITEMS - 1, 'two would not fit, so neither is copied')
+  assert.match(c.root.statusText, /at most 5,000 items/)
+  assert.equal(c.root.doc.undoStack.length, 0, 'and nothing was done to undo')
+  c.root.markedIds = [1]
+  c.root.duplicateTargets()
+  assert.equal(c.items.count, S.MAX_ITEMS, 'one fits')
+}
+{
+  // Connectors the same way: none added past the limit, though one can still
+  // be turned round or taken away. Duplicating copies connectors too, so it
+  // counts them first.
+  const c = controller()
+  const S = c.store
+  const n = 202
+  const items = Array.from({ length: n }, (_, i) => ({ id: i + 1, kind: 'rect', x: i * 80, y: 0, w: 60, h: 60 }))
+  const links = []
+  for (let a = 1; a <= n && links.length < S.MAX_LINKS; a++)
+    for (let b = a + 1; b <= n && links.length < S.MAX_LINKS; b++) links.push({ from: a, to: b })
+  c.session.loadBoard(JSON.stringify({ version: 5, nextId: n + 1, items, links }), false)
+  assert.equal(c.links.count, S.MAX_LINKS)
+  const joined = (a, b) => { for (let i = 0; i < c.links.count; i++) { const l = c.links.get(i); if ((l.lfrom === a && l.lto === b) || (l.lfrom === b && l.lto === a)) return l } return null }
+  const missing = [n - 1, n]
+  assert.equal(joined(...missing), null, 'one pair is not joined yet')
+  c.root.statusText = ''
+  c.root.addLink(...missing)
+  assert.equal(c.links.count, S.MAX_LINKS, 'a board at the limit takes no more connectors')
+  assert.match(c.root.statusText, /at most 20,000 connectors/)
+  c.root.addLink(2, 1)
+  assert.equal(joined(1, 2).lfrom, 2, 'one can still be turned round')
+  c.root.addLink(2, 1)
+  assert.equal(c.links.count, S.MAX_LINKS - 1, 'or taken away')
+  c.root.addLink(...missing)
+  assert.ok(joined(...missing), 'which makes room for another')
+  assert.equal(c.links.count, S.MAX_LINKS)
+  c.root.selectedIndex = 0
+  c.root.markedIds = [3, 4]
+  c.root.statusText = ''
+  c.root.duplicateTargets()
+  assert.equal(c.items.count, n, 'a duplicate that would copy one connector too many copies nothing')
+  assert.match(c.root.statusText, /at most 20,000 connectors/)
+  // Only the connector between the two is copied, so with room for one
+  // more, it fits.
+  c.root.addLink(...missing)
+  assert.equal(c.links.count, S.MAX_LINKS - 1)
+  c.root.selectedIndex = 0
+  c.root.markedIds = [3, 4]
+  c.root.duplicateTargets()
+  assert.equal(c.items.count, n + 2, 'a duplicate that fits exactly is made')
+  assert.equal(c.links.count, S.MAX_LINKS)
+}
+{
+  // A board on disk larger than a board may be is not read to find out whose
+  // it is, whether the watcher noticed it or a save was refused for it.
+  const disk = text => JSON.stringify({ version: 5, nextId: 2, items: [{ id: 1, kind: 'note', x: 0, y: 0, w: 180, h: 140, text }], links: [] })
+  const watched = (unsaved) => {
+    const c = controller()
+    c.session.loadBoard(disk('mine'), false)
+    if (unsaved) c.items.setProperty(0, 'itext', 'mine, unsaved')
+    let reads = 0
+    const readDisk = c.session.readDisk
+    c.session.readDisk = () => { reads++; return readDisk() }
+    c.session.diskText = disk('theirs')
+    c.session.diskBytes = c.store.MAX_BOARD_BYTES + 1
+    c.root.statusText = ''
+    c.session.externalWrite()
+    return { c, reads }
+  }
+  for (const unsaved of [false, true]) {
+    const { c, reads } = watched(unsaved)
+    assert.equal(reads, 0, 'not read')
+    assert.equal(c.session.conflict, true, 'kept as a choice to make')
+    assert.match(c.root.statusText, /larger than 32 MB/)
+    assert.equal(c.items.get(0).itext, unsaved ? 'mine, unsaved' : 'mine', 'with what is on screen left alone')
+  }
+  {
+    // At the limit, it is read as before.
+    const c = controller()
+    c.session.loadBoard(disk('mine'), false)
+    c.session.diskText = disk('theirs')
+    c.session.diskBytes = c.store.MAX_BOARD_BYTES
+    c.session.externalWrite()
+    assert.equal(c.items.get(0).itext, 'theirs')
+  }
+  {
+    const c = controller()
+    c.session.loadBoard(disk('mine'), false)
+    c.items.setProperty(0, 'itext', 'mine, changed')
+    c.root.save()
+    let reads = 0
+    c.session.readDisk = () => { reads++; return disk('theirs') }
+    const write = c.writes[c.writes.length - 1]
+    c.persistence.busy = false
+    c.session.staleSave(write.path, (c.store.MAX_BOARD_BYTES + 1) + '|42|2026-10-11 12:00:00')
+    assert.equal(reads, 0, 'a refused save does not read it either')
+    assert.equal(c.session.conflict, true)
+  }
+  {
+    // A list longer than Qt's JSON.parse can hold at once would take the
+    // shell down while it was read. It is not read, and says so.
+    const c = controller()
+    const long = '{"version":5,"nextId":1,"items":[],"links":[' + '0,'.repeat(c.store.MAX_JSON_OPEN) + '0]}'
+    c.session.loadBoard(long, false)
+    assert.equal(c.session.damaged, true)
+    assert.equal(c.session.damageReason, 'has a list too long to read')
+    c.session.loadBoard('not a board', false)
+    assert.equal(c.session.damageReason, '', 'text that is simply not a board says nothing more')
+  }
+  {
+    // Opened, it is refused before a byte of it is read.
+    const c = controller()
+    c.session.refuseLarge()
+    assert.equal(c.session.damaged, true)
+    assert.equal(c.session.damageReason, 'is larger than 32 MB')
+    assert.equal(c.items.count, 0)
+  }
+}
+{
   const c = controller()
   c.root.addItem('note', 0, 0)
   c.root.addItem('note', 100, 100)
@@ -1689,4 +1843,30 @@ console.log('ok — controller: the canvas colour is a remembered setting, not p
   c.root.setTexture('dots')
   assert.equal(c.items.get(0).itexture, 'hatch', 'read-only board unchanged')
   console.log('ok — controller: texture group, multi-selection, undo, copy and read-only')
+}
+{
+  // The writer's answer to the helper refusing a board too large to read back:
+  // the real handler from BoardPersistence.qml, run against a stand-in. The
+  // session then keeps the edits on screen and says why they are not saved.
+  const fs = require('fs')
+  const path = require('path')
+  const vm = require('vm')
+  const source = fs.readFileSync(path.join(__dirname, '..', 'BoardPersistence.qml'), 'utf8')
+  const body = source.match(/id: commit\n[\s\S]*?onExited: function\s*\(code\) \{\n([\s\S]*?)^    }$/m)
+  assert.ok(body, 'the commit handler is found')
+  const said = []
+  const persistence = { busy: true, target: '/boards/a.json', contents: 'x',
+    fail(message) { this.busy = false; said.push(['failed', message]) },
+    stale() { said.push(['stale']) }, completed() { said.push(['completed']) } }
+  const exited = vm.runInContext(`(function(code) {${body[1]}})`,
+    vm.createContext({ persistence, committed: { text: '' }, Store: loadStore() }))
+  exited(5)
+  assert.deepEqual(said, [['failed', 'Board is larger than 32 MB, so it was not saved; shorten or remove a note']])
+  assert.equal(persistence.busy, false)
+  const c = controller()
+  c.session.loadBoard(JSON.stringify({ version: 5, nextId: 2, items: [{ id: 1, kind: 'note', x: 0, y: 0, w: 100, h: 100, text: 'kept' }], links: [] }), false)
+  c.session.failedSave(said[0][1])
+  assert.match(c.session.saveError, /^Board is larger than 32 MB, so it was not saved; shorten or remove a note — ctrl\+s to retry$/)
+  assert.equal(c.items.get(0).itext, 'kept', 'and what is on screen stays')
+  console.log('ok — controller: a board too large to read back is not written, and says so')
 }

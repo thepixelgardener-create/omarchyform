@@ -106,6 +106,76 @@ function tests(S) {
     eq(S.overlongNote(S.readFile(JSON.stringify({ notes: [{ text: "x".repeat(at + 1) }] })).items), 0)
   })
 
+  test("a board holds at most so many items and connectors, and says which it is over", () => {
+    const rows = n => Array.from({ length: n }, (_, i) => ({ id: i + 1, kind: "rect" }))
+    const links = n => Array.from({ length: n }, () => ({ from: 1, to: 2 }))
+    eq([S.MAX_ITEMS, S.MAX_LINKS, S.MAX_BOARD_BYTES], [5000, 20000, 33554432])
+    eq(S.boardLimit(null), "", "nothing to hold")
+    eq(S.boardLimit({ items: rows(S.MAX_ITEMS), links: links(S.MAX_LINKS) }), "", "exactly the limits is a board")
+    eq(S.boardLimit({ items: rows(S.MAX_ITEMS + 1), links: [] }), "has more than 5,000 items")
+    eq(S.boardLimit({ items: [], links: links(S.MAX_LINKS + 1) }), "has more than 20,000 connectors")
+    eq(S.boardLimit({ items: rows(S.MAX_ITEMS + 1), links: links(S.MAX_LINKS + 1) }), "has more than 5,000 items",
+       "the items are said first")
+    eq(S.boardLimit({ items: [{ text: "x".repeat(S.MAX_NOTE_LENGTH + 1) }].concat(rows(S.MAX_ITEMS + 1)), links: [] }),
+       "has a note longer than 1 MB", "and a note too long before either")
+    eq(S.tooManyRows({ items: [{ text: "x".repeat(S.MAX_NOTE_LENGTH + 1) }], links: [] }), "",
+       "counting alone does not read the text")
+    eq(S.tooManyRows({}), "", "a board with neither")
+    // What the board file says, before anything is dropped as unusable: every
+    // row costs reading.
+    const file = S.readFile(JSON.stringify({ version: 5, items: [null].concat(rows(S.MAX_ITEMS)) }))
+    eq(file, null, "a row that is not an item is not a board")
+    eq(S.boardLimit(S.readFile(JSON.stringify({ version: 5, items: rows(S.MAX_ITEMS + 1) }))), "has more than 5,000 items")
+    eq(S.boardLimit(S.readFile(JSON.stringify({ notes: rows(S.MAX_ITEMS + 1) }))), "has more than 5,000 items",
+       "a version 1 board too")
+    eq([S.FULL_ITEMS, S.FULL_LINKS], ["A board holds at most 5,000 items", "A board holds at most 20,000 connectors"])
+    eq([S.thousands(5), S.thousands(5000), S.thousands(1234567)], ["5", "5,000", "1,234,567"])
+    eq(S.TOO_LARGE, "larger than 32 MB")
+  })
+
+  test("a revision says how big the board was, when it says anything", () => {
+    eq(S.revisionBytes("33554433|1234|2026-10-11 10:00:00"), 33554433)
+    eq(S.revisionBytes("0|1|x"), 0)
+    for (const revision of ["", "rev-external", "|1|x", "-5|1|x", "12", "x|1|y", undefined])
+      eq(S.revisionBytes(revision), -1, String(revision))
+  })
+
+  test("JSON that would hold more at once than the shell's parser can is not parsed", () => {
+    const N = S.MAX_JSON_OPEN
+    const zeros = n => "0,".repeat(n - 1) + "0"
+    eq(S.jsonFits("[" + zeros(N) + "]"), true, "an array exactly at the limit")
+    eq(S.jsonFits("[" + zeros(N + 1) + "]"), false, "one element past it")
+    eq(S.jsonFits("[" + zeros(N / 2) + ",[" + zeros(N / 2) + "]]"), false,
+       "an array still open counts toward the one inside it")
+    eq(S.jsonFits("[[" + zeros(N / 2) + "],[" + zeros(N / 2) + "]]"), true, "one already closed does not")
+    eq(S.jsonFits("{" + Array.from({ length: N + 5 }, (_, i) => `"k${i}":0`).join(",") + "}"), true,
+       "an object's members are not held")
+    eq(S.jsonFits("[" + Array.from({ length: N / 4 }, () => "{\"a\":1,\"b\":2}").join(",") + "]"), true,
+       "and nor are the commas inside the objects in an array")
+    // Strings are stepped over: what is inside one is text, however it looks.
+    const noise = ",[".repeat(N)
+    eq(S.jsonFits(`["${noise}"]`), true, "commas and brackets in a string")
+    eq(S.jsonFits(`["\\"${noise}"]`), true, "past a quote escaped by a backslash")
+    eq(S.jsonFits(`["\\\\",${zeros(N + 1)}]`), false, "but not past an escaped backslash")
+    eq(S.jsonFits(`["${noise}`), true, "a string never closed is left to the parser to refuse")
+    eq(S.jsonFits("[".repeat(1025) + zeros(N)), false, "nor anything nested deeper than the parser goes")
+    eq(S.jsonFits("[".repeat(1025) + '"' + ",".repeat(N) + '"'), false,
+       "however little it holds: the walk would otherwise keep every level")
+    eq(S.jsonFits("[".repeat(1024) + '{"a":"' + ",".repeat(N) + '"}'), false, "of arrays or objects")
+    eq(S.jsonFits("[".repeat(1024) + zeros(N - 1023)), true, "as deep as it goes, holding up to the limit")
+    eq(S.jsonFits(""), true)
+    eq(S.jsonFits(undefined), true, "anything else is the parser's to refuse")
+    // parseJson is JSON.parse, refusing what would not fit the way it refuses
+    // what does not parse.
+    eq(S.parseJson('{"a":[1,2]}'), { a: [1, 2] })
+    let threw = null
+    try { S.parseJson("[" + zeros(N + 1) + "]") } catch (e) { threw = e }
+    ok(threw instanceof SyntaxError, "it throws a SyntaxError")
+    // A board that is refused reads as none, and says why.
+    eq(S.readFile(JSON.stringify({ version: 5, items: [], links: [], extra: new Array(N + 1).fill(0) })), null)
+    eq(S.TOO_LONG_LIST, "has a list too long to read")
+  })
+
   test("a paste into a field fits whole or not at all, and one-line fields fold line breaks", () => {
     eq(S.fitPaste("two\nlines", 3, 100, true), "two\nlines", "a note keeps its line breaks")
     eq(S.fitPaste("a\r\nb\rc\nd", 0, 100, false), "a b c d", "a one-line field gets spaces for every kind")

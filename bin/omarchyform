@@ -191,6 +191,8 @@ function writeBoard(board, file, expected) {
     [target, aside(target, "backup"), aside(target, "lock"), expected === undefined ? "-" : expected], text)
   if (written.status === 7)
     die(file + " changed since it was read", "another writer got there first; read it again, or pass --force")
+  if (written.status === 5)
+    die(file + " would be " + S.TOO_LARGE, "the board opens no larger than that; nothing was written")
   if (written.status !== 0)
     die("cannot write " + file, (written.stderr || "").trim() || "exit " + written.status)
   return text.length
@@ -229,6 +231,8 @@ const OPS = {
     run(board, a) {
       const kind = String(a[0] || "note")
       if (S.KINDS.indexOf(kind) < 0) die(`add: ${kind} is not one of ${S.KINDS.join(", ")}`)
+      // The board refuses to open one past this (Store.boardLimit).
+      if (board.items.count >= S.MAX_ITEMS) die("add: " + S.FULL_ITEMS.toLowerCase())
       const id = board.nextId++
       board.items.append({
         iid: id, kind: kind,
@@ -338,6 +342,7 @@ const OPS = {
           return { linked: [from, to], turned: true }
         }
       }
+      if (board.links.count >= S.MAX_LINKS) die("link: " + S.FULL_LINKS.toLowerCase())
       board.links.append({ lfrom: from, lto: to })
       return { linked: [from, to] }
     }
@@ -415,6 +420,10 @@ function verbValidate(args) {
     warnings.push(`${row.id === undefined ? "a note" : "item " + row.id} is longer than ${S.MAX_NOTE_LENGTH} characters; `
       + "the board opens read-only until it is shorter")
   }
+  const crowded = S.tooManyRows(data)
+  if (crowded !== "") warnings.push(`it ${crowded}; the board opens read-only until there are fewer`)
+  if (fs.statSync(file).size > S.MAX_BOARD_BYTES)
+    warnings.push(`it is ${S.TOO_LARGE}; the board opens read-only until it is smaller`)
   // The history is checked, not changed: how many edits it holds, and whether
   // it plays back to this board.
   let kept = null
@@ -469,7 +478,8 @@ function verbOps() {
   answer({
     ok: true,
     ops: Object.keys(OPS).map(name => ({ op: name, args: OPS[name].args, does: OPS[name].does })),
-    kinds: S.KINDS, tints: S.TINTS, textures: S.TEXTURES, minimumSize: S.MIN_SIZE
+    kinds: S.KINDS, tints: S.TINTS, textures: S.TEXTURES, minimumSize: S.MIN_SIZE,
+    maximumItems: S.MAX_ITEMS, maximumConnectors: S.MAX_LINKS
   })
 }
 

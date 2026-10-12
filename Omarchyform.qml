@@ -430,7 +430,7 @@ Item {
   // dragging one machine's window preference along with it.
   function applyState(raw) {
     var st = null
-    try { st = JSON.parse(raw) } catch (e) { st = null }
+    try { st = Store.parseJson(raw) } catch (e) { st = null }
     var board = st && Store.safeRelative(st.lastBoard) ? st.lastBoard : ""
     // The first pane's board is the one the state names. Until now nothing was
     // open: there was no board to say what is on it.
@@ -482,7 +482,7 @@ Item {
   // the bar, and the keybinding opens the same board the same way.
   function applyPayload(payloadJson) {
     var p = null
-    try { p = JSON.parse(payloadJson || "{}") } catch (e) { return false }
+    try { p = Store.parseJson(payloadJson || "{}") } catch (e) { return false }
     if (!p || !p.settings) return false
     var st = p.settings
     if (typeof st.autosaveMs === "number") root.autosaveMs = Math.max(100, Math.min(5000, st.autosaveMs))
@@ -497,7 +497,7 @@ Item {
 
   function open(payloadJson) {
     var request = null
-    try { request = JSON.parse(payloadJson || "{}") } catch (e) {}
+    try { request = Store.parseJson(payloadJson || "{}") } catch (e) {}
     if (request && request.action === "new") root.launchNewBoard = true
     if (request && request.action === "open" && typeof request.path === "string" && request.path !== "")
       root.launchOpenPath = request.path

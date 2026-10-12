@@ -157,6 +157,27 @@ assert.match(fs.readFileSync(path.join(root, 'Board.qml'), 'utf8'),
   /MouseArea \{\n    id: panSurface\n[^}]*acceptedButtons: Qt\.MiddleButton/,
   'the pan surface takes the middle button from every item, the note editor included')
 
+// Qt's JSON.parse keeps an array's elements on an engine stack nothing checks,
+// and a 1.1 MB file overflows it (Store.MAX_JSON_OPEN). Everything the shell
+// parses goes through parseJson, which counts first; only the two copies of
+// it call JSON.parse. The command line runs in node, whose parser has no such
+// limit.
+function bareParse(source, guard) {
+  return source.split('\n').map((line, i) => [line, i + 1])
+    .filter(([line]) => /\bJSON\.parse\s*\(/.test(line) && !/^\s*\/\//.test(line)
+      && !(guard && line === '  return JSON.parse(text)'))
+    .map(([, n]) => `line ${n}: JSON.parse outside parseJson can take the shell down; use parseJson`)
+}
+const guards = ['BoardStore.js', 'BoardHistory.js']
+assert.ok(bareParse('    try { st = JSON.parse(raw) } catch (e) {}').length)
+assert.ok(bareParse('  return JSON.parse(text)', false).length, "parseJson's own line, anywhere else")
+assert.deepEqual(bareParse('    try { st = Store.parseJson(raw) } catch (e) {}\n  // JSON.parse(text) here'), [])
+for (const file of fs.readdirSync(root).filter(f => /\.(qml|js)$/.test(f)))
+  assert.deepEqual(bareParse(fs.readFileSync(path.join(root, file), 'utf8'), guards.includes(file)), [], file)
+for (const file of guards)
+  assert.equal((fs.readFileSync(path.join(root, file), 'utf8').match(/^  return JSON\.parse\(text\)$/gm) || []).length, 1,
+    `${file}: JSON.parse is called once, by parseJson`)
+
 // A picture that lands in images/ is loaded by Qt in the shell, so each way in
 // holds the bytes that land to their pixels and, for a PNG, to the compressed
 // text Qt would inflate, before placing them.

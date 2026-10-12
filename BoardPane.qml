@@ -693,6 +693,9 @@ Item {
   // Paste supplies its content and final size; ordinary new items use defaults.
   function addItem(kind, wx, wy, label, content) {
     if (!root.canEdit) return
+    // A board past the cap could not be opened again (Store.boardLimit), so
+    // it is not built in the first place.
+    if (root.items.count >= Store.MAX_ITEMS) { root.flash(Store.FULL_ITEMS); return }
     root.showPinned = false
     root.markedIds = []
     root.pushUndo(label || Store.ADD_LABELS[kind] || "New item")
@@ -1080,6 +1083,15 @@ Item {
     // targets() comes back descending; copying in board order keeps the copies
     // stacked the way the originals were.
     var ordered = t.slice().sort(function (a, b) { return a - b })
+    // All of it or none of it: half a duplicate is not what was asked for, and
+    // a board past the cap could not be opened again (Store.boardLimit).
+    var copying = ({})
+    for (var c = 0; c < ordered.length; c++) copying[root.items.get(ordered[c]).iid] = true
+    var joining = 0
+    var joined = Store.linkRows(root.links)
+    for (var k = 0; k < joined.length; k++) if (copying[joined[k].from] && copying[joined[k].to]) joining++
+    if (root.items.count + ordered.length > Store.MAX_ITEMS) { root.flash(Store.FULL_ITEMS); return }
+    if (root.links.count + joining > Store.MAX_LINKS) { root.flash(Store.FULL_LINKS); return }
     root.pushUndo("Duplicate")
     var fresh = []
     var byOriginal = ({})
@@ -1233,6 +1245,12 @@ Item {
     // what happens here is what the board said was about to happen.
     var found = Store.linkAt(root.links, a, b)
     if (found.outcome === "none") return
+    // Taking one away or turning one round is always possible; adding one is
+    // not, past the cap (Store.MAX_LINKS).
+    if (found.outcome !== "remove" && found.outcome !== "reverse" && root.links.count >= Store.MAX_LINKS) {
+      root.flash(Store.FULL_LINKS)
+      return
+    }
     root.pushUndo(found.outcome === "remove" ? "Remove connector" : found.outcome === "reverse" ? "Turn connector" : "Connect")
     if (found.outcome === "remove") {
       root.links.remove(found.at)
@@ -1724,6 +1742,13 @@ Item {
     if (Store.overlongNote(state.items) >= 0) {
       root.stopPlaying()
       root.flash("a note at step " + (at - first) + " is too long to show")
+      return
+    }
+    // And to as many items and connectors as a live board holds.
+    var crowded = Store.tooManyRows(state)
+    if (crowded !== "") {
+      root.stopPlaying()
+      root.flash("the board at step " + (at - first) + " " + crowded + ", too many to show")
       return
     }
     if (!root.lookingBack) root.resetSelection(true)

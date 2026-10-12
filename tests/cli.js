@@ -258,6 +258,65 @@ try {
     assert.deepEqual(listed.out.kinds, S.KINDS, 'kinds come from the board, not a copy')
     assert.deepEqual(listed.out.tints, S.TINTS, 'and so do tints')
     assert.deepEqual(listed.out.textures, S.TEXTURES, 'and textures')
+    assert.deepEqual([listed.out.maximumItems, listed.out.maximumConnectors], [S.MAX_ITEMS, S.MAX_LINKS],
+      'and what a board holds')
+  }
+
+  {
+    // A board holds so many items and connectors: the board refuses to open
+    // more, so the command line refuses to add them.
+    const rows = n => Array.from({ length: n }, (_, i) => ({ id: i + 1, kind: 'rect', x: i, y: 0, w: 60, h: 60 }))
+    const apply = (file, op, ...args) => pipe(JSON.stringify([{ op, args }]), 'apply', file, '-')
+    const full = path.join(dir, 'full.json')
+    fs.writeFileSync(full, JSON.stringify({ version: 5, nextId: S.MAX_ITEMS + 1, items: rows(S.MAX_ITEMS), links: [] }))
+    const before = fs.readFileSync(full, 'utf8')
+    const added = apply(full, 'add', 'note', 0, 0)
+    assert.equal(added.status, 1)
+    assert.equal(added.out.error, 'add: a board holds at most 5,000 items')
+    assert.equal(fs.readFileSync(full, 'utf8'), before, 'and the board is untouched')
+
+    const n = 202
+    const links = []
+    for (let a = 1; a <= n && links.length < S.MAX_LINKS; a++)
+      for (let b = a + 1; b <= n && links.length < S.MAX_LINKS; b++) links.push({ from: a, to: b })
+    const joined = path.join(dir, 'joined.json')
+    fs.writeFileSync(joined, JSON.stringify({ version: 5, nextId: n + 1, items: rows(n), links }))
+    const linked = apply(joined, 'link', n - 1, n)
+    assert.equal(linked.status, 1)
+    assert.equal(linked.out.error, 'link: a board holds at most 20,000 connectors')
+    const turned = apply(joined, 'link', 2, 1)
+    assert.equal(turned.status, 0, 'one already there can still be turned round: ' + turned.raw.slice(0, 200))
+
+    // One written by something else is still read here, and validate says
+    // why the board will not open it; taking some away is how it is mended.
+    const crowded = path.join(dir, 'crowded.json')
+    fs.writeFileSync(crowded, JSON.stringify({ version: 5, nextId: S.MAX_ITEMS + 2, items: rows(S.MAX_ITEMS + 1), links: [] }))
+    const checked = run('validate', crowded)
+    assert.equal(checked.status, 0)
+    assert.equal(checked.out.items, S.MAX_ITEMS + 1, 'all of it is read')
+    assert.deepEqual(checked.out.warnings, ['it has more than 5,000 items; the board opens read-only until there are fewer'])
+    assert.equal(apply(crowded, 'remove', 1).status, 0)
+    assert.deepEqual(run('validate', crowded).out.warnings, [], 'after which there is nothing to say')
+
+    // And a file larger than the board will read at all.
+    const heavy = path.join(dir, 'heavy.json')
+    const small = JSON.stringify({ version: 5, nextId: 1, items: [], links: [] })
+    fs.writeFileSync(heavy, small + ' '.repeat(S.MAX_BOARD_BYTES + 1 - small.length))
+    assert.deepEqual(run('validate', heavy).out.warnings, ['it is larger than 32 MB; the board opens read-only until it is smaller'])
+    fs.truncateSync(heavy, S.MAX_BOARD_BYTES)
+    assert.deepEqual(run('validate', heavy).out.warnings, [], 'exactly the limit is not')
+  }
+
+  {
+    // Nor is one written that large: the board would not open it again.
+    const file = path.join(dir, 'growing.json')
+    run('new', file, '--note', 'start')
+    const before = fs.readFileSync(file, 'utf8')
+    const notes = Array.from({ length: 33 }, () => ({ op: 'add', args: ['note', 0, 0, 220, 160, 'x'.repeat(S.MAX_NOTE_LENGTH)] }))
+    const grown = pipe(JSON.stringify(notes), 'apply', file, '-')
+    assert.equal(grown.status, 1)
+    assert.equal(grown.out.error, file + ' would be larger than 32 MB')
+    assert.equal(fs.readFileSync(file, 'utf8'), before, 'and the board is untouched')
   }
 
   {

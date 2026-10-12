@@ -47,6 +47,15 @@ the CLI to create boards and is not a contribution guide.
   holds it to its bytes, its pixels (`refuse_huge_pictures`) and, for a PNG,
   the compressed text Qt would inflate (`refuse_compressed_text`). A new way in
   calls all three on the bytes that land.
+- Parse JSON in shell code with `parseJson`, never `JSON.parse`: Qt's parser
+  segfaults on a 1.1 MB array (`MAX_JSON_OPEN` in `BoardStore.js`), and
+  `tests/security.js` refuses any other call. Change the guard in
+  `BoardStore.js` and `BoardHistory.js` together; `tests/contract.js` holds
+  them equal.
+- A board holds at most `MAX_ITEMS` items, `MAX_LINKS` connectors and
+  `MAX_BOARD_BYTES` on disk. Anything new that adds items or connectors stops
+  at the limit with `FULL_ITEMS` or `FULL_LINKS`, and anything that reads a
+  board asks `boardLimit` before building it.
 
 ## Regression checks
 

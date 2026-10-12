@@ -93,8 +93,12 @@ syncable, so the file and what would be drawn can differ, and that difference
 is what this prints.
 
 Its `warnings` name what the board will not open: a note longer than 1048576
-characters makes the board open read-only, so `add` and `setText` refuse text
-that long. Shorten such a note with `setText`; the command line still reads it.
+characters, more than 5,000 items or 20,000 connectors, or a file larger than
+32 MB each make the board open read-only and empty. So `add` and `setText`
+refuse text that long, `add` and `link` refuse past the counts (`ops` lists
+`maximumItems` and `maximumConnectors`), and no `apply` writes a file past
+32 MB. The command line still reads such a board: shorten the note with
+`setText`, or `remove` items, to bring it back.
 
 A board reported as **newer than this understands** is not a broken one. It was
 written by a later Omarchyform and the board itself opens it read-only rather

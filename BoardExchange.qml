@@ -94,7 +94,7 @@ Item {
   // What a board arriving from outside is allowed to be. A board with its
   // pictures inside it is a few megabytes; anything beyond this is refused
   // before it is read into memory rather than after.
-  readonly property int maxImportBytes: 33554432
+  readonly property int maxImportBytes: Store.MAX_BOARD_BYTES
 
   function importPath(path) {
     if (busy) return
@@ -132,8 +132,13 @@ Item {
     var raw = input.text()
     if (!raw) { exchange.fail("Could not read that board", "board"); return }
     var data = Store.readFile(raw)
-    if (!data) { exchange.fail("That file is not a supported board", "board"); return }
-    if (Store.overlongNote(data.items) >= 0) { exchange.fail("That board has a note longer than 1 MB", "board"); return }
+    if (!data) {
+      exchange.fail(Store.jsonFits(raw) ? "That file is not a supported board" : "That board " + Store.TOO_LONG_LIST, "board")
+      return
+    }
+    // Held to what a board may be before anything of it lands in the library.
+    var refused = Store.boardLimit(data)
+    if (refused !== "") { exchange.fail("That board " + refused, "board"); return }
     var base = Store.baseName(path).replace(/(\.omarchyform)?\.json$/i, "")
     // A copy saved to share carries its pictures inside it. They have to be
     // written into this machine's own images folder, under names of its

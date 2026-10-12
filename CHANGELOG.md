@@ -31,6 +31,29 @@ since older boards are migrated on load rather than rejected.
   refused with a message saying why. Plain text metadata, as screenshot tools
   write it, is still accepted.
 
+- A board holds at most 5,000 items and 20,000 connectors, and its file at
+  most 32 MB. Every item is built on the shell's thread: on Qt 6.12.0 5,000
+  took 12 seconds and 675 MB to open and 20,000 took 92 seconds and 2.7 GB,
+  from a file under 1 MB, with the bar and everything else waiting. A board
+  past any of these opens read-only and empty with the reason, and its file is
+  left as it is; one larger than 32 MB is refused by its size before any of it
+  is read, as is a version written over the open board from outside. Import
+  refuses such a board, and adding, duplicating and connecting stop at the
+  limit with a message. Nothing writes a board past 32 MB, so a save that
+  would is refused with the reason and the edits stay on screen. The command
+  line refuses the same, `ops` reports the limits, and `validate` says which
+  one a board is over; `remove` and `setText` bring it back.
+
+- Nothing the shell reads as JSON can crash it any more. Qt's `JSON.parse`
+  keeps each element of an array it is still reading on a stack nothing
+  checks, so on Qt 6.12.0 a board file of 1.1 MB holding one long list (or
+  lists inside lists adding up to the same) segfaulted the shell, and with it
+  the bar, every time the board was opened. Boards, histories, imports, the
+  workspace state, the trash index and requests from `qs ipc` are now counted
+  before they are parsed, and refused as unreadable past 100,000 elements held
+  at once, well above anything this writes and well below the crash. A board
+  refused this way opens read-only and says so.
+
 ## 0.4.8 — 2026-10-10
 
 ### Fixed

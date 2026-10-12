@@ -34,6 +34,8 @@ an external service.
 | Text pasted into a field | Paste keys → `pasteInto` → helper → the field that asked | Qt's own paste reads everything a clipboard owner sends before any limit can count it, so no field may run it. The note editor, command list, find field and browser field hand Ctrl+V and Shift+Insert to the exchange, which reads through `cliptext`'s 1 MiB bound, refuses a paste that would not fit the field, and inserts only while that field is still taking text; failures go to the pane that asked. The line fields also take the middle button (primary selection); the pan surface takes it above the note editor. `security.js` refuses any text field without both; `tst_node.qml` and `tst_pan.qml` show each field no longer pastes for itself; `tst_fieldpaste.qml` runs the real exchange and helper against an owner that never stops sending, a late answer, a destroyed field and a clipboard with no text. |
 | Board JSON, titles, paths, errors | Models → Qt text | Explicit plain text for labels. Styled notes escape input first; status escapes variable messages. Source guards, hostile markup tests and Qt title test. |
 | Long note text | Board file, import, editor, CLI → text layout on the shell's thread | A note is at most 1 MiB: a board with a longer one opens read-only and empty, import and the CLI refuse one, the editor refuses to grow one. Unbroken runs wrap anywhere, and the editor holds a note only while open, so layout stays linear. Store, controller, node, exchange and CLI tests. |
+| Board size | Board file, import, outside writes, CLI → delegates on the shell's thread | At most 5,000 items, 20,000 connectors and 32 MiB. The helper refuses a larger file by its size before any of it is read (`check`, `snapshot`, `filesize`, exit 5) and refuses to commit one; a board over a count opens read-only and empty with the reason and is never written over. Adding, duplicating, connecting, import, timeline steps and the CLI stop at the limits. Store, controller, exchange, timeline, filesystem and CLI tests. |
+| JSON text | Board, history, import, state, trash index, IPC → `JSON.parse` on the shell's engines | Qt's parser holds each element of an open array on an unchecked stack and segfaults past about 557,000. Every shell-side parse goes through `parseJson`, which refuses more than 100,000 held at once; the history worker carries an identical copy. Store, history, controller and exchange tests; `contract.js` holds the copies equal; `security.js` refuses any other `JSON.parse` in shell code. |
 | Image names from boards | Local image URL, bundle/copy helper | Plain validated names, no URL or traversal; helper rejects symlink components. Logic/filesystem tests; manually inspect direct Qt loads. |
 | Notes and edits | Helper commit stdin → board/backup | Atomic replacement, revision check, lock, no content in diagnostics, private modes for newly committed files and the folders made for them. Filesystem, CLI and QML persistence tests. |
 | Shared boards and PNG exports | Staging → chosen external destination | Explicit user action, refuse app-data overwrite, keep unrelated files on failure. Filesystem/exchange tests. |
@@ -102,8 +104,12 @@ These are review obligations, not claims covered by a green test:
   file or a pipe. Do not put secrets in the shell command that builds the pipe.
   `inspect --full` and exports intentionally emit board contents; filenames and
   paths can appear in process arguments and error messages.
-- Local board/CLI reads are not uniformly byte-bounded. Import size checks and
-  bundle budgets can race concurrent file changes. Pixel checks cover PNG,
+- Local board/CLI reads are not uniformly byte-bounded. A board's size is
+  checked before it is read, but by a separate step: a file that grows between
+  that check and the read is read whole, up to what the shell can hold. The
+  same holds for import size checks and bundle budgets. The CLI reads a board
+  of any size (it runs in node, not the shell) and only refuses to write one
+  past 32 MiB. Pixel checks cover PNG,
   GIF and BMP headers, and a PNG carrying compressed text (zTXt, compressed
   iTXt) is refused; JPEG/WebP and aggregate decoded image memory require
   further resource-limit work. Metadata in other formats is not inflated by Qt,
@@ -230,5 +236,63 @@ the image data, compressed and malformed iTXt, a file cut off before IEND, and
 the names inside image data and inside a tEXt value; `tests/exchange.js` checks
 the three messages, and the static screen requires every way a picture lands
 in `images/` to run both the pixel and the text check first.
+
+While that was open, two more ways a board alone could stop or crash the
+shell were found and closed here.
+
+A board had no limit on how much it held. Every item is a delegate built on
+the shell's thread, with the bar and everything else waiting. Measured on
+Qt 6.12.0, offscreen, with the real board and the smallest item a file can
+describe:
+
+| Items | Board file | Time to open | Extra memory |
+|---|---|---|---|
+| 1,000 | 0.04 MB | 2.1 s | +138 MB |
+| 5,000 | 0.22 MB | 12.3 s | +675 MB |
+| 20,000 | 0.89 MB | 92 s | +2.7 GB |
+
+`docs/performance.md` benchmarks up to 3,000, where pan and zoom are already
+over the frame budget. A board now holds at most 5,000 items and 20,000
+connectors, and its file at most 32 MiB (the import limit it already had).
+One over a count opens read-only and empty with the reason, like a note over
+1 MiB, and is never written over; one over the size is refused by the helper
+before any of it is read, on opening and when it is written over from outside.
+Turning one away costs reading its rows: 9 ms for 5,001 items. Adding,
+duplicating, connecting, import and timeline steps stop at the limits, the CLI
+refuses to add past them and `validate` names them, and the helper refuses to
+commit a board larger than 32 MiB, so nothing here writes a board it would
+then refuse to open.
+
+Measuring that turned up the second. Qt's `JSON.parse` allocates a
+`ScopedValue` for each element of an array in the array's own scope, so every
+element of an array still being read stays on the engine's JavaScript stack,
+and scoped allocations do not check the stack's limit (4 MiB of 8-byte values,
+plus its margin, about 557,000). On Qt 6.12.0:
+
+| JSON | Size | Result |
+|---|---|---|
+| one array of 540,000 zeros | 1.08 MB | parsed in 70 ms |
+| one array of 560,000 zeros | 1.12 MB | segfault |
+| 300,000 inside 300,000 | 1.2 MB | segfault |
+| 300,000 beside 300,000 | 1.2 MB | parsed |
+| an object of 600,000 members | 7.1 MB | parsed |
+| 1,100 arrays deep | 2 KB | parse error, no crash |
+
+A board file of 1.12 MB took the shell down through `Store.readFile`, and a
+history would through the worker, which runs in the same process. `split`,
+`match`, `stringify`, `sort`, `slice` and `Object.keys` on two million elements
+were all fine; the plugin never spreads an array into a call.
+
+Every `JSON.parse` in shell code now goes through `parseJson` (`BoardStore.js`,
+with an identical copy in `BoardHistory.js` for the worker), which refuses text
+holding more than 100,000 elements at once on the way in. Anything this writes
+stays under 40,000 (a full history's 10,000 records, one holding 20,000
+connectors). A text with fewer commas and brackets than that is settled by
+counting them; anything else is walked, strings stepped over, which took
+208 ms for a 34 MiB board and a second for a full history (their parses took
+186 ms and 875 ms). The 1.12 MB board that crashed the committed `readFile`
+on Qt 6.12.0 now reads as unreadable in about 150 ms, and the real worker,
+included the way the shell includes it, answers it as it answers text that
+does not parse. A board refused this way opens read-only with the reason.
 
 The known limits above remain open hardening areas, not completed fixes.
