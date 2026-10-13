@@ -122,6 +122,14 @@ Item {
   }
 
   function readImport(path) {
+    try { exchange.readImportChecked(path) }
+    catch (e) {
+      exchange.sharing = null
+      exchange.fail("That board has invalid fields or is too large; nothing was imported", "board")
+    }
+  }
+
+  function readImportChecked(path) {
     // Read it here and now. An asynchronous reload on a view that is not
     // preloaded produced neither loaded nor loadFailed, so the import simply
     // stopped; a chosen file is small enough to read on the spot.
@@ -139,6 +147,7 @@ Item {
     // Held to what a board may be before anything of it lands in the library.
     var refused = Store.boardLimit(data)
     if (refused !== "") { exchange.fail("That board " + refused, "board"); return }
+    var clean = JSON.stringify(Store.importBoard(raw))
     var base = Store.baseName(path).replace(/(\.omarchyform)?\.json$/i, "")
     // A copy saved to share carries its pictures inside it. They have to be
     // written into this machine's own images folder, under names of its
@@ -158,9 +167,9 @@ Item {
     // Through the same rewrite even when nothing was carried: a board that
     // leaves its pictures out still names them, and those names would address
     // whatever this library happens to hold under them.
-    if (names.length === 0) { exchange.stageImport(Store.withSharedImages(raw, {}), base, false); return }
+    if (names.length === 0) { exchange.stageImport(Store.withSharedImages(clean, {}), base, false); return }
     busy = true
-    exchange.sharing = { raw: raw, base: base, images: carried, names: names, at: 0, landed: {} }
+    exchange.sharing = { raw: clean, base: base, images: carried, names: names, at: 0, landed: {} }
     exchange.nextSharedImage()
   }
 
@@ -169,17 +178,54 @@ Item {
   property var sharing: null
 
   function nextSharedImage() {
+    try { exchange.nextSharedImageChecked() }
+    catch (e) {
+      exchange.sharing = null
+      exchange.fail("That board has invalid fields or is too large; nothing was imported", "board")
+    }
+  }
+
+  function nextSharedImageChecked() {
     var job = exchange.sharing
     if (job.at >= job.names.length) {
-      exchange.sharing = null
-      exchange.createdNote = ""
-      exchange.stageImport(Store.withSharedImages(job.raw, job.landed), job.base, false)
+      // Each Node can retain a decode, including repeated and offscreen uses.
+      var data = Store.readFile(Store.withSharedImages(job.raw, job.landed))
+      var names = []
+      for (var i = 0; i < data.items.length; i++) {
+        var item = data.items[i]
+        if (item.kind === "image" && item.src !== "") names.push(item.src)
+      }
+      imageBudget.input = names.length ? names.join("\n") + "\n" : ""
+      imageBudget.command = exchange.ctl.fileCommand("imagebudget", [exchange.ctl.imagesDir])
+      imageBudget.stdinEnabled = true
+      imageBudget.running = true
       return
     }
     bytes.path = ""
     bytes.path = exchange.ctl.dataDir + "/.shared-" + Date.now() + "-" + job.at + ".b64"
     var body = job.images[job.names[job.at]]
     Qt.callLater(function () { bytes.setText(body) })
+  }
+
+  Process {
+    id: imageBudget
+    property string input: ""
+    onStarted: { imageBudget.write(imageBudget.input); imageBudget.stdinEnabled = false }
+    onExited: function (code) {
+      var job = exchange.sharing
+      exchange.sharing = null
+      if (code !== 0) {
+        exchange.fail(code === 7
+          ? "That board's pictures exceed 40 megapixels in total; nothing was imported"
+          : code === 12 ? "That board's repeated pictures exceed 32 MiB of image data; nothing was imported"
+          : "That board's picture dimensions could not be checked; nothing was imported", "board")
+        return
+      }
+      try {
+        exchange.createdNote = ""
+        exchange.stageImport(Store.withSharedImages(job.raw, job.landed), job.base, false)
+      } catch (e) { exchange.fail("That board has invalid fields or is too large; nothing was imported", "board") }
+    }
   }
 
   function sharedImageDone(name, refusal) {
@@ -216,7 +262,8 @@ Item {
     stdout: StdioCollector { id: unbundled; waitForEnd: true }
     onExited: function (code) {
       exchange.sharedImageDone(code === 0 && unbundled.text ? unbundled.text : "",
-        code === 9 ? "A picture in that board carries compressed text, which a board will not load; nothing was imported" : "")
+        code === 9 ? "A picture in that board carries compressed text, which a board will not load; nothing was imported"
+        : code === 11 ? "A picture in that board carries a compressed colour profile; nothing was imported" : "")
     }
   }
 
@@ -358,10 +405,24 @@ Item {
   // that asked, which need not be the one the keyboard is in by then.
   property bool pasteForField: false
   property var pasteField: null
+  property int pasteFieldSerial: 0
+  // Closing and reopening the same persistent control must not revive its
+  // pending paste, even if it is accepting input again when the helper ends.
+  Connections {
+    id: pasteWatch
+    target: exchange.pasteField
+    function onTakesPasteChanged() {
+      if (pasteWatch.target && !pasteWatch.target.takesPaste) exchange.pasteField = null
+    }
+    function onReadOnlyChanged() {
+      if (pasteWatch.target && pasteWatch.target.readOnly) exchange.pasteField = null
+    }
+  }
   function pasteInto(pane, field) {
-    if (clipboard.running || imageGrab.running || !field || field.readOnly) return false
+    if (clipboard.running || imageGrab.running || !field || !field.takesPaste || field.readOnly) return false
     pastePane = pane
     pasteBoard = pane.currentBoard
+    pasteFieldSerial = pane.docSerial
     pasteForField = true
     pasteField = field
     clipboard.running = true
@@ -370,8 +431,14 @@ Item {
 
   function fieldPasted(code, text) {
     var pane = exchange.pastePane, field = exchange.pasteField
-    exchange.pasteForField = false
+    var board = exchange.pasteBoard, serial = exchange.pasteFieldSerial
     exchange.pasteField = null
+    exchange.pasteForField = false
+    if (!pane || board !== pane.currentBoard || serial !== pane.docSerial) {
+      if (!pane) return
+      pane.report("Board changed; paste again", "paste")
+      return
+    }
     if (code === 5) { pane.report("Clipboard text exceeds 1 MiB", "paste"); return }
     if (code !== 0) { pane.report("Clipboard has no available text", "paste"); return }
     if (!field || !field.takesPaste || field.readOnly) {
@@ -568,6 +635,7 @@ Item {
       // 9: text inside the picture that would be inflated, in the shell, to
       // far more than the file's size. BoardFiles.sh says why.
       else if (code === 9) exchange.dropReport(done, "That picture carries compressed text, which a board will not load")
+      else if (code === 11) exchange.dropReport(done, "That picture carries a compressed colour profile, which a board will not load")
       else exchange.dropReport(done, "That is not an image this can read")
       exchange.nextDrop()
     }
@@ -586,6 +654,7 @@ Item {
       if (code === 6) { exchange.failed("A picture of that name is already there", "paste"); return }
       if (code === 7) { exchange.failed("That picture has too many pixels to put on a board", "paste"); return }
       if (code === 9) { exchange.failed("That picture carries compressed text, which a board will not load", "paste"); return }
+      if (code === 11) { exchange.failed("That picture carries a compressed colour profile, which a board will not load", "paste"); return }
       if (code !== 0 || !grabbed.text) { exchange.failed("Could not read the clipboard image", "paste"); return }
       exchange.pastePane.imagePasted(grabbed.text)
     }

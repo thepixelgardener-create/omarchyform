@@ -27,7 +27,7 @@ ShellRoot {
   // meant for a field must never turn into.
   component Pane: QtObject {
     property string currentBoard: "board.json"
-    // The private folder the clipboard is staged in: the test's own.
+    property int docSerial: 0
     readonly property string dataDir: test.dir
     property bool canEdit: true
     property var reports: []
@@ -52,25 +52,57 @@ ShellRoot {
     readonly property int pasteLimit: 1048576
     readonly property bool pasteLines: true
   }
-  TextInput {
+  LineField {
     id: line
     maximumLength: 12
-    property bool takesPaste: true
-    readonly property int pasteLimit: line.maximumLength
-    readonly property bool pasteLines: false
+    takesPaste: true
   }
   Component {
     id: doomed
-    TextInput {
-      property bool takesPaste: true
-      readonly property int pasteLimit: 100
-      readonly property bool pasteLines: false
+    LineField {
+      takesPaste: true
+      maximumLength: 100
     }
   }
 
   // Each step: how the stub answers, what to do, and what must be true once
   // the clipboard has answered.
   property var steps: [
+    { mode: "text", text: "closed field",
+      act: function () {
+        note.text = "still here"
+        var asked = exchange.pasteInto(asker, note)
+        note.takesPaste = false
+        note.takesPaste = true
+        return asked
+      },
+      then: function () {
+        test.check(note.text === "still here", "closing and reopening a field does not revive its old paste")
+        test.check(asker.reports.join() === "paste: Stopped typing before the clipboard answered; paste again", "the closed field reports rejection")
+      } },
+    { mode: "text", text: "closed and reopened",
+      act: function () {
+        note.text = "same path, new document"
+        var asked = exchange.pasteInto(asker, note)
+        asker.docSerial++
+        return asked
+      },
+      then: function () {
+        test.check(note.text === "same path, new document", "reopening the same path invalidates the pending paste")
+        test.check(asker.reports.join() === "paste: Board changed; paste again", "the requesting pane reports the replacement")
+      } },
+    { mode: "text", text: "wrong board",
+      act: function () {
+        note.text = "untouched"
+        var asked = exchange.pasteInto(asker, note)
+        asker.currentBoard = "other.json"
+        return asked
+      },
+      then: function () {
+        test.check(note.text === "untouched", "an active field on a new board rejects the old paste")
+        test.check(asker.reports.join() === "paste: Board changed; paste again", "the requesting pane reports the switch")
+        asker.currentBoard = "board.json"
+      } },
     { mode: "text", text: "there\nfriend",
       act: function () {
         note.text = "hello world"

@@ -1348,7 +1348,9 @@ function tests(S) {
     eq(back.items[1].src, "")
     eq(back.items[2].src, undefined, "an item that never had one is left alone")
     eq(back.links.length, 1, "the rest of the board is untouched")
-    eq(S.withSharedImages("not json", {}), "not json", "and nothing it cannot read is rewritten")
+    var rejected = false
+    try { S.withSharedImages("not json", {}) } catch (e) { rejected = true }
+    ok(rejected, "unreadable imports cannot reach publication")
   })
 
   test("a board that carries no pictures does not keep the names of them either", () => {
@@ -1369,7 +1371,26 @@ function tests(S) {
 
     // A board from before items had kinds keeps its notes under `notes`.
     const legacy = JSON.parse(S.withSharedImages(JSON.stringify({ notes: [{ src: "pic.png", text: "y" }] }), {}))
-    eq(legacy.notes, [{ src: "", text: "y" }], "and so does one from before there were items")
+    eq(legacy.notes[0].src, "", "and so does one from before there were items")
+    eq(legacy.notes[0].text, "y")
+  })
+
+  test("foreign boards serialize only a flat validated canvas", () => {
+    let extra = new Array(10000).fill(0)
+    for (let i = 0; i < 100; i++) extra = { a: extra }
+    const raw = JSON.stringify({ version: 5, items: [{ id: 1, text: "kept", extra }], links: [], extra })
+    const rewritten = S.withSharedImages(raw, {})
+    ok(rewritten.length < 200, "nested unknown fields never reach serialization")
+    eq(JSON.parse(rewritten).items[0].text, "kept")
+    for (const key of ["src", "x", "id", "text", "kind", "texture", "pinned"]) {
+      let rejected = false
+      try { S.withSharedImages(JSON.stringify({ version: 5, items: [{ [key]: { toString: null, valueOf: null } }], links: [] }), {}) }
+      catch (e) { rejected = true }
+      ok(rejected, "malformed " + key + " is refused without coercion")
+    }
+    eq(S.num({ toString: null, valueOf: null }, 9), 9, "local loads also avoid hostile numeric coercion")
+    const prototype = S.withSharedImages('{"version":5,"items":[{"kind":"image","src":"toString"}],"links":[]}', {})
+    eq(JSON.parse(prototype).items[0].src, "", "inherited object members are never image mappings")
   })
 
   test("external imports discard history that can name foreign library images", () => {

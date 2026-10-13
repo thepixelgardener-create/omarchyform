@@ -109,7 +109,8 @@ var PICTURE_REFUSALS = {
   "4": "is not a picture a board can show",
   "5": "is larger than 32 MB",
   "7": "has too many pixels",
-  "9": "carries compressed text"
+  "9": "carries compressed text",
+  "11": "carries a compressed colour profile"
 }
 function pictureAnswers(text) {
   var found = {}
@@ -1065,7 +1066,7 @@ function linkRows(links) {
 // actually draw: a string where a number belongs would otherwise become NaN
 // geometry and be written straight back out.
 function num(value, fallback) {
-  var n = typeof value === "number" ? value : parseFloat(value)
+  var n = typeof value === "number" ? value : typeof value === "string" ? parseFloat(value) : NaN
   return isFinite(n) ? n : fallback
 }
 
@@ -1639,22 +1640,73 @@ function sharedImages(raw) {
 //
 // Every import comes through here, including a board that carries no pictures
 // at all: leaving the `images` key out must not be a way to keep the names.
-function withSharedImages(raw, landed) {
-  var parsed
-  try { parsed = parseJson(raw) } catch (e) { return raw }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return raw
-  delete parsed.images
-  // Foreign replay can contain deleted images with names from another library.
-  // Import the current board as a new baseline, never its local edit history.
-  delete parsed.history
-  var rows = Array.isArray(parsed.items) ? parsed.items
-    : (Array.isArray(parsed.notes) ? parsed.notes : [])
-  for (var i = 0; i < rows.length; i++) {
-    if (!rows[i] || typeof rows[i] !== "object" || Array.isArray(rows[i])) continue
-    if (rows[i].src === undefined || rows[i].src === "") continue
-    rows[i].src = landed[rows[i].src] === undefined ? "" : landed[rows[i].src]
+function importBoard(raw) {
+  var parsed = parseJson(raw), data = boardOf(parsed)
+  if (!data || boardLimit(data) !== "") throw new Error("Unsupported board")
+  // Never reserialize arbitrary foreign trees: pretty-printing deeply nested
+  // extra fields can amplify a small input into gigabytes on the shell thread.
+  // Only the flat schema the canvas consumes survives, with primitive types.
+  function field(row, out, key, numeric) {
+    var value = row[key]
+    if (value === undefined) return
+    if (numeric) {
+      if (typeof value !== "number" && typeof value !== "string") throw new Error("Invalid board field")
+      out[key] = num(value, 0)
+    } else {
+      if (typeof value !== "string") throw new Error("Invalid board field")
+      out[key] = value
+    }
   }
-  return JSON.stringify(parsed, null, 2) + "\n"
+  var clean = { kind: FORMAT_MARKER, version: parsed.version === undefined ? 1 : parsed.version }
+  field(parsed, clean, "nextId", true)
+  var rows = []
+  for (var i = 0; i < data.items.length; i++) {
+    var row = data.items[i], out = {}
+    var numeric = ["id", "x", "y", "w", "h"]
+    var strings = ["kind", "text", "tint", "color", "texture", "src"]
+    for (var j = 0; j < numeric.length; j++) field(row, out, numeric[j], true)
+    for (var k = 0; k < strings.length; k++) field(row, out, strings[k], false)
+    if (row.pinned !== undefined) {
+      if (typeof row.pinned !== "boolean") throw new Error("Invalid board field")
+      out.pinned = row.pinned
+    }
+    rows.push(out)
+  }
+  if (Array.isArray(parsed.items)) clean.items = rows
+  else clean.notes = rows
+  clean.links = []
+  for (var l = 0; l < data.links.length; l++) {
+    var link = {}
+    field(data.links[l], link, "from", true)
+    field(data.links[l], link, "to", true)
+    clean.links.push(link)
+  }
+  return clean
+}
+
+function withSharedImages(raw, landed) {
+  // importBoard also removes foreign history, including deleted image names.
+  var parsed = importBoard(raw)
+  var rows = parsed.items || parsed.notes
+  for (var i = 0; i < rows.length; i++) {
+    if (rows[i].src === undefined || rows[i].src === "") continue
+    var name = rows[i].src
+    rows[i].src = Object.prototype.hasOwnProperty.call(landed, name) && imageIsValid(landed[name]) ? landed[name] : ""
+  }
+  var text = JSON.stringify(parsed) + "\n"
+  // The normalized tree has bounded depth, so serialization itself cannot
+  // amplify it. Still enforce the on-disk UTF-8 limit before staging.
+  var bytes = 0
+  for (var at = 0; at < text.length; at++) {
+    var c = text.charCodeAt(at)
+    if (c < 128) bytes++
+    else if (c < 2048) bytes += 2
+    else if (c >= 0xd800 && c <= 0xdbff && at + 1 < text.length
+             && text.charCodeAt(at + 1) >= 0xdc00 && text.charCodeAt(at + 1) <= 0xdfff) { bytes += 4; at++ }
+    else bytes += 3
+    if (bytes > MAX_BOARD_BYTES) throw new Error("Imported board is too large")
+  }
+  return text
 }
 
 // ------------------------------------------------------------------- library

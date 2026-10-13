@@ -45,20 +45,67 @@ board_fits() {
 # strip.
 max_image_pixels=40000000
 max_image_side=20000
+# Preserve the single-picture allowance, but share it across an import's
+# image items. Encoded byte size and viewport visibility are not substitutes.
+max_board_image_pixels=40000000
+# Each Image also retains file metadata. Count encoded bytes once per item
+# rather than once per distinct file; PNG compressed metadata is refused below.
+max_board_image_bytes=33554432
 
 # The dimensions, read out of the header. Not out of `file`'s description: that
 # is prose, it differs per format, and a JPEG's mentions "density 1x1" before it
 # mentions the size. PNG, GIF and BMP each put them at a fixed offset, which is
 # exact and needs nothing installed.
 #
-# JPEG and WebP keep theirs behind a walk of the file, so those are left to the
-# byte limit and to what the reader does with them — Qt's JPEG reader does scale
-# while decoding, which is the one case where asking for less actually gets it.
-# Answers nothing when it cannot tell, and the caller lets those through.
+# JPEG needs a marker walk; WebP puts the canvas in its first image header.
+# No raster or compressed metadata is decoded here. Unknown/truncated headers
+# answer nothing; the aggregate import check refuses them.
 image_pixels() {
   local path=$1 kind=$2
   local -a b
   case "$kind" in
+    jpg)
+      # Walk length-delimited segments to SOF, never into entropy-coded data.
+      # Consume the bounded file even after finding SOF to avoid SIGPIPE under
+      # pipefail. Only a handful of header bytes are retained by awk.
+      od -An -v -tu1 -w64 -- "$path" | awk '
+        BEGIN { state = "ff" }
+        { for (i = 1; i <= NF; i++) {
+          b = $i + 0
+          if (state == "done" || state == "bad") continue
+          if (skip > 0) { skip--; continue }
+          if (state == "ff") { state = b == 255 ? "marker" : "bad" }
+          else if (state == "marker") {
+            if (b == 255) continue
+            if (b == 216 || b == 1 || (b >= 208 && b <= 215)) { state = "ff"; continue }
+            if (b == 0 || b == 217 || b == 218) { state = "bad"; continue }
+            sof = b >= 192 && b <= 207 && b != 196 && b != 200 && b != 204
+            state = "length1"
+          } else if (state == "length1") { size = b * 256; state = "length2" }
+          else if (state == "length2") {
+            size += b
+            if (size < 2 || (sof && size < 8)) { state = "bad"; continue }
+            if (sof) { got = 0; state = "frame" }
+            else { skip = size - 2; state = "ff" }
+          } else if (state == "frame") {
+            h[got++] = b
+            if (got == 5) { print h[3] * 256 + h[4], h[1] * 256 + h[2]; state = "done" }
+          }
+        } }'
+      ;;
+    webp)
+      read -ra b < <(od -An -v -tu1 -N30 -- "$path" | tr '\n' ' ') || true
+      (( ${#b[@]} >= 25 )) || return 1
+      # VP8X extended canvas, VP8L lossless, or VP8 lossy key frame.
+      if (( b[12] == 86 && b[13] == 80 && b[14] == 56 && b[15] == 88 && ${#b[@]} == 30 )); then
+        printf '%s %s' $((1+b[24]+(b[25]<<8)+(b[26]<<16))) $((1+b[27]+(b[28]<<8)+(b[29]<<16)))
+      elif (( b[12] == 86 && b[13] == 80 && b[14] == 56 && b[15] == 76 && b[20] == 47 )); then
+        printf '%s %s' $((1+b[21]+((b[22]&63)<<8))) $((1+(b[22]>>6)+(b[23]<<2)+((b[24]&15)<<10)))
+      elif (( ${#b[@]} == 30 && b[12] == 86 && b[13] == 80 && b[14] == 56 && b[15] == 32 && (b[20]&1) == 0 && b[23] == 157 && b[24] == 1 && b[25] == 42 )); then
+        printf '%s %s' $((b[26]+((b[27]&63)<<8))) $((b[28]+((b[29]&63)<<8)))
+      else return 1
+      fi
+      ;;
     png)
       # IHDR is the first chunk: width then height, big-endian, at offset 16.
       read -ra b < <(od -An -tu1 -j16 -N8 -- "$path" | tr -s ' ')
@@ -101,9 +148,11 @@ refuse_huge_pictures() {
 # inflates each to nearly 8 MB and keeps up to a thousand of them, before and
 # after the image data: a PNG of a few megabytes, two pixels square, asks the
 # shell for gigabytes before a pixel is decoded. Plain tEXt and uncompressed
-# iTXt cost no more than their bytes on disk, so those stay.
+# iTXt remain bounded by encoded bytes, counted per item during import. iCCP
+# colour profiles are compressed too: refuse them (exit 11), rather than let
+# tiny encoded profiles bypass that accounting on every repeated image node.
 #
-# A file without either name anywhere in it cannot hold either chunk, which is
+# A file without any of these names cannot hold one of these chunks, which is
 # every ordinary picture, and that is all it costs. One with the name is walked
 # chunk by chunk, so the same four bytes inside the image data are not taken
 # for a chunk. The walk is one pass over the bytes, so what it costs is set by
@@ -113,7 +162,7 @@ refuse_huge_pictures() {
 refuse_compressed_text() {
   local path=$1 kind=$2 found=0 verdict
   [[ $kind == png ]] || return 0
-  LC_ALL=C grep -q -a -F -e zTXt -e iTXt -- "$path" || found=$?
+  LC_ALL=C grep -q -a -F -e zTXt -e iTXt -e iCCP -- "$path" || found=$?
   (( found != 1 )) || return 0
   (( found == 0 )) || exit 9
   # After the signature: a 4-byte length, a 4-byte name, the data, a 4-byte CRC.
@@ -136,6 +185,7 @@ refuse_compressed_text() {
           size = ((h[0] * 256 + h[1]) * 256 + h[2]) * 256 + h[3]
           name = h[4] " " h[5] " " h[6] " " h[7]
           if (name == "122 84 88 116") decide("compressed")      # zTXt
+          if (name == "105 67 67 80") decide("profile")           # iCCP
           if (name == "73 69 78 68") decide("clean")             # IEND
           if (name == "105 84 88 116") { state = "keyword"; left = size; keyword = 0 }  # iTXt
           else { state = "skip"; skip = size + 4 }
@@ -154,6 +204,7 @@ refuse_compressed_text() {
     }
     # Out of bytes before IEND: cut short, or cut off by the timeout.
     END { if (!decided) print "unfinished" }') || true
+  [[ $verdict != profile ]] || exit 11
   [[ $verdict == clean ]] || exit 9
 }
 
@@ -451,6 +502,33 @@ case "$operation" in
     # refused without being loaded. Nothing is a size of its own: a file that
     # is not there answers 0, and the caller says so.
     if [[ -f $1 ]]; then printf '%s' "$(stat -Lc '%s' -- "$1")"; else printf 0; fi
+    ;;
+  imagebudget)
+    # A shared board must fit as a whole before it is published or any Node
+    # can load it. Names arrive on stdin once per image ITEM: cache:false means
+    # repeated references can retain repeated decodes. Header results are
+    # cached only for this check, never the accounting. Foreign history is
+    # discarded by the caller before building this list.
+    images_root=$1 total=0 total_bytes=0
+    declare -A costs=() sizes=()
+    while IFS= read -r name || [[ -n $name ]]; do
+      plain_name "$name" && confined "$images_root" "$name" || exit 4
+      if [[ -z ${costs[$name]+set} ]]; then
+        [[ -f $images_root/$name ]] || exit 4
+        sizes[$name]=$(stat -Lc %s -- "$images_root/$name") || exit 4
+        (( sizes[$name] > 0 && sizes[$name] <= max_image_bytes )) || exit 5
+        kind=$(image_extension "$images_root/$name") || exit 4
+        dimensions=$(image_pixels "$images_root/$name" "$kind") || exit 10
+        read -r width height <<< "$dimensions"
+        [[ $width =~ ^[0-9]+$ && $height =~ ^[0-9]+$ ]] || exit 10
+        (( width > 0 && height > 0 && width <= max_image_side && height <= max_image_side )) || exit 7
+        costs[$name]=$((width * height))
+      fi
+      total=$((total + costs[$name]))
+      (( total <= max_board_image_pixels )) || exit 7
+      total_bytes=$((total_bytes + sizes[$name]))
+      (( total_bytes <= max_board_image_bytes )) || exit 12
+    done
     ;;
   checkimages)
     # Pictures already in the folder, asked about before Qt is asked to draw

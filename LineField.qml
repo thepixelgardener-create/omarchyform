@@ -31,8 +31,39 @@ TextEdit {
   // What BoardExchange.pasteInto reads. The owner says when a paste may land;
   // the limit is the one TextInput's maximumLength gave these fields.
   property bool takesPaste: false
-  readonly property int pasteLimit: 32767
+  property int maximumLength: 32767
+  readonly property int pasteLimit: Math.max(0, maximumLength)
   readonly property bool pasteLines: false
+
+  // Key filtering alone misses input-method commits and programmatic edits.
+  // Keep the text on either side of an insertion when it exceeds the limit.
+  property string acceptedText: ""
+  function boundedText(value, limit) {
+    var end = Math.max(0, Math.min(limit, value.length))
+    if (end > 0 && end < value.length && /[\uD800-\uDBFF]/.test(value[end - 1])
+        && /[\uDC00-\uDFFF]/.test(value[end])) end--
+    return value.slice(0, end)
+  }
+  onTextChanged: {
+    var next = field.text.replace(/\r\n|[\r\n\t\u2028\u2029]/g, " ")
+    var at = field.cursorPosition
+    if (next.length > field.pasteLimit) {
+      var old = field.acceptedText, from = 0, end = old.length, tail = next.length
+      while (from < end && from < tail && old[from] === next[from]) from++
+      while (end > from && tail > from && old[end - 1] === next[tail - 1]) { end--; tail-- }
+      var room = Math.max(0, field.pasteLimit - old.length + end - from)
+      var inserted = field.boundedText(next.slice(from, tail), room)
+      next = field.boundedText(old.slice(0, from) + inserted + old.slice(end), field.pasteLimit)
+      at = Math.min(at, from + inserted.length)
+    }
+    field.acceptedText = next
+    if (field.text !== next) {
+      field.text = next
+      field.cursorPosition = Math.min(at, next.length)
+    }
+  }
+  onMaximumLengthChanged: if (field.text.length > field.pasteLimit)
+    field.text = field.boundedText(field.text, field.pasteLimit)
 
   // Every key goes to the owner first. A paste is asked for rather than taken,
   // and whatever would break the line goes nowhere.

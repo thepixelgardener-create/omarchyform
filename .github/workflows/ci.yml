@@ -69,3 +69,6 @@ jobs:
 
       - name: Reject external drag payloads before reading
         run: npm run test:drop
+
+      - name: Clipboard ownership and input-method field limits
+        run: npm run test:clipboard

@@ -326,6 +326,12 @@ the pictures it carried into your own `images/` under names it picks, so a copy
 you were sent can never end up addressing a picture of yours that happens to
 share a name.
 
+An imported copy may contain at most 40 megapixels and 32 MiB of image data
+across its image items.
+Using the same picture several times counts each use. A copy over that limit,
+or with picture dimensions that cannot be checked, is refused before it opens;
+the original file stays untouched.
+
 A copy either carries everything it names or is not written at all. If a picture
 is missing from your library, or the pictures come to more than 16 MB, the copy
 is refused with the reason and the file you were saving over is untouched.
@@ -351,9 +357,12 @@ own proportions; failing that, it turns the text into a note, however many lines
 it is.
 
 A picture is refused, with the reason, if it is over 32 MB, more than 20,000
-pixels on a side or 40 million in all, or a PNG carrying compressed text,
+pixels on a side or 40 million in all, or a PNG carrying compressed text or
+a compressed colour profile,
 which Qt would unpack whole however small the picture; the plain text a
-screenshot tool writes is fine. That holds whether it is pasted or carried in
+screenshot tool writes is fine within the limits above. For a refused colour
+profile, export the picture without its embedded profile first.
+That holds whether it is pasted or carried in
 a board you import. A picture that reaches `images/` some other way, copied or
 synced in, is held to the same before it is first drawn: until then it shows
 as loading, and one that fails shows *picture not shown* and why in its place.

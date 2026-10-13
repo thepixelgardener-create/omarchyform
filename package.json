@@ -20,7 +20,7 @@
     "preview": "node tests/preview.js",
     "test:security": "node tests/security.js && node tests/filesystem.js && node tests/desktop.js && node tests/cli.js",
     "review:marketplace": "node tests/marketplace.js",
-    "test:security:full": "npm run test:security && npm run test:qml && npm run test:ui",
+    "test:security:full": "npm run test:security && npm run test:qml && npm run test:ui && npm run test:clipboard && npm run test:drop",
     "bench:history": "node tests/history-bench.js"
   }
 }

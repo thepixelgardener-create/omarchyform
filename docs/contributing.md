@@ -31,6 +31,10 @@ the CLI to create boards and is not a contribution guide.
   library and discard foreign history, which may reference deleted images with
   names that collide with unrelated local files. Local loads and conflict copies
   preserve their own history.
+- External imports serialize only the flat, primitive canvas schema through
+  `importBoard`; discard unknown fields before serialization and enforce the
+  resulting UTF-8 byte limit. Malformed fields must release exchange ownership
+  and busy state so another import can succeed.
 - Treat nested JSON history as untrusted, including baseline items/links and
   patch entries. CLI failures must remain JSON; validation reports an unplayable
   history, and rejected edits must leave both files and backups unchanged.
@@ -43,9 +47,12 @@ the CLI to create boards and is not a contribution guide.
   `TextInput` reads the clipboard's whole text on every clipboard change while
   it is editable. Keep `test:clipboard` at zero content reads with every field
   open, and run it on Qt 6.12.0 as `docs/security-review.md` describes.
+- Keep one-line limits on typing and IME commits, not only paste. A delayed
+  field paste belongs to its pane, board path and document generation; closing
+  the field invalidates it even when that same field is reopened before reply.
 - Every picture that lands in `images/` goes through `BoardFiles.sh`, which
   holds it to its bytes, its pixels (`refuse_huge_pictures`) and, for a PNG,
-  the compressed text Qt would inflate (`refuse_compressed_text`). A new way in
+  compressed text and colour profiles (`refuse_compressed_text`). A new way in
   calls all three on the bytes that land.
 - Nothing private goes on a command line: another account can read it in
   `/proc`. Send contents on stdin or in a staged file in a private folder; a
@@ -60,6 +67,13 @@ the CLI to create boards and is not a contribution guide.
 - A picture is drawn only through `imagePath`, which waits for `checkimages`
   to clear the file (`pictureState`). Never build a URL into `images/`
   anywhere else; `tests/security.js` refuses one.
+- A foreign board with embedded images must pass `imagebudget` before
+  publication. Count every live image item, including repeated file names and
+  offscreen items; unique-file or encoded-byte totals do not bound retained
+  decodes. Bound both aggregate pixels (40 MP) and per-item file bytes (32 MiB),
+  since each instance can retain metadata. Unknown dimensions fail closed.
+  Keep the real QML import regression
+  covering refusal, the exact boundary and a successful import after failure.
 - Parse JSON in shell code with `parseJson`, never `JSON.parse`: Qt's parser
   segfaults on a 1.1 MB array (`MAX_JSON_OPEN` in `BoardStore.js`), and
   `tests/security.js` refuses any other call. Change the guard in

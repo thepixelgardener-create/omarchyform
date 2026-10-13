@@ -8,6 +8,7 @@
 #include <QClipboard>
 #include <QElapsedTimer>
 #include <QGuiApplication>
+#include <QInputMethodEvent>
 #include <QMimeData>
 #include <QQuickItem>
 #include <QQuickView>
@@ -37,7 +38,15 @@ static void settle(int ms)
 static void change(QClipboard::Mode mode)
 {
     auto *data = new CountingMimeData;
-    data->setText(QStringLiteral("clipboard text that no field may read"));
+    static int offer = 0;
+    switch (offer++ % 6) {
+    case 0: data->setText(QStringLiteral("clipboard text that no field may read")); break;
+    case 1: data->setData("text/plain;charset=utf-8", QByteArray("finite UTF-8 text")); break;
+    case 2: data->setUrls({QUrl("https://example.invalid/finite")}); break;
+    case 3: data->setHtml("<b>finite HTML</b>"); break;
+    case 4: data->setData("image/png", QByteArray("finite invalid image fixture")); break;
+    default: break;
+    }
     QGuiApplication::clipboard()->setMimeData(data, mode);
 }
 
@@ -48,6 +57,7 @@ int main(int argc, char **argv)
         std::fprintf(stderr, "usage: clipboard_watch scene.qml\n");
         return 2;
     }
+    change(QClipboard::Clipboard);
     QQuickView view;
     view.setSource(QUrl::fromLocalFile(QString::fromLocal8Bit(argv[1])));
     if (view.status() != QQuickView::Ready) {
@@ -57,31 +67,67 @@ int main(int argc, char **argv)
     }
     view.show();
     settle(300);
+    for (const auto *name : {"browser-field", "find-field", "command-query"}) {
+        if (view.rootObject()->findChildren<QObject *>(QString::fromLatin1(name)).size() != 2) {
+            std::fprintf(stderr, "FAIL: missing production fields: %s\n", name);
+            return 2;
+        }
+    }
     std::printf("Qt %s\n", qVersion());
 
     QObject *scene = view.rootObject();
     QClipboard *clipboard = QGuiApplication::clipboard();
-    for (int step = 0;; ++step) {
+    for (int step = 0; step < 13; ++step) {
         QVariant name;
-        QMetaObject::invokeMethod(scene, "prepare", Q_RETURN_ARG(QVariant, name), Q_ARG(QVariant, step));
-        if (name.toString().isEmpty())
-            break;
+        if (!QMetaObject::invokeMethod(scene, "prepare", Q_RETURN_ARG(QVariant, name), Q_ARG(QVariant, step))) return 2;
+        if (name.toString().isEmpty()) return 2;
         settle(100);
-        reads = 0;
-        for (int i = 0; i < 3; ++i) {
+        for (int i = 0; i < 6; ++i) {
             change(QClipboard::Clipboard);
             if (clipboard->supportsSelection())
                 change(QClipboard::Selection);
             settle(30);
         }
         if (reads != 0) {
-            std::fprintf(stderr, "FAIL: %s: %d requests for the clipboard's contents on 3 changes\n",
+            std::fprintf(stderr, "FAIL: %s: %d requests for the clipboard's contents during construction/transitions/offer changes\n",
                          qPrintable(name.toString()), reads);
             return 1;
         }
         std::printf("ok   %s\n", qPrintable(name.toString()));
     }
 
+    view.setSource(QUrl());
+    settle(100);
+    if (reads != 0) return 1;
+    if (argc > 2) {
+        view.setSource(QUrl::fromLocalFile(QString::fromLocal8Bit(argv[2])));
+        if (view.status() != QQuickView::Ready) return 2;
+        settle(50);
+        auto *field = view.rootObject()->findChild<QQuickItem *>("ime-field");
+        if (!field) return 2;
+        field->forceActiveFocus();
+        field->setProperty("text", "ab");
+        field->setProperty("cursorPosition", 1);
+        QInputMethodEvent commit;
+        commit.setCommitString("X\nY");
+        QCoreApplication::sendEvent(field, &commit);
+        if (field->property("text").toString() != "aX Yb") {
+            std::fprintf(stderr, "FAIL: IME commit was not normalized\n");
+            return 1;
+        }
+        field->setProperty("cursorPosition", 2);
+        QInputMethodEvent overflow;
+        overflow.setCommitString("overflow");
+        QCoreApplication::sendEvent(field, &overflow);
+        if (field->property("text").toString() != "aX Yb" || reads != 0) {
+            std::fprintf(stderr, "FAIL: IME overflow changed existing text or read clipboard\n");
+            return 1;
+        }
+        std::printf("ok   synthetic IME normalization and length\n");
+    }
+    auto *positive = new CountingMimeData;
+    positive->setText("positive control");
+    clipboard->setMimeData(positive);
     // A count of zero means something only if a read would have shown in it.
     reads = 0;
     const QString text = clipboard->text();

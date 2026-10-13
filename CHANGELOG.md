@@ -3,6 +3,26 @@
 Notable changes, newest first. Board file versions are noted where they moved,
 since older boards are migrated on load rather than rejected.
 
+## Unreleased
+
+### Fixed
+
+- Shared-board imports are limited to 40 megapixels across all image items,
+  counting repeated references separately. A board over the limit is refused
+  before publication, even when its compressed images fit the byte budget.
+  JPEG and WebP dimensions are now checked alongside PNG, GIF and BMP;
+  an import whose image dimensions cannot be read is refused.
+- Imported image items also share a 32 MiB file-data budget, counting each
+  reference separately to bound repeated metadata. PNGs with compressed
+  colour profiles are refused alongside compressed text on landing and load.
+- Foreign boards keep only known, primitive canvas fields and are written
+  compactly. Nested extra fields cannot amplify during import; malformed fields
+  fail cleanly and leave imports ready for another attempt.
+- One-line fields bound typing and input-method commits as well as paste,
+  normalize line separators, and preserve complete Unicode characters.
+  Delayed field pastes cannot land after switching or reopening a board or
+  closing and reopening the field.
+
 ## 0.4.10 — 2026-10-12
 
 ### Changed
