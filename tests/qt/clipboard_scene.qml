@@ -53,6 +53,8 @@ Item {
 
   // Opens one thing and says what it is; an empty answer ends the run.
   function prepare(step) {
+    scene.visible = true
+    scene.enabled = true
     scene.closeAll()
     if (step === 0) { ws.layout = "single"; ws.activePane = left; return "one pane, nothing open" }
     if (step === 1) { left.finding = true; return "find" }
@@ -80,6 +82,12 @@ Item {
       left.paletteVisible = true
       return "two panes, find in one and the command list in the other"
     }
+    if (step === 7) { ws.layout = "stacked"; left.finding = true; right.paletteVisible = true; return "stacked" }
+    if (step === 8) { scene.visible = false; left.finding = true; return "hidden scene with open find" }
+    if (step === 9) { scene.enabled = false; left.paletteVisible = true; return "disabled scene with commands" }
+    if (step === 10) { ws.layout = "single"; ws.activePane = left; right.finding = true; return "hidden inactive pane with find" }
+    if (step === 11) { left.library.showing = true; left.library.searching = true; return "reopened search" }
+    if (step === 12) { return "closed all fields" }
     return ""
   }
 }

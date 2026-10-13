@@ -392,6 +392,66 @@ try {
   assert.equal(drop('drop-big','big.png').status,0,'sixteen megapixels is a picture, not a bomb')
   assert.equal(fs.existsSync(path.join(images,'drop-big.png')),true)
 
+  // The decoded cost is a board-wide limit, even when each compact image is
+  // acceptable on its own. Count repeated nodes too, regardless of visibility.
+  {
+    const { solidPng } = require('./image-fixtures')
+    const budget = names => spawnSync('bash', [path.join(__dirname, '../BoardFiles.sh'), 'imagebudget', images],
+      { encoding: 'utf8', input: names.join('\n') + (names.length ? '\n' : '') })
+    const large = solidPng(4000, 5000)
+    assert.ok(large.length * 3 < 16777216, 'three real 20 MP PNGs fit the encoded budget')
+    for (const name of ['budget-a', 'budget-b', 'budget-c'])
+      assert.equal(unbundle(name, large.toString('base64')).status, 0, 'each lands individually')
+    fs.writeFileSync(path.join(images, 'one-pixel.png'), solidPng(1, 1))
+    assert.equal(budget(['budget-a.png', 'budget-b.png', 'budget-c.png']).status, 7)
+    assert.equal(budget(['budget-a.png', 'budget-a.png', 'budget-a.png']).status, 7, 'one file reused')
+    assert.equal(budget(['budget-a.png', 'budget-b.png', 'one-pixel.png']).status, 7, 'one pixel over')
+    assert.equal(budget(['budget-a.png', 'budget-b.png']).status, 0, 'exactly 40 MP')
+    assert.equal(budget(['budget-a.png', 'budget-a.png']).status, 0, 'same boundary with duplicates')
+    assert.equal(budget(['one-pixel.png']).status, 0, 'budget resets for the next import')
+    assert.equal(budget([]).status, 0, 'no images')
+    const { withChunk } = require('./image-fixtures')
+    const metadata = withChunk('tEXt', Buffer.concat([Buffer.from('Comment\0'), Buffer.alloc(65536, 65)]))
+    assert.equal(unbundle('metadata', metadata.toString('base64')).status, 0, 'bounded plain metadata is accepted')
+    const fits = Math.floor(33554432 / metadata.length)
+    assert.equal(budget(Array(fits).fill('metadata.png')).status, 0, 'metadata fits the per-item byte budget')
+    assert.equal(budget(Array(fits + 1).fill('metadata.png')).status, 12, 'repeated metadata cannot cost only pixels')
+    for (const name of ['gone.png', '../one-pixel.png', 'one-pixel.png\t0'])
+      assert.notEqual(budget([name]).status, 0, 'fail closed: ' + name)
+    fs.symlinkSync(path.join(images, 'one-pixel.png'), path.join(images, 'budget-link.png'))
+    assert.notEqual(budget(['budget-link.png']).status, 0, 'no links')
+
+    // Dimensions for the other accepted formats, without a raster decode.
+    const gif = Buffer.from('474946383961a00f8813800000000000ffffff2c00000000010001000002024401003b', 'hex')
+    const bitmap = Buffer.alloc(70)
+    bitmap.write('BM'); bitmap.writeUInt32LE(70, 2); bitmap.writeUInt32LE(54, 10)
+    bitmap.writeUInt32LE(40, 14); bitmap.writeInt32LE(4000, 18); bitmap.writeInt32LE(-5000, 22)
+    bitmap.writeUInt16LE(1, 26); bitmap.writeUInt16LE(24, 28)
+    fs.writeFileSync(path.join(images, 'budget.gif'), gif)
+    fs.writeFileSync(path.join(images, 'budget.bmp'), bitmap)
+    assert.equal(budget(['budget.gif', 'budget.bmp']).status, 0, 'mixed GIF and top-down BMP at the limit')
+    assert.equal(budget(['budget.gif', 'budget.bmp', 'one-pixel.png']).status, 7)
+    // The JPEG includes a length-delimited APP segment before its SOF.
+    const jpeg = Buffer.from('ffd8ffe000104a46494600010100000100010000ffc000110813880fa003011100021100031100ffd9', 'hex')
+    fs.writeFileSync(path.join(images, 'budget.jpg'), jpeg)
+    assert.equal(budget(['budget.jpg', 'budget.jpg']).status, 0, 'JPEG at the limit')
+    assert.equal(budget(['budget.jpg', 'budget.jpg', 'one-pixel.png']).status, 7)
+    for (const [kind, payload] of [
+      ['VP8X', Buffer.from([0,0,0,0,159,15,0,135,19,0])],
+      ['VP8L', Buffer.from([47,159,207,225,4])],
+      ['VP8 ', Buffer.from([0,0,0,157,1,42,160,15,136,19])]
+    ]) {
+      const riff = Buffer.alloc(20)
+      riff.write('RIFF'); riff.writeUInt32LE(12 + payload.length, 4); riff.write('WEBP', 8)
+      riff.write(kind, 12); riff.writeUInt32LE(payload.length, 16)
+      fs.writeFileSync(path.join(images, 'budget.webp'), Buffer.concat([riff, payload]))
+      assert.equal(budget(['budget.webp', 'budget.webp']).status, 0, kind + ' at the limit')
+      assert.equal(budget(['budget.webp', 'budget.webp', 'one-pixel.png']).status, 7, kind + ' dimensions counted')
+    }
+    fs.writeFileSync(path.join(images, 'cut.jpg'), jpeg.subarray(0, 24))
+    assert.notEqual(budget(['cut.jpg']).status, 0, 'truncated dimensions never cost zero')
+  }
+
   // Text a PNG asks its reader to inflate, which neither the bytes nor the
   // pixels say anything about. Qt keeps every zTXt and compressed iTXt chunk,
   // inflated, and libpng allows nearly 8 MB a chunk and a thousand chunks, so a
@@ -413,6 +473,7 @@ try {
   const text=(name,body)=>pngChunk(name,Buffer.from(body,'latin1'))
   const inflating=require('zlib').deflateSync(Buffer.alloc(1000000,65))
   const zTXt=pngChunk('zTXt',Buffer.concat([Buffer.from('Comment\0\0','latin1'),inflating]))
+  const iCCP=pngChunk('iCCP',Buffer.concat([Buffer.from('Profile\0\0','latin1'),inflating]))
   const iTXt=compressed=>pngChunk('iTXt',Buffer.concat([Buffer.from('XML:com.adobe.xmp\0'+(compressed?'\x01':'\0')+'\0\0\0','latin1'),
     compressed?inflating:Buffer.from('<x/>')]))
   const textCases=[
@@ -423,7 +484,8 @@ try {
     ['cut off before IEND, the name in it', pngWith({before:[text('tEXt','note\0zTXt')],end:false}), 9],
     ['plain tEXt and uncompressed iTXt', pngWith({before:[text('tEXt','Software\0grim'),iTXt(false)]}), 0],
     ['the names inside the image data', pngWith({pixels:Buffer.from('\0zTXtiTXt\0zTXtiTXt','latin1'),level:0}), 0],
-    ['the names inside a tEXt value', pngWith({before:[text('tEXt','note\0about zTXt and iTXt')]}), 0]
+    ['the names inside a tEXt value', pngWith({before:[text('tEXt','note\0about zTXt and iTXt and iCCP')]}), 0],
+    ['compressed colour profile', pngWith({before:[iCCP]}), 11]
   ]
   textCases.forEach(([what,bytes,status],i)=>{
     const file=path.join(source,`text-${i}.png`)
@@ -518,7 +580,7 @@ try {
   const names=[...textCases.map((c,i)=>`text-${i}.png`),'huge.png','words.png','renamed.jpg','empty.png','heavy.png','linked.png',
     'gone.png','../text-5.png','.hidden.png']
   const shelved=checkimages(names.map(n=>n+'\t\n').join(''))
-  textCases.forEach(([what,,status],i)=>assert.equal(shelved[`text-${i}.png`].verdict,status===0?'ok':'9',what))
+  textCases.forEach(([what,,status],i)=>assert.equal(shelved[`text-${i}.png`].verdict,status===0?'ok':String(status),what))
   assert.equal(shelved['huge.png'].verdict,'7','too many pixels')
   assert.equal(shelved['words.png'].verdict,'4','not a picture')
   assert.equal(shelved['empty.png'].verdict,'4','nothing at all')

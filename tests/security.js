@@ -243,6 +243,7 @@ function calls(source, fn) {
 const reviewedArguments = [
   'BoardExchange.qml: "filesize", [path]',
   'BoardExchange.qml: "unbundleimage", [exchange.ctl.imagesDir, bytes.path, "shared-" + Date.now() + "-" + exchange.sharing.at]',
+  'BoardExchange.qml: "imagebudget", [exchange.ctl.imagesDir]',
   'BoardExchange.qml: "bundleimages", [exchange.ctl.imagesDir, String(exchange.bundleBudget)].concat(exchange.snapshot.names)',
   'BoardExchange.qml: "clipimage", [exchange.ctl.imagesDir, "paste-" + Date.now()]',
   'BoardExchange.qml: "publish", [exchange.ctl.boardsDir, exchange.baseName, output.path]',

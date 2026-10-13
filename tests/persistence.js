@@ -3,7 +3,7 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const { spawnSync } = require('child_process')
-for (const scenario of ['persistence', 'session', 'timeout', 'exchange', 'clipboard', 'fieldpaste', 'history', 'history_edge']) {
+for (const scenario of ['persistence', 'session', 'timeout', 'exchange', 'imagebudget', 'clipboard', 'fieldpaste', 'history', 'history_edge']) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'omarchyform-persistence-'))
   try {
     fs.writeFileSync(path.join(dir, 'blocked.json'), 'original')
@@ -12,6 +12,32 @@ for (const scenario of ['persistence', 'session', 'timeout', 'exchange', 'clipbo
     // A folder inside the boards folder that points back at it: a.json there
     // is readable, but saving through it would be refused.
     fs.symlinkSync(dir, path.join(dir, 'linked'))
+    if (scenario === 'imagebudget') {
+      const { solidPng, withChunk } = require('./image-fixtures')
+      for (const d of ['data', 'data/boards', 'data/images']) fs.mkdirSync(path.join(dir, d))
+      const large = solidPng(4000, 5000).toString('base64') // 20 MP, tiny on disk
+      const tiny = solidPng(1, 1).toString('base64')
+      const metadata = withChunk('tEXt', Buffer.concat([Buffer.from('Comment\0'), Buffer.alloc(65536, 65)])).toString('base64')
+      const fixtures = [
+        ['many', ['a.png', 'b.png', 'c.png'], { 'a.png': large, 'b.png': large, 'c.png': large }],
+        ['repeated', ['a.png', 'a.png', 'a.png'], { 'a.png': large }],
+        ['one-over', ['a.png', 'b.png', 'c.png'], { 'a.png': large, 'b.png': large, 'c.png': tiny }],
+        ['boundary', ['a.png', 'a.png'], { 'a.png': large }],
+        ['recovery', ['a.png'], { 'a.png': tiny }],
+        ['metadata', Array(512).fill('a.png'), { 'a.png': metadata }],
+        ['after-metadata', ['a.png'], { 'a.png': tiny }]
+      ]
+      for (const [name, names, images] of fixtures) {
+        const raw = JSON.stringify({ version: 5, nextId: names.length + 1, links: [], images,
+          items: names.map((src, i) => ({ id: i + 1, kind: 'image', src, x: i * 100000, y: 0, w: 100, h: 100 })) })
+        if (raw.length >= 16777216) throw new Error('fixture must fit encoded budget')
+        fs.writeFileSync(path.join(dir, name + '.omarchyform.json'), raw)
+      }
+      fs.writeFileSync(path.join(dir, 'malformed.omarchyform.json'), JSON.stringify({version:5, items:[{kind:'image',src:{toString:null,valueOf:null}}],links:[]}))
+      let extra = Array(10000).fill(0)
+      for (let i = 0; i < 100; i++) extra = { a: extra }
+      fs.writeFileSync(path.join(dir, 'nested.omarchyform.json'), JSON.stringify({version:5,items:[{id:1,text:'kept',extra}],links:[],extra}))
+    }
     if (scenario === 'exchange') {
       // A library with one picture in it, and boards arriving from outside:
       // one whole, one carrying a picture that is not one, and one naming a
@@ -128,7 +154,7 @@ esac
       const fifo = spawnSync('mkfifo', [path.join(dir, 'slow.json')])
       if (fifo.status !== 0) throw new Error('could not create delayed-backup fixture')
     }
-    for (const file of ['BoardPersistence.qml', 'BoardSession.qml', 'BoardExchange.qml', 'BoardStore.js', 'BoardFiles.sh',
+    for (const file of ['LineField.qml', 'BoardPersistence.qml', 'BoardSession.qml', 'BoardExchange.qml', 'BoardStore.js', 'BoardFiles.sh',
                         'BoardDocument.qml', 'BoardHistory.js', 'BoardHistoryWorker.js'])
       fs.copyFileSync(path.join(__dirname, '..', file), path.join(dir, file))
     // The scenarios import the repository from two folders up; here it is the

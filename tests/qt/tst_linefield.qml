@@ -37,6 +37,7 @@ TestCase {
   }
 
   function init() {
+    field.maximumLength = 32767
     field.text = ""
     test.owned = []
     test.pasteAsks = 0
@@ -51,6 +52,31 @@ TestCase {
     keyClick("c")
     compare(field.text, "ac")
     compare(test.owned.length, 4, "the owner heard every key first")
+  }
+
+  function test_lengthAndSelectionReplacement() {
+    field.maximumLength = 5
+    field.text = "abcde"
+    field.cursorPosition = 2
+    keyClick("X")
+    compare(field.text, "abcde", "overflow preserves the suffix")
+    field.select(1, 3)
+    keyClick("X")
+    compare(field.text, "aXde")
+    keyClick(Qt.Key_Z, Qt.ControlModifier)
+    compare(field.text, "abcde", "ordinary accepted edits retain native undo")
+  }
+
+  function test_committedLineSeparators() {
+    field.text = "a\r\nb\nc\u2028d\u2029e\tf"
+    compare(field.text, "a b c d e f")
+  }
+
+  function test_limitDoesNotSplitUnicode() {
+    field.maximumLength = 5
+    field.text = "abcd"
+    field.insert(4, "\uD83D\uDE00")
+    compare(field.text, "abcd", "a two-unit character needs two free positions")
   }
 
   function test_aLineCannotBeBroken_data() {

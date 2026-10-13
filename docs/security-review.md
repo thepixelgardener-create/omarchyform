@@ -17,8 +17,9 @@ npm run test:security:full
 The first command needs Node, Bash and the existing GNU filesystem tools. It
 runs security guards and the filesystem, installer and CLI suites. CI runs the
 new guards alongside the existing suites. The full command additionally needs
-`qs` and `/usr/lib/qt6/bin/qmltestrunner` (or `QMLTESTRUNNER`). It runs actual QML
-clipboard/persistence tests and Qt rendering tests. Missing tools or timeouts
+`qs`, `/usr/lib/qt6/bin/qmltestrunner` (or `QMLTESTRUNNER`), a C++ compiler,
+`pkg-config` and Qt development headers. It runs actual QML clipboard/persistence
+tests, Qt rendering tests, and native clipboard/IME/drop probes. Missing tools or timeouts
 are failures, not skipped checks. All fixtures use temporary directories and
 stub clipboard commands; these commands do not touch the user's clipboard.
 
@@ -41,6 +42,8 @@ an external service.
 | Notes and edits | Helper commit stdin → board/backup | Atomic replacement, revision check, lock, no content in diagnostics, private modes for newly committed files and the folders made for them. Filesystem, CLI and QML persistence tests. |
 | The plugin's folders and what the shell writes in them | `private` as the shell starts → data, boards, backups, trash, images, locks | 0700 folders and owner-only files under any umask, existing installs tightened, another account's files left alone and named, never the home folder; the shell writes its own files only inside them; imports are 0600 before they have a name; nothing is staged in the shared `/tmp`. `tests/filesystem.js` (umask 022, an old 0755 install, a linked boards folder, a second account), `tests/security.js`. |
 | Shared boards and PNG exports | Staging → chosen external destination | Explicit user action, refuse app-data overwrite, keep unrelated files on failure. Filesystem/exchange tests. |
+| Images in foreign shared boards | Landed files → aggregate header check → published board | At most 40,000,000 pixels and 32 MiB of file data across live image items, counting repeated references and offscreen items. Compressed PNG text and profiles are refused before landing. `imagebudget` reads dimensions without decoding rasters; unreadable dimensions or a helper failure refuse publication. Foreign history is discarded first. Filesystem, exchange and `tst_imagebudget.qml` tests. |
+| Foreign board fields | Parsed input → normalized canvas → import staging | Only known primitive canvas fields survive, serialized compactly within the UTF-8 byte cap. Unknown nested data is dropped; invalid fields fail without leaving the exchange busy. Store, exchange and real QML regressions. |
 | CLI operations | stdin/file → model → helper | Parse as data, no evaluation. Invalid JSON must not echo content. CLI/security tests. |
 | Board history | Board file → worker thread → replay models → text layout | Parsed off the shell's thread, never evaluated. Text past 64 MiB is not parsed; more than twice 10,000 records is refused before replay; every record is checked against the board it plays to. A step whose notes break the 1 MiB rule is not shown. Labels are plain text; image names go through the same validation as the live board. Unreadable histories are written whole beside the backups under a flattened name. `tests/history.js`, `tests/recording.js`, `tests/timeline.js`, CLI tests. |
 | Desktop install/open | Opt-in launcher files and summon payload | No automatic install hook; ownership/conflict checks, correct path encoding, no shell interpretation. Desktop tests and manual review. |
@@ -162,12 +165,13 @@ These are review obligations, not claims covered by a green test:
   that check and the read is read whole, up to what the shell can hold. The
   same holds for import size checks and bundle budgets. The CLI reads a board
   of any size (it runs in node, not the shell) and only refuses to write one
-  past 32 MiB. Pixel checks cover PNG,
-  GIF and BMP headers, and a PNG carrying compressed text (zTXt, compressed
-  iTXt) is refused; JPEG/WebP and aggregate decoded image memory require
-  further resource-limit work. Metadata in other formats is not inflated by Qt,
-  so it costs no more than the file's bytes. Do not claim complete
-  denial-of-service coverage.
+  past 32 MiB. Pixel checks cover PNG, GIF, BMP, JPEG and WebP headers, and a
+  PNG carrying compressed text (zTXt, compressed iTXt) is refused. Foreign
+  imports also have an aggregate pixel budget, described below. This is not
+  a process-wide memory cap: existing local boards, subsequent duplication or
+  image pastes, split panes and export scenes need separate aggregate resource
+  controls. Pixel counts do not include metadata, GPU textures, mipmaps or
+  decoder overhead. Do not claim complete denial-of-service coverage.
 - The source guards are targeted pattern checks, not a QML parser, taint
   analysis, secret scanner, network monitor or dependency vulnerability audit.
   They do not catch indirect network access or prove every data flow safe.
@@ -371,5 +375,114 @@ does not parse. A board refused this way opens read-only with the reason.
 Everything from the follow-up on drops onward, with the private folders and
 the routine in [Before submitting](#before-submitting-to-the-marketplace), was
 released in 0.4.9.
+
+## Aggregate image follow-up — 2026-10-13
+
+The [marketplace follow-up](https://github.com/omacom/omarchy-plugin-marketplace/issues/10902#issuecomment-6137223238)
+confirmed the compressed-PNG-text fix at
+`cb4a80c0a8d8f0fb23f78e148a735c00a695981a`, then identified a separate gap:
+many individually accepted compact PNGs could exhaust the shell when an
+imported board opened. `Node` keeps an active image source even while culled,
+and `cache: false` means repeated references also need separate accounting.
+
+The correction on `codex/aggregate-image-budget`, based on that commit, adds
+`BoardFiles.sh imagebudget` between unbundling and publication.
+`BoardExchange` supplies the remapped live image names on stdin, once per item,
+including offscreen items. The helper sums width × height, allowing at most
+40,000,000 pixels and 32 MiB of file data, and refuses unreadable dimensions.
+Both totals count repeated references separately. Header walks cover JPEG
+and the three WebP headers as well as PNG, GIF and BMP; raster and compressed
+metadata are never decoded for this calculation. These added dimension readers
+also apply to the existing per-image landing and load checks.
+
+Until the helper succeeds, no board is staged or published and no `created`
+signal can open it. Failure retains the requesting pane through its error
+signal, then releases the busy state for another import. Foreign history is
+discarded by the existing remapping step. The external file is unchanged;
+images already unbundled remain unreferenced in the library, as they do after
+other partial import failures. This check introduces no new executable,
+dependency, network operation or data-bearing command-line argument: its only
+argument is the trusted images directory, with file names on stdin.
+
+Three additional foreign-input findings were reproduced and corrected:
+
+- **Repeated metadata retention.** A native Qt 6.12.0 probe with four invisible
+  `Image` objects (`cache: false`, asynchronous) retained four copies of a
+  65,536-character PNG text field despite accounting for only four pixels.
+  The per-item file-data budget now bounds this independently of pixels.
+  Compressed PNG colour profiles (`iCCP`) could bypass that byte accounting;
+  they are now refused on every landing route and when checking existing
+  pictures (exit 11), alongside the existing compressed-text refusal (exit 9).
+  This deliberately excludes otherwise valid profiled PNGs: re-export without
+  the embedded profile to use one. Plain metadata remains accepted within the
+  budgets. The probe was small; it did not attempt to exhaust the shell.
+- **Unknown-field serialization amplification.** Actual Qt expanded an
+  accepted 20,645-byte foreign tree into 2,091,566 bytes while pretty-printing
+  unknown nested fields. `importBoard` now keeps only primitive fields from
+  the flat canvas schema, discards foreign history and unknown fields, and
+  serializes compactly. `withSharedImages` checks the resulting UTF-8 size
+  before staging. Local history loading remains unchanged.
+- **Malformed-field import lockout.** An object used as `src`, with null
+  coercion methods, threw during remapping and left the exchange busy.
+  Foreign canvas fields now have explicit primitive type checks before image
+  landing, remapping uses own-property lookups, and import completion paths
+  release busy state and report failure on exceptions. A subsequent valid
+  import succeeds without restarting the plugin.
+
+### Reconciliation with the local development tree
+
+The candidate starts at published 0.4.10, rather than applying upstream changes
+over the dirty 0.4.8 development checkout. That original checkout is preserved.
+The candidate retains upstream private folders, PNG compressed-text refusal,
+board/JSON caps, image load checks and the 0.4.10 window-mode migration.
+
+| Overlap | Resolution |
+|---|---|
+| `LineField.qml` | Ported the local bounded typing/IME behavior, separator normalization and surrogate-safe truncation. Production fields retain bounded helper paste and zero automatic clipboard reads. |
+| `BoardExchange.qml` | Ported local field-paste board-path and document-generation ownership, plus field-close invalidation; retained upstream private staging and added the import guards above. |
+| `tests/qml/tst_windowmode.qml` | Current local and upstream copies are byte-identical; retained upstream. |
+| `tests/windowmode.js` | Retained upstream's broader suite, including migration from 0.4.9 and bar-versus-keyboard behavior. |
+| Clipboard and field-paste regressions | Ported local tests, retained the upstream test controller's private data directory, and test with production `LineField`. CI now runs the native clipboard/IME probe. |
+
+The version remains 0.4.10 with changes recorded under Unreleased; this is a
+review candidate, not a published release or marketplace approval.
+
+### Validation
+
+Evidence from this candidate:
+
+- `tst_imagebudget.qml` exercises the real exchange and helper with valid,
+  compact PNG streams: three distinct 20 MP files; three references to one
+  20 MP file; 40 MP plus one pixel; exactly 40 MP; and a small import after
+  refusals. It additionally rejects repeated plain metadata over 32 MiB and
+  malformed image fields, recovers after each, and strips nested extra fields.
+  It checks error delivery, absence of publication and recovery.
+  The new test fails on `cb4a80c` with `many must fail before publication` and
+  passes with the correction. It never instantiates a hostile board's images.
+- Filesystem tests independently cover the exact boundary, repeated names,
+  mixed formats, truncated dimensions, missing files, traversal and symlinks,
+  repeated metadata, and compressed profile refusal on landing and load.
+  Exchange tests cover a focus change while awaiting the aggregate result,
+  including a helper failure and an unmeasurable image.
+- `npm test` and `npm run test:security:full` passed: source/process guards,
+  filesystem/installer/CLI suites, nine real QML scenarios, 189 Qt UI checks,
+  zero clipboard payload reads, synthetic native IME commits (normalization
+  and overflow), and zero drop payload reads in single and split panes.
+  Installed Qt was 6.12.0. This verifies delivered input-method events, not a
+  manual session with each platform's IME.
+- `npm run test:windowmode` passed on live Wayland with isolated boards and
+  windows. Bash syntax, manifest shape/entry points and the QML final-property
+  override check passed; plain `qmllint` still lacks Quickshell import metadata.
+  `git diff --check` was clean. The filesystem suite's
+  existing second-account ownership check was skipped because this run was
+  not root. Initial sandboxed runs could not exercise private Qt IPC and
+  clipboard subprocesses; successful runs used isolated fixtures outside
+  those sandbox restrictions.
+
+The 40 MP limit applies to the imported canvas, not the whole shell's memory.
+It does not add runtime admission control for subsequent local edits, existing
+local boards, split panes or export scenes, nor measure decoder/GPU overhead.
+The small native metadata-retention probe is not a whole-shell RSS ceiling or
+an exhaustive image-decoder audit. No marketplace submission was performed.
 
 The known limits above remain open hardening areas, not completed fixes.

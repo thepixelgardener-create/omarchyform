@@ -26,12 +26,14 @@ try {
       '-o', watcher, ...flags.split(/\s+/)], { encoding: 'utf8', timeout: 300000 })
     if (build.status !== 0) { console.error(build.stderr || build.error); process.exit(1) }
   }
-  const run = spawnSync(watcher, [path.join(__dirname, 'qt', 'clipboard_scene.qml')], {
+  const run = spawnSync(watcher, [path.join(__dirname, 'qt', 'clipboard_scene.qml'),
+    path.join(__dirname, 'qt', 'linefield_ime.qml')], {
     encoding: 'utf8', timeout: 60000,
     env: { ...process.env, QT_QPA_PLATFORM: 'offscreen', QT_QPA_PLATFORMTHEME: '' } })
   const out = (run.stdout || '') + (run.stderr || '')
-  if (run.status !== 0 || !out.includes('CLIPBOARD_TESTS_PASSED')) { console.error(out, run.error || ''); process.exit(1) }
+  if (run.status !== 0 || !out.includes('CLIPBOARD_TESTS_PASSED') || /(?:TypeError|ReferenceError|FAIL:)/.test(out)) { console.error(out, run.error || ''); process.exit(1) }
   const qt = (/^Qt (\S+)/m.exec(out) || [])[1] || version
+  if (process.env.EXPECT_QT && qt !== process.env.EXPECT_QT) { console.error(`expected Qt ${process.env.EXPECT_QT}, got ${qt}`); process.exit(1) }
   console.log(`ok — clipboard: no text field reads the clipboard's contents unasked, on Qt ${qt}`)
 } finally {
   fs.rmSync(dir, { recursive: true, force: true })

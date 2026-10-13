@@ -10,12 +10,12 @@ const source = read('BoardExchange.qml')
 const workspace = read('Omarchyform.qml')
 
 function fixture() {
-  const a = { name: 'a', dataDir: '/a' }, b = { name: 'b', dataDir: '/b' }
+  const a = { name: 'a', dataDir: '/a', imagesDir: '/a/images', fileCommand: (op, args) => [op, ...args] }, b = { name: 'b', dataDir: '/b' }
   const root = { activePane: a, exchangePane: a }
   let busy = false
   const signals = [], staged = []
   const exchange = { root, dialogOpen: false, error: '', operation: '', firstNote: false,
-    maxImportBytes: 33554432, exportNote: '', sharing: null,
+    maxImportBytes: 33554432, exportNote: '', sharing: null, imageBudget: {},
     Store: loadStore(), Date, Qt: { callLater(f) { f() } },
     output: { path: '', setText(text) { staged.push({ path: this.path, text }) } },
     input: { path: '', reload() {}, waitForJob() {}, text() { return this.raw } },
@@ -98,9 +98,42 @@ for (const operation of ['publish', 'copy', 'export']) {
   c.exchange.nextSharedImage()
   assert.equal(c.exchange.busy, true)
   assert.equal(c.exchange.ctl, c.a, 'unbundling and publication retain the import owner')
+  assert.equal(c.staged.length, 0, 'no board is staged before the aggregate check')
+  assert.equal(c.exchange.imageBudget.input, 'new.png\n')
+  c.exited('imageBudget', 0)
   assert.equal(JSON.parse(c.staged[0].text).items[0].src, 'new.png')
   c.exited('publish', 0)
   assert.equal(c.signals[0].pane, c.a)
+}
+
+for (const code of [7, 10, 12, 1]) {
+  const c = fixture()
+  c.exchange.sharing = { at: 1, names: ['old.png'], base: 'board', landed: { 'old.png': 'new.png' },
+    raw: JSON.stringify({ version: 5, items: [1, 2, 3].map(id => ({ id, kind: 'image', src: 'old.png' })), links: [] }) }
+  c.exchange.nextSharedImage()
+  assert.equal(c.exchange.imageBudget.input, 'new.png\nnew.png\nnew.png\n', 'every retained decode is counted')
+  c.exited('imageBudget', code)
+  assert.equal(c.staged.length, 0, 'over-budget or unmeasurable imports are never published')
+  assert.equal(c.exchange.sharing, null)
+  assert.equal(c.signals[0].name, 'failed')
+  assert.equal(c.signals[0].pane, c.a, 'a late refusal still belongs to the asking pane')
+  assert.match(c.signals[0].args[0], /nothing was imported/)
+  assert.equal(c.exchange.busy, false, 'another import is possible after refusal')
+}
+
+{
+  const c = fixture()
+  c.exchange.input.raw = JSON.stringify({ version: 5, items: [{ kind: 'image', src: { toString: null, valueOf: null } }], links: [] })
+  c.exited('measure', 0)
+  assert.equal(c.staged.length, 0)
+  assert.equal(c.signals[0].name, 'failed')
+  assert.equal(c.signals[0].pane, c.a, 'schema refusal belongs to the asking pane')
+  assert.equal(c.exchange.busy, false, 'malformed imports do not strand exchange operations')
+  assert.equal(c.exchange.sharing, null)
+  c.exchange.busy = true
+  c.exchange.input.raw = JSON.stringify({ version: 5, items: [{ text: 'recovered' }], links: [] })
+  c.exited('measure', 0)
+  assert.equal(JSON.parse(c.staged[0].text).items[0].text, 'recovered', 'a valid import still works')
 }
 
 // A picture BoardFiles.sh refuses for the compressed text inside it (exit 9)
