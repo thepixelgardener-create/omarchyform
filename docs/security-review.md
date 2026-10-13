@@ -478,6 +478,16 @@ Evidence from this candidate:
   not root. Initial sandboxed runs could not exercise private Qt IPC and
   clipboard subprocesses; successful runs used isolated fixtures outside
   those sandbox restrictions.
+- The pinned marketplace scanner (`05b8c4243b4c6b3e05e81cf654560e24d22852e9`)
+  passed with no findings and only the documented installer capability
+  (`review-required`). The marketplace's current revision,
+  `8357233582df521b240e3c95ccecb1d07623edcb`, has an identical Git blob and path
+  listing for every file under `scripts/`. Current-scanner equivalence was
+  established by this read-only comparison; newly downloaded code was not
+  executed after automatic approval review rejected an unrestricted latest run.
+- The optional mutation run detected 887 of 1,085 mutations (81.8%); 198
+  survived. This is coverage information, not a release gate or a claim of
+  exhaustive testing.
 
 The 40 MP limit applies to the imported canvas, not the whole shell's memory.
 It does not add runtime admission control for subsequent local edits, existing
