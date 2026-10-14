@@ -689,12 +689,17 @@ Item {
   Process {
     id: migrateProc
     command: ["cp", "-n", root.legacyPath, root.boardsDir + "/board.json"]
-    onExited: stateFile.reload()
+    onExited: stateFile.path = root.statePath
   }
 
+  // No path until the folders exist and an old single board has been moved
+  // into them (migrateProc): the board the state names is checked as soon as
+  // it is read, and a check of a folder not yet made fails. Read from the
+  // start, the state raced the folders on a fresh install, and the first board
+  // opened read-only as "goes through a symlink".
   FileView {
     id: stateFile
-    path: root.statePath
+    path: ""
     watchChanges: false
     atomicWrites: true
     printErrors: false

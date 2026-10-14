@@ -19,6 +19,10 @@ since older boards are migrated on load rather than rejected.
 
 ### Fixed
 
+- A fresh install's first board opens editable. The plugin read its state
+  before its folders were made, so the board's path was checked before its
+  folder existed, and the first board opened read-only as "goes through a
+  symlink" until the shell was restarted.
 - Item positions and sizes are held to the board: within 1,000,000 of the
   middle, and from 60 to 100,000 across. A board's file is brought within
   them when it opens, and moving, resizing, copying, new items and the command

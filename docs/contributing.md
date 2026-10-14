@@ -17,6 +17,10 @@ the CLI to create boards and is not a contribution guide.
   the next file loads, so a pointer gesture begun on the old board cannot
   write. Never combine content from the old board with the new board's path or
   revision. Pending saves must finish before the switch actually begins.
+- Startup runs in order: the folders are made (`private`), an old single
+  board is moved in, and only then is the state read, because reading it has
+  the named board's path checked. `npm run test:omarchy` starts once on an
+  empty home to keep it so.
 - Resolve a delayed open by the requested path when it completes: a captured
   document may have switched paths meanwhile. A delayed split close must leave
   `activePane` pointing to the surviving, non-null document even if focus moved.
