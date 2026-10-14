@@ -449,30 +449,31 @@ function closeOther(c) {
 }
 
 {
-  // A pane that cannot take the picture by the time it arrives: looking back
-  // through its history, or reading it again.
+  // A pane that cannot take the picture by the time it arrives: its board
+  // turned out to be one this must not write, say.
   const c = twoBoards()
   const { a, b } = c
   const scene = { probeImage() {}, repaintLinks() {}, focusKeys() { c.focused = 'b' } }
   b.activeBoard = scene
+  const session = c.of(b.doc).session
   dropOn(b, 300, 200, 'one.png')
-  c.of(b.doc).doc.historyChecking = true
+  session.damaged = true
   c.finishDrop(0, 'drop-1.png')
-  assert.equal(pictures(b).length, 0, 'not while its history is checked')
+  assert.equal(pictures(b).length, 0, 'not while it is read-only')
   assert.match(b.failureText, /not added/)
   assert.equal(pictures(a).length, 0, 'nor on the other board')
-  c.of(b.doc).doc.historyChecking = false
+  session.damaged = false
 
   // Copied while it could, measured once it no longer could.
   b.failureText = ''
   dropOn(b, 300, 200, 'two.png')
   c.finishDrop(0, 'drop-2.png')
   assert.equal(b.imageQueue.length, 1, 'being measured')
-  c.of(b.doc).doc.historyChecking = true
+  session.damaged = true
   b.pasteImage('drop-2.png', 200, 100)
   assert.equal(pictures(b).length, 0)
   assert.match(b.failureText, /not added/, 'and it is said, not dropped silently')
-  c.of(b.doc).doc.historyChecking = false
+  session.damaged = false
 
   // Measured and placed with the keyboard elsewhere: it does not take it.
   dropOn(b, 300, 200, 'three.png')
@@ -481,14 +482,13 @@ function closeOther(c) {
   assert.equal(pictures(b).length, 1)
   assert.equal(c.focused, undefined, 'the keys stay with the pane they were in')
 
-  // An earlier version on screen takes nothing either.
-  b.timeline = true
-  b.timelineLive = false
+  // A read-only board is not even copied for.
+  session.damaged = true
   b.failureText = ''
   b.statusText = ''
   dropOn(b, 300, 200, 'four.png')
   assert.equal(c.imageImport.running, false, 'nothing is copied')
-  assert.match(b.statusText, /earlier version/)
+  assert.match(b.statusText, /read-only/)
   console.log('ok — split: a drop on a pane that cannot take it is refused, and said')
 }
 

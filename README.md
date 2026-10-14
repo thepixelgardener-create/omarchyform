@@ -55,7 +55,6 @@ right-click lists what can be done with the selection. The mouse works too.
 - Headings, bold, italic, key labels and theme colours inside a note
 - An ordinary tiled window by default; `w` switches to a fullscreen overlay and back
 - Split view, `v` or `V`: two boards side by side, or two views of one
-- A timeline, `t`, that plays back how a board was built
 - Boards in folders, with search and a trash, on `b`
 - PNG export in your theme, on white for documents, or in black and white for print
 - A board shared as one file with its pictures inside it
@@ -79,7 +78,7 @@ other people find it.
 ## Documentation
 
 - [Install, update and remove](docs/install.md): the key binding, the desktop entry, dependencies, tested versions
-- [Using the board](docs/guide.md): every key, note formatting, connectors, split view, history, export and saving
+- [Using the board](docs/guide.md): every key, note formatting, connectors, split view, export and saving
 - [Boards on disk and the command line](docs/files.md): where boards live, the file format and `bin/omarchyform`
 - [Development](docs/development.md): running from a clone, the source layout, tests and benchmarks
 - [Changelog](CHANGELOG.md), [roadmap](docs/roadmap.md) and the [documentation guide](docs/README.md)

@@ -435,12 +435,6 @@ FocusScope {
     // Focus moves between the canvas and the browser declaratively. Leaving
     // both claiming it strands the keyboard on whichever hid last.
     focus: !board.ctl.browsing
-    onActiveFocusChanged: if (!activeFocus) board.ctl.finishKeyEdit()
-
-    Keys.onReleased: function(event) {
-      if (!event.isAutoRepeat && (keys.direction(event.key, event.text)
-          || event.key === Qt.Key_Shift || event.key === Qt.Key_Control)) board.ctl.finishKeyEdit()
-    }
 
     // Printable keys are a table rather than a ladder of else-ifs: adding a
     // command is one line, and the cheat sheet is the only other place to
@@ -463,8 +457,6 @@ FocusScope {
       "v": function () { board.ctl.toggleSplit("side-by-side") },
       "V": function () { board.ctl.toggleSplit("stacked") },
       "o": function () { board.ctl.otherPane() },
-      "t": function () { board.ctl.toggleTimeline() },
-      "T": function () { board.ctl.compareWithCurrent() },
       "g": function () { board.ctl.beginArrange() },
       "/": function () { board.ctl.beginFind() },
       "m": function () { board.ctl.toggleMenu() },
@@ -499,9 +491,6 @@ FocusScope {
         // Escape cancels this gesture only; it must not also dismiss the board.
         if (event.key === Qt.Key_Escape) { event.accepted = true; return }
       }
-      // A different command ends a held move even if the direction key is
-      // still down; auto-repeat events retain the current gesture.
-      if (!event.isAutoRepeat) board.ctl.finishKeyEdit()
       if (board.ctl.helpVisible) {
         if (event.key === Qt.Key_Escape || event.key === Qt.Key_F1 || event.text === "?") board.ctl.helpVisible = false
         else if (event.key === Qt.Key_Down || event.text === "j") help.scroll(board.theme.fontBody * 2)
@@ -562,14 +551,6 @@ FocusScope {
       // next match rather than ending, because stepping is the common case.
       if (board.ctl.finding) {
         board.findKey(event)
-        return
-      }
-
-      // The timeline has the keys for stepping and playing. The keys that only
-      // look — the view, the panes, finding, the lists — still work; anything
-      // that would change an earlier version says so instead.
-      if (board.ctl.timeline && board.timelineKey(event)) {
-        event.accepted = true
         return
       }
 
@@ -799,32 +780,6 @@ FocusScope {
     ctl: board.ctl
   }
 
-  // Keys that look rather than change: these reach the board as usual while
-  // it shows an earlier version.
-  readonly property var lookingKeys: ["f", "0", "+", "=", "-", "?", ":", "/", "m", "w", "v", "V", "o", "T", "j", "k", "b", "."]
-  function lookingKey(event) {
-    if (board.lookingKeys.indexOf(event.text) >= 0) return true
-    return [Qt.Key_Up, Qt.Key_Down, Qt.Key_Tab, Qt.Key_Backtab, Qt.Key_F1, Qt.Key_F2].indexOf(event.key) >= 0
-  }
-
-  // Answers whether the timeline took the key.
-  function timelineKey(event) {
-    if ((event.modifiers & (Qt.ControlModifier | Qt.MetaModifier)) !== 0) return false
-    var speeds = { "1": 0.5, "2": 1, "3": 2, "4": 4 }
-    if (event.key === Qt.Key_Left || event.text === "h") board.ctl.timelineStep(-1)
-    else if (event.key === Qt.Key_Right || event.text === "l") board.ctl.timelineStep(1)
-    else if (event.key === Qt.Key_Home || event.text === "H") board.ctl.timelineFirst()
-    else if (event.key === Qt.Key_End || event.text === "L") board.ctl.timelineLatest()
-    else if (event.key === Qt.Key_Space) board.ctl.togglePlay()
-    else if (speeds[event.text] !== undefined) board.ctl.setPlaySpeed(speeds[event.text])
-    else if (event.key === Qt.Key_Escape) board.ctl.timelineBack()
-    else if (event.text === "t") board.ctl.leaveTimeline()
-    else if (board.ctl.lookingBack && !board.lookingKey(event))
-      board.ctl.flash("this is an earlier version · esc returns to now")
-    else return false
-    return true
-  }
-
   // What the palette's query field does not own. Two callers: the field, which
   // has the keyboard while the palette is up, and the board's handler behind
   // it, so a field that has somehow not been given the keyboard cannot leave
@@ -994,8 +949,6 @@ FocusScope {
       : status.tier === "failure" ? Store.escapeMarkup(board.ctl.failureText)
       : status.tier === "palette"
       ? "commands · " + Store.hintLine(Store.PALETTE_HINTS, board.ctl.accentMarkup)
-      : status.tier === "timeline"
-      ? "timeline · " + Store.hintLine(Store.TIMELINE_HINTS, board.ctl.accentMarkup)
       : status.tier === "arrange"
       ? "arrange · " + Store.hintLine(Store.ARRANGE_HINTS, board.ctl.accentMarkup)
       : status.tier === "backgrounds"
@@ -1016,15 +969,6 @@ FocusScope {
       // it, and the line says how to reach it rather than leave it forgotten.
       : (board.ctl.squeezed ? Store.hintMarkup("o", "the other pane", board.ctl.accentMarkup) + " \u00b7 " : "")
         + Store.hintLine(Store.BOARD_HINTS, board.ctl.accentMarkup)
-  }
-
-  // Along the bottom while the pane is in its timeline, clear of the edge the
-  // active pane's outline is drawn on.
-  TimelineStrip {
-    objectName: "timeline-strip"
-    ctl: board.ctl
-    anchors { left: parent.left; right: parent.right; bottom: parent.bottom; margins: board.theme.sp(16) }
-    height: implicitHeight
   }
 
   // Which of two panes the keys go to: the accent round its edge, the way the

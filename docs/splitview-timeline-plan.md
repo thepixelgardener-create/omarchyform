@@ -1,5 +1,11 @@
 # Split view and edit timeline — development plan
 
+> **History and the timeline were removed after 0.4.10.** The edit history,
+> its worker, the timeline (`t`), compare (`T`) and **Forget this board's
+> history** are gone; a board's old history is no longer read and is dropped
+> at its next save. Split view, gestures and saving, also planned here, stay.
+> What follows is the record of how they were built, not current behaviour.
+
 Branch: `dev`, cut from `origin/main` at 03edb49 (the 0.4.6 release merge).
 No release number is assigned.
 

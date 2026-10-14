@@ -87,12 +87,10 @@ function tests(S) {
     // A version is a whole number from 1 up to the one this writes.
     for (const version of [0, -1, 4.5, "5", true, null, [5]])
       eq(S.readFile(JSON.stringify({ version, items: [] })), null, "version " + JSON.stringify(version))
-    // A board without history is written in the format every Omarchyform since
-    // 0.4 opens; one with history in the newest, which older ones open read-only.
+    // A board is written in the format every Omarchyform since 0.4 opens; one
+    // with textures in the newest, which older ones open read-only (below).
     eq(JSON.parse(S.writeFile(new FakeModel(), new FakeModel(), 1)).version, S.PLAIN_VERSION,
-       "a board without history is the plain format")
-    eq(JSON.parse(S.writeFile(new FakeModel(), new FakeModel(), 1, '{"v":1,"records":[]}')).version, S.FORMAT_VERSION,
-       "and one with history is the newest it reads")
+       "a plain board is the plain format")
   })
 
   test("a note too long to lay out is found, wherever it is and however old the board", () => {
@@ -993,7 +991,6 @@ function tests(S) {
       ["damaged", { damaged: true }],
       ["failure", { failureText: "Could not reach the clipboard" }],
       ["palette", { paletteVisible: true }],
-      ["timeline", { timeline: true }],
       ["arrange", { arranging: true }],
       ["backgrounds", { showPinned: true }],
       ["editing", { editing: true }],
@@ -1401,7 +1398,7 @@ function tests(S) {
         history: { v: 1, base: { items: [{ id: 1, kind: "image", src: "private.png" }], links: [], nextId: 2 }, records: [] }
       })
       const imported = JSON.parse(S.withSharedImages(raw, { "current.png": "landed.png" }))
-      eq(imported.history, undefined, "deleted foreign images cannot be restored through replay")
+      eq(imported.history, undefined, "a history naming deleted foreign images does not come along")
       eq(imported.images, undefined)
       if (carried) eq(imported.items[0].src, "landed.png", "live images still map to their imported files")
       eq(JSON.parse(raw).history.base.items[0].src, "private.png", "the source remains intact")
@@ -1475,29 +1472,18 @@ function tests(S) {
       const ordered = {}
       for (const k of keys) ordered[k] = all[k]
       for (const [layout, write] of Object.entries(layouts)) {
-        const read = S.readBoardFile(write(ordered))
+        const read = S.readFile(write(ordered))
         const what = order + ", " + layout
-        ok(read.data, what + " reads")
-        eq(read.data.items, items, what + ": every item, in paint order")
-        eq(read.data.links, board.links, what + ": the connectors")
-        eq(read.data.nextId, 12, what + ": the next id")
-        eq(JSON.parse(read.history), history, what + ": and the history")
-        // Only this writer's layout is left as text; everything else is read
-        // whole, which is slower and always right.
-        eq(read.split, order === "last" && layout === "two spaces" || order === "last" && layout === "trailing space",
-           what + ": " + (read.split ? "split" : "read whole"))
+        ok(read, what + " reads")
+        eq(read.items, items, what + ": every item, in paint order")
+        eq(read.links, board.links, what + ": the connectors")
+        eq(read.nextId, 12, what + ": the next id")
+        eq(read.history, undefined, what + ": and nothing of the history")
       }
     }
     // Truncated, or not JSON at all: not a board.
     const good = JSON.stringify(all, null, 2) + "\n"
-    for (const broken of [good.slice(0, -20), "{", ""]) eq(S.readBoardFile(broken).data, null, "not a board")
-    // Cut off inside the history, the board in front of it is still whole and
-    // is read; the worker, reading the file whole, finds it is not JSON and
-    // has it read again whole, as not a board (tests/recording.js).
-    const cut = good.slice(0, good.indexOf('"history"') + 30) + "\n}\n"
-    eq(S.readBoardFile(cut).split, true)
-    eq(S.readBoardFile(cut).data.items.length, 2)
-    eq(S.readBoardFile(cut, true).data, null, "read whole, it is not a board")
+    for (const broken of [good.slice(0, -20), "{", ""]) eq(S.readFile(broken), null, "not a board")
   })
 
   test("a model is brought to a state touching only what differs", () => {
@@ -1517,23 +1503,60 @@ function tests(S) {
     eq(model.count, 0)
   })
 
-  test("a board's history is written last and read apart from it", () => {
+  test("a board's old history is read as the file says, and is not written again", () => {
     const items = new FakeModel([item({ iid: 1, itext: 'with "quotes"\n  "history": in it' })])
+    const board = S.writeFile(items, new FakeModel(), 2)
+    // As Omarchyform 0.4.7 to 0.4.10 wrote one: the history last, on one line.
+    const withHistory = (history, after, front) =>
+      (front || board).slice(0, -3) + ',\n  "history": ' + history + (after || "") + "\n}\n"
     const history = '{"v":1,"lineage":"x","start":0,"base":{"items":[],"links":[],"nextId":1},"records":[]}'
-    const text = S.writeFile(items, new FakeModel(), 2, history)
-    const parts = S.splitHistory(text)
-    eq(parts.history, history, "the history comes back as the text it was")
-    eq(JSON.parse(parts.board).history, undefined, "and the board in front of it is a board without one")
-    eq(S.readFile(parts.board).items[0].text, 'with "quotes"\n  "history": in it', "a note that names the marker is a note")
-    eq(JSON.parse(text).history.lineage, "x", "the whole file is still one JSON document")
-    eq(S.splitHistory(S.writeFile(items, new FakeModel(), 2)).history, "", "a board without one has none")
-    // Reformatted by hand, the marker is gone but the history is not: it is
-    // read with the board rather than lost.
-    const reformatted = JSON.stringify(JSON.parse(text))
-    eq(S.splitHistory(reformatted).history, "")
-    eq(S.readFile(reformatted).history.lineage, "x")
-    for (const odd of ["", "{}", "not json", text.slice(0, -5)])
-      ok(typeof S.splitHistory(odd).board === "string", "anything at all splits into something: " + odd.slice(0, 10))
+    const read = S.readFile(withHistory(history))
+    eq(read.items[0].text, 'with "quotes"\n  "history": in it', "a note that names the marker is a note")
+    eq(read.history, undefined, "and nothing of the history is kept")
+    // A key after it is the file's, on a line of its own or on the history's:
+    // a newer version keeps the board from being read as an older one, with or
+    // without a version in front of it, and the canvas after it is the canvas.
+    const unversioned = board.replace('  "version": 5,\n', "")
+    ok(unversioned !== board)
+    for (const gap of ["\n  ", " "]) {
+      const where = gap === " " ? "on the history's line" : "on a line of its own"
+      eq(S.readFile(withHistory(history, "," + gap + '"version": 8')), null, "a later version 8 " + where)
+      eq(S.readFile(withHistory(history, "," + gap + '"version": 8', unversioned)), null, "the only version, 8, " + where)
+      eq(S.readFile(withHistory(history, "," + gap + '"version": 5')).items.length, 1)
+      const after = S.readFile(withHistory(history,
+        "," + gap + '"items": [{"id": 9, "kind": "note", "text": "after"}], "nextId": 12, "links": []'))
+      eq(after.items.map(r => r.text), ["after"], "the items after it are the items " + where)
+      eq(after.nextId, 12)
+    }
+    // A history that is not JSON makes a file that is not JSON, and one holding
+    // more at once than a parse may is refused the way any such file is.
+    eq(S.readFile(withHistory('{"v":1,"records":[')), null)
+    eq(S.readFile(withHistory("[".repeat(S.MAX_JSON_OPEN + 1) + "]".repeat(S.MAX_JSON_OPEN + 1))), null)
+    // Written again, it has none, in the plain format.
+    const loaded = new FakeModel()
+    S.fillItems(loaded, read.items)
+    const again = JSON.parse(S.writeFile(loaded, new FakeModel(), read.nextId))
+    eq(again.history, undefined)
+    eq(again.version, S.PLAIN_VERSION)
+    for (const odd of ["", "not json", board.slice(0, -5)]) eq(S.readFile(odd), null, "not a board: " + odd)
+  })
+
+  test("new items get ids a board keeps, even beside one with the largest", () => {
+    const model = new FakeModel([item({ iid: 2 }), item({ iid: S.MAX_ID })])
+    const next = S.nextFreeId(model, 7)
+    eq(next, S.MAX_ID + 1, "a board with an item at the largest id has run out")
+    const taken = S.newIds(model, next, 3)
+    eq(taken.ids, [1, 3, 4], "so it takes the smallest ids no item has")
+    eq(taken.next, S.MAX_ID + 1, "and stays run out")
+    for (const id of taken.ids) ok(S.isItemId(id), id + " is an id the board keeps when it is read again")
+    eq(S.newIds(new FakeModel([item({ iid: 5 })]), 6, 2), { ids: [6, 7], next: 8 },
+       "otherwise they follow on, as they always have")
+    // Near the end, an id that would pass it is not handed out either.
+    const near = new FakeModel([item({ iid: S.MAX_ID - 1 })])
+    eq(S.newIds(near, S.MAX_ID, 1), { ids: [S.MAX_ID], next: S.MAX_ID + 1 })
+    eq(S.newIds(near, S.MAX_ID, 2).ids, [1, 2])
+    ok(S.MAX_ID + 1 <= 2147483647, "the next id still fits the int a board holds it in")
+    for (const bad of [0, -1, 1.5, S.MAX_ID + 1, NaN]) ok(!S.isItemId(bad), bad + " is not an id")
   })
 
   test("copying out takes the text in board order, blanks left out", () => {
@@ -2098,7 +2121,7 @@ function tests(S) {
     ok(g.leftX > g.fromX && g.rightX > g.fromX, "head fits available space")
   })
 
-  test("textures persist, default to plain, and clear during replay", () => {
+  test("textures persist, default to plain, and clear when a snapshot is restored", () => {
     const model = new FakeModel([item(), item({ iid: 2, kind: "ellipse", itexture: "grid" }),
       item({ iid: 3, kind: "image", isrc: "picture.png", itexture: "dots" })])
     const file = JSON.parse(S.writeFile(model, new FakeModel(), 4))

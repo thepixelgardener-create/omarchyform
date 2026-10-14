@@ -630,8 +630,8 @@ case "$operation" in
     # in them only its owner's, whatever umask the shell started with and
     # whatever an older version, a sync tool or a hand left them as. The
     # shell writes some files into them itself (its state, a staged import,
-    # the trash index, a history set aside) with its own umask; inside a
-    # folder only its owner can enter, no other account reaches them.
+    # the trash index) with its own umask; inside a folder only its owner
+    # can enter, no other account reaches them.
     #
     # A folder may be a link to where it is kept, and what it leads to is
     # made private if it is this user's. Nothing below it is followed, and

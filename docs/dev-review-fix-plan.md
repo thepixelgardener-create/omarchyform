@@ -1,5 +1,11 @@
 # Dev review fixes
 
+> **History and the timeline were removed after 0.4.10.** The edit history,
+> its worker, the timeline (`t`), compare (`T`) and **Forget this board's
+> history** are gone; a board's old history is no longer read and is dropped
+> at its next save. The fixes below that concern them are historical; the
+> rest stand.
+
 Date: 2026-10-07. Baseline: `dev` at `789d538`, reviewed against
 `origin/main` merge base `03edb49f8526fcd452c475c49d40f5eb8f090a32`.
 Status: done on `dev` in `0883789`, `0e87b41` and `f73c571`. Results and

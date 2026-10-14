@@ -56,13 +56,9 @@ ShellRoot {
     readonly property string backupsDir: test.dir
     // What was selected is the panes'; the document only says when to forget it.
     function resetSelection(endModes) {}
-    // The history is the document's; this one keeps none, as a board written
-    // before history did.
     function fileText() { return Store.writeFile(items, links, ctl.nextId) }
-    function adoptHistory(text, boardText, raw) { return "" }
-    function abandonHistory() {}
-    property bool historyChecking: false
     property var pointerOwner: null
+    property int loadSerial: 0
     // The session asks whether the library is open, and leaves word there.
     property QtObject library: QtObject {
       property bool showing: false

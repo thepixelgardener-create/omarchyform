@@ -5,8 +5,24 @@ since older boards are migrated on load rather than rejected.
 
 ## Unreleased
 
+### Removed
+
+- The edit history and its timeline: `t`, `T` (an earlier version beside the
+  board as it is) and **Forget this board's history**. A board shared with an
+  item id near the largest an id can be could hold the shell up for 25 seconds
+  when its timeline opened. A board that 0.4.7 to 0.4.10 saved with a history
+  now opens at once, without **Checking history…**, and nothing of the history
+  is kept: the next save writes the board without it, so any edit removes it.
+  Boards are written as format 5, or 7 with item textures. `bin/omarchyform`
+  no longer records its runs, and `validate` and `apply` no longer answer
+  `history`.
+
 ### Fixed
 
+- A board that arrives with an item at the largest id, 2,147,483,646, no
+  longer hands out ids past it. New notes and copies got ids that opening the
+  board again replaced, dropping their connectors; they now take the smallest
+  free ids, and so does the command line's `add`.
 - Shared-board imports are limited to 40 megapixels across all image items,
   counting repeated references separately. A board over the limit is refused
   before publication, even when its compressed images fit the byte budget.

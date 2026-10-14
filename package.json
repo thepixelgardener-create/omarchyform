@@ -4,7 +4,7 @@
   "private": true,
   "description": "Development and regression checks for the Omarchyform whiteboard",
   "scripts": {
-    "test": "node tests/run.js && node tests/controller.js && node tests/split.js && node tests/windowmode.js && node tests/exchange.js && node tests/history.js && node tests/recording.js && node tests/timeline.js && node tests/contract.js && node tests/filesystem.js && node tests/desktop.js && node tests/cli.js && node tests/held-runner-test.js && node tests/export.js",
+    "test": "node tests/run.js && node tests/controller.js && node tests/split.js && node tests/windowmode.js && node tests/exchange.js && node tests/editing.js && node tests/contract.js && node tests/filesystem.js && node tests/desktop.js && node tests/cli.js && node tests/held-runner-test.js && node tests/export.js",
     "mutate": "node tests/mutate.js",
     "test:qml": "node tests/persistence.js",
     "test:ui": "node tests/ui.js",
@@ -20,7 +20,6 @@
     "preview": "node tests/preview.js",
     "test:security": "node tests/security.js && node tests/filesystem.js && node tests/desktop.js && node tests/cli.js",
     "review:marketplace": "node tests/marketplace.js",
-    "test:security:full": "npm run test:security && npm run test:qml && npm run test:ui && npm run test:clipboard && npm run test:drop",
-    "bench:history": "node tests/history-bench.js"
+    "test:security:full": "npm run test:security && npm run test:qml && npm run test:ui && npm run test:clipboard && npm run test:drop"
   }
 }

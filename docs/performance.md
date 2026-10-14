@@ -35,8 +35,9 @@ measurements or compared directly with earlier display configurations.
 Texture overhead is not dominant in this fixture. At 3,000 items, pan, zoom,
 whole-board movement and timeline playback already exceed the frame budget
 with plain items. Two-pane scrub p95 remains below the plan's 200 ms target
-in both runs. This closes the missing textured-board measurement, not the
-broader large-board performance work; tiny-zoom or all-items-visible layouts
+in both runs. The scrub and play phases measured the timeline, which has since
+been removed; `bench:scene` no longer runs them. This closes the missing
+textured-board measurement, not the broader large-board performance work; tiny-zoom or all-items-visible layouts
 and other display arrangements may behave differently.
 
 ## Baseline environment — 2026-09-30

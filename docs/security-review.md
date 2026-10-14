@@ -35,8 +35,8 @@ an external service.
 | Text pasted into a field | Paste keys → `pasteInto` → helper → the field that asked | Qt's own paste reads everything a clipboard owner sends before any limit can count it, so no field may run it. The note editor, command list, find field and browser field hand Ctrl+V and Shift+Insert to the exchange, which reads through `cliptext`'s 1 MiB bound, refuses a paste that would not fit the field, and inserts only while that field is still taking text; failures go to the pane that asked. The line fields also take the middle button (primary selection); the pan surface takes it above the note editor. `security.js` refuses any text field without both; `tst_node.qml` and `tst_pan.qml` show each field no longer pastes for itself; `tst_fieldpaste.qml` runs the real exchange and helper against an owner that never stops sending, a late answer, a destroyed field and a clipboard with no text. |
 | Board JSON, titles, paths, errors | Models → Qt text | Explicit plain text for labels. Styled notes escape input first; status escapes variable messages. Source guards, hostile markup tests and Qt title test. |
 | Long note text | Board file, import, editor, CLI → text layout on the shell's thread | A note is at most 1 MiB: a board with a longer one opens read-only and empty, import and the CLI refuse one, the editor refuses to grow one. Unbroken runs wrap anywhere, and the editor holds a note only while open, so layout stays linear. Store, controller, node, exchange and CLI tests. |
-| Board size | Board file, import, outside writes, CLI → delegates on the shell's thread | At most 5,000 items, 20,000 connectors and 32 MiB. The helper refuses a larger file by its size before any of it is read (`check`, `snapshot`, `filesize`, exit 5) and refuses to commit one; a board over a count opens read-only and empty with the reason and is never written over. Adding, duplicating, connecting, import, timeline steps and the CLI stop at the limits. Store, controller, exchange, timeline, filesystem and CLI tests. |
-| JSON text | Board, history, import, state, trash index, IPC → `JSON.parse` on the shell's engines | Qt's parser holds each element of an open array on an unchecked stack and segfaults past about 557,000. Every shell-side parse goes through `parseJson`, which refuses more than 100,000 held at once; the history worker carries an identical copy. Store, history, controller and exchange tests; `contract.js` holds the copies equal; `security.js` refuses any other `JSON.parse` in shell code. |
+| Board size | Board file, import, outside writes, CLI → delegates on the shell's thread | At most 5,000 items, 20,000 connectors and 32 MiB. The helper refuses a larger file by its size before any of it is read (`check`, `snapshot`, `filesize`, exit 5) and refuses to commit one; a board over a count opens read-only and empty with the reason and is never written over. Adding, duplicating, connecting, import and the CLI stop at the limits. Store, controller, exchange, filesystem and CLI tests. |
+| JSON text | Board, import, state, trash index, IPC → `JSON.parse` on the shell's engine | Qt's parser holds each element of an open array on an unchecked stack and segfaults past about 557,000. Every shell-side parse goes through `parseJson`, which refuses more than 100,000 held at once. Store, controller and exchange tests; `security.js` refuses any other `JSON.parse` in shell code. |
 | Image names from boards | Local image URL, bundle/copy helper | Plain validated names, no URL or traversal; helper rejects symlink components. Logic/filesystem tests. |
 | Pictures already in `images/` | File → Qt image reader in the shell | Whatever put it there, a picture is drawn only after `checkimages` holds it to what landing would (size, type, pixels, compressed text). `imagePath` answers a URL only for a picture `pictureState` has cleared; a board read from disk has its pictures checked again, unchanged ones by revision (size, inode, modification and change time). Filesystem, controller and `tst_node` tests; `security.js` refuses any other picture URL. |
 | Notes and edits | Helper commit stdin → board/backup | Atomic replacement, revision check, lock, no content in diagnostics, private modes for newly committed files and the folders made for them. Filesystem, CLI and QML persistence tests. |
@@ -45,7 +45,7 @@ an external service.
 | Images in foreign shared boards | Landed files → aggregate header check → published board | At most 40,000,000 pixels and 32 MiB of file data across live image items, counting repeated references and offscreen items. Compressed PNG text and profiles are refused before landing. `imagebudget` reads dimensions without decoding rasters; unreadable dimensions or a helper failure refuse publication. Foreign history is discarded first. Filesystem, exchange and `tst_imagebudget.qml` tests. |
 | Foreign board fields | Parsed input → normalized canvas → import staging | Only known primitive canvas fields survive, serialized compactly within the UTF-8 byte cap. Unknown nested data is dropped; invalid fields fail without leaving the exchange busy. Store, exchange and real QML regressions. |
 | CLI operations | stdin/file → model → helper | Parse as data, no evaluation. Invalid JSON must not echo content. CLI/security tests. |
-| Board history | Board file → worker thread → replay models → text layout | Parsed off the shell's thread, never evaluated. Text past 64 MiB is not parsed; more than twice 10,000 records is refused before replay; every record is checked against the board it plays to. A step whose notes break the 1 MiB rule is not shown. Labels are plain text; image names go through the same validation as the live board. Unreadable histories are written whole beside the backups under a flattened name. `tests/history.js`, `tests/recording.js`, `tests/timeline.js`, CLI tests. |
+| Old board history | Board file → `readFile` → dropped | The edit history Omarchyform 0.4.7 to 0.4.10 kept after a board is parsed with the rest of the file, as any JSON reader parses it, through `parseJson`, and then dropped; it is never evaluated. A key after it counts on any line, so a newer version named there keeps the board read-only and the canvas after it is the canvas. A history that is not JSON, or holds more at once than `parseJson` allows, makes the file unreadable rather than half read. A full one costs about 0.2 s once, until the next save writes the board without it. `tests/suite.js`, `tests/editing.js`, `tests/cli.js`, `tst_legacy.qml`. |
 | Desktop install/open | Opt-in launcher files and summon payload | No automatic install hook; ownership/conflict checks, correct path encoding, no shell interpretation. Desktop tests and manual review. |
 
 ## Before submitting to the marketplace
@@ -141,18 +141,18 @@ These are review obligations, not claims covered by a green test:
 - Board files are plaintext, and private only by their modes. As the shell
   starts, the helper makes the plugin's six folders 0700 and removes group and
   other access from everything in them that is this user's, existing installs
-  included; the files the shell writes itself (its state, staged imports, the
-  trash index, a history set aside) take the shell's umask and are kept to
-  their owner by those folders. Something in them that is not this user's is
-  left as it is and named. A file copied out of them, or an export saved where
-  the user chooses, is 0600 when this writes it and then the user's to keep.
+  included; the files the shell writes itself (its state, staged imports and
+  the trash index) take the shell's umask and are kept to their owner by those
+  folders. Something in them that is not this user's is left as it is and
+  named. A file copied out of them, or an export saved where the user chooses,
+  is 0600 when this writes it and then the user's to keep.
 - Ordinary deletion is not secure erasure. Backups, trash, image assets,
-  exported copies and clipboard managers can retain content. A board's history
-  keeps text that was deleted from its notes, in the board file itself, until
-  the oldest records are trimmed or **Forget this board's history** is run;
-  the backup of the previous write still holds it after a forget, and a
-  history set aside as unreadable stays in the backups folder. Copies made to
-  share never carry history. Crashes can leave
+  exported copies and clipboard managers can retain content. A board written
+  by 0.4.7 to 0.4.10 keeps the text deleted from its notes in its history, in
+  the board file itself, until its next save writes it without one; the backup
+  of that previous version holds it until the save after, and a history those
+  versions set aside as unreadable stays in the backups folder. Copies made to
+  share never carried history. Crashes can leave
   staging files; EXIT traps do not run after SIGKILL or power loss.
 - `bin/omarchyform new --note TEXT` deliberately accepts text in argv, so it
   can also enter shell history and process metadata. For sensitive text use

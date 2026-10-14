@@ -159,16 +159,15 @@ assert.match(fs.readFileSync(path.join(root, 'Board.qml'), 'utf8'),
 
 // Qt's JSON.parse keeps an array's elements on an engine stack nothing checks,
 // and a 1.1 MB file overflows it (Store.MAX_JSON_OPEN). Everything the shell
-// parses goes through parseJson, which counts first; only the two copies of
-// it call JSON.parse. The command line runs in node, whose parser has no such
-// limit.
+// parses goes through parseJson, which counts first; only it calls
+// JSON.parse. The command line runs in node, whose parser has no such limit.
 function bareParse(source, guard) {
   return source.split('\n').map((line, i) => [line, i + 1])
     .filter(([line]) => /\bJSON\.parse\s*\(/.test(line) && !/^\s*\/\//.test(line)
       && !(guard && line === '  return JSON.parse(text)'))
     .map(([, n]) => `line ${n}: JSON.parse outside parseJson can take the shell down; use parseJson`)
 }
-const guards = ['BoardStore.js', 'BoardHistory.js']
+const guards = ['BoardStore.js']
 assert.ok(bareParse('    try { st = JSON.parse(raw) } catch (e) {}').length)
 assert.ok(bareParse('  return JSON.parse(text)', false).length, "parseJson's own line, anywhere else")
 assert.deepEqual(bareParse('    try { st = Store.parseJson(raw) } catch (e) {}\n  // JSON.parse(text) here'), [])

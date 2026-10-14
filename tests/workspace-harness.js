@@ -34,11 +34,8 @@ function makeDocument(workspace, board, Store) {
   const items = new FakeModel(), links = new FakeModel()
   const doc = { workspace, items, links, nextId: 1, nextColor: 0, undoStack: [], redoStack: [],
     currentBoard: board, destroyed: false, editedBy: [],
-    // The history the QML declares, at the values it starts with.
-    historyHeader: '', historyRecords: '', historyCount: 0, historyBytes: 0, historyLast: 0, historyStart: 0,
-    historyAsLoaded: '', historyChecking: false, historyRaw: '', historyWaiting: [], historyTrimming: false, historyTrimmed: false,
-    historyToken: 0, head: null, loadedState: null, editLabel: '', editKey: '', changed: false, changedSince: 0,
-    replay: null, replayUsers: 0, pointerOwner: null,
+    // The gesture state the QML declares, at the values it starts with.
+    pointerOwner: null, loadSerial: 0,
     // Connections in the QML: every pane on this board but the one that
     // edited follows the edit.
     edited(by) {
@@ -47,11 +44,11 @@ function makeDocument(workspace, board, Store) {
     },
     destroy() { doc.destroyed = true } }
   const session = { ctl: doc, boardLoaded: true, damaged: false, pendingBoard: null,
-    lastSavedCount: 0, lastSavedText: '', saveError: '', damageReason: '',
+    lastSavedCount: 0, lastSavedText: '', loadedText: '', saveError: '', damageReason: '',
     // The conflict state the QML declares, mirrored here: an undeclared
     // property reads as undefined, which is not what a string property does.
     conflict: false, resolving: '', createWhenLoaded: false,
-    revision: '', forceNextSave: false, diskReading: false }
+    revision: '', forceNextSave: false, diskReading: false, waitingSince: 0 }
   // The binding BoardSession.qml declares, term for term.
   Object.defineProperty(session, 'canEdit', {
     get: () => session.boardLoaded && !session.damaged && session.pendingBoard === null && !session.diskReading
@@ -67,27 +64,14 @@ function makeDocument(workspace, board, Store) {
   Object.defineProperty(session, 'busy', { get: () => persistence.busy || session.diskReading })
   // What the document reads off its session, and off the workspace for it.
   forward(doc, () => session, ['boardLoaded', 'damaged', 'damageReason', 'saveError', 'pendingBoard'])
-  // The binding BoardDocument.qml declares: not while its history is read.
-  Object.defineProperty(doc, 'canEdit', { get: () => session.canEdit && !doc.historyChecking })
+  // The binding BoardDocument.qml declares.
+  Object.defineProperty(doc, 'canEdit', { get: () => session.canEdit })
   Object.defineProperty(doc, 'diskChanged', { get: () => session.conflict })
   Object.defineProperty(doc, 'saving', { get: () => session.busy })
   Object.defineProperty(doc, 'boardPath', { get: () => '/boards/' + doc.currentBoard })
   Object.defineProperty(doc, 'boardTitle', { get: () => Store.displayName({ path: doc.currentBoard, dir: false }) })
   forward(doc, () => workspace, ['autosaveMs', 'stateReady', 'boardsDir', 'backupsDir', 'library'])
-  // The history worker answers when the test says so: what the document
-  // asked it is kept, and `answer` plays the reply back the way onMessage does.
-  const historyWorker = { asked: [], sendMessage(m) { historyWorker.asked.push(m) } }
-  const aside = { path: '', written: [], setText(text) { aside.written.push({ path: aside.path, text }) } }
-  const History = loadStore(fs.readFileSync(path.join(__dirname, '..', 'BoardHistory.js'), 'utf8'))
-  // The index is built a slice per timer tick; here, all at once when asked.
-  const indexer = { running: false, start() { indexer.running = true }, stop() { indexer.running = false } }
-  // Connections in the QML: a pane looking back follows the replay's changes.
-  let revision = 0
-  Object.defineProperty(doc, 'replayRevision', {
-    get: () => revision,
-    set: value => { revision = value; for (const pane of workspace.paneSlots || []) if (pane.replayDoc === doc) pane.followReplay() }
-  })
-  const context = vm.createContext({ doc, session, persistence, Store, History, historyWorker, aside, indexer,
+  const context = vm.createContext({ doc, session, persistence, Store,
     itemModel: items, linkModel: links, Date, Qt: { callLater(f) { f() } },
     saveTimer: { running: false, stop() {}, restart() {} } })
   loadFunctions(doc, sources.document, context)
@@ -106,15 +90,7 @@ function makeDocument(workspace, board, Store) {
   session.requestDisk = resolve => session.acceptDisk(doc.currentBoard,
     doc.fileText(), resolve, 'rev-fresh\n' + session.diskText)
   let revisions = 0
-  return { doc, session, persistence, items, links, writes, worker: historyWorker, aside, indexer,
-    // What the indexing timer does between frames, done now.
-    index() { while (indexer.running) doc.indexReplay() },
-    // What the worker would say back, delivered the way onMessage delivers it.
-    answer(reply) {
-      if (reply.token !== doc.historyToken) return
-      if (reply.kind === 'checked') doc.checkedHistory(reply)
-      else if (reply.kind === 'trimmed') doc.trimmedHistory(reply)
-    },
+  return { doc, session, persistence, items, links, writes,
     complete() {
       const write = writes[writes.length - 1]
       persistence.busy = false
@@ -138,27 +114,16 @@ function makePane(workspace, exchange, Store) {
     menuVisible: false, zoomMenuVisible: false, menuIndex: 0, helpVisible: false,
     paletteVisible: false, paletteQuery: '', paletteIndex: 0, paletteRows: 9, paletteGroup: '',
     conflictVisible: false, conflictIndex: 0, paletteScope: 'all', imageBusy: false,
-    statusText: '', failureText: '', failureKind: '', pendingFirstNote: '', forgetArmedAt: 0,
-    timeline: false, timelineLive: true, timelineRecord: 0, replayDoc: null, playing: false, playSpeed: 1, pointerEdit: null,
-    playEnd: 0, scrubWanted: 0, compareArmedAt: 0, docSerial: 0,
+    statusText: '', failureText: '', failureKind: '', pendingFirstNote: '', pointerEdit: null, docSerial: 0,
     worldStep: 40, minItemSize: 60, viewW: 1000, viewH: 700 }
   const empty = new FakeModel()
-  // Its own models for an earlier board, which the QML declares as ids.
-  const pastItems = new FakeModel(), pastLinks = new FakeModel()
-  Object.defineProperty(root, 'lookingBack', { get: () => root.timeline && !root.timelineLive })
   // What the header says the board is: a binding in the QML, term for term.
-  Object.defineProperty(root, 'boardState', { get: () => root.lookingBack ? 'Earlier version · read only'
-    : root.doc && root.doc.historyChecking ? 'Checking history…'
-    : root.damaged ? 'Read only' : root.saveError !== '' ? 'Save failed'
+  Object.defineProperty(root, 'boardState', { get: () => root.damaged ? 'Read only'
+    : root.saveError !== '' ? 'Save failed'
     : root.diskChanged ? 'Changed on disk' : root.saving ? 'Saving…' : 'Saved locally' })
-  // What the strip says and where its marker is: bindings in the QML.
-  Object.defineProperty(root, 'timelineSays', { get: () => root.timeline
-    ? root.timelineText(root.timelineRecord, root.timelineLive, root.playing, root.playSpeed, 0) : '' })
-  Object.defineProperty(root, 'timelineFraction', { get: () => root.timeline
-    ? root.timelinePlace(root.timelineRecord, root.timelineLive, 0) : 0 })
   // What the pane reads off its document and the workspace.
-  Object.defineProperty(root, 'items', { get: () => root.lookingBack ? pastItems : root.doc ? root.doc.items : empty })
-  Object.defineProperty(root, 'links', { get: () => root.lookingBack ? pastLinks : root.doc ? root.doc.links : empty })
+  Object.defineProperty(root, 'items', { get: () => root.doc ? root.doc.items : empty })
+  Object.defineProperty(root, 'links', { get: () => root.doc ? root.doc.links : empty })
   // onDocChanged in the QML.
   let shown = null
   Object.defineProperty(root, 'doc', {
@@ -167,7 +132,6 @@ function makePane(workspace, exchange, Store) {
       if (value === shown) return
       shown = value
       root.docSerial += 1
-      if (root.timeline && root.replayDoc !== value) root.leaveTimeline()
     }
   })
   Object.defineProperty(root, 'nextId', { get: () => root.doc ? root.doc.nextId : 1 })
@@ -179,7 +143,7 @@ function makePane(workspace, exchange, Store) {
   Object.defineProperty(root, 'boardPath', { get: () => root.doc ? root.doc.boardPath : '' })
   // The harness has always read canEdit as the session's own answer: the
   // library and an export pausing it are tested where they happen.
-  Object.defineProperty(root, 'canEdit', { get: () => !!root.doc && root.doc.canEdit && !root.leaving && !root.lookingBack })
+  Object.defineProperty(root, 'canEdit', { get: () => !!root.doc && root.doc.canEdit && !root.leaving })
   forward(root, () => workspace, ['opened', 'stateReady', 'step', 'showGrid', 'canvasPattern', 'library',
     'dataDir', 'boardsDir', 'imagesDir', 'split'])
   Object.defineProperty(root, 'active', { get: () => workspace.activePane === root })
@@ -215,10 +179,7 @@ function makePane(workspace, exchange, Store) {
     get: () => selected,
     set: value => { if (value === selected) return; selected = value; root.cursorId = root.idAt(value) }
   })
-  const timer = () => ({ running: false, start() { this.running = true }, stop() { this.running = false } })
-  const History = loadStore(fs.readFileSync(path.join(__dirname, '..', 'BoardHistory.js'), 'utf8'))
-  const context = vm.createContext({ root, Store, History, pastItems, pastLinks, Date,
-    player: timer(), scrubber: timer(),
+  const context = vm.createContext({ root, Store, Date,
     statusTimer: { restart() {} }, failureTimer: { restart() {} } })
   loadFunctions(root, sources.pane, context)
   return root
@@ -357,7 +318,6 @@ function controller() {
       importedName.text = name || ''
       importExited(code)
     },
-    worker: opened.worker, aside: opened.aside, answer: opened.answer, index: opened.index,
     // The handles for any document the workspace has made since.
     of: doc => made.get(doc) }
 }

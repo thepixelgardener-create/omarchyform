@@ -474,7 +474,7 @@ Item {
       var dy = mouse.y - pressY
       // A few pixels of slack so a click to select never nudges it.
       if (!dragging && Math.abs(dx) + Math.abs(dy) < 3) return
-      if (!dragging) node.ctl.beginPointerEdit("Move")
+      if (!dragging) node.ctl.beginPointerEdit()
       dragging = true
       node.ctl.moveTargets(dx, dy)
     }
@@ -485,7 +485,7 @@ Item {
     onCanceled: { if (dragging) node.ctl.finishPointerEdit(true); dragging = false }
     onDoubleClicked: {
       if (node.ipinned || !node.ctl.canEdit || node.ctl.linkingFrom >= 0) return
-      node.ctl.pushUndo("Typing", node.iid)
+      node.ctl.pushUndo()
       node.ctl.editIndex = node.index
     }
   }
@@ -512,7 +512,7 @@ Item {
     onPositionChanged: function (mouse) {
       if (!pressed) return
       if (sizing && !node.ctl.pointerEdit) return
-      if (!sizing) { node.ctl.beginPointerEdit("Resize"); sizing = true }
+      if (!sizing) { node.ctl.beginPointerEdit(); sizing = true }
       node.ctl.resizeTargets(mouse.x - pressX, mouse.y - pressY)
     }
     onReleased: {
