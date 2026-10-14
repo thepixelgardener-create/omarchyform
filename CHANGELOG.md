@@ -5,8 +5,34 @@ since older boards are migrated on load rather than rejected.
 
 ## Unreleased
 
+### Removed
+
+- The edit history and its timeline: `t`, `T` (an earlier version beside the
+  board as it is) and **Forget this board's history**. A board shared with an
+  item id near the largest an id can be could hold the shell up for 25 seconds
+  when its timeline opened. A board that 0.4.7 to 0.4.10 saved with a history
+  now opens at once, without **Checking history…**, and nothing of the history
+  is kept: the next save writes the board without it, so any edit removes it.
+  Boards are written as format 5, or 7 with item textures. `bin/omarchyform`
+  no longer records its runs, and `validate` and `apply` no longer answer
+  `history`.
+
 ### Fixed
 
+- A fresh install's first board opens editable. The plugin read its state
+  before its folders were made, so the board's path was checked before its
+  folder existed, and the first board opened read-only as "goes through a
+  symlink" until the shell was restarted.
+- Item positions and sizes are held to the board: within 1,000,000 of the
+  middle, and from 60 to 100,000 across. A board's file is brought within
+  them when it opens, and moving, resizing, copying, new items and the command
+  line stop at them; `validate` names the items it brought in. Past them the
+  scene graph's 32-bit floats lose precision, and a large enough ellipse drew
+  `Infinity` into its texture.
+- A board that arrives with an item at the largest id, 2,147,483,646, no
+  longer hands out ids past it. New notes and copies got ids that opening the
+  board again replaced, dropping their connectors; they now take the smallest
+  free ids, and so does the command line's `add`.
 - Shared-board imports are limited to 40 megapixels across all image items,
   counting repeated references separately. A board over the limit is refused
   before publication, even when its compressed images fit the byte budget.

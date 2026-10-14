@@ -3,7 +3,6 @@ pragma ComponentBehavior: Bound
 import Quickshell.Io
 import QtQuick
 import "BoardStore.js" as Store
-import "BoardHistory.js" as History
 
 // One view of a board, and the controller every view reads as `ctl`: where the
 // camera is, what is selected, which mode the keys are in, what the line under
@@ -49,12 +48,8 @@ Item {
   // -------------------------------------------------------------------- state
   // The board's contents, as the views read them. A pane with no board yet
   // reads as an empty one rather than as null.
-  // Looking back, they are the board as it was: models of the pane's own,
-  // which nothing edits and nothing saves.
-  readonly property ListModel items: root.lookingBack ? pastItems : root.doc ? root.doc.items : noItems
-  readonly property ListModel links: root.lookingBack ? pastLinks : root.doc ? root.doc.links : noLinks
-  ListModel { id: pastItems }
-  ListModel { id: pastLinks }
+  readonly property ListModel items: root.doc ? root.doc.items : noItems
+  readonly property ListModel links: root.doc ? root.doc.links : noLinks
   ListModel { id: noItems }
   ListModel { id: noLinks }
 
@@ -101,9 +96,7 @@ Item {
   property bool imageBusy: false
   readonly property bool exchangeBusy: root.workspace.exchange.busy
   readonly property bool dialogOpen: root.workspace.exchange.dialogOpen
-  readonly property string boardState: root.lookingBack ? "Earlier version · read only"
-    : root.doc && root.doc.historyChecking ? "Checking history…"
-    : root.damaged ? "Read only" : root.saveError !== "" ? "Save failed"
+  readonly property string boardState: root.damaged ? "Read only" : root.saveError !== "" ? "Save failed"
     : root.diskChanged ? "Changed on disk" : root.saving ? "Saving…" : "Saved locally"
   // Only a board made to be typed into. A pane that has just been given a
   // board can hear that it loaded before it hears which board it is, and an
@@ -113,8 +106,6 @@ Item {
     root.pendingFirstNote = ""
     Qt.callLater(function() {
       root.selectedIndex = 0
-      // Typing into it is an edit like any other, and its record says so.
-      if (root.items.count > 0) root.doc.beginEdit("Typing", String(root.items.get(0).iid))
       root.editIndex = 0
       root.centerOnSelected()
     })
@@ -128,7 +119,7 @@ Item {
 
   function pasteText(text) {
     if (!root.canEdit || !text) return
-    root.addItem("note", root.toWorldX(root.viewW / 2), root.toWorldY(root.viewH / 2), "Paste",
+    root.addItem("note", root.toWorldX(root.viewW / 2), root.toWorldY(root.viewH / 2),
                  { text: text, width: 300, height: 200 })
     root.flash("Text pasted · enter to edit", "paste")
     root.focusKeys()
@@ -206,8 +197,8 @@ Item {
       return
     }
     if (!Store.imageIsValid(name)) { root.pumpImages(); return }
-    // Read-only by the time it was measured: an earlier version on screen, or
-    // the board's history being read again. Said, not dropped without a word.
+    // Not editable by the time it was measured: read-only, or busy with
+    // something else. Said, not dropped without a word.
     if (!root.canEdit) {
       root.report("Picture not added · " + root.commandExcuse(""), placing && placing.atPoint ? "picture" : "paste")
       root.pumpImages()
@@ -222,7 +213,7 @@ Item {
     var fitH = Math.max(root.minItemSize, Math.round(h * fit))
     var atX = placing && placing.atPoint ? placing.x : root.toWorldX(root.viewW / 2)
     var atY = placing && placing.atPoint ? placing.y : root.toWorldY(root.viewH / 2)
-    root.addItem("image", atX, atY, "Picture", { src: name, width: fitW, height: fitH })
+    root.addItem("image", atX, atY, { src: name, width: fitW, height: fitH })
     // A drop carries the point it was let go of; a paste does not. That is
     // also which operation it recovers: the file manager or the clipboard.
     root.flash(naturalWidth > 0 ? "Image added" : "Image added · it could not be read, so the size is a guess",
@@ -243,18 +234,11 @@ Item {
   // helper's limit rather than by Qt: see BoardExchange.pasteInto.
   function pasteInto(field) { root.workspace.exchange.pasteInto(root, field) }
   function importBoard() { root.workspace.exchange.choose("import") }
-  // What goes out is the board as it is. Sending an earlier version out is
-  // not something this does yet, so looking back it says so.
-  function exportsNow() {
-    if (!root.lookingBack) return true
-    root.flash("this is an earlier version · esc returns to now, which is what goes out")
-    return false
-  }
-  function exportBoard() { if (root.exportsNow()) root.workspace.exchange.choose("json") }
+  function exportBoard() { root.workspace.exchange.choose("json") }
   // The copy that deliberately leaves the pictures behind. Asking for it is a
   // separate thing with a name of its own, because a copy that quietly arrives
   // without them is what this used to do by accident.
-  function exportBoardPlain() { if (root.exportsNow()) root.workspace.exchange.choose("plain") }
+  function exportBoardPlain() { root.workspace.exchange.choose("plain") }
   // Which colours the next picture is drawn in. Set by the command that asked
   // for it and read by the board when it renders, rather than carried through
   // the file dialog: choosing where to put a picture and choosing what it looks
@@ -265,7 +249,6 @@ Item {
     // Both panes render into the same file on the way out, so a second picture
     // waits for the first rather than being drawn over it.
     if (root.workspace.imageBusy) { root.flash("Finishing image export…"); return }
-    if (!root.exportsNow()) return
     root.pngPalette = Store.EXPORT_PALETTE_NAMES.indexOf(palette) >= 0 ? palette : "theme"
     root.workspace.exchange.choose("png")
   }
@@ -348,7 +331,7 @@ Item {
       paletteVisible: root.paletteVisible, arranging: root.arranging,
       showPinned: root.showPinned, editing: root.editIndex >= 0,
       linking: root.linkingFrom >= 0, statusText: root.statusText,
-      switching: root.pendingBoard !== null || root.leaving, saving: root.saving, timeline: root.timeline
+      switching: root.pendingBoard !== null || root.leaving, saving: root.saving
     }
   }
 
@@ -420,16 +403,14 @@ Item {
     if (!root.diskChanged || root.exchangeBusy) return
     root.conflictVisible = false
     var base = Store.baseName(root.currentBoard).replace(/\.json$/i, "")
-    // The copy keeps this version's history with it.
     root.workspace.saveConflictCopy(root.doc, root.doc.fileText(), base + "-mine")
   }
   readonly property bool saving: root.doc !== null && root.doc.saving
   readonly property var pendingBoard: root.doc ? root.doc.pendingBoard : null
   // One picture renders at a time across the workspace, and nothing changes
   // under it while it does: a board shown twice is still one board.
-  // An earlier version is to look at: nothing in this pane changes it.
   readonly property bool canEdit: root.doc !== null && root.doc.canEdit && !root.library.busy
-    && !root.leaving && !root.workspace.imageBusy && !root.lookingBack
+    && !root.leaving && !root.workspace.imageBusy
   readonly property bool stateReady: root.workspace.stateReady
 
   function fileCommand(action, args) { return root.workspace.fileCommand(action, args) }
@@ -542,7 +523,7 @@ Item {
     var unpin = n && n.ipinned
     var t = unpin ? [root.selectedIndex] : root.targets()
     if (t.length === 0) return
-    root.pushUndo(unpin ? "Unpin" : "Pin")
+    root.pushUndo()
     for (var i = 0; i < t.length; i++) root.items.setProperty(t[i], "ipinned", !unpin)
     root.markedIds = []
     root.editIndex = -1
@@ -571,18 +552,15 @@ Item {
   function toScreenX(wx) { return wx * root.zoom + root.camX }
   function toScreenY(wy) { return wy * root.zoom + root.camY }
 
-  // ------------------------------------------------------------------ history
+  // --------------------------------------------------------------------- undo
   function snapshot() {
     return { items: Store.itemRows(root.items), links: Store.linkRows(root.links), nextId: root.nextId }
   }
 
-  // An edit is starting, and this is what it is called: the label its record
-  // carries in the board's history. `key` says which typing session it is,
-  // so typing in another note is a record of its own.
-  function pushUndo(label, key) {
+  // An edit is starting: the board as it was goes on the undo stack.
+  function pushUndo() {
     if (!root.boardLoaded) return
     if (root.doc.pointerOwner) root.doc.pointerOwner.finishPointerEdit(true)
-    root.doc.beginEdit(label || "Edit", key === undefined ? "" : String(key))
     var s = root.doc.undoStack.slice()
     s.push(root.snapshot())
     // A snapshot holds the whole board, so depth has to give way as boards
@@ -604,12 +582,11 @@ Item {
     if (edit && edit.doc.pointerOwner === root) edit.doc.pointerOwner = null
   }
 
-  function beginPointerEdit(label) {
+  function beginPointerEdit() {
     if (root.doc.pointerOwner) root.doc.pointerOwner.finishPointerEdit(true)
-    root.finishKeyEdit()
     var beforeUndo = root.doc.undoStack, beforeRedo = root.doc.redoStack
-    root.pushUndo(label)
-    root.pointerEdit = { doc: root.doc, token: root.doc.historyToken,
+    root.pushUndo()
+    root.pointerEdit = { doc: root.doc, token: root.doc.loadSerial,
                          before: root.doc.undoStack[root.doc.undoStack.length - 1],
                          undo: beforeUndo, redo: beforeRedo }
     root.doc.pointerOwner = root
@@ -620,27 +597,18 @@ Item {
     root.pointerEdit = null
     if (!edit || edit.doc.pointerOwner !== root) return
     edit.doc.pointerOwner = null
-    if (edit.doc !== root.doc || edit.token !== edit.doc.historyToken) return
+    if (edit.doc !== root.doc || edit.token !== edit.doc.loadSerial) return
     if (cancel) {
       // Sync in place: rebuilding delegates inside their canceled handler
       // would destroy the item that is still releasing its pointer grab.
       Store.syncItems(root.items, edit.before.items)
       root.doc.undoStack = edit.undo
       root.doc.redoStack = edit.redo
-      root.doc.changed = false
       root.doc.edited(root)
       root.repaintLinks()
     } else root.save()
-    root.doc.endEdit()
     // A preceding save may have completed while this gesture blocked its
     // follow-up write. Resume that accepted state even after cancellation.
-    root.doc.flushSave()
-  }
-
-  function finishKeyEdit() {
-    if (!root.doc || root.doc.pointerOwner) return
-    if (root.doc.editLabel !== "Move" && root.doc.editLabel !== "Resize") return
-    root.doc.endEdit()
     root.doc.flushSave()
   }
 
@@ -662,8 +630,6 @@ Item {
   function undo() {
     if (!root.canEdit) return
     if (root.doc.undoStack.length === 0) return
-    // An undo is an edit of its own in the history: the board went back.
-    root.doc.beginEdit("Undo", "")
     var from = root.doc.undoStack.slice()
     var to = root.doc.redoStack.slice()
     to.push(root.snapshot())
@@ -677,7 +643,6 @@ Item {
   function redo() {
     if (!root.canEdit) return
     if (root.doc.redoStack.length === 0) return
-    root.doc.beginEdit("Redo", "")
     var from = root.doc.redoStack.slice()
     var to = root.doc.undoStack.slice()
     to.push(root.snapshot())
@@ -689,26 +654,27 @@ Item {
   }
 
   // -------------------------------------------------------------------- items
-  // Build the complete item before publishing it to the model or history.
+  // Build the complete item before publishing it to the model.
   // Paste supplies its content and final size; ordinary new items use defaults.
-  function addItem(kind, wx, wy, label, content) {
+  function addItem(kind, wx, wy, content) {
     if (!root.canEdit) return
     // A board past the cap could not be opened again (Store.boardLimit), so
     // it is not built in the first place.
     if (root.items.count >= Store.MAX_ITEMS) { root.flash(Store.FULL_ITEMS); return }
     root.showPinned = false
     root.markedIds = []
-    root.pushUndo(label || Store.ADD_LABELS[kind] || "New item")
+    root.pushUndo()
     var initial = content || {}
-    var w = initial.width === undefined ? (kind === "note" ? 180 : 160) : initial.width
-    var h = initial.height === undefined ? (kind === "note" ? 140 : 110) : initial.height
+    var w = Store.clampSize(initial.width === undefined ? (kind === "note" ? 180 : 160) : initial.width)
+    var h = Store.clampSize(initial.height === undefined ? (kind === "note" ? 140 : 110) : initial.height)
+    var taken = Store.newIds(root.items, root.doc.nextId, 1)
     root.items.append({
-      iid: root.nextId, kind: kind,
-      ix: wx - w / 2, iy: wy - h / 2, iw: w, ih: h,
+      iid: taken.ids[0], kind: kind,
+      ix: Store.clampCoord(wx - w / 2), iy: Store.clampCoord(wy - h / 2), iw: w, ih: h,
       itint: Store.TINTS[root.doc.nextColor % Store.TINTS.length],
       itext: initial.text || "", ipinned: false, isrc: initial.src || "", itexture: "plain"
     })
-    root.doc.nextId += 1
+    root.doc.nextId = taken.next
     root.doc.nextColor += 1
     root.selectedIndex = root.items.count - 1
     root.save()
@@ -933,8 +899,6 @@ Item {
 
   function commandExcuse(needs) {
     if (needs === "conflict") return "this board has not changed underneath you"
-    if (root.lookingBack) return "this is an earlier version · esc returns to now"
-    if (root.doc && root.doc.historyChecking) return "checking this board's history · a moment"
     if (!root.canEdit) return root.damaged ? "this board is read-only" : "the board is not ready yet"
     if (needs === "typing") return "start editing a note"
     if (needs === "group") return "mark two or more"
@@ -1048,7 +1012,7 @@ Item {
     if (!root.canEdit) return
     var moves = Store.alignMoves(root.items, root.targets(), edge)
     if (moves.length === 0) { root.flash("already aligned"); return }
-    root.applyMoves(moves, "Align")
+    root.applyMoves(moves)
     root.flash("aligned " + moves.length + (moves.length === 1 ? " item" : " items"))
   }
 
@@ -1059,12 +1023,12 @@ Item {
     if (t.length < 3) { root.flash("mark three or more items to spread them"); return }
     var moves = Store.spreadMoves(root.items, t, axis)
     if (moves.length === 0) { root.flash("already evenly spaced"); return }
-    root.applyMoves(moves, "Spread")
+    root.applyMoves(moves)
     root.flash("spread " + moves.length + (moves.length === 1 ? " item" : " items"))
   }
 
-  function applyMoves(moves, label) {
-    root.pushUndo(label)
+  function applyMoves(moves) {
+    root.pushUndo()
     for (var i = 0; i < moves.length; i++) {
       root.items.setProperty(moves[i].index, "ix", moves[i].x)
       root.items.setProperty(moves[i].index, "iy", moves[i].y)
@@ -1092,19 +1056,20 @@ Item {
     for (var k = 0; k < joined.length; k++) if (copying[joined[k].from] && copying[joined[k].to]) joining++
     if (root.items.count + ordered.length > Store.MAX_ITEMS) { root.flash(Store.FULL_ITEMS); return }
     if (root.links.count + joining > Store.MAX_LINKS) { root.flash(Store.FULL_LINKS); return }
-    root.pushUndo("Duplicate")
+    root.pushUndo()
     var fresh = []
     var byOriginal = ({})
+    var taken = Store.newIds(root.items, root.doc.nextId, ordered.length)
+    root.doc.nextId = taken.next
     for (var i = 0; i < ordered.length; i++) {
       var n = root.items.get(ordered[i])
-      var id = root.nextId
-      root.doc.nextId += 1
+      var id = taken.ids[i]
       byOriginal[n.iid] = id
       // An image copy points at the same file: the picture is shared by every
       // board already, and duplicating one should not duplicate megabytes.
       root.items.append({
         iid: id, kind: n.kind,
-        ix: n.ix + Store.DUPLICATE_OFFSET, iy: n.iy + Store.DUPLICATE_OFFSET,
+        ix: Store.clampCoord(n.ix + Store.DUPLICATE_OFFSET), iy: Store.clampCoord(n.iy + Store.DUPLICATE_OFFSET),
         iw: n.iw, ih: n.ih, itint: n.itint, itext: n.itext, ipinned: false, isrc: n.isrc, itexture: Store.normalizeTexture(n.itexture)
       })
       fresh.push(id)
@@ -1125,7 +1090,7 @@ Item {
   // Indices must arrive descending: removing one shifts every index after it.
   function removeAt(indices) {
     if (indices.length === 0) return
-    root.pushUndo("Delete")
+    root.pushUndo()
     for (var k = 0; k < indices.length; k++) {
       var id = root.items.get(indices[k]).iid
       root.items.remove(indices[k])
@@ -1163,7 +1128,7 @@ Item {
       root.flash(where === "front" || where === "forward" ? "already at the front" : "already at the back")
       return
     }
-    root.pushUndo("Reorder")
+    root.pushUndo()
     // The cursor follows its item rather than its position, which is about to
     // be somebody else's.
     var cursor = root.selectedIndex >= 0 ? root.items.get(root.selectedIndex).iid : -1
@@ -1178,7 +1143,7 @@ Item {
     var n = root.selected()
     var t = root.targets()
     if (!n || t.length === 0) return
-    root.pushUndo("Colour")
+    root.pushUndo()
     var next = Store.cycle(Store.TINTS, n.itint)
     for (var i = 0; i < t.length; i++) root.items.setProperty(t[i], "itint", next)
     root.save()
@@ -1195,7 +1160,7 @@ Item {
     var targets = root.textureTargets()
     var changed = targets.filter(function (at) { return Store.normalizeTexture(root.items.get(at).itexture) !== texture })
     if (changed.length === 0) { root.flash(targets.length ? "texture already " + texture : "select a note or shape"); return }
-    root.pushUndo("Texture")
+    root.pushUndo()
     for (var i = 0; i < changed.length; i++) root.items.setProperty(changed[i], "itexture", texture)
     root.save()
     root.flash("texture: " + texture + " · " + changed.length + (changed.length === 1 ? " item" : " items") + " · u to undo")
@@ -1209,7 +1174,7 @@ Item {
     // Turning an image into a box would drop the picture with no way back, so
     // it keeps its shape and takes the rest of the selection with it.
     if (n.kind === "image") { root.flash("an image keeps its shape"); return }
-    root.pushUndo("Shape")
+    root.pushUndo()
     var next = Store.cycle(Store.KINDS, n.kind)
     for (var i = 0; i < t.length; i++)
       if (root.items.get(t[i]).kind !== "image") root.items.setProperty(t[i], "kind", next)
@@ -1251,7 +1216,7 @@ Item {
       root.flash(Store.FULL_LINKS)
       return
     }
-    root.pushUndo(found.outcome === "remove" ? "Remove connector" : found.outcome === "reverse" ? "Turn connector" : "Connect")
+    root.pushUndo()
     if (found.outcome === "remove") {
       root.links.remove(found.at)
       root.save(true)
@@ -1280,7 +1245,7 @@ Item {
     for (var j = root.links.count - 1; j >= 0; j--) {
       var l = root.links.get(j)
       if (l.lfrom === n.iid || l.lto === n.iid) {
-        if (!removed) { root.pushUndo("Remove connectors"); removed = true }
+        if (!removed) { root.pushUndo(); removed = true }
         root.links.remove(j)
       }
     }
@@ -1312,12 +1277,13 @@ Item {
     if (!root.canEdit) return
     var t = root.targets()
     var model = root.items
+    var move = Store.boundedMove(model, t, dx, dy)
     root.batching = true
     try {
       for (var i = 0; i < t.length; i++) {
         var n = model.get(t[i])
-        model.setProperty(t[i], "ix", n.ix + dx)
-        model.setProperty(t[i], "iy", n.iy + dy)
+        model.setProperty(t[i], "ix", n.ix + move.dx)
+        model.setProperty(t[i], "iy", n.iy + move.dy)
       }
     } finally { root.batching = false }
     root.repaintLinks()
@@ -1331,8 +1297,8 @@ Item {
     try {
       for (var i = 0; i < t.length; i++) {
         var n = model.get(t[i])
-        model.setProperty(t[i], "iw", Math.max(root.minItemSize, n.iw + dx))
-        model.setProperty(t[i], "ih", Math.max(root.minItemSize, n.ih + dy))
+        model.setProperty(t[i], "iw", Store.clampSize(n.iw + dx))
+        model.setProperty(t[i], "ih", Store.clampSize(n.ih + dy))
       }
     } finally { root.batching = false }
     root.repaintLinks()
@@ -1373,10 +1339,13 @@ Item {
     if (!root.canEdit) return
     var t = root.targets()
     if (t.length === 0) return
-    root.pushUndo("Move")
+    // Nothing to record when they are already as far as an item can go.
+    var move = Store.boundedMove(root.items, t, dx * root.worldStep, dy * root.worldStep)
+    if (move.dx === 0 && move.dy === 0) return
+    root.pushUndo()
     root.moveTargets(dx * root.worldStep, dy * root.worldStep)
     root.centerOnSelected()
-    // Scheduled rather than written: a held key is one move, and one record.
+    // Scheduled rather than written: a held key is one move, written once.
     root.scheduleSave()
   }
 
@@ -1386,15 +1355,16 @@ Item {
     if (!root.canEdit) return
     var t = root.targets()
     if (t.length === 0) return
-    // Nothing to record when every one of them is already at the minimum.
+    // Nothing to record when every one of them is already as small, or as
+    // large, as an item can be.
     var moved = false
     for (var i = 0; i < t.length; i++) {
       var n = root.items.get(t[i])
-      if (Math.max(root.minItemSize, n.iw + dx * root.worldStep) !== n.iw) { moved = true; break }
-      if (Math.max(root.minItemSize, n.ih + dy * root.worldStep) !== n.ih) { moved = true; break }
+      if (Store.clampSize(n.iw + dx * root.worldStep) !== n.iw) { moved = true; break }
+      if (Store.clampSize(n.ih + dy * root.worldStep) !== n.ih) { moved = true; break }
     }
     if (!moved) return
-    root.pushUndo("Resize")
+    root.pushUndo()
     root.resizeTargets(dx * root.worldStep, dy * root.worldStep)
     root.centerOnSelected()
     root.scheduleSave()
@@ -1477,7 +1447,7 @@ Item {
     if (root.selected() && root.selected().ipinned) return
     if (!root.canEdit) return
     if (root.selectedIndex < 0) return
-    root.pushUndo("Typing", root.selected().iid)
+    root.pushUndo()
     root.editIndex = root.selectedIndex
   }
 
@@ -1486,31 +1456,9 @@ Item {
     root.editIndex = -1
     root.focusKeys()
     root.save()
-    // Done typing is the end of that record, however soon the next one starts.
-    if (root.doc) root.doc.endEdit()
   }
 
   function toggleWindowMode() { root.workspace.toggleWindowMode() }
-
-  // Forgets every edit this board remembers and starts again from it as it
-  // is: text deleted from a note otherwise stays in its file's history. Asked
-  // for twice, because nothing brings it back.
-  property real forgetArmedAt: 0
-  function forgetHistory() {
-    if (!root.canEdit) return
-    if (root.doc.historyHeader === "" && !root.doc.historyChecking) {
-      root.flash("this board has no history to forget")
-      return
-    }
-    if (Date.now() - root.forgetArmedAt > 6000) {
-      root.forgetArmedAt = Date.now()
-      root.flash("Forget every edit this board remembers? Run it again to forget them")
-      return
-    }
-    root.forgetArmedAt = 0
-    root.doc.forgetHistory()
-    root.flash("History forgotten · it starts again from here")
-  }
 
   // Escape unwinds one layer at a time rather than closing outright.
   function back() {
@@ -1603,7 +1551,6 @@ Item {
   // both have an editor open; what is selected stays for when it comes back.
   function deactivate() {
     root.finishPointerEdit(true)
-    root.finishKeyEdit()
     if (root.editIndex >= 0) root.stopEditing()
     if (root.finding) root.endFind()
     if (root.paletteVisible) root.endPalette()
@@ -1638,8 +1585,6 @@ Item {
   // the camera stay where they were for when it comes back.
   function closeView() {
     root.finishPointerEdit(true)
-    root.finishKeyEdit()
-    root.stopPlaying()
     root.markedIds = []
     root.showPinned = false
     root.selectedIndex = -1
@@ -1650,262 +1595,12 @@ Item {
 
   function dismiss() { root.workspace.dismiss() }
 
-  // ------------------------------------------------------------ the timeline
-  // `t`: the board's history, a step at a time. The pane keeps which step it
-  // shows as that record's number rather than a place in a list, so edits
-  // arriving and the oldest leaving do not move it. Live is a state of its
-  // own: following the board as it is, rather than the latest step taken.
-  property bool timeline: false
-  property bool timelineLive: true
-  property int timelineRecord: 0
-  readonly property bool lookingBack: root.timeline && !root.timelineLive
-  // The document whose replay this pane holds, so leaving lets go of that one
-  // even when the pane has already moved to another board.
-  property var replayDoc: null
-  property bool playing: false
-  property real playSpeed: 1
-  property int playEnd: 0
-  property int scrubWanted: 0
-
-  // The first and last steps there are: the number of the record before the
-  // first, which is where the history starts, and of the last.
-  function firstRecord() {
-    var r = root.replayDoc && root.replayDoc.replay ? root.replayDoc.replay.h.records : []
-    return r.length > 0 ? r[0].i - 1 : root.replayDoc ? root.replayDoc.historyLast : 0
-  }
-  function lastRecord() {
-    var r = root.replayDoc && root.replayDoc.replay ? root.replayDoc.replay.h.records : []
-    return r.length > 0 ? r[r.length - 1].i : root.firstRecord()
-  }
-
-  function toggleTimeline() {
-    if (root.timeline) root.leaveTimeline()
-    else root.enterTimeline()
-  }
-
-  function enterTimeline() {
-    if (!root.doc || root.timeline) return
-    if (root.editIndex >= 0) root.stopEditing()
-    root.endFind()
-    root.arranging = false
-    root.linkingFrom = -1
-    var why = root.doc.openReplay()
-    if (why !== "") { root.flash(why); return }
-    root.replayDoc = root.doc
-    root.timeline = true
-    root.timelineLive = true
-    root.timelineRecord = root.lastRecord()
-    root.statusText = ""
-  }
-
-  function leaveTimeline() {
-    if (!root.timeline) return
-    root.stopPlaying()
-    var wasBack = root.lookingBack
-    root.timeline = false
-    root.timelineLive = true
-    if (root.replayDoc) root.replayDoc.closeReplay()
-    root.replayDoc = null
-    pastItems.clear()
-    pastLinks.clear()
-    // The cursor and the marks were rows of the earlier board.
-    if (wasBack) root.resetSelection(true)
-    root.repaintLinks()
-  }
-
-  // Back to the board as it is, still in the timeline. Escape again leaves it.
-  function timelineNow() {
-    root.stopPlaying()
-    if (!root.lookingBack) return
-    root.timelineLive = true
-    root.timelineRecord = root.lastRecord()
-    root.resetSelection(true)
-    root.repaintLinks()
-  }
-
-  function timelineBack() {
-    if (root.lookingBack) root.timelineNow()
-    else root.leaveTimeline()
-  }
-
-  // Shows the board as it was after record `n`, held within the steps there
-  // are. The first step back from the board as it is clears what was selected
-  // on it: those were rows of a board that is not the one on screen.
-  function showRecord(n) {
-    if (!root.timeline || !root.replayDoc || !root.replayDoc.replay) return
-    var first = root.firstRecord(), last = root.lastRecord()
-    var at = Math.max(first, Math.min(last, Math.round(n)))
-    var state = root.replayDoc.replayState(at - first)
-    if (!state) return
-    // The live board refuses a note too long to lay out without holding the
-    // shell up; an earlier one is held to the same, whatever its file says.
-    if (Store.overlongNote(state.items) >= 0) {
-      root.stopPlaying()
-      root.flash("a note at step " + (at - first) + " is too long to show")
-      return
-    }
-    // And to as many items and connectors as a live board holds.
-    var crowded = Store.tooManyRows(state)
-    if (crowded !== "") {
-      root.stopPlaying()
-      root.flash("the board at step " + (at - first) + " " + crowded + ", too many to show")
-      return
-    }
-    if (!root.lookingBack) root.resetSelection(true)
-    root.timelineRecord = at
-    root.timelineLive = false
-    Store.syncItems(pastItems, state.items)
-    pastLinks.clear()
-    for (var i = 0; i < state.links.length; i++) pastLinks.append({ lfrom: state.links[i].from, lto: state.links[i].to })
-    if (root.selectedIndex >= pastItems.count) root.selectedIndex = -1
-    root.repaintLinks()
-  }
-
-  // From the board as it is, a step back is the board before the latest edit:
-  // the latest edit is what is on screen already.
-  function timelineStep(by) {
-    root.stopPlaying()
-    if (root.lookingBack) { root.showRecord(root.timelineRecord + by); return }
-    if (by > 0) { root.flash("this is the board as it is now"); return }
-    if (root.lastRecord() === root.firstRecord()) { root.flash("nothing to step back to yet"); return }
-    root.showRecord(root.lastRecord() + by)
-  }
-
-  function timelineFirst() { root.stopPlaying(); root.showRecord(root.firstRecord()) }
-  function timelineLatest() { root.stopPlaying(); root.showRecord(root.lastRecord()) }
-
-  // Plays forward a step at a time, one a second at 1x however long the edits
-  // took. From the board as it is, or from the last step, it starts again at
-  // the beginning; either way it stops at the step that was last when it
-  // started, so edits arriving meanwhile do not keep it going.
-  function togglePlay() {
-    if (!root.timeline) return
-    if (root.playing) { root.stopPlaying(); return }
-    var first = root.firstRecord(), last = root.lastRecord()
-    if (last === first) { root.flash("nothing to play yet"); return }
-    if (!root.lookingBack || root.timelineRecord >= last) root.showRecord(first)
-    root.playEnd = last
-    root.playing = true
-  }
-
-  function stopPlaying() { root.playing = false }
-
-  function playStep() {
-    if (!root.playing) return
-    if (root.timelineRecord >= root.playEnd || !root.lookingBack) { root.stopPlaying(); return }
-    root.showRecord(root.timelineRecord + 1)
-    if (root.timelineRecord >= root.playEnd) root.stopPlaying()
-  }
-
-  function setPlaySpeed(speed) {
-    if ([0.5, 1, 2, 4].indexOf(speed) < 0) return
-    root.playSpeed = speed
-    root.flash("playing at " + speed + "x")
-  }
-
-  Timer {
-    id: player
-    interval: 1000 / root.playSpeed
-    repeat: true
-    running: root.playing
-    onTriggered: root.playStep()
-  }
-
-  // A pointer on the strip: where along it, from 0 to 1. Asked for as often as
-  // the pointer moves and shown at most once a frame, the latest asked for.
-  function scrubTo(fraction) {
-    if (!root.timeline) return
-    root.stopPlaying()
-    var first = root.firstRecord(), last = root.lastRecord()
-    root.scrubWanted = Math.round(first + Math.max(0, Math.min(1, fraction)) * (last - first))
-    if (!scrubber.running) scrubber.start()
-  }
-  function scrubNow() { root.showRecord(root.scrubWanted) }
-  Timer { id: scrubber; interval: 16; repeat: false; onTriggered: root.scrubNow() }
-
-  // The replay changed under the pane: edits arrived, the oldest were trimmed,
-  // or the history was replaced. Where it was is kept if it is still there.
-  function followReplay() {
-    if (!root.timeline) return
-    if (!root.replayDoc || !root.replayDoc.replay) {
-      root.leaveTimeline()
-      root.flash("this board's history was replaced · the timeline closed")
-      return
-    }
-    if (!root.lookingBack) { root.timelineRecord = root.lastRecord(); return }
-    if (root.timelineRecord < root.firstRecord()) {
-      root.flash("that step was among the oldest, which have left the history")
-      root.showRecord(root.firstRecord())
-    } else root.showRecord(root.timelineRecord)
-  }
-  Connections {
-    target: root.replayDoc
-    function onReplayRevisionChanged() { root.followReplay() }
-  }
   // How many boards this pane has been given, closing it included. Something
   // on its way here, a dropped picture, checks it as well as the board's name:
   // a pane closed and opened again on that board is not where it was dropped.
   property int docSerial: 0
   function stillShows(board, shown) { return board === root.currentBoard && shown === root.docSerial }
-  onDocChanged: {
-    root.docSerial += 1
-    if (root.timeline && root.replayDoc !== root.doc) root.leaveTimeline()
-  }
-
-  // What the strip says, and where along it the step is. Both name what they
-  // follow, so they are worked out again when it changes.
-  readonly property string timelineSays: root.timeline
-    ? root.timelineText(root.timelineRecord, root.timelineLive, root.playing, root.playSpeed,
-                        root.replayDoc ? root.replayDoc.replayRevision : 0) : ""
-  readonly property real timelineFraction: root.timeline
-    ? root.timelinePlace(root.timelineRecord, root.timelineLive,
-                         root.replayDoc ? root.replayDoc.replayRevision : 0) : 0
-
-  function timelineText(record, live, playing, speed, revision) {
-    if (!root.replayDoc || !root.replayDoc.replay) return ""
-    var first = root.firstRecord(), last = root.lastRecord()
-    var steps = last - first
-    if (live) return "now · " + steps + (steps === 1 ? " step" : " steps") + " back to where the history starts"
-    var h = root.replayDoc.replay.h
-    var shown = record > first ? h.records[record - first - 1] : null
-    return "step " + (record - first) + " of " + steps + " · " + History.stepLabel(shown, h.start, Date.now())
-      + (playing ? " · playing " + speed + "x" : "")
-  }
-
-  function timelinePlace(record, live, revision) {
-    if (live) return 1
-    var first = root.firstRecord(), last = root.lastRecord()
-    return last > first ? (record - first) / (last - first) : 1
-  }
-
-  // `T`: an earlier version beside the board as it is now. The other pane
-  // shows this board live; this one steps back one edit, or stays where it
-  // is if it is already looking back. Another board in the other pane is
-  // replaced only when asked twice, because that is a pane someone chose.
-  property real compareArmedAt: 0
-  function compareWithCurrent() {
-    if (!root.doc) return
-    var other = root.workspace.otherOf(root)
-    if (other && other.doc !== root.doc) {
-      if (Date.now() - root.compareArmedAt > 6000) {
-        root.compareArmedAt = Date.now()
-        root.flash("the other pane shows " + other.boardTitle + " · run it again to put this board there instead")
-        return
-      }
-      root.compareArmedAt = 0
-      other.openBoard(root.currentBoard, false)
-    }
-    if (!other) {
-      root.workspace.toggleSplit("side-by-side")
-      root.workspace.activate(root)
-      other = root.workspace.otherOf(root)
-    }
-    if (other && other.timeline) other.leaveTimeline()
-    if (!root.timeline) root.enterTimeline()
-    if (!root.timeline) return
-    if (!root.lookingBack) root.showRecord(root.lastRecord() - 1)
-    root.flash("an earlier version here, the board as it is now in the other pane")
-  }
+  onDocChanged: root.docSerial += 1
 
   // ------------------------------------------------------- the workspace's
   readonly property string dataDir: root.workspace.dataDir

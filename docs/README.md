@@ -6,7 +6,7 @@ install it and where to send feedback. The manual is split into four pages:
 - [Install, update and remove](install.md): binding a key, the desktop entry,
   dependencies and the versions it was tested against.
 - [Using the board](guide.md): every key and command, notes, connectors,
-  backgrounds, boards, split view, sharing, saving and history.
+  backgrounds, boards, split view, sharing and saving.
 - [Boards on disk and the command line](files.md): the library layout, the
   board file format and `bin/omarchyform`.
 - [Development](development.md): running from a clone, the source layout,
@@ -20,8 +20,9 @@ The [changelog](../CHANGELOG.md) separates unreleased work from tagged releases.
   requirements for code changes.
 
 - [Roadmap](roadmap.md): completed work, unreleased features and future scope.
-- [Split view and timeline](splitview-timeline-plan.md): implementation decisions,
-  validation results and remaining release checks.
+- [Split view and timeline](splitview-timeline-plan.md): split view's
+  implementation decisions and validation results. The history and timeline it
+  also planned were removed after 0.4.10.
 - [CLI and board format](for-agents.md): file schema, command-line operations
   and safe ways to edit boards programmatically.
 - [Performance](performance.md): dated measurements and their limits.

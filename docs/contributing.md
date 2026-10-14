@@ -10,34 +10,55 @@ the CLI to create boards and is not a contribution guide.
 
 ## Ownership and persistence invariants
 
-- A `BoardDocument` owns saved content and history; a `BoardPane` owns focus,
-  selection and camera. Two panes can share one document. Test both shared and
+- A `BoardDocument` owns saved content; a `BoardPane` owns focus, selection
+  and camera. Two panes can share one document. Test both shared and
   independent documents when changing split behavior.
-- Invalidate history worker and replay ownership **before changing a document's
-  path**, not only when the next file loads. Never combine content from the old
-  board with the new board's path or revision. Pending saves must finish before
-  the switch actually begins. Exercise late `reload`, check and trim replies.
+- Bump the document's `loadSerial` **before changing its path**, not only when
+  the next file loads, so a pointer gesture begun on the old board cannot
+  write. Never combine content from the old board with the new board's path or
+  revision. Pending saves must finish before the switch actually begins.
+- Startup runs in order: the folders are made (`private`), an old single
+  board is moved in, and only then is the state read, because reading it has
+  the named board's path checked. `npm run test:omarchy` starts once on an
+  empty home to keep it so.
 - Resolve a delayed open by the requested path when it completes: a captured
   document may have switched paths meanwhile. A delayed split close must leave
   `activePane` pointing to the surviving, non-null document even if focus moved.
 - Keep an exchange operation's pane owner through every asynchronous stage and
   through its completion/error signal. QML change handlers run immediately;
   clearing `busy` can change bindings before the next statement executes.
-- History trimming must preserve the original request cutoff separately from
-  the last retained record. All records can be trimmed into the baseline. Keep
-  edits made after the request exactly once and verify replay equals the saved
-  canvas, including after the next edit and reload.
-- External imports start a new history baseline. Remap live images into this
-  library and discard foreign history, which may reference deleted images with
-  names that collide with unrelated local files. Local loads and conflict copies
-  preserve their own history.
+- Read a board file whole, as any JSON reader would, through `readFile`; never
+  part of it as if it were the whole. The edit history 0.4.7 to 0.4.10 kept in
+  a board's file is parsed with the rest and dropped, so a key after it counts,
+  on any line. Writing a board leaves the history out.
+- A board with an old history, or laid out by hand, is not what this would
+  write, so its file never equals `lastSavedText`. Until the session first
+  writes it, the bytes it loaded (`loadedText`) are still its own: the same
+  bytes under a new revision are a touch, not someone else's version.
+- External imports remap live images into this library and discard the rest,
+  foreign history included, which may reference deleted images with names that
+  collide with unrelated local files.
 - External imports serialize only the flat, primitive canvas schema through
   `importBoard`; discard unknown fields before serialization and enforce the
   resulting UTF-8 byte limit. Malformed fields must release exchange ownership
   and busy state so another import can succeed.
-- Treat nested JSON history as untrusted, including baseline items/links and
-  patch entries. CLI failures must remain JSON; validation reports an unplayable
-  history, and rejected edits must leave both files and backups unchanged.
+- New items get their ids from `newIds`, never `nextId + 1`: a board can
+  arrive with an id at `MAX_ID`, and one past it is renumbered on the next load,
+  which drops its connectors. Look things up by id in plain objects:
+  `tests/security.js` refuses an array written at an id, because the array is
+  as long as the id.
+- Every position and size goes through `clampCoord`, `clampSize` or
+  `boundedMove`: a file's when it loads (`fillItems`), and each edit and CLI
+  operation that makes one. Past `MAX_COORD` and `MAX_SIZE` the scene graph's
+  32-bit floats lose precision and texture paths stop being finite.
+- Anything that reads board, clipboard, state or CLI input in a new way, a new
+  feature reading an old field included, gets the
+  [cost trace](security-review.md#cost-trace) before merge: what its time and
+  memory grow with, each bounded where the input arrives, and a fixture at
+  each bound in the engine the cost depends on. Benchmarks on realistic boards
+  are not that fixture.
+- CLI failures must remain JSON, and rejected edits must leave both files and
+  backups unchanged.
 
 - Reject external drag offers without reading `urls`, `text`, or raw MIME data.
   Qt's Wayland reader is not byte-bounded; a size check after a getter is too
@@ -76,9 +97,7 @@ the CLI to create boards and is not a contribution guide.
   covering refusal, the exact boundary and a successful import after failure.
 - Parse JSON in shell code with `parseJson`, never `JSON.parse`: Qt's parser
   segfaults on a 1.1 MB array (`MAX_JSON_OPEN` in `BoardStore.js`), and
-  `tests/security.js` refuses any other call. Change the guard in
-  `BoardStore.js` and `BoardHistory.js` together; `tests/contract.js` holds
-  them equal.
+  `tests/security.js` refuses any other call.
 - A board holds at most `MAX_ITEMS` items, `MAX_LINKS` connectors and
   `MAX_BOARD_BYTES` on disk. Anything new that adds items or connectors stops
   at the limit with `FULL_ITEMS` or `FULL_LINKS`, and anything that reads a
@@ -90,8 +109,8 @@ For these paths, run `npm test` and `npm run test:qml`. Changes to QML interacti
 or bindings also need `npm run test:ui`. Use temporary boards and isolated data
 folders; do not test by editing a user's real boards or restarting their shell.
 
-Relevant suites: `tests/split.js`, `tests/exchange.js`, `tests/recording.js`,
-`tests/timeline.js`, `tests/suite.js`, `tests/cli.js`, and `tests/qml/`.
+Relevant suites: `tests/split.js`, `tests/exchange.js`, `tests/editing.js`,
+`tests/suite.js`, `tests/cli.js`, and `tests/qml/`.
 The JavaScript harness executes production QML functions but models signals and
 bindings; retain real QML coverage for lifecycle or binding changes. Add a
 reproduction that fails on the old behavior and assert user-visible outcomes or

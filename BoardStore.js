@@ -4,6 +4,38 @@
 // Everything here is testable by reading it, which is the point of the split.
 
 var MIN_SIZE = 60
+// The largest an item may be, and the furthest from the middle of the board
+// it may stand. A board can say anything, and past these the shell starts to
+// lose: the scene graph draws in 32-bit floats, which hold a position to a
+// sixteenth of a unit at a million and lose whole units past 2^24, and an
+// ellipse 1e150 across drew Infinity into its texture. Nothing a person makes
+// comes near them; a board's file, the command line and every edit are held
+// to them (docs/security-review.md, Board values).
+var MAX_SIZE = 100000
+var MAX_COORD = 1000000
+
+function clampSize(v) {
+  return Math.max(MIN_SIZE, Math.min(MAX_SIZE, v))
+}
+
+function clampCoord(v) {
+  return Math.max(-MAX_COORD, Math.min(MAX_COORD, v))
+}
+
+// How far a set of items can move by (dx, dy) and all stay within MAX_COORD:
+// the move is cut short for the whole set, so it keeps its shape.
+function boundedMove(items, indices, dx, dy) {
+  var lowX = -Infinity, highX = Infinity, lowY = -Infinity, highY = Infinity
+  for (var i = 0; i < indices.length; i++) {
+    var n = items.get(indices[i])
+    lowX = Math.max(lowX, -MAX_COORD - n.ix)
+    highX = Math.min(highX, MAX_COORD - n.ix)
+    lowY = Math.max(lowY, -MAX_COORD - n.iy)
+    highY = Math.min(highY, MAX_COORD - n.iy)
+  }
+  return { dx: Math.max(lowX, Math.min(highX, dx)), dy: Math.max(lowY, Math.min(highY, dy)) }
+}
+
 var KINDS = ["note", "rect", "ellipse", "diamond"]
 var CANVAS_PATTERNS = ["Dots", "Grid", "Ruled"]
 
@@ -157,9 +189,6 @@ function normalizeTint(value) {
 
 // Each entry owns its label and action, so reordering the menu cannot change
 // what a click or keyboard choice runs. Navigation entries keep the menu open.
-// What making each kind of item is called in a board's history.
-var ADD_LABELS = { note: "New note", rect: "New box", ellipse: "New ellipse", diamond: "New diamond", image: "Picture" }
-
 var MENU_COMMANDS = [
   { id: "new", label: "New", run: "newBoard" },
   { id: "boards", label: "Boards", run: "openBrowser" },
@@ -281,9 +310,6 @@ var BOARD_HINTS = [["n", "note"], ["r", "rect"], ["e", "ellipse"], ["x", "connec
 var FIND_HINTS = [["enter", "next"], ["esc", "done"]]
 var ARRANGE_HINTS = [["hjkl", "edges"], ["c/m", "centres"], ["HJKL", "spread evenly"],
                      ["esc", "cancel"]]
-// While a pane looks back through a board's history.
-var TIMELINE_HINTS = [["h l", "step"], ["H L", "first / latest"], ["space", "play"], ["1-4", "speed"],
-                      ["esc", "back to now"]]
 var PINNED_HINTS = [["tab/hjkl or click", "select"], ["p", "unpin"], ["esc", "done"]]
 // `add board` rather than `board`, so the key leads the word and does not have
 // to be said in front of it. The capital on `Add folder` is the shift the key
@@ -467,7 +493,7 @@ function paletteTint(palette, group, tint) {
 //   saving
 //   hints           nothing in particular: the keys.
 var STATUS_TIERS = ["none", "saveError", "trashIndexError", "conflict", "damaged", "failure",
-                    "palette", "timeline", "arrange", "backgrounds", "editing", "linking",
+                    "palette", "arrange", "backgrounds", "editing", "linking",
                     "flash", "switching", "saving", "hints"]
 
 function statusTier(s) {
@@ -481,7 +507,6 @@ function statusTier(s) {
   if (s.damaged) return "damaged"
   if (s.failureText !== "") return "failure"
   if (s.paletteVisible) return "palette"
-  if (s.timeline) return "timeline"
   if (s.arranging) return "arrange"
   if (s.showPinned) return "backgrounds"
   if (s.editing) return "editing"
@@ -743,11 +768,6 @@ var COMMANDS = [
     also: ["two boards", "horizontal split", "panes"] },
   { name: "The other pane", key: "o", run: "otherPane", needs: "", also: ["switch pane", "focus"] },
   { name: "Even out the split", key: "", run: "evenSplit", needs: "", also: ["reset split", "half"] },
-  // The board's history, a step at a time, in the pane; and an earlier step
-  // beside the board as it is.
-  { name: "Timeline", key: "t", run: "toggleTimeline", needs: "", also: ["history", "replay", "play back", "earlier"] },
-  { name: "Compare with now", key: "T", run: "compareWithCurrent", needs: "",
-    also: ["history", "earlier version", "before and after"] },
   { name: "Boards", key: "b", run: "openBrowser", needs: "" },
   { name: "New board", key: "ctrl+n", run: "newBoard", needs: "" },
   { name: "Name this board", key: "F2", run: "renameBoard", needs: "", also: ["rename"] },
@@ -768,9 +788,6 @@ var COMMANDS = [
   { name: "Export a PNG in black and white", key: "", run: "choosePng", arg: "mono", needs: "", group: "png",
     also: ["png mono", "monochrome", "greyscale", "grayscale", "print"] },
   { name: "Save now", key: "ctrl+s", run: "flushSave", needs: "" },
-  // Asked for twice: the first run says what the second will do.
-  { name: "Forget this board's history", key: "", run: "forgetHistory", needs: "edit",
-    also: ["clear history", "erase history", "privacy", "timeline"] },
   // Only offered while two versions of the open board exist. They have no keys
   // of their own: the panel that appears with the conflict numbers them, and
   // this is how they are found by name.
@@ -929,9 +946,6 @@ var COMMAND_ICONS = {
   exportBoardPlain: "\uf045",
   choosePng: "\uf03e",
   flushSave: "\uf0c7",
-  forgetHistory: "\uf12d",
-  toggleTimeline: "\uf1da",
-  compareWithCurrent: "\uf24d",
   conflictUseDisk: "\uf0a0",
   conflictSaveCopy: "\uf0c5",
   conflictReplaceDisk: "\uf0c7",
@@ -1010,8 +1024,6 @@ var KEY_HELP_SECTIONS = [
     ["w", "fullscreen or windowed"],
     ["v / V", "split side by side / stacked; the same key again for one pane"],
     ["o", "the other pane; b there opens another board in it"],
-    ["t", "timeline: h l step through what this board was, space plays, esc back to now"],
-    ["T", "an earlier version beside the board as it is now"],
     ["/", "find: type to search the notes, enter steps through matches"]
   ] },
   { title: "Find your way", rows: [
@@ -1075,7 +1087,7 @@ function num(value, fallback) {
 // pane already draws stay drawn. Everything after the first row that is not
 // where it was is taken out and put back. Rows are read as written by itemRows;
 // nothing here is checked the way fillItems checks a file, because these come
-// from a history this board wrote.
+// from a snapshot this board took.
 function syncItems(items, rows) {
   var same = 0
   while (same < rows.length && same < items.count && items.get(same).iid === rows[same].id) same++
@@ -1100,6 +1112,15 @@ function syncItems(items, rows) {
   }
 }
 
+// The largest id an item can have. Ids are whole numbers from 1, and a board
+// keeps its next one in a 32-bit int: one past this is the most it can hold,
+// and it is the next id of a board that has run out of new ones (newIds).
+var MAX_ID = 2147483646
+
+function isItemId(id) {
+  return id >= 1 && id <= MAX_ID && Math.floor(id) === id
+}
+
 function fillItems(items, rows) {
   items.clear()
   if (!rows) return
@@ -1107,7 +1128,7 @@ function fillItems(items, rows) {
   var reserved = {}
   for (var r = 0; r < rows.length; r++) {
     var existing = num(rows[r].id, 0)
-    if (existing > 0 && existing < 2147483647 && Math.floor(existing) === existing) reserved[existing] = true
+    if (isItemId(existing)) reserved[existing] = true
   }
   var nextId = 1
   for (var i = 0; i < rows.length; i++) {
@@ -1115,7 +1136,7 @@ function fillItems(items, rows) {
     // Ids have to be unique: connectors reference them, so a duplicate would
     // silently join the wrong things.
     var id = num(n.id, 0)
-    id = (id > 0 && id < 2147483647 && Math.floor(id) === id && !used[id]) ? id : 0
+    id = (isItemId(id) && !used[id]) ? id : 0
     while (id === 0) {
       if (!used[nextId] && !reserved[nextId]) id = nextId
       nextId++
@@ -1126,10 +1147,10 @@ function fillItems(items, rows) {
     items.append({
       iid: id,
       kind: kind,
-      ix: num(n.x, 0),
-      iy: num(n.y, 0),
-      iw: Math.max(MIN_SIZE, num(n.w, 180)),
-      ih: Math.max(MIN_SIZE, num(n.h, 140)),
+      ix: clampCoord(num(n.x, 0)),
+      iy: clampCoord(num(n.y, 0)),
+      iw: clampSize(num(n.w, 180)),
+      ih: clampSize(num(n.h, 140)),
       itint: normalizeTint(n.tint || n.color),
       itexture: kind === "image" ? "plain" : normalizeTexture(n.texture),
       itext: typeof n.text === "string" ? n.text : "",
@@ -1178,11 +1199,30 @@ function idIndex(items) {
   return map
 }
 
+// One past every id on the board, and never less than the one it stored. A
+// board with an item at MAX_ID answers one past MAX_ID: it has run out.
 function nextFreeId(items, stored) {
   var id = num(stored, 1)
-  if (id < 1 || id >= 2147483647 || Math.floor(id) !== id) id = 1
+  if (!isItemId(id)) id = 1
   for (var i = 0; i < items.count; i++) id = Math.max(id, items.get(i).iid + 1)
   return id
+}
+
+// Ids for `count` new items on a board whose next id is `next`, and its next
+// id after them. They follow on from `next`, as they always have. A board
+// that came with an id near MAX_ID runs out of those, and then gets the
+// smallest ids no item has: an id past MAX_ID is not one, and opening the
+// board again would give that item another and drop its connectors.
+function newIds(items, next, count) {
+  var ids = []
+  if (isItemId(next) && next + count - 1 <= MAX_ID) {
+    for (var i = 0; i < count; i++) ids.push(next + i)
+    return { ids: ids, next: next + count }
+  }
+  var used = {}
+  for (var r = 0; r < items.count; r++) used[items.get(r).iid] = true
+  for (var id = 1; ids.length < count; id++) if (!used[id]) ids.push(id)
+  return { ids: ids, next: MAX_ID + 1 }
 }
 
 // The newest format this reads. Every version from 1 up to it still loads:
@@ -1190,18 +1230,12 @@ function nextFreeId(items, stored) {
 // line asks this too, to tell a board from a newer Omarchyform apart from one
 // that is broken.
 //
-// Version 6 introduced history; version 7 adds item textures and their history
-// patches. Older readers open these boards read-only to prevent feature loss.
-// Plain boards without history still write version 5.
+// Version 6 was a board with its edit history, which Omarchyform 0.4.7 to
+// 0.4.10 kept in the file; version 7 adds item textures. Older readers open
+// these boards read-only to prevent feature loss. A board with textures still
+// writes version 7 and any other version 5, neither with a history.
 var FORMAT_VERSION = 7
 var PLAIN_VERSION = 5
-
-// Where a board's history starts in its file. Always the last key and always
-// at this indentation, because opening a board reads the board in front of it
-// and leaves the history as text: parsing a long history on the shell's own
-// thread stood it still for up to 156ms (tests/history-bench.js). A newline
-// cannot be inside a JSON string, so this cannot be found in a note.
-var HISTORY_MARKER = '\n  "history": '
 
 // A whole number from 1 to FORMAT_VERSION. "5" and 4.5 are not versions.
 function knownVersion(version) {
@@ -1283,19 +1317,16 @@ var TOO_LARGE = "larger than " + MAX_BOARD_BYTES / 1048576 + " MB"
 // zeros parsed in 70ms, and one of 560,000, a 1.1 MB file, took the process
 // down, as did 300,000 held inside another 300,000. Arrays side by side are
 // each let go of, and an object keeps nothing. So what is counted is what is
-// open at once on the way in; anything this writes stays under 40,000 (a full
-// history's 10,000 records, one holding 20,000 connectors).
-//
-// BoardHistory.js keeps the same three, for the history worker, which reads
-// only that file; tests/contract.js holds the two copies to each other.
+// open at once on the way in; anything this writes holds at most 20,000 at
+// once, a board's connectors.
 var MAX_JSON_OPEN = 100000
 
 // Whether JSON.parse can read this without holding more than MAX_JSON_OPEN.
 // A text with fewer commas and brackets than that in all is settled by
 // counting them; anything else is walked, strings stepped over, which took
-// 208ms for a 34 MiB board and a second for a full history (its own parse
-// took 186ms and 875ms). The walk also refuses anything nested deeper than
-// the parser goes, rather than keep every level: the parser stops there.
+// 208ms for a 34 MiB board (its own parse took 186ms). The walk also refuses
+// anything nested deeper than the parser goes, rather than keep every level:
+// the parser stops there.
 function jsonFits(text) {
   text = String(text)
   var seen = 0, at = -1
@@ -1364,7 +1395,15 @@ function revisionBytes(revision) {
   return isFinite(bytes) && bytes >= 0 ? bytes : -1
 }
 
-// A v1 board stored a flat notes[] with no ids or kinds.
+// A v1 board stored a flat notes[] with no ids or kinds. A board Omarchyform
+// 0.4.7 to 0.4.10 wrote can end with its edit history, up to 16 MiB of it.
+// It is parsed with the rest, as any JSON reader would parse it, and boardOf
+// keeps none of it: a key after it is the file's as much as one before, a
+// newer version included, on whatever line it stands. Reading only the board
+// in front of it let a version after it on the same line be saved over as an
+// older board. Measured on Qt 6.12.0, a full history costs about 0.2 s, once,
+// until the board is next saved; one that holds more at once than parseJson
+// allows makes the file unreadable rather than half read.
 function readFile(raw) {
   var parsed
   try { parsed = parseJson(raw) } catch (e) { return null }
@@ -1386,65 +1425,8 @@ function boardOf(parsed) {
   return {
     items: parsed.items ? parsed.items : (parsed.notes ? parsed.notes : []),
     links: parsed.links ? parsed.links : [],
-    nextId: parsed.nextId ? parsed.nextId : 1,
-    // Only when the history was not split off first: a board someone has
-    // reformatted by hand still has one, just not where it is looked for.
-    history: parsed.history !== undefined ? parsed.history : null
+    nextId: parsed.nextId ? parsed.nextId : 1
   }
-}
-
-// A board file read as a board and its history. The history is left as text
-// when it is where this writer puts it — last, after HISTORY_MARKER — and the
-// board in front of it is a whole board on its own: its items, connectors and
-// next id all there. Anything else, a history moved before the items by a
-// formatter that sorts keys, a file with CRLF or tab indentation, is read
-// whole instead, so the canvas is never built from part of a board. Reading
-// whole costs a parse of the history on the shell's thread, once; the next
-// write puts it back where this writer puts it.
-//
-// A scan of the history to prove it ends at the board's closing brace cost
-// 192ms for a 1 MiB history in the board's engine, three times the parse. The
-// worker proves it instead, off this thread, by reading the file whole and
-// comparing (BoardHistoryWorker.js).
-//
-//   data     what readFile answers, from whichever way it was read; null when
-//            the file is not a board
-//   board    the text the board was read from
-//   history  the history as text, "" when there is none
-//   split    whether the history was left as text, unparsed
-function readBoardFile(raw, whole) {
-  var text = typeof raw === "string" ? raw : ""
-  var end = text.length
-  while (end > 0 && (text.charAt(end - 1) === "\n" || text.charAt(end - 1) === "\r" || text.charAt(end - 1) === " ")) end--
-  var at = whole === true ? -1 : text.lastIndexOf(HISTORY_MARKER)
-  if (at > 0 && text.charAt(at - 1) === "," && text.charAt(end - 1) === "}") {
-    var board = text.slice(0, at - 1) + "\n}\n"
-    var parsed = null
-    try { parsed = parseJson(board) } catch (e) { parsed = null }
-    var whole = parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)
-      && Array.isArray(parsed.items) && Array.isArray(parsed.links) && typeof parsed.nextId === "number"
-    if (whole) {
-      var history = text.slice(at + HISTORY_MARKER.length, end - 1)
-      var last = history.length
-      while (last > 0 && /\s/.test(history.charAt(last - 1))) last--
-      var data = boardOf(parsed)
-      if (data) data.history = null
-      return { data: data, board: board, history: history.slice(0, last), split: true }
-    }
-  }
-  var read = readFile(text)
-  return { data: read, board: text, history: read && read.history ? JSON.stringify(read.history) : "", split: false }
-}
-
-// The two halves readBoardFile found, as text: the board, and the history
-// after it or "". A file it read whole comes back whole, with no history.
-function splitHistory(raw) {
-  var parts = readBoardFile(raw)
-  return { board: parts.board, history: parts.split ? parts.history : "" }
-}
-
-function joinHistory(boardText, historyText) {
-  return boardText.slice(0, -3) + "," + HISTORY_MARKER + historyText + "\n}\n"
 }
 
 // windowMode deliberately absent: which surface the board opens on is a
@@ -1461,20 +1443,16 @@ function joinHistory(boardText, historyText) {
 // marker up the next time they are saved.
 var FORMAT_MARKER = "omarchyform.board"
 
-// `historyText`, when there is one, is written after the board as it is held:
-// a history is appended to as text rather than written out again, which on a
-// long one cost 80-160ms a save.
-function writeFile(items, links, nextId, historyText) {
+function writeFile(items, links, nextId) {
   var rows = itemRows(items)
   var textured = rows.some(function (row) { return row.texture !== undefined })
-  var board = JSON.stringify({
+  return JSON.stringify({
     kind: FORMAT_MARKER,
-    version: historyText || textured ? FORMAT_VERSION : PLAIN_VERSION,
+    version: textured ? FORMAT_VERSION : PLAIN_VERSION,
     nextId: nextId,
     items: rows,
     links: linkRows(links)
   }, null, 2) + "\n"
-  return historyText ? joinHistory(board, historyText) : board
 }
 
 // --------------------------------------------------------------- layer order

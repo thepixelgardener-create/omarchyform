@@ -77,12 +77,11 @@ they live outside the plugin directory, in `~/.local/share/omarchyform/`. A
 board written by a newer version than the one you are running opens read-only
 rather than losing what it does not understand, so downgrading is safe too.
 
-From 0.4.7 on, a board starts keeping its history the
-first time you edit it, and is then written as format 7 (see
-[History](guide.md#history)). Boards you only look at stay as they were. Older versions
-open these boards read-only. To take a board back to one, set item textures to
-Plain, then save a copy to share (`ctrl+shift+s`), which never carries history,
-or run **Forget this board's history** first.
+A board with item textures is written as format 7, which Omarchyform 0.4.6 and
+older open read-only. To take a board back to one, set its item textures to
+Plain; the next save writes it as format 5. Boards 0.4.7 to 0.4.10 wrote with
+an edit history lose it at their next save (see
+[Boards with an old history](guide.md#boards-with-an-old-history)).
 
 If you installed the desktop entry, re-run its installer,
 `desktop/install.sh` in the plugin's folder, after an update to pick up any

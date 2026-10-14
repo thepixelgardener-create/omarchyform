@@ -1,6 +1,6 @@
 # Roadmap
 
-Updated 2026-10-12. This is the current release direction. The dated
+Updated 2026-10-14. This is the current release direction. The dated
 [architecture review](architecture-review-0.4.5.md) and
 [competitor analysis](competitor-analysis-0.4.5.md) explain the findings behind it.
 
@@ -75,6 +75,13 @@ rather than fullscreen** setting now takes effect after the first open too.
 
 Shipped. The board opens as an ordinary tiled window, after feedback that a
 forced fullscreen got in the way; `w` still switches to the overlay and back.
+
+## Unreleased — History removed
+
+The edit history, its timeline and **Forget this board's history** are gone:
+they cost more than they gave, and a board shared with an item id near the
+largest there is could stall the shell for 25 seconds when the timeline
+opened. A board's old history is ignored, and left out at its next save. New items on a board with that largest id now get ids it keeps.
 
 ## 0.5 — Editable, labeled connectors
 

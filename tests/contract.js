@@ -85,7 +85,7 @@ function expect(names, available, what, where) {
 }
 
 // The views address the controller as ctl.
-for (const file of ["Board.qml", "Node.qml", "Browser.qml", "Help.qml", "BoardToolbar.qml", "BoardExchange.qml", "BoardImage.qml", "ScrollHint.qml", "Commands.qml", "Conflict.qml", "TimelineStrip.qml"]) {
+for (const file of ["Board.qml", "Node.qml", "Browser.qml", "Help.qml", "BoardToolbar.qml", "BoardExchange.qml", "BoardImage.qml", "ScrollHint.qml", "Commands.qml", "Conflict.qml"]) {
   const source = read(file)
   expect(referenced(source, "ctl."), controller, "the controller", file)
 }
@@ -96,7 +96,7 @@ for (const file of ["Board.qml", "Node.qml", "Browser.qml", "Help.qml", "BoardTo
 const themeTokens = declaredMembers(read("Theme.qml"))
 // The board and its items read BoardPalette instead, checked further down.
 const themed = ["Browser.qml", "Help.qml", "BoardToolbar.qml",
-                "BoardImage.qml", "ScrollHint.qml", "Commands.qml", "Conflict.qml", "Surface.qml", "TimelineStrip.qml"]
+                "BoardImage.qml", "ScrollHint.qml", "Commands.qml", "Conflict.qml", "Surface.qml"]
 for (const file of themed) expect(referenced(read(file), "theme."), themeTokens, "Theme.qml", file)
 
 // The session addresses its document as session.ctl.
@@ -125,10 +125,6 @@ const workspace = read("Omarchyform.qml")
 expect(referenced(pane, "root.workspace."), workspaceMembers, "the workspace", "BoardPane.qml")
 expect(referenced(pane, "root.doc."), documentMembers, "the document", "BoardPane.qml")
 expect(referenced(documentSource, "doc.workspace."), workspaceMembers, "the workspace", "BoardDocument.qml")
-// tst_history mounts a real document on a stand-in workspace, and test:qml,
-// which runs it, is not in CI: `recheckPictures` went missing from it unseen.
-expect(referenced(documentSource, "doc.workspace."), nestedMembers(read("tests/qml/tst_history.qml"), "stubWorkspace"),
-  "the tst_history workspace", "BoardDocument.qml")
 expect(referencedBy(documentSource, "\\b(?:pane|panes\\[\\w+\\])"), controller, "the pane", "BoardDocument.qml")
 expect(referencedBy(workspace, "(?:root\\.activePane|root\\.panes\\[\\w+\\]|\\bpane|\\bfirst)"), controller,
   "the pane", "Omarchyform.qml")
@@ -198,7 +194,7 @@ const panSource = read("tests/qt/PaneStub.qml")
 const panStub = declaredMembers(panSource)
 const panTheme = membersAt(blockBody(panSource, "property QtObject theme:"), 4)
 for (const file of ["Board.qml", "Node.qml", "BoardToolbar.qml", "Help.qml", "Browser.qml",
-                    "ScrollHint.qml", "Commands.qml", "Conflict.qml", "BoardImage.qml", "Surface.qml", "TimelineStrip.qml"]) {
+                    "ScrollHint.qml", "Commands.qml", "Conflict.qml", "BoardImage.qml", "Surface.qml"]) {
   expect(referenced(read(file), "ctl."), panStub, "the tst_pan stub", file)
   expect(referenced(read(file), "theme."), panTheme, "the tst_pan stub's theme", file)
 }
@@ -269,7 +265,7 @@ function declaredSignals(source) {
 for (const file of ["Omarchyform.qml", "BoardPane.qml", "BoardDocument.qml", "BoardSession.qml", "BoardPersistence.qml", "BoardExchange.qml", "BoardLibrary.qml",
                     "Board.qml", "Node.qml", "Browser.qml", "Help.qml", "BoardToolbar.qml",
                     "BoardImage.qml", "ScrollHint.qml", "Commands.qml", "Conflict.qml",
-                    "Theme.qml", "Surface.qml", "TimelineStrip.qml"]) {
+                    "Theme.qml", "Surface.qml"]) {
   const source = read(file)
   const rootId = (source.match(/^\s*id:\s*(\w+)\s*$/m) || [])[1]
   if (!rootId) { failures.push(`${file}: no id on the root object to check against`); continue }
@@ -497,19 +493,6 @@ for (const file of [...fs.readdirSync(root).filter(f => f.endsWith(".qml")),
 for (const entry of [...Store.MENU_COMMANDS, ...Store.ZOOM_COMMANDS]) {
   if (!controller.has(entry.run)) failures.push(`Menu action ${entry.run} is missing`)
 }
-
-// The history worker reads only BoardHistory.js, so it carries its own copy of
-// the store's JSON guard. A fix to one that misses the other leaves a parse
-// the shell can still be taken down through.
-const guardOf = file => {
-  const text = read(file)
-  const from = text.indexOf("var MAX_JSON_OPEN = ")
-  const to = text.indexOf("\n}\n", text.indexOf("function parseJson(", from))
-  return from >= 0 && to >= 0 ? text.slice(from, to) : null
-}
-if (guardOf("BoardStore.js") === null) failures.push("BoardStore.js: MAX_JSON_OPEN to parseJson not found")
-else if (guardOf("BoardHistory.js") !== guardOf("BoardStore.js"))
-  failures.push("BoardHistory.js: its JSON guard is not the same as BoardStore.js's")
 
 if (failures.length) {
   for (const line of failures) console.error("  " + line)

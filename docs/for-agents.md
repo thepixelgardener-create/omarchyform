@@ -82,9 +82,11 @@ the version it replaced, in `backups/` for a board in the library and as
 ```
 
 **Items.** `id` is unique within the board and is what connectors point at.
-`x`/`y` are the **top-left corner** in board coordinates, `y` down. `w`/`h` are
-the size, never below **60**. Paint order is array order: later items are drawn
-over earlier ones.
+`x`/`y` are the **top-left corner** in board coordinates, `y` down, within
+**1,000,000** of the middle either way. `w`/`h` are the size, from **60** to
+**100,000**. `ops` reports `minimumSize`, `maximumSize` and
+`maximumCoordinate`, and anything past them is brought within them. Paint
+order is array order: later items are drawn over earlier ones.
 
 **`kind`** is one of `note`, `rect`, `ellipse`, `diamond`, or `image`. A note is
 a rectangle with a rule across the top and its text aligned to the top left;
@@ -103,7 +105,7 @@ a cluster sits on, or a label for a region. Pin the shape *after* the items
 that go on top of it exist, and give it a `muted` tint.
 
 **`texture`** is optional on notes and shapes: `plain` (default), `ruled`,
-`grid`, `dots`, or `hatch`. Textured boards use format 7 even without history.
+`grid`, `dots`, or `hatch`. Textured boards use format 7; any other board is 5.
 Images stay plain. Unknown texture values load as plain. `setTexture` sets one.
 
 **Links.** Directed, drawn as an arrow from `from` to `to`. **Only one runs
@@ -122,24 +124,21 @@ So `link` is safe to repeat and `x` is a toggle. Use `unlink` to remove one
 from here; it takes the pair in either order.
 
 **`nextId`** is the next id to hand out. `apply` maintains it; do not set it.
+`add` answers with the id it gave. Ids run up to 2,147,483,646; on a board
+that already has that one, new items take the smallest ids no item has.
 
-**`history`**, last in the file, is every edit the board remembers, so its
-timeline can play it back. A board with history or textures is `"version": 7`;
-one with neither is still 5. Version 6 histories still load. `apply` adds one record per run, labelled "Command line",
-however many operations it carries, and keeps the newest 10,000. Never edit
-the history by hand. If the board itself was edited by hand, the next `apply`
-records the difference as one record, "Changed outside Omarchyform". A history
-that cannot be played back makes `apply` refuse and leave the file as it was;
-`validate` reports it under `history` and `warnings`, and opening the board in
-Omarchyform keeps it aside and starts a new one. A copy made to share never
-carries a history.
+**`history`**, which Omarchyform 0.4.7 to 0.4.10 wrote last in the file, is
+ignored. The file is still read as the JSON it is, so a key after the history
+counts like any other. The next `apply`, or the next save in Omarchyform,
+writes the board without it. Version 6 boards, which carried one, still load.
 
 ### What a board tolerates
 
 Board files are hand-editable and get synced between machines, so everything
 coming in is coerced to something the canvas can draw: a string where a number
-belongs, a tint this version has never heard of, a size below the minimum, a
-connector to nothing. `validate` prints what loading had to repair.
+belongs, a tint this version has never heard of, a size below the minimum or
+past the maximum, a position past the board's extent, a connector to nothing.
+`validate` prints what loading had to repair.
 
 Some things are not repaired, because the board would hold the shell up
 drawing them: a note longer than 1048576 characters, more than 5,000 items,
@@ -198,7 +197,8 @@ This is the part that decides whether the result looks made or generated.
 
 ### Size and spacing
 
-A default note is **220 × 160**. The minimum is 60 in each direction.
+A default note is **220 × 160**. The minimum is 60 in each direction, the
+maximum 100,000.
 
 Leave about **60 between neighbours** — closer and two notes read as one block.
 In practice: step **280** across and **220** down, and nothing touches.

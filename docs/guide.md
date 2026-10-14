@@ -93,8 +93,6 @@ breaks, and the middle button does not paste the primary selection.
 | `w` | Switch between fullscreen and windowed |
 | `v` / `V` | Split side by side / stacked; the same key again goes back to one pane |
 | `o` | Move to the other pane |
-| `t` | Timeline: step back through what this board was; `esc` back to now |
-| `T` | An earlier version beside the board as it is now |
 | `f` | Fit the whole board on screen |
 | `0` | Reset the view |
 | `+` / `-` | Zoom |
@@ -172,7 +170,7 @@ saying `<b>hello</b>` shows you those characters.
 Notes and shapes start with a plain background. Select one or mark a group,
 press `.` (or right-click), and choose **Item texture…**: **Plain**, **Ruled**,
 **Grid**, **Dots**, or **Hatch**. Pictures keep their image. Textures follow the
-canvas palette and are preserved by undo, duplication, saving, history, and PNG
+canvas palette and are preserved by undo, duplication, saving, and PNG
 export. The canvas pattern is a separate setting.
 
 Related commands now open groups: item textures, alignment, layers, canvas
@@ -408,8 +406,10 @@ your home is touched, and it never needs `sudo`.
 
 There is no save key, though `ctrl+s` works if you want one. Structural
 changes — adding, deleting, moving, connecting — are written immediately.
-Typing settles for 700ms first, so a sentence is one write rather than forty.
-Switching boards or closing flushes whatever is pending. Board switching waits
+Typing settles for 700ms first, so a sentence is one write rather than forty,
+and typing that never pauses is still written every five seconds. A drag or a
+resize is written when you let go; `esc` before then puts it back where it
+started. Switching boards or closing flushes whatever is pending. Board switching waits
 for writes to finish. A failed backup or write leaves the board open in memory
 and shows an error; use `ctrl+s` to retry. A slow save stays in progress until
 the disk operation completes; retrying cannot replace its destination. Closing the surface keeps an in-flight
@@ -423,46 +423,19 @@ leaves the current board editable so you can switch again.
 
 Which board you had open is remembered in `state.json` and reopened next time.
 
-## History
+## Boards with an old history
 
-`t` opens the timeline for the pane you are in. `h` and `l` step back and
-forward through what the board was, `H` and `L` jump to where the history
-starts and to the latest step, `space` plays it forward a step a second, and
-`1` to `4` play at half, normal, double and four times the speed. `esc` comes
-back to the board as it is, and again closes the timeline. The strip along the
-bottom says which step is on screen, what it was and when; click or drag along
-it to scrub. An earlier version is only to look at: nothing edits, pastes into
-or exports it, and the header says so. `T` puts an earlier version beside the
-board as it is, in two panes, so you can see what changed.
+Omarchyform 0.4.7 to 0.4.10 kept a timeline of every board's edits in the
+board's file. That feature is gone. A board that still carries such a history
+opens as usual, and nothing of the history is kept; the next time the board
+is saved, it is written without it. Until then the history, with any text you
+deleted from a note, stays in the file, so any edit is enough to remove it. The
+backup of the version before that save keeps it until the save after. A copy
+saved to share never included it.
 
-A board remembers its edits, in order, so a timeline can play it back: each
-command, each drag, each pause in typing and each undo is one step. The
-history is kept in the board's own file, after the board, and saved with it
-under the same lock and backup. It keeps the newest 10,000 steps; past that the
-oldest go, a tenth at a time, and the line says so the first time. Holding a
-movement or resize key groups repeats until release, focus loss or another
-command. Typing is grouped by pauses, with a five-second maximum chunk.
-An accepted drag or resize is one step; canceling restores its starting state.
-
-When another process extends the same history, an open timeline keeps its
-position and playback endpoint. If its oldest steps have been trimmed, it moves
-to the oldest retained step. Replacing the history closes the old timeline.
-
-Text you delete from a note stays in that history. **Forget this board's
-history**, in the command list, asks to be run twice and then starts again from
-the board as it is. A copy saved to share never includes it, and a board
-imported from one starts its own.
-
-A board with history or item textures is format version 7. Older versions open
-it read-only to avoid losing features. A board without history and with only
-Plain item backgrounds, including a plain copy made to share, is version 5.
-Existing version 6 histories continue to load. If a board
-was edited by something that does not keep history — a text editor, say — the
-difference is recorded as one step, "Changed outside Omarchyform". A history
-that cannot be read is kept beside the board's backups, and a new one starts.
-The board is read in front of its history and the history is checked on a
-thread of its own, so a long one does not hold the shell up when the board
-opens.
+A board with item textures is format version 7, which Omarchyform 0.4.6 and
+older open read-only rather than lose the textures. Any other board is
+version 5.
 
 ## It looks like Omarchy, because it asks Omarchy
 

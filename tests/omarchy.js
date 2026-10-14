@@ -69,6 +69,26 @@ try {
   fs.mkdirSync(theme, {recursive:true})
   fs.symlinkSync(path.join(os.homedir(), '.local/state/omarchy/current/theme'), path.join(theme, 'theme'))
   const display = process.env.WAYLAND_DISPLAY || ''
+  // A fresh install, before anything has made a folder. The run below makes
+  // its boards folder first, so it never sees one: the first board must open
+  // editable, not read-only because its path was checked before its folder
+  // existed. Nothing is summoned, so no window appears.
+  if (!paste && !windowmode) {
+    const fresh = path.join(dir, 'fresh-home')
+    fs.mkdirSync(fresh)
+    fs.copyFileSync(path.join(__dirname, 'qml/tst_freshstart.qml'), path.join(dir, 'fresh.qml'))
+    const started = spawnSync('qs', ['--no-color', '-p', path.join(dir, 'fresh.qml')], {
+      encoding: 'utf8', timeout: 30000,
+      env: {...process.env, HOME: fresh, QT_QPA_PLATFORM: 'wayland', QT_QPA_PLATFORMTHEME: '',
+        QT_QUICK_CONTROLS_STYLE: 'Basic', XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR,
+        WAYLAND_DISPLAY: path.isAbsolute(display) ? display : path.join(process.env.XDG_RUNTIME_DIR || '', display)}
+    })
+    const said = (started.stdout || '') + (started.stderr || '')
+    if (started.error || started.status !== 0 || !said.includes('FRESHSTART_TESTS_PASSED') || /FAIL:|TypeError|ReferenceError/.test(said)) {
+      console.error(said, started.error || '')
+      process.exitCode = 1
+    } else console.log('ok — a fresh install opens its first board editable (live Wayland)')
+  }
   const result = spawnSync('qs', ['--no-color', '-p', path.join(dir, 'shell.qml')], {
     encoding: 'utf8', timeout: 30000,
     env: {...process.env, HOME: home, PATH: (paste ? path.join(dir, 'stubs') + ':' : '') + process.env.PATH, QT_QPA_PLATFORM: 'wayland',

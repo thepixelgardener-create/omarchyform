@@ -45,7 +45,7 @@ TestCase {
     property int flushCount: 0
     property var pointerEdit: null
     property int cancels: 0
-    function beginPointerEdit(label) { pointerEdit = {}; pushUndo() }
+    function beginPointerEdit() { pointerEdit = {}; pushUndo() }
     function finishPointerEdit(cancel) {
       if (pointerEdit) { if (cancel) cancels++; else save() }
       pointerEdit = null
