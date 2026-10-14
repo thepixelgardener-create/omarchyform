@@ -219,7 +219,7 @@ where this plugin answers each:
 Submitting, or asking for an update to be verified:
 
 - [ ] `npm test`, `npm run test:security`, `npm run test:ui`, `npm run test:drop`,
-  `npm run test:clipboard` and `npm run review:marketplace` pass on the commit
+  `npm run test:clipboard`, `npm run test:wayland` and `npm run review:marketplace` pass on the commit
   to be named, and `-- --latest` reports nothing new.
 - [ ] The [cost trace](#cost-trace) is current for that commit: every consumer
   it adds or changes has what it grows with listed and bounded, and each bound
@@ -401,6 +401,17 @@ LD_LIBRARY_PATH=$QT/lib QT_PLUGIN_PATH=$QT/plugins QML_IMPORT_PATH=$QT/qml \
 `LD_LIBRARY_PATH`, `QT_PLUGIN_PATH` and `QML_IMPORT_PATH` set. Like the drop
 test, this proves what the plugin asks Qt for, not behaviour under a real
 streaming Wayland owner.
+
+`npm run test:wayland` covers that owner. It builds
+`tests/qt/wayland_clipboard.cpp` (needs `pkg-config` and `Qt6WaylandCompositor`)
+and runs a private compositor on its own 0700 runtime folder and socket, never
+the desktop's, with a provider and a consumer under time and memory limits. The
+production fields must make no native receive request while a clipboard owner
+offers text, and the helper's `cliptext` must return 32 bytes and exactly 1 MiB
+whole, refuse 1 MiB + 1 byte with exit 5 and no output, wait out a provider
+paused for a second, and give up on a stalled one at its 3-second deadline
+(exit 4). It is not in CI, which does not install Qt's compositor module; run it before
+asking for verification.
 
 The review of `336e0e9` confirmed that and found that a pasted PNG was held
 only to its bytes (32 MiB) and its IHDR dimensions, which say nothing about
@@ -700,7 +711,10 @@ middle, and sizes from 60 to `MAX_SIZE`, 100,000. A board's file is brought
 within them when it loads (`fillItems`), `validate` names the items it brought
 in, and every edit that makes a position or a size stops at them: a move cuts
 short for the whole selection, so it keeps its shape (`boundedMove`), and a
-nudge or resize that cannot happen records no step. The command line holds its
+nudge or resize that cannot happen records no step. Aligning and spreading
+work from the selection's bounds, which reach `MAX_SIZE` past the last
+position, so each position they make is clamped before it is saved, and the
+board opens again as it was saved (`tests/editing.js`). The command line holds its
 `add`, `move` and `resize` to the same, and `ops` reports the limits.
 
 Measured on the renderer the shell itself uses, Qt 6.12.0's OpenGL backend on

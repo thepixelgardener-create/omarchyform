@@ -282,6 +282,33 @@ const plain = (n) => JSON.stringify({ kind: 'omarchyform.board', version: 5, nex
 }
 
 {
+  // Arranging works from the selection's bounds, which reach MAX_SIZE past
+  // the last position. Aligning to that edge, or butting up items that take
+  // more room than they sit in, stops at the board, and what is saved is what
+  // opening the board again shows.
+  const S = controller().store
+  const wide = (id, x) => Object.assign(note(id, x), { w: S.MAX_SIZE })
+  const board = items => JSON.stringify({ kind: 'omarchyform.board', version: 5,
+    nextId: items.length + 1, links: [], items }, null, 2) + '\n'
+  const cases = [
+    ['right', [wide(1, S.MAX_COORD), note(2, 0)], a => a.alignTargets('right')],
+    ['centreX', [wide(1, S.MAX_COORD), note(2, S.MAX_COORD - 500)], a => a.alignTargets('centreX')],
+    ['spread', [wide(1, S.MAX_COORD - 1000), wide(2, S.MAX_COORD - 500), note(3, S.MAX_COORD)],
+      a => a.spreadTargets('x')]
+  ]
+  for (const [what, items, arrange] of cases) {
+    const c = opened(board(items))
+    c.root.markAll(); arrange(c.root); c.land()
+    const saved = written(c).items
+    for (const n of saved) assert.ok(Math.abs(n.x) <= S.MAX_COORD, what + ': item ' + n.id + ' stays on the board')
+    const again = opened(c.writes[c.writes.length - 1].text)
+    assert.deepEqual(saved.map(n => n.x), Array.from({ length: again.items.count }, (_, i) => again.items.get(i).ix),
+      what + ': opens again where it was saved')
+  }
+  console.log('ok — editing: arranging stays within the board and reopens as saved')
+}
+
+{
   // A board that came with an item at the largest id there is. New notes and
   // copies get ids it keeps, so they, and the connectors drawn to them,
   // survive the board being opened again.

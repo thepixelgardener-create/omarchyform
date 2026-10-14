@@ -33,6 +33,10 @@ for (const scenario of ['persistence', 'session', 'timeout', 'exchange', 'imageb
         if (raw.length >= 16777216) throw new Error('fixture must fit encoded budget')
         fs.writeFileSync(path.join(dir, name + '.omarchyform.json'), raw)
       }
+      // An image item without src is one the loader opens as a note; it names
+      // no picture, so it adds nothing to the budget and refuses nothing.
+      fs.writeFileSync(path.join(dir, 'absent-src.omarchyform.json'), JSON.stringify({ version: 5, nextId: 3, links: [],
+        images: { 'a.png': tiny }, items: [{ id: 1, kind: 'image', src: 'a.png', x: 0, y: 0, w: 100, h: 100 }, { id: 2, kind: 'image' }] }))
       fs.writeFileSync(path.join(dir, 'malformed.omarchyform.json'), JSON.stringify({version:5, items:[{kind:'image',src:{toString:null,valueOf:null}}],links:[]}))
       let extra = Array(10000).fill(0)
       for (let i = 0; i < 100; i++) extra = { a: extra }
