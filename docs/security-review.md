@@ -7,6 +7,11 @@ release/PR description. A passing screen is regression evidence, not proof that
 there are no vulnerabilities. Do not call the release reviewed until the manual
 items below have been checked against that revision.
 
+Every flaw found since 0.4.7 was in a commit this screen had passed, and none
+was a missing byte limit ([how reviews have missed](#how-reviews-have-missed)).
+The [cost trace](#cost-trace) is the part of the review that looks for the
+next one. It is not optional, and a green command does not stand in for it.
+
 ## Commands
 
 ```sh
@@ -26,6 +31,35 @@ stub clipboard commands; these commands do not touch the user's clipboard.
 Also run `npm test` for general regressions. No scan uploads boards or source to
 an external service.
 
+## How reviews have missed
+
+Nine flaws were found in work this screen had passed. Seven were found by
+someone reviewing from outside, two by measuring something else.
+
+| In | Flaw | The screen bounded | The cost followed | Found by |
+|---|---|---|---|---|
+| 0.4.7, `6eb82bb` | Qt's own Ctrl+V read a clipboard owner's whole stream | what the paste helper reads | Qt's built-in paste, which runs before any handler here | marketplace review |
+| 0.4.8 | Reading `drop.urls` took a drag's whole payload | the drop handler | Qt's Wayland drag reader | marketplace review |
+| `0f12e80` | An editable `TextInput` read the clipboard on every change | pasting | Qt 6.12.0's `canPaste` check, with nobody pasting | marketplace review |
+| `336e0e9` | A 392 KB PNG cost 1.9 GB when loaded | its bytes and pixels | text chunks the decoder inflates | marketplace review |
+| `336e0e9` | 20,000 small items took 92 s to open | an import's bytes | one delegate per item, built on the shell's thread | measuring |
+| `336e0e9` | An array of 560,000 zeros segfaulted `JSON.parse` | the file's bytes | elements the parser holds open at once | measuring |
+| 0.4.10, `cb4a80c` | Compact pictures, each within limits, exhausted memory together | each picture | one decode per reference, across items | marketplace review |
+| `edcc014` | A two-item board held the shell 25 s when its timeline opened; new ids wrapped negative | the number of items | an id's value, used as an array index, and a 32-bit `int` | a review of `edcc014` |
+| the history removal, before merge | A newer version written after an old history, on its line, was saved over as version 5 | — | text the reader skipped as history without proving it was | review before merge |
+
+None of the first eight was a missing byte limit. Each was a cost that grew
+with something the screen did not bound: Qt reading before this code ran, a
+decoder or parser expanding what it read, a count, a repetition, a value. Byte
+limits are necessary and never enough. The [cost trace](#cost-trace) asks, of
+every consumer, what its cost grows with, and wants the answer measured at
+the bound, not on a realistic board: the history codec met every budget on
+benchmark boards whose ids ran from 1.
+
+The ninth was of another kind, and came from the change that wrote this
+section: a reader that skipped part of a file on an assumption nothing proved.
+The trace's third rule is for it.
+
 ## What crosses a boundary
 
 | Input/data | Where it goes | Required property and evidence |
@@ -44,9 +78,108 @@ an external service.
 | Shared boards and PNG exports | Staging → chosen external destination | Explicit user action, refuse app-data overwrite, keep unrelated files on failure. Filesystem/exchange tests. |
 | Images in foreign shared boards | Landed files → aggregate header check → published board | At most 40,000,000 pixels and 32 MiB of file data across live image items, counting repeated references and offscreen items. Compressed PNG text and profiles are refused before landing. `imagebudget` reads dimensions without decoding rasters; unreadable dimensions or a helper failure refuse publication. Foreign history is discarded first. Filesystem, exchange and `tst_imagebudget.qml` tests. |
 | Foreign board fields | Parsed input → normalized canvas → import staging | Only known primitive canvas fields survive, serialized compactly within the UTF-8 byte cap. Unknown nested data is dropped; invalid fields fail without leaving the exchange busy. Store, exchange and real QML regressions. |
+| Numbers in a board | Board file, import, CLI → lookups, layout, the ids handed out | No value decides an array's length or a loop's count, and each range fits every type it passes through; see [Board values](#board-values). `security.js` refuses an array written at an id; `tests/editing.js` and `tests/cli.js` take a board at the largest id through new items, copies and connectors and open it again, and `tst_ids.qml` does it through Qt's own document and `int`. |
 | CLI operations | stdin/file → model → helper | Parse as data, no evaluation. Invalid JSON must not echo content. CLI/security tests. |
 | Old board history | Board file → `readFile` → dropped | The edit history Omarchyform 0.4.7 to 0.4.10 kept after a board is parsed with the rest of the file, as any JSON reader parses it, through `parseJson`, and then dropped; it is never evaluated. A key after it counts on any line, so a newer version named there keeps the board read-only and the canvas after it is the canvas. A history that is not JSON, or holds more at once than `parseJson` allows, makes the file unreadable rather than half read. A full one costs about 0.2 s once, until the next save writes the board without it. `tests/suite.js`, `tests/editing.js`, `tests/cli.js`, `tst_legacy.qml`. |
 | Desktop install/open | Opt-in launcher files and summon payload | No automatic install hook; ownership/conflict checks, correct path encoding, no shell interpretation. Desktop tests and manual review. |
+
+## Cost trace
+
+For every consumer a change adds or touches (opening a board, drawing it,
+each command, undo, duplication, arranging, finding, export, split view, the
+library, the CLI), list what its time and memory grow with, and check each
+one where the input arrives:
+
+1. **Bytes.** The size of what is read, bounded before it is collected (the
+   table above).
+2. **Expansion.** What a parser, decoder or layout makes of those bytes:
+   elements held open, pixels and metadata, glyphs. Bound the expanded size,
+   measured in the reader that expands it.
+3. **Count.** Items, connectors, references. Bound the count and price each
+   one: 5,000 delegates are seconds of the shell's thread.
+4. **Repetition.** A thing named many times costs many times. Pictures
+   decode once per reference, and so will anything else drawn by name.
+5. **Value.** A number from a board, the clipboard, state or the CLI used as
+   an index, a length, a loop bound, a repeat count, a size or an interval.
+   No value may decide an array's length or a loop's count: look things up by
+   id in plain objects, and build arrays with `push`. Every range must fit
+   each type it passes through: a QML `int` wraps past 2,147,483,647, the
+   scene graph draws in `float`, and Qt's image sizes are `int`.
+6. **Who reads first.** Qt reads some input before any handler here runs:
+   paste, drag payloads, `TextInput`'s clipboard check, image readers,
+   `JSON.parse`. Assume a Qt control or reader takes everything it is offered
+   until a test counts what it asks for.
+
+Three rules keep the trace honest:
+
+- **A new consumer reopens old bounds.** A field admitted for one use is not
+  admitted for the next. The history codec read item ids that boards had
+  always been allowed to carry, and turned their value into work. When a
+  change reads an existing field in a new way, its row in
+  [Board values](#board-values) is traced again for that use before merge.
+- **The evidence is an adversarial fixture.** Realistic benchmarks are
+  performance evidence, not security evidence. Each bound gets a small
+  fixture at the bound and one past it: two items at the largest id, not
+  3,000 ordinary ones. Run it in the engine the cost depends on, Qt's
+  (`qmltestrunner` or `qs`, offscreen) for types, parsing, layout and drawing,
+  node only for plain JavaScript both engines share. Where the revision before
+  the fix would hang, run it under `prlimit --cpu --as`, so that a regression
+  is a killed test rather than a frozen desktop. It must fail on that
+  revision.
+- **Read the whole input, or prove what you skip.** A reader that takes part
+  of its input for the whole has to prove where the part it skips ends;
+  otherwise it reads everything. The first version of the history removal
+  read only the board in front of an old history, and a newer version written
+  after the history on the same line was then saved over (below).
+
+### What the engines do with a sparse array
+
+Measured on 2026-10-14 on an array holding two elements, the last at index
+10,000,000: Qt 6.12.0's engine in `qmltestrunner` offscreen, and node v26, on a
+Ryzen 5 PRO 4650U. Costs grow with the length, not the two elements; at an
+id's 2,147,483,646, multiply by about 215.
+
+| Operation | Qt 6.12.0 | node v26 |
+|---|---|---|
+| `slice()` | 116 ms | 350 ms |
+| `indexOf`, `lastIndexOf` | 118, 119 ms | 208, 323 ms |
+| `includes` | 125 ms | 0 ms |
+| `forEach`, `some`, `reduce` | 114–117 ms | 314–320 ms |
+| `filter`, `map` | 229, 364 ms | 316, 341 ms |
+| `reverse`, `splice(0, 1)` | 176, 188 ms | 326, 862 ms |
+| `sort()` | 0 ms | 872 ms |
+| `join()` | 313 ms, a 10 MB string | 281 ms |
+| `JSON.stringify` | 445 ms, 50 MB of `null` | 678 ms |
+| `for (i = 0; i < a.length; i++)` | 430 ms | 288 ms |
+| `Array.from(a)`, `[...a]` | 5.7 s, 7.1 s | 621, 677 ms |
+| `concat`, `Object.keys`, `for…in` | 0 ms | 0–1 ms |
+| A plain object with the same two keys: `Object.keys`, `JSON.stringify`, `for…in` | 0 ms | 0 ms |
+
+Both engines walk the holes, so testing in node did not hide this flaw;
+fixtures whose ids ran from 1 did. What node cannot show is the parser: Qt's
+`JSON.parse` segfaults past about 557,000 elements held at once (below) where
+node's does not. And a QML `int` property at 2,147,483,647, plus one, is
+−2,147,483,648.
+
+### Board values
+
+What each scalar in a board may be and where it goes, from the first trace on
+2026-10-14 of every use in shell code. Trace a row again whenever something
+new reads it.
+
+| Value | Admitted | Reaches | What its value can cost |
+|---|---|---|---|
+| `id`, connector `from` and `to` | whole numbers 1 to `MAX_ID`, 2,147,483,646; anything else is renumbered on load (`isItemId`) | lookups in plain objects (`idIndex`, marks, duplication's map); the `int` properties `iid`, `cursorId` and `linkingFrom` | Nothing: no array is written at an id (`security.js` refuses one), and each fits an `int`. |
+| `nextId` | an id, or one past the largest id on the board | `newIds`; the `int` property `nextId` | Nothing: at most `MAX_ID` + 1, after which new items take the smallest free ids. |
+| `x`, `y` | any finite number | position, culling, bounds, fit, arranging, export | Nothing found. Fit holds zoom between 0.2 and 1, export holds a picture to 4,096 px a side, and culling hides what is off screen. |
+| `w`, `h` | at least 60, with no upper limit | layout, the outline, texture strokes, export | A texture's spacing grows with its item, so it has about 1,000 strokes at most at any size (950 is the most a search of sizes and shapes found). An ellipse with a side of about 1e150 or more gets `Infinity` in a ruled, grid or hatch texture path; the outline stays finite, the software renderer draws it in 2 ms, and the GPU renderer has not been measured. Open: a size limit would close it. |
+| `text` | at most 1 MiB | layout, markup, find | In proportion to its length (the long-note row above). |
+| `kind`, `tint`, `texture`, `pinned` | one of their known values, else the default | drawing | Nothing. |
+| `src` | a plain image name in this library | picture checks, decoding | The picture rows above. |
+| `version` | 1 to 7; newer opens read-only | which fields are read | Nothing. |
+
+The counts, 5,000 items and 20,000 connectors, and the file's bytes are the
+board size row above.
 
 ## Before submitting to the marketplace
 
@@ -78,7 +211,7 @@ where this plugin answers each:
 | Private files readable by other accounts: a default umask, files in `/tmp`, a file replaced without its mode, an existing install left loose | The helper writes with `umask 077`; the six folders are made private as the shell starts, existing ones and what is in them too; the shell writes only inside them; imports are 0600 before they are named; temporary files are made in the plugin's own folders | `tests/filesystem.js`, `tests/security.js` |
 | Private data in process arguments (`/proc/<pid>/cmdline`): message text, dictation, tokens, `sh -c` payloads, search terms | Every helper argument is a reviewed folder, path, name or number; notes, clipboard contents and boards go on stdin or in a staged file; a new argument fails until reviewed | `tests/security.js` (argument table), clipboard and commit tests |
 | Downloads not pinned to a digest, `curl \| sh`, unpinned remote git | No network at all; the baseline finds nothing | `tests/security.js`, `npm run review:marketplace` |
-| Freezing or exhausting the shared shell: clipboard auto-reads (hidden fields included), Qt's own paste, drag-and-drop payloads, PNG text bombs | No `TextInput`; bounded paste through the helper; drops refused unread; pictures checked on the way in and before they are drawn; JSON guarded; board, note and file limits | `test:clipboard`, `test:drop`, `tests/security.js`, filesystem and controller tests |
+| Freezing or exhausting the shared shell: clipboard auto-reads (hidden fields included), Qt's own paste, drag-and-drop payloads, PNG text bombs, work set by a value in the input | No `TextInput`; bounded paste through the helper; drops refused unread; pictures checked on the way in and before they are drawn; JSON guarded; board, note and file limits; no value from a board decides an array's length, and ids fit an `int` | `test:clipboard`, `test:drop`, `tests/security.js`, filesystem, controller, editing and CLI tests |
 | Local services without per-user authentication | Nothing listens; IPC is Quickshell's own | `tests/security.js` |
 | Changes outside the plugin without consent | The launcher entry is installed only by hand and replaces or removes only its own unchanged files | `tests/desktop.js` |
 | Privilege (setuid, `sudo`) | None | `npm run review:marketplace` |
@@ -88,11 +221,17 @@ Submitting, or asking for an update to be verified:
 - [ ] `npm test`, `npm run test:security`, `npm run test:ui`, `npm run test:drop`,
   `npm run test:clipboard` and `npm run review:marketplace` pass on the commit
   to be named, and `-- --latest` reports nothing new.
+- [ ] The [cost trace](#cost-trace) is current for that commit: every consumer
+  it adds or changes has what it grows with listed and bounded, and each bound
+  has a fixture at the bound and one past it, in the engine the cost depends
+  on, that fails on the commit before the fix.
 - [ ] The issue names that exact commit, in full, and keeps the form's headings
   as they are: a changed heading stops validation before any scan.
 - [ ] A finding is fixed in code for its whole class, not the one line quoted:
-  search for every other place the same thing happens. The reply names the
-  commit, what changed and the test that shows it.
+  search for every other place the same thing happens, and follow the input
+  the finding names to every other consumer of it. Following the id past the
+  history found the id ceiling. The reply names the commit, what changed and
+  the test that shows it.
 
 ## Manual release checklist
 
@@ -111,10 +250,11 @@ Submitting, or asking for an update to be verified:
   user choices. Exercise traversal, absolute paths, option-like names, quotes,
   control characters, dangling symlinks, existing files and failed writes.
   Validate the final bytes, not just a filename or MIME claim.
-- [ ] Check input sizes before collection/decoding, plus decoded pixel cost,
-  item/link counts and total memory. Test failure halfway through an import,
-  malformed JSON/base64 and readers that never finish. A byte limit alone is
-  not a decode-memory limit.
+- [ ] Run the [cost trace](#cost-trace) for every changed consumer: bytes,
+  expansion, count, repetition, value and who reads first. Test failure
+  halfway through an import, malformed JSON/base64 and readers that never
+  finish. A byte limit is not a decode-memory limit, and a count limit is not
+  a limit on what a value can make the code do.
 - [ ] Review retention: boards, previous versions, trash, images, staging,
   exports and clipboard history. Make sure UI/docs do not promise erasure that
   leaves copies. Test error cleanup and explain what can survive a crash.
@@ -172,6 +312,9 @@ These are review obligations, not claims covered by a green test:
   image pastes, split panes and export scenes need separate aggregate resource
   controls. Pixel counts do not include metadata, GPU textures, mipmaps or
   decoder overhead. Do not claim complete denial-of-service coverage.
+- Item widths and heights have no upper limit ([Board values](#board-values)).
+  Offscreen runs get only Qt's software renderer, so what the GPU renderer the
+  shell draws with makes of an extreme shape has not been measured.
 - The source guards are targeted pattern checks, not a QML parser, taint
   analysis, secret scanner, network monitor or dependency vulnerability audit.
   They do not catch indirect network access or prove every data flow safe.
@@ -496,3 +639,51 @@ The small native metadata-retention probe is not a whole-shell RSS ceiling or
 an exhaustive image-decoder audit. No marketplace submission was performed.
 
 The known limits above remain open hardening areas, not completed fixes.
+
+## Sparse ids and the id ceiling — 2026-10-14
+
+A review of `edcc014` found that the history codec kept rows in an array
+indexed by item id and copied it with `slice()`. Boards keep any id up to
+2,147,483,646, and `slice()` walks every index up to the largest. Reproduced
+on Qt 6.12.0, offscreen: a board with two items, after one edit, spent 25 s in
+a single indexing call when its timeline opened, on the shell's thread.
+
+Tracing the same id further found a second flaw, outside the history. On a
+board with an item at 2,147,483,646, the next new note got 2,147,483,647, one
+past what a board keeps, and the one after it −2,147,483,648, because
+`nextId` is a QML `int`. The history's first record then failed its own check,
+and opening the board again renumbered both notes and dropped their
+connectors: one of three survived.
+
+A correction that kept the history, string keys in place of the arrays
+(`5b0de36`, not merged), ended the freeze but was about three times slower on
+dense boards and took the index's memory past its 128 MiB budget. The history
+and the timeline were removed instead. New ids come from `newIds`, which takes
+the smallest free ids once the next would pass `MAX_ID`; the CLI's `add`
+shares it.
+
+Review before merge then found a flaw in that removal. To keep from parsing
+an old history, its first version read only the board in front of it whenever
+the history stood on one line. JSON allows another key after the history on
+that same line: a file whose only version, 8, stood there opened editable, and
+its first edit saved it over as version 5, in the plugin and in the CLI;
+canvas fields there were ignored. What the reader skipped was taken for
+history, and nothing proved it. Files are now read whole, as any JSON reader
+reads them. Measured on Qt 6.12.0, a full old history costs 184 to 218 ms
+once, and a crafted 31 MiB one is refused by `parseJson` in 161 ms, the board
+then read-only. `tests/suite.js`, `tests/editing.js`, `tests/cli.js` and
+`tst_legacy.qml` put a newer version and canvas fields after the history, on
+its line and on their own, with and without a version in front; on the reader
+before the fix, the editing, CLI and QML ones fail.
+
+Evidence: `tests/editing.js` and `tests/cli.js` take a board at the largest id
+through new notes, copies and connectors and open it again. On `edcc014` they
+fail: the pane, in the JavaScript harness, handed out 2,147,483,647 and
+2,147,483,648 (in Qt the second wraps, as above), and so did the CLI.
+`tst_ids.qml` (`npm run test:qml`) does the same through a real document,
+whose `int` must hold one past the largest id, the real writer and a second
+document reading the board back. `tests/suite.js` checks `newIds` at and past
+the bound. The guard added to `security.js` refuses an array written at an id;
+on `edcc014` it names five such writes in `BoardHistory.js`, among them the
+lines the review cited. The [cost trace](#cost-trace), the engine table and
+[Board values](#board-values) are what this changed in the screen.

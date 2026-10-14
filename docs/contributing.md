@@ -40,7 +40,15 @@ the CLI to create boards and is not a contribution guide.
   and busy state so another import can succeed.
 - New items get their ids from `newIds`, never `nextId + 1`: a board can
   arrive with an id at `MAX_ID`, and one past it is renumbered on the next load,
-  which drops its connectors.
+  which drops its connectors. Look things up by id in plain objects:
+  `tests/security.js` refuses an array written at an id, because the array is
+  as long as the id.
+- Anything that reads board, clipboard, state or CLI input in a new way, a new
+  feature reading an old field included, gets the
+  [cost trace](security-review.md#cost-trace) before merge: what its time and
+  memory grow with, each bounded where the input arrives, and a fixture at
+  each bound in the engine the cost depends on. Benchmarks on realistic boards
+  are not that fixture.
 - CLI failures must remain JSON, and rejected edits must leave both files and
   backups unchanged.
 

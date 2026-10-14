@@ -177,6 +177,39 @@ for (const file of guards)
   assert.equal((fs.readFileSync(path.join(root, file), 'utf8').match(/^  return JSON\.parse\(text\)$/gm) || []).length, 1,
     `${file}: JSON.parse is called once, by parseJson`)
 
+// An array written at an item's id is as long as the id, and a two-item board
+// can carry id 2,147,483,646. slice(), join(), indexOf(), forEach() and
+// JSON.stringify() walk every hole up to the length: the history codec's
+// slice() of one held the shell for 25 seconds. Lookups by id, or by a
+// connector's end, are plain objects (docs/security-review.md, "Cost trace").
+function idIndexedArrays(source) {
+  const arrays = new Set([...source.matchAll(/\b(\w+)\s*=\s*\[\]/g)].map(m => m[1]))
+  const found = []
+  for (const m of source.matchAll(/\b(\w+)\[/g)) {
+    if (!arrays.has(m[1])) continue
+    let depth = 1, at = m.index + m[0].length
+    while (at < source.length && depth > 0) {
+      if (source[at] === '[') depth++
+      else if (source[at] === ']') depth--
+      at++
+    }
+    const index = source.slice(m.index + m[0].length, at - 1).trim()
+    if (/^\s*=(?!=)/.test(source.slice(at)) && /(?:^|\.)(?:i?id|lfrom|lto|from|to)$|Id$/.test(index))
+      found.push(`line ${source.slice(0, m.index).split('\n').length}: ${m[1]}[${index}] is an array written at an id; use an object`)
+  }
+  return found
+}
+assert.ok(idIndexedArrays('  var rows = []\n  rows[r.id] = r').length, 'the history codec\'s rows')
+assert.ok(idIndexedArrays('  var was = []\n  was[before.items[i].id] = before.items[i]').length, 'an id behind an index')
+assert.ok(idIndexedArrays('  var seen = []\n  seen[id] = true').length)
+assert.ok(idIndexedArrays('  var ends = []\n  ends[l.lto] = l').length, "a connector's end")
+assert.deepEqual(idIndexedArrays('  var map = {}\n  map[items.get(i).iid] = i'), [], 'an object is the lookup')
+assert.deepEqual(idIndexedArrays('  var rows = []\n  rows[i] = r\n  if (rows[r.id] === r) rows.push(r.id)'), [],
+  'positions, reads and pushes are not lengths')
+// node walks the holes as well, so the command line is held to it too.
+for (const file of [...fs.readdirSync(root).filter(f => /\.(qml|js)$/.test(f)), 'bin/omarchyform', 'bin/store.js'])
+  assert.deepEqual(idIndexedArrays(fs.readFileSync(path.join(root, file), 'utf8')), [], file)
+
 // A picture that lands in images/ is loaded by Qt in the shell, so each way in
 // holds the bytes that land to their pixels and, for a PNG, to the compressed
 // text Qt would inflate, before placing them.
