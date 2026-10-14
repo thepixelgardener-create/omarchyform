@@ -78,7 +78,7 @@ The trace's third rule is for it.
 | Shared boards and PNG exports | Staging → chosen external destination | Explicit user action, refuse app-data overwrite, keep unrelated files on failure. Filesystem/exchange tests. |
 | Images in foreign shared boards | Landed files → aggregate header check → published board | At most 40,000,000 pixels and 32 MiB of file data across live image items, counting repeated references and offscreen items. Compressed PNG text and profiles are refused before landing. `imagebudget` reads dimensions without decoding rasters; unreadable dimensions or a helper failure refuse publication. Foreign history is discarded first. Filesystem, exchange and `tst_imagebudget.qml` tests. |
 | Foreign board fields | Parsed input → normalized canvas → import staging | Only known primitive canvas fields survive, serialized compactly within the UTF-8 byte cap. Unknown nested data is dropped; invalid fields fail without leaving the exchange busy. Store, exchange and real QML regressions. |
-| Numbers in a board | Board file, import, CLI → lookups, layout, the ids handed out | No value decides an array's length or a loop's count, and each range fits every type it passes through; see [Board values](#board-values). `security.js` refuses an array written at an id; `tests/editing.js` and `tests/cli.js` take a board at the largest id through new items, copies and connectors and open it again, and `tst_ids.qml` does it through Qt's own document and `int`. |
+| Numbers in a board | Board file, import, CLI → lookups, layout, the ids handed out | No value decides an array's length or a loop's count, each range fits every type it passes through, and positions and sizes are held within the board; see [Board values](#board-values). `security.js` refuses an array written at an id; `tests/editing.js` and `tests/cli.js` take a board at the largest id through new items, copies and connectors and open it again, and `tst_ids.qml` does it through Qt's own document and `int`. |
 | CLI operations | stdin/file → model → helper | Parse as data, no evaluation. Invalid JSON must not echo content. CLI/security tests. |
 | Old board history | Board file → `readFile` → dropped | The edit history Omarchyform 0.4.7 to 0.4.10 kept after a board is parsed with the rest of the file, as any JSON reader parses it, through `parseJson`, and then dropped; it is never evaluated. A key after it counts on any line, so a newer version named there keeps the board read-only and the canvas after it is the canvas. A history that is not JSON, or holds more at once than `parseJson` allows, makes the file unreadable rather than half read. A full one costs about 0.2 s once, until the next save writes the board without it. `tests/suite.js`, `tests/editing.js`, `tests/cli.js`, `tst_legacy.qml`. |
 | Desktop install/open | Opt-in launcher files and summon payload | No automatic install hook; ownership/conflict checks, correct path encoding, no shell interpretation. Desktop tests and manual review. |
@@ -171,8 +171,8 @@ new reads it.
 |---|---|---|---|
 | `id`, connector `from` and `to` | whole numbers 1 to `MAX_ID`, 2,147,483,646; anything else is renumbered on load (`isItemId`) | lookups in plain objects (`idIndex`, marks, duplication's map); the `int` properties `iid`, `cursorId` and `linkingFrom` | Nothing: no array is written at an id (`security.js` refuses one), and each fits an `int`. |
 | `nextId` | an id, or one past the largest id on the board | `newIds`; the `int` property `nextId` | Nothing: at most `MAX_ID` + 1, after which new items take the smallest free ids. |
-| `x`, `y` | any finite number | position, culling, bounds, fit, arranging, export | Nothing found. Fit holds zoom between 0.2 and 1, export holds a picture to 4,096 px a side, and culling hides what is off screen. |
-| `w`, `h` | at least 60, with no upper limit | layout, the outline, texture strokes, export | A texture's spacing grows with its item, so it has about 1,000 strokes at most at any size (950 is the most a search of sizes and shapes found). An ellipse with a side of about 1e150 or more gets `Infinity` in a ruled, grid or hatch texture path; the outline stays finite, the software renderer draws it in 2 ms, and the GPU renderer has not been measured. Open: a size limit would close it. |
+| `x`, `y` | within `MAX_COORD`, 1,000,000, of the middle; a file's are brought within it on load, and moves, copies, new items and the CLI stop at it (`clampCoord`, `boundedMove`) | position, culling, bounds, fit, arranging, export | Nothing: a 32-bit float holds a position to a sixteenth of a unit there, and bounds, fit and export stay finite. Fit holds zoom between 0.2 and 1, export holds a picture to 4,096 px a side, and culling hides what is off screen. |
+| `w`, `h` | from 60 to `MAX_SIZE`, 100,000; a file's are brought within it on load, and resizing and the CLI stop at it (`clampSize`) | layout, the outline, texture strokes, export | A texture's spacing grows with its item, so it has about 1,000 strokes at most at any size (950 is the most a search of sizes and shapes found), and every outline and texture is finite at the largest size. On the renderer the shell draws with, an item at the largest size draws in a frame (below). Unbounded, an ellipse with a side of about 1e150 or more drew `Infinity` into a ruled, grid or hatch texture path. |
 | `text` | at most 1 MiB | layout, markup, find | In proportion to its length (the long-note row above). |
 | `kind`, `tint`, `texture`, `pinned` | one of their known values, else the default | drawing | Nothing. |
 | `src` | a plain image name in this library | picture checks, decoding | The picture rows above. |
@@ -312,9 +312,10 @@ These are review obligations, not claims covered by a green test:
   image pastes, split panes and export scenes need separate aggregate resource
   controls. Pixel counts do not include metadata, GPU textures, mipmaps or
   decoder overhead. Do not claim complete denial-of-service coverage.
-- Item widths and heights have no upper limit ([Board values](#board-values)).
-  Offscreen runs get only Qt's software renderer, so what the GPU renderer the
-  shell draws with makes of an extreme shape has not been measured.
+- Offscreen runs get only Qt's software renderer. What the GPU renderer makes
+  of the largest items was measured on one machine, an AMD Radeon with Mesa's
+  radeonsi over OpenGL ([Positions and sizes](#positions-and-sizes--2026-10-14));
+  other GPUs and drivers have not been.
 - The source guards are targeted pattern checks, not a QML parser, taint
   analysis, secret scanner, network monitor or dependency vulnerability audit.
   They do not catch indirect network access or prove every data flow safe.
@@ -687,3 +688,32 @@ the bound. The guard added to `security.js` refuses an array written at an id;
 on `edcc014` it names five such writes in `BoardHistory.js`, among them the
 lines the review cited. The [cost trace](#cost-trace), the engine table and
 [Board values](#board-values) are what this changed in the screen.
+
+## Positions and sizes — 2026-10-14
+
+The first [cost trace](#cost-trace) left one row of [Board values](#board-values)
+open: an item's width and height had no upper limit, and its position none at
+all. Past about 1e150 an ellipse drew `Infinity` into its texture, and well
+before that the scene graph's 32-bit floats stop holding a position to the
+unit. Both are now held: positions within `MAX_COORD`, 1,000,000, of the
+middle, and sizes from 60 to `MAX_SIZE`, 100,000. A board's file is brought
+within them when it loads (`fillItems`), `validate` names the items it brought
+in, and every edit that makes a position or a size stops at them: a move cuts
+short for the whole selection, so it keeps its shape (`boundedMove`), and a
+nudge or resize that cannot happen records no step. The command line holds its
+`add`, `move` and `resize` to the same, and `ops` reports the limits.
+
+Measured on the renderer the shell itself uses, Qt 6.12.0's OpenGL backend on
+an AMD Radeon (radeonsi, Mesa 26.2.4), in a test window: an item at the
+largest size, square and at both extremes of thin, as an ellipse, a diamond
+and a box, plain and in each of the four textures, behind the board's own
+world transform at zoom 0.2, 1 and 4. None of those 90 cases had a frame worse
+than 15.1 ms, where an ordinary note took 13.6 to 14.0 ms on that 14 ms
+display. Every outline and texture path at the largest size is finite.
+
+Evidence: `tests/suite.js` checks the clamps, `boundedMove` and finite paths
+and bounds at the limits; `tests/editing.js` takes a board with
+`x: 1.7e308, w: 1e300` through loading, saving, nudging, moving a selection,
+resizing, duplicating and adding beside it; `tests/cli.js` checks `add`,
+`move`, `resize`, `ops` and `validate`. Each of fifteen deliberate breaks of
+the limits, in the store, the pane and the command line, fails one of them.

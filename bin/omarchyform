@@ -182,8 +182,8 @@ const OPS = {
       board.nextId = taken.next
       board.items.append({
         iid: id, kind: kind,
-        ix: S.num(a[1], 0), iy: S.num(a[2], 0),
-        iw: Math.max(S.MIN_SIZE, S.num(a[3], 220)), ih: Math.max(S.MIN_SIZE, S.num(a[4], 160)),
+        ix: S.clampCoord(S.num(a[1], 0)), iy: S.clampCoord(S.num(a[2], 0)),
+        iw: S.clampSize(S.num(a[3], 220)), ih: S.clampSize(S.num(a[4], 160)),
         itint: S.normalizeTint(a[6]), itext: noteText(a[5], "add"),
         ipinned: false, isrc: ""
       })
@@ -230,21 +230,21 @@ const OPS = {
   },
   move: {
     args: "id, x, y",
-    does: "put an item somewhere else",
+    does: "put an item somewhere else, no further than maximumCoordinate from the middle",
     run(board, a) {
       const at = mustRow(board, a[0], "move")
-      board.items.setProperty(at, "ix", S.num(a[1], 0))
-      board.items.setProperty(at, "iy", S.num(a[2], 0))
+      board.items.setProperty(at, "ix", S.clampCoord(S.num(a[1], 0)))
+      board.items.setProperty(at, "iy", S.clampCoord(S.num(a[2], 0)))
       return { changed: Number(a[0]) }
     }
   },
   resize: {
     args: "id, w, h",
-    does: "change an item's size, never below the minimum",
+    does: "change an item's size, between minimumSize and maximumSize",
     run(board, a) {
       const at = mustRow(board, a[0], "resize")
-      board.items.setProperty(at, "iw", Math.max(S.MIN_SIZE, S.num(a[1], S.MIN_SIZE)))
-      board.items.setProperty(at, "ih", Math.max(S.MIN_SIZE, S.num(a[2], S.MIN_SIZE)))
+      board.items.setProperty(at, "iw", S.clampSize(S.num(a[1], S.MIN_SIZE)))
+      board.items.setProperty(at, "ih", S.clampSize(S.num(a[2], S.MIN_SIZE)))
       return { changed: Number(a[0]) }
     }
   },
@@ -358,6 +358,9 @@ function verbValidate(args) {
   if (rawItems !== items.count) repairs.push(`${rawItems - items.count} item(s) could not be used`)
   const rawLinks = Array.isArray(data.links) ? data.links.length : 0
   if (rawLinks !== links.count) repairs.push(`${rawLinks - links.count} connector(s) pointed at nothing`)
+  const beyond = (Array.isArray(data.items) ? data.items : []).filter(r =>
+    [r.x, r.y].some(v => Math.abs(S.num(v, 0)) > S.MAX_COORD) || [r.w, r.h].some(v => S.num(v, 0) > S.MAX_SIZE)).length
+  if (beyond > 0) repairs.push(`${beyond} item(s) were brought within the board's size and extent`)
   // Not a repair: nothing is changed. The board opens it read-only and empty.
   const warnings = []
   const overlong = S.overlongNote(data.items)
@@ -414,6 +417,7 @@ function verbOps() {
     ok: true,
     ops: Object.keys(OPS).map(name => ({ op: name, args: OPS[name].args, does: OPS[name].does })),
     kinds: S.KINDS, tints: S.TINTS, textures: S.TEXTURES, minimumSize: S.MIN_SIZE,
+    maximumSize: S.MAX_SIZE, maximumCoordinate: S.MAX_COORD,
     maximumItems: S.MAX_ITEMS, maximumConnectors: S.MAX_LINKS
   })
 }

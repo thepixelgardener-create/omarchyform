@@ -1541,6 +1541,32 @@ function tests(S) {
     for (const odd of ["", "not json", board.slice(0, -5)]) eq(S.readFile(odd), null, "not a board: " + odd)
   })
 
+  test("an item is held to the board's size and extent, from a file or an edit", () => {
+    eq([S.clampSize(1), S.clampSize(500), S.clampSize(1e300)], [S.MIN_SIZE, 500, S.MAX_SIZE])
+    eq([S.clampCoord(-1e300), S.clampCoord(12.5), S.clampCoord(1.7e308)], [-S.MAX_COORD, 12.5, S.MAX_COORD])
+    const model = new FakeModel()
+    S.fillItems(model, [{ id: 1, kind: "ellipse", x: 1.7e308, y: -1e300, w: 1e300, h: 1e9, texture: "grid" },
+                        { id: 2, kind: "note", x: "5", y: 7, w: 10, h: "1e400" }])
+    eq([model.get(0).ix, model.get(0).iy, model.get(0).iw, model.get(0).ih],
+       [S.MAX_COORD, -S.MAX_COORD, S.MAX_SIZE, S.MAX_SIZE], "a file's numbers are brought within the board")
+    eq([model.get(1).ix, model.get(1).iy, model.get(1).iw, model.get(1).ih], [5, 7, S.MIN_SIZE, 140],
+       "and one that is not finite is the default")
+    // Within those, everything drawn from them stays finite: every outline and
+    // texture at the largest size, and a board's bounds corner to corner.
+    for (const kind of S.KINDS) for (const texture of S.TEXTURES)
+      for (const [w, h] of [[S.MAX_SIZE, S.MIN_SIZE], [S.MIN_SIZE, S.MAX_SIZE], [S.MAX_SIZE, S.MAX_SIZE]])
+        ok(!/NaN|Infinity/.test(S.texturePath(kind, texture, w, h, 8) + S.shapePath(kind, w, h)), kind + " " + texture + " " + w + "x" + h)
+    const far = new FakeModel([item({ iid: 1, ix: -S.MAX_COORD, iy: -S.MAX_COORD }),
+                               item({ iid: 2, ix: S.MAX_COORD, iy: S.MAX_COORD, iw: S.MAX_SIZE, ih: S.MAX_SIZE })])
+    const b = S.bounds(far)
+    ok(isFinite(b.maxX - b.minX) && isFinite(b.maxY - b.minY), "a board's bounds")
+    // A move is cut short for a whole set, so it keeps its shape.
+    const set = new FakeModel([item({ iid: 1, ix: S.MAX_COORD - 10, iy: 0 }), item({ iid: 2, ix: 0, iy: -S.MAX_COORD + 3 })])
+    eq(S.boundedMove(set, [0, 1], 50, -5), { dx: 10, dy: -3 }, "the set stops where its furthest item does")
+    eq(S.boundedMove(set, [1], 50, 2), { dx: 50, dy: 2 })
+    eq(S.boundedMove(set, [], 50, 2), { dx: 50, dy: 2 }, "nothing to move limits nothing")
+  })
+
   test("new items get ids a board keeps, even beside one with the largest", () => {
     const model = new FakeModel([item({ iid: 2 }), item({ iid: S.MAX_ID })])
     const next = S.nextFreeId(model, 7)

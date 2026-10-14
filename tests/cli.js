@@ -523,6 +523,28 @@ try {
   }
 
   {
+    // Every position and size the command line is given is held to the
+    // board's extent and size, and ops says what those are.
+    const file = path.join(dir, 'limits.json')
+    assert.equal(run('new', file).status, 0)
+    const ops = run('ops').out
+    assert.deepEqual([ops.maximumSize, ops.maximumCoordinate], [S.MAX_SIZE, S.MAX_COORD])
+    const applied = pipe(JSON.stringify([{ op: 'add', args: ['ellipse', 1e300, -1e300, 1e300, 1] },
+      { op: 'add', args: ['note', 0, 0] }, { op: 'move', args: [2, -1.7e308, 5] }, { op: 'resize', args: [2, 1e9, 1e9] }]),
+      'apply', file)
+    assert.equal(applied.status, 0, applied.raw)
+    // What loading has to bring within the board, validate says.
+    const wild = path.join(dir, 'wild.json')
+    fs.writeFileSync(wild, JSON.stringify({ version: 5, nextId: 3, links: [], items: [
+      { id: 1, kind: 'note', x: 1e300, y: 0, w: 220, h: 160 }, { id: 2, kind: 'note', x: 0, y: 0, w: 1e9, h: 160 }] }))
+    assert.deepEqual(run('validate', wild).out.repairs, ["2 item(s) were brought within the board's size and extent"])
+    // As written, not as the plugin would read it back: reading clamps as well.
+    assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')).items.map(r => [r.x, r.y, r.w, r.h]),
+      [[S.MAX_COORD, -S.MAX_COORD, S.MAX_SIZE, S.MIN_SIZE], [-S.MAX_COORD, 5, S.MAX_SIZE, S.MAX_SIZE]])
+    console.log('ok — command line: positions and sizes stay within the board')
+  }
+
+  {
     // A board that came with an item at the largest id there is: what a run
     // adds gets ids the board keeps, so it and its connectors survive the
     // board being opened again.

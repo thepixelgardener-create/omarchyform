@@ -4,6 +4,38 @@
 // Everything here is testable by reading it, which is the point of the split.
 
 var MIN_SIZE = 60
+// The largest an item may be, and the furthest from the middle of the board
+// it may stand. A board can say anything, and past these the shell starts to
+// lose: the scene graph draws in 32-bit floats, which hold a position to a
+// sixteenth of a unit at a million and lose whole units past 2^24, and an
+// ellipse 1e150 across drew Infinity into its texture. Nothing a person makes
+// comes near them; a board's file, the command line and every edit are held
+// to them (docs/security-review.md, Board values).
+var MAX_SIZE = 100000
+var MAX_COORD = 1000000
+
+function clampSize(v) {
+  return Math.max(MIN_SIZE, Math.min(MAX_SIZE, v))
+}
+
+function clampCoord(v) {
+  return Math.max(-MAX_COORD, Math.min(MAX_COORD, v))
+}
+
+// How far a set of items can move by (dx, dy) and all stay within MAX_COORD:
+// the move is cut short for the whole set, so it keeps its shape.
+function boundedMove(items, indices, dx, dy) {
+  var lowX = -Infinity, highX = Infinity, lowY = -Infinity, highY = Infinity
+  for (var i = 0; i < indices.length; i++) {
+    var n = items.get(indices[i])
+    lowX = Math.max(lowX, -MAX_COORD - n.ix)
+    highX = Math.min(highX, MAX_COORD - n.ix)
+    lowY = Math.max(lowY, -MAX_COORD - n.iy)
+    highY = Math.min(highY, MAX_COORD - n.iy)
+  }
+  return { dx: Math.max(lowX, Math.min(highX, dx)), dy: Math.max(lowY, Math.min(highY, dy)) }
+}
+
 var KINDS = ["note", "rect", "ellipse", "diamond"]
 var CANVAS_PATTERNS = ["Dots", "Grid", "Ruled"]
 
@@ -1115,10 +1147,10 @@ function fillItems(items, rows) {
     items.append({
       iid: id,
       kind: kind,
-      ix: num(n.x, 0),
-      iy: num(n.y, 0),
-      iw: Math.max(MIN_SIZE, num(n.w, 180)),
-      ih: Math.max(MIN_SIZE, num(n.h, 140)),
+      ix: clampCoord(num(n.x, 0)),
+      iy: clampCoord(num(n.y, 0)),
+      iw: clampSize(num(n.w, 180)),
+      ih: clampSize(num(n.h, 140)),
       itint: normalizeTint(n.tint || n.color),
       itexture: kind === "image" ? "plain" : normalizeTexture(n.texture),
       itext: typeof n.text === "string" ? n.text : "",

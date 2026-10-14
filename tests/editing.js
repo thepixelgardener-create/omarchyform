@@ -242,6 +242,46 @@ const plain = (n) => JSON.stringify({ kind: 'omarchyform.board', version: 5, nex
 }
 
 {
+  // A board's numbers are held to the board's size and extent, from its file
+  // and from every edit: a move stops at the edge, keeping the selection's
+  // shape; a resize stops at the largest size; neither records a step that
+  // changes nothing; copies and new items beside one at the edge stay on.
+  const S = controller().store
+  const huge = JSON.stringify({ kind: 'omarchyform.board', version: 5, nextId: 3, links: [],
+    items: [Object.assign(note(1, 0), { x: 1.7e308, y: -1e300, w: 1e300, h: 1e9 }), note(2, 0)] }, null, 2) + '\n'
+  const c = opened(huge), a = c.root
+  const at = i => { const n = c.items.get(i); return [n.ix, n.iy, n.iw, n.ih] }
+  assert.deepEqual(at(0), [S.MAX_COORD, -S.MAX_COORD, S.MAX_SIZE, S.MAX_SIZE], 'opened within the board')
+  a.selectOnly(0); a.recolorItem(); c.land()
+  const w = written(c).items[0]
+  assert.deepEqual([w.x, w.y, w.w, w.h], [S.MAX_COORD, -S.MAX_COORD, S.MAX_SIZE, S.MAX_SIZE], 'and written so')
+
+  const steps = c.doc.undoStack.length
+  a.selectOnly(0)
+  a.nudgeSelected(1, -1)
+  a.resizeSelected(1, 1)
+  assert.deepEqual(at(0), [S.MAX_COORD, -S.MAX_COORD, S.MAX_SIZE, S.MAX_SIZE])
+  assert.equal(c.doc.undoStack.length, steps, 'no step for a move or a resize that cannot happen')
+  a.duplicateTargets(); c.land()
+  assert.deepEqual(at(2).slice(0, 2), [S.MAX_COORD, 24 - S.MAX_COORD], 'a copy of one at the edge stays on the board')
+
+  a.markAll()
+  a.beginPointerEdit(); a.moveTargets(500, 0); a.finishPointerEdit(false); c.land()
+  assert.deepEqual([at(0)[0], at(1)[0]], [S.MAX_COORD, 0], 'a selection at the edge does not come apart')
+  a.beginPointerEdit(); a.moveTargets(-500, 40); a.finishPointerEdit(false); c.land()
+  assert.deepEqual([at(0)[0], at(0)[1], at(1)[0], at(1)[1]], [S.MAX_COORD - 500, 40 - S.MAX_COORD, -500, 40])
+
+  a.selectOnly(1)
+  for (let i = 0; i < 3; i++) a.resizeTargets(S.MAX_SIZE, S.MAX_SIZE)
+  assert.deepEqual(at(1).slice(2), [S.MAX_SIZE, S.MAX_SIZE], 'a resize stops at the largest size')
+
+  a.selectOnly(0); a.addRelative('note'); c.land()
+  for (let i = 0; i < c.items.count; i++)
+    for (const v of at(i).slice(0, 2)) assert.ok(Math.abs(v) <= S.MAX_COORD, 'item ' + i + ' stays on the board')
+  console.log('ok — editing: positions and sizes stay within the board, from the file and every edit')
+}
+
+{
   // A board that came with an item at the largest id there is. New notes and
   // copies get ids it keeps, so they, and the connectors drawn to them,
   // survive the board being opened again.

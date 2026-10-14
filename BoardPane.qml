@@ -665,12 +665,12 @@ Item {
     root.markedIds = []
     root.pushUndo()
     var initial = content || {}
-    var w = initial.width === undefined ? (kind === "note" ? 180 : 160) : initial.width
-    var h = initial.height === undefined ? (kind === "note" ? 140 : 110) : initial.height
+    var w = Store.clampSize(initial.width === undefined ? (kind === "note" ? 180 : 160) : initial.width)
+    var h = Store.clampSize(initial.height === undefined ? (kind === "note" ? 140 : 110) : initial.height)
     var taken = Store.newIds(root.items, root.doc.nextId, 1)
     root.items.append({
       iid: taken.ids[0], kind: kind,
-      ix: wx - w / 2, iy: wy - h / 2, iw: w, ih: h,
+      ix: Store.clampCoord(wx - w / 2), iy: Store.clampCoord(wy - h / 2), iw: w, ih: h,
       itint: Store.TINTS[root.doc.nextColor % Store.TINTS.length],
       itext: initial.text || "", ipinned: false, isrc: initial.src || "", itexture: "plain"
     })
@@ -1069,7 +1069,7 @@ Item {
       // board already, and duplicating one should not duplicate megabytes.
       root.items.append({
         iid: id, kind: n.kind,
-        ix: n.ix + Store.DUPLICATE_OFFSET, iy: n.iy + Store.DUPLICATE_OFFSET,
+        ix: Store.clampCoord(n.ix + Store.DUPLICATE_OFFSET), iy: Store.clampCoord(n.iy + Store.DUPLICATE_OFFSET),
         iw: n.iw, ih: n.ih, itint: n.itint, itext: n.itext, ipinned: false, isrc: n.isrc, itexture: Store.normalizeTexture(n.itexture)
       })
       fresh.push(id)
@@ -1277,12 +1277,13 @@ Item {
     if (!root.canEdit) return
     var t = root.targets()
     var model = root.items
+    var move = Store.boundedMove(model, t, dx, dy)
     root.batching = true
     try {
       for (var i = 0; i < t.length; i++) {
         var n = model.get(t[i])
-        model.setProperty(t[i], "ix", n.ix + dx)
-        model.setProperty(t[i], "iy", n.iy + dy)
+        model.setProperty(t[i], "ix", n.ix + move.dx)
+        model.setProperty(t[i], "iy", n.iy + move.dy)
       }
     } finally { root.batching = false }
     root.repaintLinks()
@@ -1296,8 +1297,8 @@ Item {
     try {
       for (var i = 0; i < t.length; i++) {
         var n = model.get(t[i])
-        model.setProperty(t[i], "iw", Math.max(root.minItemSize, n.iw + dx))
-        model.setProperty(t[i], "ih", Math.max(root.minItemSize, n.ih + dy))
+        model.setProperty(t[i], "iw", Store.clampSize(n.iw + dx))
+        model.setProperty(t[i], "ih", Store.clampSize(n.ih + dy))
       }
     } finally { root.batching = false }
     root.repaintLinks()
@@ -1338,6 +1339,9 @@ Item {
     if (!root.canEdit) return
     var t = root.targets()
     if (t.length === 0) return
+    // Nothing to record when they are already as far as an item can go.
+    var move = Store.boundedMove(root.items, t, dx * root.worldStep, dy * root.worldStep)
+    if (move.dx === 0 && move.dy === 0) return
     root.pushUndo()
     root.moveTargets(dx * root.worldStep, dy * root.worldStep)
     root.centerOnSelected()
@@ -1351,12 +1355,13 @@ Item {
     if (!root.canEdit) return
     var t = root.targets()
     if (t.length === 0) return
-    // Nothing to record when every one of them is already at the minimum.
+    // Nothing to record when every one of them is already as small, or as
+    // large, as an item can be.
     var moved = false
     for (var i = 0; i < t.length; i++) {
       var n = root.items.get(t[i])
-      if (Math.max(root.minItemSize, n.iw + dx * root.worldStep) !== n.iw) { moved = true; break }
-      if (Math.max(root.minItemSize, n.ih + dy * root.worldStep) !== n.ih) { moved = true; break }
+      if (Store.clampSize(n.iw + dx * root.worldStep) !== n.iw) { moved = true; break }
+      if (Store.clampSize(n.ih + dy * root.worldStep) !== n.ih) { moved = true; break }
     }
     if (!moved) return
     root.pushUndo()

@@ -43,6 +43,10 @@ the CLI to create boards and is not a contribution guide.
   which drops its connectors. Look things up by id in plain objects:
   `tests/security.js` refuses an array written at an id, because the array is
   as long as the id.
+- Every position and size goes through `clampCoord`, `clampSize` or
+  `boundedMove`: a file's when it loads (`fillItems`), and each edit and CLI
+  operation that makes one. Past `MAX_COORD` and `MAX_SIZE` the scene graph's
+  32-bit floats lose precision and texture paths stop being finite.
 - Anything that reads board, clipboard, state or CLI input in a new way, a new
   feature reading an old field included, gets the
   [cost trace](security-review.md#cost-trace) before merge: what its time and

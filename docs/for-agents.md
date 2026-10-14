@@ -82,9 +82,11 @@ the version it replaced, in `backups/` for a board in the library and as
 ```
 
 **Items.** `id` is unique within the board and is what connectors point at.
-`x`/`y` are the **top-left corner** in board coordinates, `y` down. `w`/`h` are
-the size, never below **60**. Paint order is array order: later items are drawn
-over earlier ones.
+`x`/`y` are the **top-left corner** in board coordinates, `y` down, within
+**1,000,000** of the middle either way. `w`/`h` are the size, from **60** to
+**100,000**. `ops` reports `minimumSize`, `maximumSize` and
+`maximumCoordinate`, and anything past them is brought within them. Paint
+order is array order: later items are drawn over earlier ones.
 
 **`kind`** is one of `note`, `rect`, `ellipse`, `diamond`, or `image`. A note is
 a rectangle with a rule across the top and its text aligned to the top left;
@@ -134,8 +136,9 @@ writes the board without it. Version 6 boards, which carried one, still load.
 
 Board files are hand-editable and get synced between machines, so everything
 coming in is coerced to something the canvas can draw: a string where a number
-belongs, a tint this version has never heard of, a size below the minimum, a
-connector to nothing. `validate` prints what loading had to repair.
+belongs, a tint this version has never heard of, a size below the minimum or
+past the maximum, a position past the board's extent, a connector to nothing.
+`validate` prints what loading had to repair.
 
 Some things are not repaired, because the board would hold the shell up
 drawing them: a note longer than 1048576 characters, more than 5,000 items,
@@ -194,7 +197,8 @@ This is the part that decides whether the result looks made or generated.
 
 ### Size and spacing
 
-A default note is **220 × 160**. The minimum is 60 in each direction.
+A default note is **220 × 160**. The minimum is 60 in each direction, the
+maximum 100,000.
 
 Leave about **60 between neighbours** — closer and two notes read as one block.
 In practice: step **280** across and **220** down, and nothing touches.
