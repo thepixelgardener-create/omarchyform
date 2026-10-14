@@ -6,7 +6,7 @@ import "../.."
 Scope {
   id: test
   property string dir: Quickshell.env("OMARCHYFORM_TEST_DIR")
-  property var cases: ["many", "repeated", "one-over", "boundary", "recovery", "metadata", "after-metadata", "malformed", "nested"]
+  property var cases: ["many", "repeated", "one-over", "boundary", "recovery", "metadata", "after-metadata", "malformed", "nested", "absent-src"]
   property int at: 0
   property bool started: false
   property bool failed: false

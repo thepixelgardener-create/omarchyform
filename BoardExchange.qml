@@ -189,11 +189,13 @@ Item {
     var job = exchange.sharing
     if (job.at >= job.names.length) {
       // Each Node can retain a decode, including repeated and offscreen uses.
+      // Counted by the loader's rule: an image item whose src is missing or no
+      // picture's name opens as a note and draws nothing.
       var data = Store.readFile(Store.withSharedImages(job.raw, job.landed))
       var names = []
       for (var i = 0; i < data.items.length; i++) {
         var item = data.items[i]
-        if (item.kind === "image" && item.src !== "") names.push(item.src)
+        if (item.kind === "image" && Store.imageIsValid(item.src)) names.push(item.src)
       }
       imageBudget.input = names.length ? names.join("\n") + "\n" : ""
       imageBudget.command = exchange.ctl.fileCommand("imagebudget", [exchange.ctl.imagesDir])

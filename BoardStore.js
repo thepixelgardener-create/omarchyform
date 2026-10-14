@@ -2027,7 +2027,9 @@ function boundsOf(items, indices) {
 
 // Both of these return only the items that actually move, so the caller can
 // tell "already arranged" from "nothing to arrange" and does not write a
-// property to the value it already holds.
+// property to the value it already holds. The bounds reach MAX_SIZE past the
+// last position, so a position worked out from them is held to the board here,
+// as the file would hold it when the board opened again.
 function alignMoves(items, indices, edge) {
   if (!indices || indices.length < 2 || ALIGN_EDGES.indexOf(edge) < 0) return []
   var b = boundsOf(items, indices)
@@ -2041,6 +2043,8 @@ function alignMoves(items, indices, edge) {
     else if (edge === "top") y = b.minY
     else if (edge === "bottom") y = b.maxY - n.ih
     else y = (b.minY + b.maxY) / 2 - n.ih / 2
+    x = clampCoord(x)
+    y = clampCoord(y)
     if (x !== n.ix || y !== n.iy) moves.push({ index: indices[i], x: x, y: y })
   }
   return moves
@@ -2068,11 +2072,12 @@ function spreadMoves(items, indices, axis) {
   var at = first[start]
   for (var j = 0; j < order.length; j++) {
     var n = items.get(order[j])
-    if (at !== n[start])
+    var to = clampCoord(at)
+    if (to !== n[start])
       moves.push({
         index: order[j],
-        x: axis === "x" ? at : n.ix,
-        y: axis === "y" ? at : n.iy
+        x: axis === "x" ? to : n.ix,
+        y: axis === "y" ? to : n.iy
       })
     at = at + n[size] + gap
   }

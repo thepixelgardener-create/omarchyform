@@ -711,7 +711,10 @@ middle, and sizes from 60 to `MAX_SIZE`, 100,000. A board's file is brought
 within them when it loads (`fillItems`), `validate` names the items it brought
 in, and every edit that makes a position or a size stops at them: a move cuts
 short for the whole selection, so it keeps its shape (`boundedMove`), and a
-nudge or resize that cannot happen records no step. The command line holds its
+nudge or resize that cannot happen records no step. Aligning and spreading
+work from the selection's bounds, which reach `MAX_SIZE` past the last
+position, so each position they make is clamped before it is saved, and the
+board opens again as it was saved (`tests/editing.js`). The command line holds its
 `add`, `move` and `resize` to the same, and `ops` reports the limits.
 
 Measured on the renderer the shell itself uses, Qt 6.12.0's OpenGL backend on

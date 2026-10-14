@@ -25,10 +25,10 @@ since older boards are migrated on load rather than rejected.
   symlink" until the shell was restarted.
 - Item positions and sizes are held to the board: within 1,000,000 of the
   middle, and from 60 to 100,000 across. A board's file is brought within
-  them when it opens, and moving, resizing, copying, new items and the command
-  line stop at them; `validate` names the items it brought in. Past them the
-  scene graph's 32-bit floats lose precision, and a large enough ellipse drew
-  `Infinity` into its texture.
+  them when it opens, and moving, resizing, arranging, copying, new items and
+  the command line stop at them; `validate` names the items it brought in.
+  Past them the scene graph's 32-bit floats lose precision, and a large
+  enough ellipse drew `Infinity` into its texture.
 - A board that arrives with an item at the largest id, 2,147,483,646, no
   longer hands out ids past it. New notes and copies got ids that opening the
   board again replaced, dropping their connectors; they now take the smallest
