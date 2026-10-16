@@ -411,7 +411,10 @@ streaming Wayland owner.
 and runs a private compositor on its own 0700 runtime folder and socket, never
 the desktop's, with a provider and a consumer under time and memory limits. The
 production fields must make no native receive request while a clipboard owner
-offers text, and the helper's `cliptext` must return 32 bytes and exactly 1 MiB
+replaces its text every 600 ms. Its positive control, one deliberate read, asks
+the owner to hold its offer and reads only once that held offer arrives: a read
+that met a replacement found the offer withdrawn, got nothing and failed about
+one run in 14. The helper's `cliptext` must return 32 bytes and exactly 1 MiB
 whole, refuse 1 MiB + 1 byte with exit 5 and no output, wait out a provider
 paused for a second, and give up on a stalled one at its 3-second deadline
 (exit 4). It is not in CI, which does not install Qt's compositor module; run it before
