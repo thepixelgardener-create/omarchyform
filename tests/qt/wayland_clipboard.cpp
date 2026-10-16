@@ -1,5 +1,6 @@
 // Private compositor and finite provider for tests/wayland.py. Never use a desktop socket.
 #include <QClipboard>
+#include <QFile>
 #include <QGuiApplication>
 #include <QMimeData>
 #include <QQuickItem>
@@ -13,6 +14,12 @@
 #include <QWaylandXdgShell>
 #include <cstdio>
 
+// The provider replaces its selection until the consumer asks it to hold, then
+// offers this marker once more and stops. A read racing a replacement finds the
+// offer withdrawn and gets nothing, so the positive control reads only the held one.
+static const char* kHeld = "application/x-omarchyform-held";
+static QString holdPath() { return qEnvironmentVariable("XDG_RUNTIME_DIR") + "/provider-hold"; }
+
 class Payload : public QMimeData {
 public:
     QString mode;
@@ -20,6 +27,12 @@ public:
         : mode(m)
     {
         setText(QString(mode == "large" ? 1048577 : mode == "exact" ? 1048576 : 32, 'x'));
+    }
+    Payload(QString m, bool held)
+        : Payload(m)
+    {
+        if (held)
+            setData(kHeld, QByteArray());
     }
     QVariant retrieveData(const QString& f, QMetaType t) const override
     {
@@ -86,23 +99,44 @@ int main(int argc, char** argv)
     if (mode == "provider") {
         QString kind = argc > 3 ? argv[3] : "finite";
         QTimer offers;
-        QObject::connect(&offers, &QTimer::timeout, &app, [kind] {
-            QGuiApplication::clipboard()->setMimeData(new Payload(kind));
-            fprintf(stderr, "OFFER\n");
+        QObject::connect(&offers, &QTimer::timeout, &app, [&offers, kind] {
+            bool held = QFile::exists(holdPath());
+            QGuiApplication::clipboard()->setMimeData(new Payload(kind, held));
+            fprintf(stderr, held ? "OFFER held\n" : "OFFER\n");
             fflush(stderr);
+            if (held)
+                offers.stop();
         });
         offers.start(600);
         return app.exec();
     }
     int step = 0;
     QTimer states;
+    // Listing an offer's types makes no receive request; reading its text does.
+    auto positiveControl = [&] {
+        const QMimeData* offer = QGuiApplication::clipboard()->mimeData();
+        if (!offer || !offer->hasFormat(kHeld))
+            return;
+        QObject::disconnect(QGuiApplication::clipboard(), nullptr, &app, nullptr);
+        fprintf(stderr, "POSITIVE_CONTROL\n");
+        fflush(stderr);
+        QString s = QGuiApplication::clipboard()->text();
+        fprintf(stderr, "POSITIVE_BYTES %lld\n", (long long)s.size());
+        app.exit(s.size() == 32 ? 0 : 3);
+    };
     QObject::connect(&states, &QTimer::timeout, &app, [&] {
         if (step == 13) {
-            fprintf(stderr, "POSITIVE_CONTROL\n");
+            states.stop();
+            QFile hold(holdPath());
+            if (!hold.open(QIODevice::WriteOnly)) {
+                app.exit(2);
+                return;
+            }
+            hold.close();
+            fprintf(stderr, "HOLD\n");
             fflush(stderr);
-            QString s = QGuiApplication::clipboard()->text();
-            fprintf(stderr, "POSITIVE_BYTES %lld\n", (long long)s.size());
-            app.exit(s.size() == 32 ? 0 : 3);
+            QObject::connect(QGuiApplication::clipboard(), &QClipboard::dataChanged, &app, positiveControl);
+            positiveControl();
             return;
         }
         QVariant label;
