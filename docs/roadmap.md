@@ -83,7 +83,15 @@ they cost more than they gave, and a board shared with an item id near the
 largest there is could stall the shell for 25 seconds when the timeline
 opened. A board's old history is ignored, and left out at its next save. New items on a board with that largest id now get ids it keeps.
 
-## 0.5 — Editable, labeled connectors
+## 0.5.0 — Plain-text notes and private board names
+
+Shipped. Notes are plain text: formatting is gone, after a shared board could
+make its parser hold the shell for 8 seconds. Board file operations go through
+a Python helper that takes every name on stdin, so a board's title no longer
+shows in the process list. The board stops before reading anything when its
+folders cannot be made private, and says what to repair.
+
+## 0.6 — Editable, labeled connectors
 
 Make relationships useful in a decision diagram: connect “Ready?” to “Ship”,
 label the arrow “yes”, and select it to edit, reverse or remove it.
