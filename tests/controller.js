@@ -1914,3 +1914,32 @@ console.log('ok — controller: the canvas colour is a remembered setting, not p
   assert.equal(c.root.pictureState('p35.png'), 'waiting')
   console.log('ok — controller: no picture is drawn before the file behind it is checked')
 }
+
+{
+  // The folder check's three answers. 0 opens; 4 (private, but holding
+  // something that is not this user's) opens too and says so once the board
+  // is up; 3 and 127 open nothing and say what to repair.
+  const opened = code => {
+    const c = controller(), w = c.workspace
+    w.storageReady = false; w.stateReady = false; w.startupError = ''
+    const flashed = []
+    w.activePane.flash = text => flashed.push(text)
+    w.storageChecked(code)
+    if (w.storageReady) w.applyState('')
+    return { w, flashed }
+  }
+  const clean = opened(0)
+  assert.equal(clean.w.storageReady, true)
+  assert.deepEqual(clean.flashed, [], 'nothing to say when the folders are clean')
+  const foreign = opened(4)
+  assert.equal(foreign.w.storageReady, true, 'a file of another user does not lock the owner out')
+  assert.equal(foreign.w.startupError, '')
+  assert.equal(foreign.flashed.length, 1)
+  assert.match(foreign.flashed[0], /another user.*still private/, 'and the board says so')
+  for (const code of [3, 127]) {
+    const blocked = opened(code)
+    assert.equal(blocked.w.storageReady, false, code + ': folders that are not private open nothing')
+    assert.notEqual(blocked.w.startupError, '', code + ': and say what to repair')
+  }
+  console.log('ok — controller: a foreign file warns, folders that cannot be private block')
+}

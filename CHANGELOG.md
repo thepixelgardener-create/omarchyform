@@ -26,7 +26,8 @@ since older boards are migrated on load rather than rejected.
 
 - If the board folders cannot be made private, the board stops before reading
   or writing anything, says what to repair and offers a retry (`R`), rather
-  than carrying on.
+  than carrying on. If they are private but hold something of another user's,
+  the board opens as usual and says so.
 
 ## 0.4.11 — 2026-10-14
 

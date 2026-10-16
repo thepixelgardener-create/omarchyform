@@ -353,7 +353,14 @@ Item {
     root.startupError = ""
     initProc.running = true
   }
+  // Said once the board is up: the folders are private, but something in them
+  // is not this user's, which only root can have put there.
+  property string storageNotice: ""
   function storageChecked(code) {
+    if (code === 4) {
+      root.storageNotice = "Something in ~/.local/share/omarchyform belongs to another user; your boards are still private"
+      code = 0
+    }
     if (code !== 0) {
       root.startupError = code === 127
         ? "Python 3 could not start. Install Python 3, then retry."
@@ -479,6 +486,7 @@ Item {
       if (st.windowMode === undefined) root.windowMode = root.startWindowed
     }
     root.stateReady = true
+    if (root.storageNotice !== "") root.activePane.flash(root.storageNotice)
   }
 
   // ----------------------------------------------------------------- lifecycle

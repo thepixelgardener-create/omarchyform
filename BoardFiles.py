@@ -96,12 +96,15 @@ def move_new(source, destination):
         raise OSError(error, os.strerror(error))
 
 
-def walk_error(error):
-    raise error
-
-
 def make_private(folders):
+    # Exit 3 when a folder cannot be made private: not a plugin folder, not
+    # made, not this user's, not a folder, or its mode cannot be set. Then
+    # nothing may be read or written. Exit 4 when the folders are private but
+    # hold something that is not this user's or cannot be read: only root can
+    # put that inside a 0700 folder, nobody else can reach it through one, and
+    # refusing every board over it would lock the owner out of their own.
     failed = False
+    foreign = False
     uid = os.getuid()
     home = os.path.realpath(os.environ.get('HOME', '/'))
     for folder in folders:
@@ -113,26 +116,38 @@ def make_private(folders):
             if info.st_uid != uid or not stat.S_ISDIR(info.st_mode):
                 raise PermissionError()
             os.chmod(folder, 0o700)
-            device = info.st_dev
-            for base, dirs, files in os.walk(folder, followlinks=False, onerror=walk_error):
-                for name in dirs + files:
-                    path = os.path.join(base, name)
-                    info = os.lstat(path)
-                    if info.st_uid != uid:
-                        failed = True
-                    if info.st_dev != device or stat.S_ISLNK(info.st_mode):
-                        if name in dirs:
-                            dirs.remove(name)
-                        continue
-                    if info.st_uid == uid:
-                        if stat.S_ISDIR(info.st_mode):
-                            os.chmod(path, 0o700)
-                        elif stat.S_ISREG(info.st_mode):
-                            os.chmod(path, stat.S_IMODE(info.st_mode) & ~0o077)
         except (OSError, SystemExit):
             failed = True
+            continue
+        device = info.st_dev
+        unreadable = []
+        for base, dirs, files in os.walk(folder, followlinks=False, onerror=unreadable.append):
+            for name in dirs + files:
+                path = os.path.join(base, name)
+                try:
+                    info = os.lstat(path)
+                except OSError:
+                    foreign = True
+                    continue
+                if info.st_uid != uid:
+                    foreign = True
+                if info.st_dev != device or stat.S_ISLNK(info.st_mode) or info.st_uid != uid:
+                    if name in dirs:
+                        dirs.remove(name)
+                    continue
+                try:
+                    if stat.S_ISDIR(info.st_mode):
+                        os.chmod(path, 0o700)
+                    elif stat.S_ISREG(info.st_mode):
+                        os.chmod(path, stat.S_IMODE(info.st_mode) & ~0o077)
+                except OSError:
+                    failed = True
+        if unreadable:
+            foreign = True
     if failed:
-        refuse()
+        refuse(3)
+    if foreign:
+        refuse(4)
 
 
 def run(op, args, source):

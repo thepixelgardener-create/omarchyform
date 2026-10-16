@@ -283,9 +283,10 @@ These are review obligations, not claims covered by a green test:
   other access from everything in them that is this user's, existing installs
   included; the files the shell writes itself (its state, staged imports and
   the trash index) take the shell's umask and are kept to their owner by those
-  folders. Something in them that is not this user's is left as it is and
-  reported as an operation failure. A file copied out of them, or an export saved where the user chooses,
-  is 0600 when this writes it and then the user's to keep.
+  folders. Something in them that is not this user's, which only root can
+  put inside a 0700 folder, is left as it is: the board still opens and says
+  so (helper exit 4). A file copied out of them, or an export saved where the
+  user chooses, is 0600 when this writes it and then the user's to keep.
 - Ordinary deletion is not secure erasure. Backups, trash, image assets,
   exported copies and clipboard managers can retain content. A board written
   by 0.4.7 to 0.4.10 keeps the text deleted from its notes in its history, in
@@ -806,9 +807,14 @@ retain their existing completion path. Persistence reports the missing Python
 3 dependency, releases busy state and permits retry.
 
 Private-storage setup must succeed before migration, state loading or trash
-index loading. Failure keeps the board surface unavailable and presents an
-ownership/permissions or Python message with Retry. State callbacks and writes
-also refuse early work. Repair and retry run the same privacy check again.
+index loading. A folder that cannot be made private (helper exit 3), or a
+helper that cannot start (127), keeps the board surface unavailable and
+presents an ownership/permissions or Python message with Retry. State
+callbacks and writes also refuse early work. Repair and retry run the same
+privacy check again. Private folders that hold something of another user's
+(exit 4) open normally, with a notice: blocking every board over a file only
+root could have placed would lock the owner out without protecting anything
+(`tests/private-files.py`, `tests/controller.js`).
 
 The real QML processfailure fixture removes Python from PATH, fails twice
 (including a retry inside the failure callback), restores the interpreter and

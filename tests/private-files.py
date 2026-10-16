@@ -4,6 +4,7 @@ import fcntl
 import errno
 import importlib.util
 import os
+import stat
 from pathlib import Path
 import subprocess
 import sys
@@ -104,4 +105,41 @@ with tempfile.TemporaryDirectory(prefix='omarchyform-private-') as directory:
     for malformed in [b'commit\0', b'commit\0' + b'9999\0', b'commit\0' + b'1\0' + b'x' * 65536]:
         result = subprocess.run(['python3', str(HELPER)], input=malformed, capture_output=True, timeout=5)
         assert result.returncode != 0
+    # The folder check's two refusals. A folder that cannot be private is 3;
+    # private folders holding something of another user's are 4, with the
+    # rest still made private. Another owner needs root to create, so one is
+    # injected through lstat.
+    def exit_code(folders):
+        try:
+            helper.make_private([str(f) for f in folders])
+        except SystemExit as stop:
+            return stop.code
+        return 0
+    held = root / 'held'
+    (held / 'inner').mkdir(parents=True)
+    (held / 'mine.json').write_bytes(b'{}')
+    (held / 'theirs.json').write_bytes(b'{}')
+    os.chmod(held / 'mine.json', 0o644)
+    os.chmod(held / 'inner', 0o755)
+    native_lstat = os.lstat
+    def foreign_lstat(path, *rest, **named):
+        info = native_lstat(path, *rest, **named)
+        if str(path).endswith('theirs.json'):
+            fields = list(info)
+            fields[stat.ST_UID] = os.getuid() + 1
+            return os.stat_result(fields)
+        return info
+    helper.os.lstat = foreign_lstat
+    try:
+        assert exit_code([held]) == 4
+        assert stat.S_IMODE(os.stat(held).st_mode) == 0o700
+        assert stat.S_IMODE(os.stat(held / 'inner').st_mode) == 0o700
+        assert stat.S_IMODE(os.stat(held / 'mine.json').st_mode) == 0o600, 'the rest is still made private'
+        blocker = root / 'blocker'
+        blocker.write_bytes(b'not a folder')
+        assert exit_code([blocker]) == 3
+        assert exit_code([held, blocker]) == 3, 'a folder that cannot be private outranks a foreign file'
+    finally:
+        helper.os.lstat = native_lstat
+    assert exit_code([held]) == 0
 print('ok — private filesystem transport: titles absent from argv/environment, no children, commit/backup/conflict/collision semantics')
