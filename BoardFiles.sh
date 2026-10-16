@@ -23,15 +23,6 @@ place_new() {
 # arrived: dropped, pasted, or carried inside a shared copy.
 max_image_bytes=33554432
 
-# The most a board's file may weigh before the shell reads it, the same as
-# MAX_BOARD_BYTES in BoardStore.js: an import is held to it, and so is a board
-# in the library, which is a folder people sync and commit. Exit 5 says a
-# board is larger than this, and nothing of it was read.
-max_board_bytes=33554432
-board_fits() {
-  [[ ! -f $1 ]] || (( $(stat -Lc %s -- "$1") <= max_board_bytes ))
-}
-
 # What a picture costs to draw is its pixels, not its bytes, and the two are not
 # related: a PNG of one flat colour compresses to almost nothing and still asks
 # for four bytes a pixel when it is decoded. Twelve thousand square is a hundred
@@ -242,17 +233,6 @@ image_extension() {
   esac
 }
 
-# What a board looked like when someone last read it: size, inode and the
-# modification time to the nanosecond. Empty means the file was not there,
-# which is a revision like any other — "nothing was here yet".
-revision_of() {
-  [[ -f $1 ]] || return 0
-  # No trailing newline: this is compared against what a caller kept from the
-  # last answer, and a newline on one side of that comparison is a false
-  # conflict every time.
-  printf '%s' "$(stat -Lc '%s|%i|%y' -- "$1" | tr -d ' ')"
-}
-
 # Refuse traversal and symlink components below base, including dangling
 # symlinks. Base itself may be a symlink (e.g. a boards folder kept in a
 # dotfiles repo): it is where the user chose to keep their data.
@@ -273,49 +253,16 @@ confined() {
 
 operation=$1
 shift
+# Compatibility entry point for CLI/tests; productive QML uses BoardFileProcess
+# directly. Both paths call the same in-process filesystem implementation.
 case "$operation" in
-  export)
-    staged=$1 destination=$2 private_root=$3
-    [[ -f $staged && ! -L $destination ]]
-    resolved=$(realpath -m -- "$destination")
-    private_root=$(realpath -m -- "$private_root")
-    [[ $resolved != "$private_root" && $resolved != "$private_root/"* ]]
-    temporary=$(mktemp -- "$(dirname -- "$destination")/.omarchyform-export-XXXXXX")
-    trap 'rm -f -- "$temporary"' EXIT
-    cp -T -- "$staged" "$temporary"
-    mv -fT -- "$temporary" "$destination"
-    rm -- "$staged"
+  export|publish|move|check|snapshot|revision|filesize|commit|mkdir|private|purge)
+    { printf '%s\0' "$operation" "$#"; if (( $# )); then printf '%s\0' "$@"; fi; cat; } |
+      python3 "${BASH_SOURCE[0]%/*}/BoardFiles.py"
+    exit $?
     ;;
-  publish)
-    # Publish a complete staged board to a unique name without overwriting.
-    board_root=$1 base_name=$2 staged=$3
-    [[ $base_name != */* ]]
-    confined "$board_root" "$base_name.json"
-    [[ -f $staged && ! -L $staged ]]
-    # The shell staged it with its own umask; the board it becomes is private
-    # from the moment it has a name, like every board the helper writes.
-    chmod 600 -- "$staged"
-    number=1
-    candidate=$base_name.json
-    while ! ln -T -- "$staged" "$board_root/$candidate" 2>/dev/null; do
-      [[ -e $board_root/$candidate || -L $board_root/$candidate ]] || exit 1
-      number=$((number + 1))
-      candidate=$base_name-$number.json
-    done
-    rm -- "$staged"
-    printf '%s' "$candidate"
-    ;;
-  move)
-    source_root=$1 source_name=$2 target_root=$3 target_name=$4
-    confined "$source_root" "$source_name"
-    confined "$target_root" "$target_name"
-    source_path=$source_root/$source_name target_path=$target_root/$target_name
-    [[ -e $source_path && ! -e $target_path && ! -L $target_path ]]
-    mkdir -p -- "$(dirname -- "$target_path")"
-    # -T prevents nesting into a directory; -n protects an intervening creation.
-    mv -nT -- "$source_path" "$target_path"
-    [[ ! -e $source_path && ! -L $source_path ]]
-    ;;
+esac
+case "$operation" in
   clipimage)
     # The clipboard picks the format; this picks the name and the folder, so
     # nothing the clipboard says can steer where the bytes land. Exit 4 means
@@ -467,42 +414,6 @@ case "$operation" in
     place_new "$temporary" "$images_root/$base_name.$extension"
     printf '%s' "$base_name.$extension"
     ;;
-  check)
-    # Loading asks first, so a board that could never be saved is not opened.
-    # The revision comes back with the answer: what is read now is what the
-    # next write will expect to still be there.
-    confined "$1" "$2" || exit 3
-    board_fits "$1/$2" || exit 5
-    revision_of "$1/$2"
-    ;;
-  snapshot)
-    board=$1 lock=$2 root=$3
-    [[ $board == "$root/"* ]] || exit 3
-    confined "$root" "${board#"$root/"}" || exit 3
-    mkdir -p -- "$(dirname -- "$lock")"
-    exec 9>"$lock"
-    flock 9
-    [[ -f $board && ! -L $board ]] || exit 3
-    board_fits "$board" || exit 5
-    before=$(revision_of "$board")
-    # Staged beside the lock, in the plugin's own folder, not the shared /tmp.
-    snapshot=$(mktemp -p "$(dirname -- "$lock")" .omarchyform-snapshot-XXXXXX)
-    trap 'rm -f -- "$snapshot"' EXIT
-    cp -T -- "$board" "$snapshot"
-    # Also detect a non-cooperating editor changing the file during the copy.
-    [[ $before == "$(revision_of "$board")" ]] || exit 7
-    printf '%s\n' "$before"
-    cat -- "$snapshot"
-    ;;
-  revision)
-    revision_of "$1"
-    ;;
-  filesize)
-    # Asked before a file is read into memory, so something absurd can be
-    # refused without being loaded. Nothing is a size of its own: a file that
-    # is not there answers 0, and the caller says so.
-    if [[ -f $1 ]]; then printf '%s' "$(stat -Lc '%s' -- "$1")"; else printf 0; fi
-    ;;
   imagebudget)
     # A shared board must fit as a whole before it is published or any Node
     # can load it. Names arrive on stdin once per image ITEM: cache:false means
@@ -573,99 +484,6 @@ case "$operation" in
       fi
       printf '%s\t%s\t%s\n' "$name" "$verdict" "$revision"
     done
-    ;;
-  commit)
-    # The one write both ends of a board go through, with the board itself on
-    # stdin. Under a lock, and only if the file is still the revision the
-    # writer last saw — so two writers that both read the same version cannot
-    # both believe they are updating it, and the second is told rather than
-    # winning by arriving later.
-    #
-    # Exit 7 means the file moved underneath, and prints what is there now. The
-    # caller still holds what it meant to write; this refuses to guess which of
-    # the two versions a person wanted. Exit 5 means the board is larger than a
-    # board is opened at, so it is not written: it could not be read back.
-    board=$1 backup=$2 lock=$3 expected=$4 root=${5:-} backup_root=${6:-}
-    if [[ -n $root ]]; then
-      [[ $board == "$root/"* ]] || exit 3
-      confined "$root" "${board#"$root/"}" || exit 3
-    fi
-    if [[ -n $backup_root ]]; then
-      [[ $backup == "$backup_root/"* ]] || exit 3
-      confined "$backup_root" "${backup#"$backup_root/"}" || exit 3
-    fi
-    [[ ! -L $board && ! -L $backup && ! -L $backup.tmp ]] || exit 3
-    # Staged beside the board it will become: a rename is only atomic within
-    # one filesystem, and a boards folder may be a symlink to another.
-    mkdir -p -- "$(dirname -- "$board")"
-    staged=$(mktemp -- "$(dirname -- "$board")/.omarchyform-XXXXXX")
-    # However this ends, the half-written board does not stay in the folder
-    # people are invited to read. The caller still holds what it sent.
-    trap 'rm -f -- "$staged"' EXIT
-    cat > "$staged"
-    board_fits "$staged" || exit 5
-    mkdir -p -- "$(dirname -- "$lock")"
-    exec 9>"$lock"
-    flock 9
-    current=$(revision_of "$board")
-    if [[ $expected != "-" && $expected != "$current" ]]; then
-      printf '%s' "$current"
-      exit 7
-    fi
-    mkdir -p -- "$(dirname -- "$backup")"
-    # The version about to be replaced is kept first, whoever is replacing it.
-    if [[ -e $board ]]; then
-      cp -T -- "$board" "$backup.tmp"
-      mv -fT -- "$backup.tmp" "$backup"
-    fi
-    mv -fT -- "$staged" "$board"
-    revision_of "$board"
-    ;;
-  mkdir)
-    confined "$1" "$2"
-    mkdir -- "$1/$2"
-    ;;
-  private)
-    # The plugin's own folders, made, or made private: 0700, and whatever is
-    # in them only its owner's, whatever umask the shell started with and
-    # whatever an older version, a sync tool or a hand left them as. The
-    # shell writes some files into them itself (its state, a staged import,
-    # the trash index) with its own umask; inside a folder only its owner
-    # can enter, no other account reaches them.
-    #
-    # A folder may be a link to where it is kept, and what it leads to is
-    # made private if it is this user's. Nothing below it is followed, and
-    # nothing that is not this user's is changed: it is named on stderr, and
-    # exit 3 says something could not be made private. Never the home folder.
-    # A failure with one folder (one that could not be made, a file that went
-    # away while it was being looked at) is said and the rest are still done.
-    unprivate=0
-    home=$(realpath -m -- "${HOME:-/}")
-    for folder in "$@"; do
-      if [[ $folder != /* || $folder =~ [[:cntrl:]] || $(realpath -m -- "$folder") == "$home" ]]; then
-        printf 'not a folder of the plugin'"'"'s: %s\n' "$folder" >&2
-        unprivate=1
-        continue
-      fi
-      mkdir -p -- "$folder" 2>/dev/null || true
-      if [[ ! -d $folder || ! -O $folder ]] || ! chmod 700 -- "$folder"; then
-        printf 'not this user'"'"'s, left as it is: %s\n' "$folder" >&2
-        unprivate=1
-        continue
-      fi
-      find -H "$folder" -mindepth 1 -xdev -user "$(id -u)" -perm /077 \
-        \( \( -type d -exec chmod 700 -- {} + \) -o \( -type f -exec chmod go= -- {} + \) \) 2>/dev/null || unprivate=1
-      if [[ -n $(find -H "$folder" -mindepth 1 -xdev ! -user "$(id -u)" -print -quit 2>/dev/null) ]]; then
-        printf 'holds something not this user'"'"'s: %s\n' "$folder" >&2
-        unprivate=1
-      fi
-    done
-    (( unprivate == 0 )) || exit 3
-    ;;
-  purge)
-    [[ $2 != */* ]]
-    confined "$1" "$2"
-    rm -rf -- "$1/$2"
     ;;
   *) exit 2 ;;
 esac

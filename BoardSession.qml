@@ -283,7 +283,7 @@ Item {
     session.ctl.flash(session.saveError)
   }
 
-  Process {
+  BoardFileProcess {
     id: diskRead
     property string board: ""
     property string localText: ""
@@ -416,7 +416,7 @@ Item {
     session.raiseConflict()
   }
 
-  Process {
+  BoardFileProcess {
     id: diskSize
     property string board: ""
     property bool again: false
@@ -479,7 +479,7 @@ Item {
     session.damageReason = "is " + Store.TOO_LARGE
   }
 
-  Process {
+  BoardFileProcess {
     id: pathCheck
     property string checking: ""
     // Checking the path also reports what revision is there, so the first

@@ -98,7 +98,6 @@ Item {
   function save(quiet) { ctl.saveCount++ }
   function scheduleSave() { ctl.saveCount++ }
   function flushSave() {}
-  function beginTextPalette(editor) {}
   function stopEditing() { ctl.editIndex = -1 }
   function editSelected() { ctl.editIndex = ctl.selectedIndex }
   function addItem(kind, x, y) {

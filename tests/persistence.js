@@ -3,11 +3,11 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const { spawnSync } = require('child_process')
-for (const scenario of ['persistence', 'session', 'timeout', 'exchange', 'imagebudget', 'clipboard', 'fieldpaste', 'legacy', 'ids']) {
+for (const scenario of ['processfailure', 'persistence', 'session', 'timeout', 'exchange', 'imagebudget', 'clipboard', 'fieldpaste', 'legacy', 'ids']) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'omarchyform-persistence-'))
   try {
     fs.writeFileSync(path.join(dir, 'blocked.json'), 'original')
-    fs.mkdirSync(path.join(dir, 'blocked.json.bak.tmp'))
+    fs.mkdirSync(path.join(dir, 'blocked.json.bak'))
     fs.writeFileSync(path.join(dir, 'damaged.json'), '{broken')
     // A folder inside the boards folder that points back at it: a.json there
     // is readable, but saving through it would be refused.
@@ -155,17 +155,18 @@ esac
       const fifo = spawnSync('mkfifo', [path.join(dir, 'slow.json')])
       if (fifo.status !== 0) throw new Error('could not create delayed-backup fixture')
     }
-    for (const file of ['LineField.qml', 'BoardPersistence.qml', 'BoardSession.qml', 'BoardExchange.qml', 'BoardStore.js', 'BoardFiles.sh',
+    for (const file of ['LineField.qml', 'BoardPersistence.qml', 'BoardSession.qml', 'BoardExchange.qml', 'BoardStore.js', 'BoardFiles.sh', 'BoardFiles.py', 'BoardFileProcess.qml',
                         'BoardDocument.qml'])
       fs.copyFileSync(path.join(__dirname, '..', file), path.join(dir, file))
     // The scenarios import the repository from two folders up; here it is the
     // folder they run in.
     fs.writeFileSync(path.join(dir, 'shell.qml'), fs.readFileSync(path.join(__dirname, `qml/tst_${scenario}.qml`), 'utf8')
       .replace('import "../.."', '').replace(/"\.\.\/\.\.\/(\w+\.js)"/g, '"$1"'))
-    const result = spawnSync('qs', ['--no-color', '-p', path.join(dir, 'shell.qml')], {
+    if (scenario === 'processfailure') fs.mkdirSync(path.join(dir, 'stubs'), {recursive:true})
+    const result = spawnSync('/usr/bin/qs', ['--no-color', '-p', path.join(dir, 'shell.qml')], {
       encoding: 'utf8', timeout: 15000,
       env: { ...process.env, QT_QPA_PLATFORM: 'offscreen', QT_QPA_PLATFORMTHEME: '',
-        PATH: path.join(dir, 'stubs') + ':' + process.env.PATH,
+        PATH: path.join(dir, 'stubs') + (scenario === 'processfailure' ? '' : ':' + process.env.PATH),
         QT_QUICK_CONTROLS_STYLE: 'Basic', XDG_RUNTIME_DIR: dir, OMARCHYFORM_TEST_DIR: dir }
     })
     const output = (result.stdout || '') + (result.stderr || '')

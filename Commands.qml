@@ -96,7 +96,6 @@ Item {
         anchors.leftMargin: typed.cursorRectangle.x + typed.cursorRectangle.width + panel.theme.sp(4)
         visible: typed.text === ""
         text: panel.ctl.paletteGroup !== "" ? Store.groupTitle(panel.ctl.paletteGroup) + " · backspace: back"
-          : panel.ctl.paletteScope === "typing" ? "Format the text…"
           : panel.ctl.paletteScope === "selection" ? "Do something with it…" : "Run a command…"
         color: panel.theme.panelText
         opacity: 0.58

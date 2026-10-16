@@ -67,7 +67,7 @@ The trace's third rule is for it.
 | Copied notes | QML → helper → `wl-copy` | Content only on stdin; never argv/environment/logs. `security.js` inspects live Linux process metadata; `tst_clipboard.qml` exercises the QML caller, repeat copies, failure and large Unicode text. |
 | Pasted text/images | `wl-paste` → staging → QML/library | Bound bytes before returning text; reject bad image types and excessive supported dimensions; remove staging on success/failure. Filesystem and security tests. |
 | Text pasted into a field | Paste keys → `pasteInto` → helper → the field that asked | Qt's own paste reads everything a clipboard owner sends before any limit can count it, so no field may run it. The note editor, command list, find field and browser field hand Ctrl+V and Shift+Insert to the exchange, which reads through `cliptext`'s 1 MiB bound, refuses a paste that would not fit the field, and inserts only while that field is still taking text; failures go to the pane that asked. The line fields also take the middle button (primary selection); the pan surface takes it above the note editor. `security.js` refuses any text field without both; `tst_node.qml` and `tst_pan.qml` show each field no longer pastes for itself; `tst_fieldpaste.qml` runs the real exchange and helper against an owner that never stops sending, a late answer, a destroyed field and a clipboard with no text. |
-| Board JSON, titles, paths, errors | Models → Qt text | Explicit plain text for labels. Styled notes escape input first; status escapes variable messages. Source guards, hostile markup tests and Qt title test. |
+| Board JSON, titles, paths, errors | Models → Qt text | Explicit plain text for labels. Canvas notes use bounded literal previews and Text.PlainText; status escapes variable messages. Source guards, hostile markup tests and Qt title test. |
 | Long note text | Board file, import, editor, CLI → text layout on the shell's thread | A note is at most 1 MiB: a board with a longer one opens read-only and empty, import and the CLI refuse one, the editor refuses to grow one. Unbroken runs wrap anywhere, and the editor holds a note only while open, so layout stays linear. Store, controller, node, exchange and CLI tests. |
 | Board size | Board file, import, outside writes, CLI → delegates on the shell's thread | At most 5,000 items, 20,000 connectors and 32 MiB. The helper refuses a larger file by its size before any of it is read (`check`, `snapshot`, `filesize`, exit 5) and refuses to commit one; a board over a count opens read-only and empty with the reason and is never written over. Adding, duplicating, connecting, import and the CLI stop at the limits. Store, controller, exchange, filesystem and CLI tests. |
 | JSON text | Board, import, state, trash index, IPC → `JSON.parse` on the shell's engine | Qt's parser holds each element of an open array on an unchecked stack and segfaults past about 557,000. Every shell-side parse goes through `parseJson`, which refuses more than 100,000 held at once. Store, controller and exchange tests; `security.js` refuses any other `JSON.parse` in shell code. |
@@ -173,7 +173,7 @@ new reads it.
 | `nextId` | an id, or one past the largest id on the board | `newIds`; the `int` property `nextId` | Nothing: at most `MAX_ID` + 1, after which new items take the smallest free ids. |
 | `x`, `y` | within `MAX_COORD`, 1,000,000, of the middle; a file's are brought within it on load, and moves, copies, new items and the CLI stop at it (`clampCoord`, `boundedMove`) | position, culling, bounds, fit, arranging, export | Nothing: a 32-bit float holds a position to a sixteenth of a unit there, and bounds, fit and export stay finite. Fit holds zoom between 0.2 and 1, export holds a picture to 4,096 px a side, and culling hides what is off screen. |
 | `w`, `h` | from 60 to `MAX_SIZE`, 100,000; a file's are brought within it on load, and resizing and the CLI stop at it (`clampSize`) | layout, the outline, texture strokes, export | A texture's spacing grows with its item, so it has about 1,000 strokes at most at any size (950 is the most a search of sizes and shapes found), and every outline and texture is finite at the largest size. On the renderer the shell draws with, an item at the largest size draws in a frame (below). Unbounded, an ellipse with a side of about 1e150 or more drew `Infinity` into a ruled, grid or hatch texture path. |
-| `text` | at most 1 MiB | layout, markup, find | In proportion to its length (the long-note row above). |
+| `text` | at most 1 MiB | plain-text layout, find | In proportion to its length (the long-note row above). |
 | `kind`, `tint`, `texture`, `pinned` | one of their known values, else the default | drawing | Nothing. |
 | `src` | a plain image name in this library | picture checks, decoding | The picture rows above. |
 | `version` | 1 to 7; newer opens read-only | which fields are read | Nothing. |
@@ -209,7 +209,7 @@ where this plugin answers each:
 | Raised against plugins | Here | Checked by |
 |---|---|---|
 | Private files readable by other accounts: a default umask, files in `/tmp`, a file replaced without its mode, an existing install left loose | The helper writes with `umask 077`; the six folders are made private as the shell starts, existing ones and what is in them too; the shell writes only inside them; imports are 0600 before they are named; temporary files are made in the plugin's own folders | `tests/filesystem.js`, `tests/security.js` |
-| Private data in process arguments (`/proc/<pid>/cmdline`): message text, dictation, tokens, `sh -c` payloads, search terms | Every helper argument is a reviewed folder, path, name or number; notes, clipboard contents and boards go on stdin or in a staged file; a new argument fails until reviewed | `tests/security.js` (argument table), clipboard and commit tests |
+| Private data in process arguments (`/proc/<pid>/cmdline`): message text, dictation, tokens, `sh -c` payloads, search terms | Board filesystem requests (including names) go on stdin to a child-free Python helper; image/clipboard helper arguments remain reviewed paths/names; a new argument fails until reviewed | `tests/security.js` (argument table), clipboard and commit tests |
 | Downloads not pinned to a digest, `curl \| sh`, unpinned remote git | No network at all; the baseline finds nothing | `tests/security.js`, `npm run review:marketplace` |
 | Freezing or exhausting the shared shell: clipboard auto-reads (hidden fields included), Qt's own paste, drag-and-drop payloads, PNG text bombs, work set by a value in the input | No `TextInput`; bounded paste through the helper; drops refused unread; pictures checked on the way in and before they are drawn; JSON guarded; board, note and file limits; no value from a board decides an array's length, and ids fit an `int` | `test:clipboard`, `test:drop`, `tests/security.js`, filesystem, controller, editing and CLI tests |
 | Local services without per-user authentication | Nothing listens; IPC is Quickshell's own | `tests/security.js` |
@@ -283,9 +283,10 @@ These are review obligations, not claims covered by a green test:
   other access from everything in them that is this user's, existing installs
   included; the files the shell writes itself (its state, staged imports and
   the trash index) take the shell's umask and are kept to their owner by those
-  folders. Something in them that is not this user's is left as it is and
-  named. A file copied out of them, or an export saved where the user chooses,
-  is 0600 when this writes it and then the user's to keep.
+  folders. Something in them that is not this user's, which only root can
+  put inside a 0700 folder, is left as it is: the board still opens and says
+  so (helper exit 4). A file copied out of them, or an export saved where the
+  user chooses, is 0600 when this writes it and then the user's to keep.
 - Ordinary deletion is not secure erasure. Backups, trash, image assets,
   exported copies and clipboard managers can retain content. A board written
   by 0.4.7 to 0.4.10 keeps the text deleted from its notes in its history, in
@@ -298,8 +299,11 @@ These are review obligations, not claims covered by a green test:
   can also enter shell history and process metadata. For sensitive text use
   `new FILE` followed by `apply FILE -` with operations fed from a protected
   file or a pipe. Do not put secrets in the shell command that builds the pipe.
-  `inspect --full` and exports intentionally emit board contents; filenames and
-  paths can appear in process arguments and error messages.
+  `inspect --full` and exports intentionally emit board contents. Explicit CLI
+  filenames and file-manager/desktop-opener paths can appear in the caller's
+  arguments; image helper paths also remain arguments. Internal board saves,
+  reads, renames, trash/restore, publication, exports and permission repair
+  send names over stdin rather than native arguments.
 - Local board/CLI reads are not uniformly byte-bounded. A board's size is
   checked before it is read, but by a separate step: a file that grows between
   that check and the read is read whole, up to what the shell can hold. The
@@ -731,3 +735,90 @@ and bounds at the limits; `tests/editing.js` takes a board with
 resizing, duplicating and adding beside it; `tests/cli.js` checks `add`,
 `move`, `resize`, `ops` and `validate`. Each of fifteen deliberate breaks of
 the limits, in the store, the pane and the command line, fails one of them.
+
+
+## Plain-text canvas notes — 2026-10-15
+
+All board note text is treated as untrusted, including local and synced boards.
+The inline markup parser, formatting shortcuts and formatting commands were
+removed. `Node.qml` renders `notePreview(text)` with `Text.PlainText`; the same
+component is used by PNG exports. Existing formatting markers remain literal
+characters, without rewriting stored content or changing the board schema.
+
+Cost trace: preview preparation slices at most 4,000 UTF-16 code units per note,
+with no delimiter searches, regex backtracking or recursive parsing. At 5,000
+items the preview strings hold at most 20 million code units. This is not a
+whole-shell memory or layout-time guarantee. Existing note/board limits and
+long-run wrapping protections still apply; editing retains the full note.
+The Qt regression accepts the 20,178,915-byte adversarial board and exercises
+all 5,000 previews, while real Node tests verify literal foreign tags, entities,
+nested/unclosed spans, truncation, preserved model content and continued use.
+
+Validation: `npm test`, `npm run test:security:full` and the final Qt UI rerun.
+The second-account ownership test remains skipped without a second account.
+No real-user board was changed and no marketplace submission was made.
+
+
+## Private board filesystem transport — 2026-10-15
+
+`BoardFileProcess.qml` sends a bounded NUL-delimited request header followed by
+optional board contents over stdin to `BoardFiles.py`. Header fields cannot
+contain NUL; the helper reads at most 64 KiB of header and 32 fields. No request
+values enter argv or environment. The Python helper uses filesystem APIs and
+fcntl locks directly, without child processes that could leak names through
+stat, cp, mv, chmod or rm arguments. The CLI uses the same transport internally.
+The shell compatibility entry point delegates to the same implementation; a
+caller explicitly supplying filenames to that old entry point still exposes
+its own arguments, just as an explicit CLI/file-manager invocation does.
+
+Existing revision strings and flock locks remain compatible. Commits stage
+beside the destination, check the expected revision under lock, preserve a
+backup before replacement and clean staging on failure. Renames refuse an
+existing destination atomically; cross-filesystem moves copy into a private
+staging directory before publication. Publishing remains no-clobber and
+owner-only. Symlink confinement and private-directory ownership checks remain.
+Filesystem failures do not print filenames from the helper.
+
+`tests/private-files.py` holds a real save at its lock and inspects argv,
+environment and child PIDs after the private request was consumed. A title
+containing Unicode, quotes and shell syntax remains absent from metadata;
+the commit succeeds, and backup, conflict, rename collision and publication
+checks pass. Static guards require the private wrapper for each board operation.
+Actual QML suites exercise this transport, including repeated saves, late
+completion, backup failure, conflicts and imports. Python 3 is now required at
+runtime; the plugin does not install it automatically.
+
+Validation for this change: `npm test`, `npm run test:security:full` (178 Qt
+UI tests), the final `npm run test:qml` and CLI reruns, and
+`npm run test:omarchy` all passed. The live test's obsolete inline-formatting
+steps were replaced with literal-text assertions. The first live run stalled
+at keyboard stage 42; the subsequent run completed. The existing second-UID
+ownership fixture was skipped; the metadata probe inspects from the same UID.
+
+
+## Startup failure handling — 2026-10-16
+
+Quickshell does not emit `exited` when an executable cannot start. The private
+process wrapper now tracks each request and whether its process started;
+a stopped process that never started completes once with code 127. Deferred
+failure handling is scoped to the request generation so an immediate retry
+cannot be completed by a previous request. Normal exits, crashes and saves
+retain their existing completion path. Persistence reports the missing Python
+3 dependency, releases busy state and permits retry.
+
+Private-storage setup must succeed before migration, state loading or trash
+index loading. A folder that cannot be made private (helper exit 3), or a
+helper that cannot start (127), keeps the board surface unavailable and
+presents an ownership/permissions or Python message with Retry. State
+callbacks and writes also refuse early work. Repair and retry run the same
+privacy check again. Private folders that hold something of another user's
+(exit 4) open normally, with a notice: blocking every board over a file only
+root could have placed would lock the owner out without protecting anything
+(`tests/private-files.py`, `tests/controller.js`).
+
+The real QML processfailure fixture removes Python from PATH, fails twice
+(including a retry inside the failure callback), restores the interpreter and
+successfully saves. The live startupfailure fixture makes the boards path a
+file, verifies no documents/state/trash are loaded and original state/legacy
+bytes remain intact, repairs the fixture and verifies successful migration and
+opening the saved board. Both cases use temporary data, not user boards.

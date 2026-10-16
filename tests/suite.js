@@ -766,7 +766,7 @@ function tests(S) {
     // Nothing typed is the whole table, minus the ways into the list itself
     // and with each family of variants standing behind its one entry.
     const all = S.matchCommands("")
-    eq(all.length, S.COMMANDS.filter(c => c.listed !== false && c.needs !== "typing" && !c.group).length)
+    eq(all.length, S.COMMANDS.filter(c => c.listed !== false && !c.group).length)
     ok(all.every(c => c.listed !== false), "the ways in do not list themselves")
 
     // Asked for a selection, it is the commands that act on one — which is
@@ -821,13 +821,10 @@ function tests(S) {
     // Browsing shows the entry and not the members.
     ok(names("").includes("Canvas background…"))
     ok(!names("").includes("Canvas pattern: Grid"))
-    ok(names("", "typing").includes("Colour the words…"))
-    ok(!names("", "typing").includes("Colour it urgent"))
     // Inside a family, only its members, whatever the scope.
     eq(names("", "all", "canvas"), ["Canvas pattern: Dots", "Canvas pattern: Grid", "Canvas pattern: Ruled",
       "Canvas pattern: Plain", "Canvas colour: Theme", "Canvas colour: Lighter", "Canvas colour: Darker",
       "Canvas colour: Paper", "Canvas colour: Ink"])
-    eq(names("", "all", "text-colour").length, 4, "a typing family opens from the board's list too")
     eq(names("pa", "all", "canvas"), ["Canvas pattern: Dots", "Canvas pattern: Grid", "Canvas pattern: Ruled",
       "Canvas pattern: Plain", "Canvas colour: Paper"], "and typing narrows it, in the table's order")
     // Typing finds a member directly, from anywhere.
@@ -881,7 +878,7 @@ function tests(S) {
 
     // Nothing typed is still the table in table order, families folded.
     eq(S.matchCommands("").map(c => c.name).join(","),
-       S.COMMANDS.filter(c => c.listed !== false && c.needs !== "typing" && !c.group).map(c => c.name).join(","),
+       S.COMMANDS.filter(c => c.listed !== false && !c.group).map(c => c.name).join(","),
        "an empty query is the table, families folded")
 
     // Scope is still the first question asked: an alias cannot smuggle a
@@ -1029,126 +1026,16 @@ function tests(S) {
        "and a failure does not cover a board that is not being saved")
   })
 
-  // A note carries a little markup so a board can have a shape to it — a
-  // heading, a key, a word that matters. The whole of the safety is the order:
-  // everything from the board file is escaped first, and only then is this
-  // syntax turned into tags, so nothing anyone else wrote can arrive as markup.
-  test("a note says a little more than its words, and nothing it was sent", () => {
-    const c = { foreground: "#cccccc", accent: "#00ffff", urgent: "#ff5555", muted: "#888888" }
-    const m = t => S.noteMarkup(t, c)
-
-    eq(m("plain"), "plain", "most of a note is words")
-    eq(m("# Capture"), '<font size="5"><b>Capture</b></font>', "a heading")
-    eq(m("*bold*"), "<b>bold</b>")
-    eq(m("_soft_"), "<i>soft</i>")
-    eq(m("press `n`"), 'press <font color="#00ffff">n</font>', "a key, in the accent")
-    eq(m("[urgent]careful[/]"), '<font color="#ff5555">careful</font>')
-    eq(m("a\nb"), "a<br>b", "a line break is a line break")
-
-    // A board is a file other people can send you, and the note is the part
-    // they write. Nothing in it reaches the renderer as a tag.
-    for (const attack of ['<b>bold</b>', '<font color="red">x</font>', '<img src=x>',
-                          '&lt;b&gt;', '<a href="http://x">y</a>']) {
-      const out = m(attack)
-      ok(out.indexOf("<b>") < 0 || attack.indexOf("*") >= 0, "no tag survives: " + out)
-      ok(out.indexOf("<img") < 0 && out.indexOf("<a ") < 0, "nor these: " + out)
-      ok(out.indexOf("&lt;") >= 0 || attack === "&lt;b&gt;", "they arrive as text: " + out)
+  test("canvas previews are bounded literal text without changing stored notes", () => {
+    for (const text of ["# Heading\n*bold*", "<img src='https://example.invalid/x'>", "&lt;b&gt;", "[accent]".repeat(5000)]) {
+      eq(S.notePreview(text), text.slice(0, S.NOTE_PREVIEW_LIMIT))
+      const items = new FakeModel([])
+      S.fillItems(items, [{id: 1, kind: "note", text}])
+      eq(items.get(0).itext, text, "loading preserves the original")
     }
-    eq(m("<script>x</script>"), "&lt;script&gt;x&lt;/script&gt;")
-    eq(m("a & b"), "a &amp; b", "and an ampersand is an ampersand")
-
-    // Order inside one line: the first thing to match at a position wins, so
-    // a star inside a key is part of the key.
-    eq(m("a `*b*` c"), 'a <font color="#00ffff">*b*</font> c')
-    eq(m("[accent]a *strong* span[/]"),
-       '<font color="#00ffff">a <b>strong</b> span</font>', "a role can hold emphasis")
-    eq(m("# a `key` here"),
-       '<font size="5"><b>a <font color="#00ffff">key</font> here</b></font>',
-       "and a heading can hold anything a line can")
-
-    // What is not markup stays as it was typed, rather than eating the rest.
-    eq(m("2 * 3 * 4"), "2 <b> 3 </b> 4", "a lone pair of stars is emphasis, for better or worse")
-    eq(m("*unclosed"), "*unclosed", "an unclosed mark is punctuation")
-    eq(m("[accent]unclosed"), "[accent]unclosed")
-    eq(m("[nosuchrole]x[/]"), "[nosuchrole]x[/]", "and a role nobody has heard of is text")
-    eq(m("#nospace"), "#nospace", "a hash needs a space to be a heading")
-    // A board file can carry a note of any length, and comes from whoever sent
-    // it. The item keeps every character — truncating somebody's note on load
-    // would lose what they wrote — and the renderer is handed a bounded piece,
-    // because nothing past the first screenful of a 220x160 note can be seen.
-    const huge = "[accent]x[/] ".repeat(20000)
-    ok(huge.length > S.MARKUP_LIMIT * 2, "the note is longer than the parser will take")
-    const started = Date.now()
-    const drawn = m(huge)
-    ok(Date.now() - started < 400, "a note that size is still drawn promptly")
-    ok(drawn.length < S.MARKUP_LIMIT * 20, "and what comes out is bounded too: " + drawn.length)
-    eq(m("a".repeat(S.MARKUP_LIMIT + 500)), "a".repeat(S.MARKUP_LIMIT), "cut, not parsed further")
-    eq(m("a".repeat(S.MARKUP_LIMIT)), "a".repeat(S.MARKUP_LIMIT), "and everything up to it is kept")
-
-    // Nesting is bounded by the text, not by the stack: a board someone sent
-    // must not be able to take the board down by being opened.
-    for (const depth of [500, 5000]) {
-      const nested = "[accent]".repeat(depth) + "x" + "[/]".repeat(depth)
-      let out
-      ok((() => { try { out = m(nested); return true } catch (e) { return false } })(),
-         depth + " deep does not throw")
-      ok(typeof out === "string", depth + " deep still renders")
-    }
-
-    eq(m(""), "", "nothing says nothing")
-    eq(m(undefined), "", "and so does nothing at all")
-    for (const role of S.MARKUP_ROLES)
-      eq(m("[" + role + "]x[/]"), '<font color="' + c[role] + '">x</font>', role)
-  })
-
-  // Pressing the chord twice takes the mark off again, so it is one key rather
-  // than two to remember — and the selection comes back where it was, because a
-  // chord that moves the caret is a chord nobody presses twice.
-  test("a mark goes round the selection, and comes off it", () => {
-    const put = (t, a, b) => S.wrapSelection(t, a, b, "*", "*")
-
-    eq(put("hello world", 0, 5), { text: "*hello* world", from: 1, to: 6 }, "round it")
-    eq(put("*hello* world", 1, 6), { text: "hello world", from: 0, to: 5 }, "and off, from inside")
-    eq(put("*hello* world", 0, 7), { text: "hello world", from: 0, to: 5 }, "and off, from outside")
-
-    // Nothing selected leaves the caret between the marks, ready to type into.
-    eq(put("ab", 1, 1), { text: "a**b", from: 2, to: 2 })
-    // Backwards is the same selection.
-    eq(put("hello world", 5, 0), put("hello world", 0, 5), "either way round")
-
-    // A role is a longer mark, and unwraps the same way.
-    const role = (t, a, b) => S.wrapSelection(t, a, b, "[accent]", "[/]")
-    eq(role("hi", 0, 2), { text: "[accent]hi[/]", from: 8, to: 10 })
-    eq(role("[accent]hi[/]", 8, 10), { text: "hi", from: 0, to: 2 })
-
-    // Half a pair is not a pair. A note can hold a lone star — it is
-    // punctuation — and mistaking it for an opening mark would eat the
-    // character beside it.
-    eq(put("*hello world", 1, 6), { text: "**hello* world", from: 2, to: 7 },
-       "a mark before it with none after is left where it is, and a real pair goes on")
-    eq(put("hello* world", 0, 5), { text: "*hello** world", from: 1, to: 6 },
-       "and the same the other way round")
-    eq(S.wrapSelection("[accent]hi", 8, 10, "[accent]", "[/]").text, "[accent][accent]hi[/]",
-       "a role with no close is text, and gets a real pair of its own")
-
-    // Half a mark selected, which is where taking the marks off starts costing
-    // characters. Both of these looked safe and were not: mutation testing put
-    // its finger on them by flipping the two guards below and finding nothing
-    // that could tell.
-    eq(put("*", 0, 1), { text: "***", from: 1, to: 2 },
-       "a lone mark, selected, is wrapped like any other character — not eaten")
-    eq(put("*hello* world", 0, 6), { text: "**hello** world", from: 1, to: 7 },
-       "a selection holding the opening mark but not the closing one is not a pair")
-    eq(put("*hello* world", 1, 7), { text: "**hello** world", from: 2, to: 8 },
-       "nor one holding the closing mark but not the opening")
-
-    // Nothing here may reach outside the string it was given.
-    for (const [a, b] of [[-5, 99], [99, -5], [0, 0], [2, 2]]) {
-      const out = S.wrapSelection("ab", a, b, "*", "*")
-      ok(out.from >= 0 && out.to <= out.text.length && out.from <= out.to,
-         `selection stays inside the text: ${JSON.stringify(out)}`)
-    }
-    eq(S.wrapSelection(undefined, 0, 0, "*", "*").text, "**", "and nothing is still something to mark")
+    eq(S.notePreview(undefined), "")
+    eq(S.notePreview("x".repeat(4001)).length, 4000)
+    ok(!S.COMMANDS.some(c => c.needs === "typing"), "no formatting commands remain")
   })
 
   // Drawing a connector is three operations wearing one keystroke. The line
@@ -1181,7 +1068,7 @@ function tests(S) {
     for (const command of S.COMMANDS) {
       ok(typeof command.name === "string" && command.name !== "", "a name")
       ok(typeof command.run === "string" && command.run !== "", command.name + " runs something")
-      ok(["", "edit", "target", "item", "group", "texture", "conflict", "typing"].indexOf(command.needs) >= 0,
+      ok(["", "edit", "target", "item", "group", "texture", "conflict"].indexOf(command.needs) >= 0,
          command.name + " needs something known")
       eq(names[command.name], undefined, "one entry called " + command.name)
       if (command.key !== "") eq(keys[command.key], undefined, "one command on " + command.key)

@@ -406,7 +406,7 @@ Item {
     }
   }
 
-  Process {
+  BoardFileProcess {
     id: mkdirProc
     onExited: function(code) {
       if (code !== 0) library.message = "could not create that folder"
@@ -414,7 +414,7 @@ Item {
     }
   }
 
-  Process {
+  BoardFileProcess {
     id: moveProc
     property string renamedFrom: ""
     property string renamedTo: ""
@@ -438,7 +438,7 @@ Item {
     }
   }
 
-  Process {
+  BoardFileProcess {
     id: trashProc
     property var pending: null
     onExited: function (code) {
@@ -455,7 +455,7 @@ Item {
     }
   }
 
-  Process {
+  BoardFileProcess {
     id: restoreProc
     property string entryFile: ""
     onExited: function (code) {
@@ -470,7 +470,7 @@ Item {
     }
   }
 
-  Process {
+  BoardFileProcess {
     id: purgeProc
     property string entryFile: ""
     onExited: function (code) {

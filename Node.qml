@@ -71,7 +71,7 @@ Item {
   readonly property bool editing: node.ctl.editIndex === node.index
   // What the note is actually drawing, so a test can read it back rather than
   // photograph it.
-  readonly property string markup: shown.text
+  readonly property string previewText: shown.text
   readonly property bool isNote: node.kind === "note"
   // Text with a long unbroken stretch in it is wrapped anywhere, by the note
   // and by its editor: looking for word boundaries in it would hold the whole
@@ -257,23 +257,15 @@ Item {
     interactive: node.editing
     boundsBehavior: Flickable.StopAtBounds
 
-  // What the note says, once you have stopped saying it. A note carries a small
-  // markup — a heading, emphasis, a key, a span in one of the theme's roles —
-  // and this is where it is drawn. The editor below shows the source instead
-  // while the caret is in it: the text you are editing and the text you are
-  // looking at have to be the same string, or the caret ends up somewhere the
-  // characters are not.
+  // Untrusted canvas text stays literal in previews and exports.
   Text {
     id: shown
     objectName: "note-text"
     visible: !node.editing
     width: textViewport.width
     height: Math.max(textViewport.height, contentHeight)
-    text: Store.noteMarkup(node.itext, node.theme.markupColors)
-    // The one place an item renders tags. Everything that reached it from the
-    // board file was escaped on the way in, so the only markup here is the
-    // markup this made.
-    textFormat: Text.StyledText
+    text: Store.notePreview(node.itext)
+    textFormat: Text.PlainText
     color: node.theme.foreground
     font.family: node.theme.fontFamily
     font.pixelSize: node.theme.fontSubtitle
@@ -330,36 +322,6 @@ Item {
     }
     onActiveFocusChanged: if (!activeFocus) node.ctl.flushSave()
     Keys.onEscapePressed: node.ctl.stopEditing()
-    // Put a mark round what is selected, or take it off again if it is already
-    // there. Nothing selected wraps an empty span and leaves the caret between
-    // the marks, which is how you start a bold word rather than finish one.
-    function style(open, close) {
-      var next = Store.wrapSelection(body.text, body.selectionStart, body.selectionEnd, open, close)
-      body.text = next.text
-      body.select(next.from, next.to)
-    }
-
-    function markText(name) {
-      var marks = Store.TEXT_MARKS[name]
-      if (marks) body.style(marks[0], marks[1])
-    }
-
-    function heading() {
-      var start = body.selectionStart === 0 ? 0 : body.text.lastIndexOf("\n", body.selectionStart - 1) + 1
-      // A selection ends before its endpoint; a caret belongs to its own line.
-      var last = body.selectionEnd > body.selectionStart ? body.selectionEnd - 1 : body.selectionEnd
-      var end = body.text.indexOf("\n", last)
-      if (end < 0) end = body.text.length
-      var lines = body.text.slice(start, end).split("\n")
-      var prefix = /^#[ \t]+/
-      var remove = lines.every(function(line) { return prefix.test(line) })
-      var replacement = lines.map(function(line) {
-        return remove ? line.replace(prefix, "") : prefix.test(line) ? line : "# " + line
-      }).join("\n")
-      body.text = body.text.slice(0, start) + replacement + body.text.slice(end)
-      body.select(start, start + replacement.length)
-    }
-
     // What a paste may bring in, for BoardExchange.pasteInto. Qt's own paste
     // reads everything the clipboard's owner sends before onTextChanged can
     // count it, and an owner that never stops sending takes the shell's memory
@@ -377,15 +339,8 @@ Item {
         return
       }
       if ((event.modifiers & Qt.ControlModifier) === 0) return
-      if (event.key === Qt.Key_P) node.ctl.beginTextPalette(body)
-      else if (event.key === Qt.Key_N) node.ctl.newBoard()
+      if (event.key === Qt.Key_N) node.ctl.newBoard()
       else if (event.key === Qt.Key_S) node.ctl.flushSave()
-      else if (event.key === Qt.Key_B) body.markText("bold")
-      else if (event.key === Qt.Key_I) body.markText("italic")
-      else if (event.key === Qt.Key_K) body.markText("key")
-      // The four roles, in the order they are named everywhere else.
-      else if (event.key >= Qt.Key_1 && event.key <= Qt.Key_4)
-        body.markText(Store.MARKUP_ROLES[event.key - Qt.Key_1])
       else return
       event.accepted = true
     }

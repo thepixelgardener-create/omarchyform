@@ -3,6 +3,32 @@
 Notable changes, newest first. Board file versions are noted where they moved,
 since older boards are migrated on load rather than rejected.
 
+## Unreleased
+
+### Removed
+
+- Formatting in notes: headings, bold, italic, key and coloured spans, and
+  their shortcuts and commands. A shared board could make the parser hold
+  the shell for 8 seconds. Notes, and PNG exports of them, are now plain text:
+  nothing in a note is lost, and any formatting markers show as written.
+  Previews still show at most 4,000 characters; editing keeps the whole note.
+
+### Changed
+
+- **Python 3 is now needed.** Saving, reading, renaming, trash and restore,
+  publishing, exporting and folder repair go through a Python helper that
+  takes every name on stdin, so a board's title no longer shows in the
+  process list another account can read. A stock Omarchy install already has
+  Python; without it the board says so and offers a retry, and the command
+  line answers `python3 not found`.
+
+### Fixed
+
+- If the board folders cannot be made private, the board stops before reading
+  or writing anything, says what to repair and offers a retry (`R`), rather
+  than carrying on. If they are private but hold something of another user's,
+  the board opens as usual and says so.
+
 ## 0.4.11 — 2026-10-14
 
 ### Removed

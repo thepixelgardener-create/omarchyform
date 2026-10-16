@@ -86,8 +86,6 @@ TestCase {
     function save() { saveCount++ }
     function scheduleSave() { saveCount++ }
     function flushSave() { flushCount++ }
-    property var paletteEditor: null
-    function beginTextPalette(editor) { paletteEditor = editor }
     property var pastedInto: null
     property int pasteAsks: 0
     function pasteInto(field) { pasteAsks++; pastedInto = field }
@@ -428,16 +426,13 @@ TestCase {
   // The note shows what it says; the editor shows how it was said. They are two
   // items, swapped on the caret, because the text being edited and the text
   // being looked at have to be the same string for the caret to land right.
-  function test_aNoteShowsItsMarkupAndEditsItsSource() {
+  function test_aNoteShowsAndEditsLiteralText() {
     model.set(0, {ix:100, iy:100, iw:180, ih:140, itext:"# Head\npress `n` for *this*"})
     verify(waitForRendering(subject))
 
-    var shown = findChild(subject, "")  // the rendered Text is the visible one
     compare(ctl.editIndex, -1, "not being typed in")
-    // Rendered: the marks are gone and tags have taken their place.
-    verify(subject.markup.indexOf("<b>Head</b>") > 0, "the heading is heavy: " + subject.markup)
-    verify(subject.markup.indexOf("<b>this</b>") > 0, "and the emphasis is emphasis")
-    verify(subject.markup.indexOf("`") < 0, "the marks themselves are not drawn")
+    compare(subject.previewText, "# Head\npress `n` for *this*")
+    compare(findChild(subject, "note-text").textFormat, Text.PlainText)
 
     // Editing shows the source, marks and all, so what is typed is what is there.
     mouseDoubleClickSequence(test, 140, 140, Qt.LeftButton)
@@ -544,68 +539,6 @@ TestCase {
     compare(ctl.saveCount, saves, "or anything asking to save an empty note")
   }
 
-  function test_textPaletteAndHeading() {
-    model.setProperty(0, "itext", "first\nsecond")
-    mouseDoubleClickSequence(test, 140, 140, Qt.LeftButton)
-    var editor = findChild(subject, "note-editor")
-    editor.selectAll()
-    keyClick(Qt.Key_P, Qt.ControlModifier)
-    compare(ctl.paletteEditor, editor)
-    compare(editor.selectedText, "first\nsecond")
-    editor.heading()
-    compare(model.get(0).itext, "# first\n# second")
-    editor.heading()
-    compare(model.get(0).itext, "first\nsecond")
-    keyClick(Qt.Key_Escape)
-  }
-
-  function test_headingSelection_data() {
-    return [
-      { tag: "exclusive endpoint", text: "first\nsecond", from: 0, to: 6, expected: "# first\nsecond" },
-      { tag: "backwards selection", text: "first\nsecond", from: 6, to: 0, expected: "# first\nsecond" },
-      { tag: "caret at line start", text: "first\nsecond", from: 6, to: 6, expected: "first\n# second" },
-      { tag: "mixed headings", text: "# first\nsecond", from: 0, to: 14, expected: "# first\n# second" },
-      { tag: "tab heading", text: "#\tfirst\nsecond", from: 0, to: 14, expected: "#\tfirst\n# second" },
-      { tag: "remove headings", text: "# first\n#\tsecond", from: 0, to: 16, expected: "first\nsecond" }
-    ]
-  }
-
-  function test_headingSelection(row) {
-    model.setProperty(0, "itext", row.text)
-    mouseDoubleClickSequence(test, 140, 140, Qt.LeftButton)
-    var editor = findChild(subject, "note-editor")
-    editor.select(row.from, row.to)
-    editor.heading()
-    compare(model.get(0).itext, row.expected)
-    keyClick(Qt.Key_Escape)
-  }
-
-  // ctrl+b and the rest put a mark round the selection, and take it off again
-  // when pressed a second time.
-  function test_chordsWrapTheSelection_data() {
-    return [
-      { tag: "bold", key: Qt.Key_B, wrapped: "*ab*" },
-      { tag: "italic", key: Qt.Key_I, wrapped: "_ab_" },
-      { tag: "a key", key: Qt.Key_K, wrapped: "`ab`" },
-      { tag: "the accent role", key: Qt.Key_2, wrapped: "[accent]ab[/]" }
-    ]
-  }
-
-  function test_chordsWrapTheSelection(row) {
-    model.set(0, {ix:100, iy:100, iw:180, ih:140, itext:"ab"})
-    mouseDoubleClickSequence(test, 140, 140, Qt.LeftButton)
-    compare(ctl.editIndex, 0)
-    var editor = findChild(subject, "note-editor")
-    verify(editor !== null, "the editor is there to type into")
-    editor.selectAll()
-
-    keyClick(row.key, Qt.ControlModifier)
-    compare(model.get(0).itext, row.wrapped, row.tag + " goes round it")
-    keyClick(row.key, Qt.ControlModifier)
-    compare(model.get(0).itext, "ab", "and comes off again")
-    keyClick(Qt.Key_Escape)
-  }
-
   // Typing replaces the binding that filled the editor, so what it holds and
   // what the board holds can part company. Undo changes the board; the note on
   // screen follows it, and the editor has to as well the next time it is opened.
@@ -618,7 +551,7 @@ TestCase {
     // Something else changes the item — an undo does exactly this.
     model.setProperty(0, "itext", "from the board")
     verify(waitForRendering(subject))
-    verify(subject.markup.indexOf("from the board") >= 0, "the note shows it: " + subject.markup)
+    verify(subject.previewText.indexOf("from the board") >= 0, "the note shows it: " + subject.previewText)
 
     mouseDoubleClickSequence(test, 140, 140, Qt.LeftButton)
     compare(ctl.editIndex, 0)
@@ -627,14 +560,31 @@ TestCase {
     keyClick(Qt.Key_Escape)
   }
 
-  // A board is a file somebody else can send you, and the note is the part they
-  // write. Whatever is in it reaches the renderer through the same parser, in
-  // QML's own engine rather than the one the store suite runs in — a different
-  // stack and a different regex implementation, so the store's word for it is
-  // not enough. What must not happen is the board going down on being opened.
+  // Exercise the real Qt renderer: foreign tags and formatting stay literal.
+  function test_maximumBoardPreviewsStayLiteral() {
+    var text = "[accent]".repeat(500), rows = []
+    for (var i = 0; i < Store.MAX_ITEMS; i++)
+      rows.push({id: i + 1, kind: "note", text: text})
+    var serialized = JSON.stringify({items: rows, links: []})
+    verify(serialized.length < Store.MAX_BOARD_BYTES)
+    compare(Store.boardLimit(Store.parseJson(serialized)), "")
+    var start = Date.now(), total = 0
+    for (var i = 0; i < rows.length; i++) {
+      var preview = Store.notePreview(rows[i].text)
+      compare(preview, text)
+      total += preview.length
+    }
+    var elapsed = Date.now() - start
+    compare(total, 20000000)
+    console.log("5000 hostile plain-text previews:", elapsed, "ms")
+    // Wide regression budget; this checks preview preparation, not scene layout.
+    verify(elapsed < 3000, "preview preparation must not rescan malformed spans")
+  }
+
   function test_aHostileNoteCannotTakeTheBoardDown_data() {
     return [
       { tag: "tags", text: "<b>x</b><img src='/etc/passwd'><a href='http://x'>y</a>" },
+      { tag: "unclosed spans", text: "[accent]".repeat(500) },
       { tag: "entities", text: "&lt;b&gt;&amp;&#60;script&#62;" },
       { tag: "quotes in a span", text: '[accent]a" onload="x[/]' },
       { tag: "deep nesting", text: "DEEPNEST" },
@@ -658,22 +608,16 @@ TestCase {
     model.set(0, {ix:100, iy:100, iw:180, ih:140, itext:text})
     verify(waitForRendering(subject), row.tag + ": the board is still drawing")
 
-    var drawn = subject.markup
+    var drawn = subject.previewText
     verify(typeof drawn === "string" && drawn.length > 0, row.tag + ": it rendered something")
 
-    // The precise claim, rather than a list of tags to be afraid of: take out
-    // the handful this file emits, and no angle bracket may be left. Anything
-    // the note itself said arrives as &lt; and is drawn as a character.
-    // `href` and `onload` appear in the output of the first row — as text,
-    // which is exactly right, so looking for the words would prove nothing.
-    var ours = drawn.replace(/<\/?b>|<\/?i>|<br>|<font (?:color="#[0-9a-f]{6}"|size="\d")>|<\/font>/g, "")
-    verify(ours.indexOf("<") < 0, row.tag + ": only this file's own tags survive: "
-           + ours.slice(0, 120))
-    verify(ours.indexOf(">") < 0, row.tag + ": and no stray bracket either")
+    compare(drawn, text.slice(0, Store.NOTE_PREVIEW_LIMIT))
+    compare(findChild(subject, "note-text").textFormat, Text.PlainText)
+    compare(model.get(0).itext, text, "rendering preserves stored content")
     // And the board is still working afterwards, which is the whole claim.
     model.set(0, {ix:100, iy:100, iw:180, ih:140, itext:"after"})
     verify(waitForRendering(subject))
-    compare(subject.markup, "after", row.tag + ": the next note draws normally")
+    compare(subject.previewText, "after", row.tag + ": the next note draws normally")
   }
 
   function test_edit() {

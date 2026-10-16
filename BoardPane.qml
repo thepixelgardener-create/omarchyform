@@ -266,7 +266,7 @@ Item {
     imagePublish.command = root.fileCommand("export", [root.dataDir + "/.image-export.png", path, root.dataDir])
     imagePublish.running = true
   }
-  Process {
+  BoardFileProcess {
     id: imagePublish
     onExited: function(code) {
       root.imageBusy = false
@@ -434,8 +434,7 @@ Item {
     if (root.activeBoard) root.activeBoard.repaintLinks()
   }
   function focusKeys() {
-    if (!root.paletteVisible && root.editIndex >= 0 && root.textEditor) root.textEditor.forceActiveFocus()
-    else if (root.activeBoard) root.activeBoard.focusKeys()
+    if (root.activeBoard) root.activeBoard.focusKeys()
   }
   function isMarked(id) { return root.markedLookup[id] === true }
   readonly property bool culling: true
@@ -796,23 +795,7 @@ Item {
   property string paletteScope: "all"
   // A family of commands the list is showing by itself, or "" for all of them.
   property string paletteGroup: ""
-  property var textEditor: null
-  onEditIndexChanged: root.textEditor = null
 
-  function beginTextPalette(editor) {
-    if (!root.canEdit || root.editIndex < 0) return
-    root.textEditor = editor
-    root.beginPalette("typing")
-  }
-
-  function markText(style) {
-    var marks = Store.TEXT_MARKS[style]
-    if (root.commandReady("typing") && marks) root.textEditor.style(marks[0], marks[1])
-  }
-
-  function headText() {
-    if (root.commandReady("typing")) root.textEditor.heading()
-  }
   readonly property var paletteMatches: root.paletteVisible
     ? Store.matchCommands(root.paletteQuery, root.paletteScope, root.paletteGroup) : []
   // How many rows the panel draws. The rest are still there to be typed at.
@@ -832,8 +815,8 @@ Item {
 
   function beginPalette(scope) {
     if (!root.boardLoaded && !root.damaged) return
-    root.paletteScope = scope === "typing" ? "typing" : scope === "selection" ? "selection" : "all"
-    if (root.paletteScope !== "typing") root.stopEditing()
+    root.paletteScope = scope === "selection" ? "selection" : "all"
+    root.stopEditing()
     root.menuVisible = false
     root.paletteVisible = true
     root.paletteGroup = ""
@@ -887,7 +870,6 @@ Item {
     if (needs === "conflict") return root.diskChanged
     if (needs === "edit") return root.canEdit
     if (!root.canEdit) return needs === ""
-    if (needs === "typing") return root.editIndex >= 0 && !!root.textEditor
     if (needs === "texture") return root.textureTargets().length > 0
     if (needs === "target") return root.targets().length > 0
     // A background under the cursor counts: which one is on top, and whether
@@ -900,7 +882,6 @@ Item {
   function commandExcuse(needs) {
     if (needs === "conflict") return "this board has not changed underneath you"
     if (!root.canEdit) return root.damaged ? "this board is read-only" : "the board is not ready yet"
-    if (needs === "typing") return "start editing a note"
     if (needs === "group") return "mark two or more"
     if (needs === "texture") return "select a note or shape"
     if (needs === "target" || needs === "item") return "nothing is selected"
@@ -1452,7 +1433,6 @@ Item {
   }
 
   function stopEditing() {
-    root.textEditor = null
     root.editIndex = -1
     root.focusKeys()
     root.save()

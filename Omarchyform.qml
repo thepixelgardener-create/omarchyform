@@ -345,6 +345,31 @@ Item {
   property bool windowMode: true
 
   property bool stateReady: false
+  property bool storageReady: false
+  property string startupError: ""
+  readonly property bool startupBusy: initProc.running || migrateProc.running
+  function retryStartup() {
+    if (root.storageReady || root.startupBusy) return
+    root.startupError = ""
+    initProc.running = true
+  }
+  // Said once the board is up: the folders are private, but something in them
+  // is not this user's, which only root can have put there.
+  property string storageNotice: ""
+  function storageChecked(code) {
+    if (code === 4) {
+      root.storageNotice = "Something in ~/.local/share/omarchyform belongs to another user; your boards are still private"
+      code = 0
+    }
+    if (code !== 0) {
+      root.startupError = code === 127
+        ? "Python 3 could not start. Install Python 3, then retry."
+        : "Could not make the board folders private. Check ownership and write permissions in ~/.local/share/omarchyform, then retry."
+      return
+    }
+    root.storageReady = true
+    migrateProc.running = true
+  }
 
   readonly property string helperScript: decodeURIComponent(Qt.resolvedUrl("BoardFiles.sh").toString().replace(/^file:\/\//, ""))
   function fileCommand(action, args) {
@@ -384,7 +409,7 @@ Item {
     id: boardLibrary
     boardsDir: root.boardsDir
     trashDir: root.trashDir
-    trashIndexPath: root.trashIndexPath
+    trashIndexPath: root.storageReady ? root.trashIndexPath : ""
     helperScript: root.helperScript
     currentBoard: root.activePane.currentBoard
     openBoards: root.documents.map(function (d) { return d.currentBoard })
@@ -408,6 +433,7 @@ Item {
   readonly property BoardLibrary library: boardLibrary
 
   function writeState() {
+    if (!root.stateReady) return
     stateFile.setText(JSON.stringify({
       version: 1,
       lastBoard: root.panes[0].doc ? root.panes[0].doc.currentBoard : "board.json",
@@ -429,6 +455,7 @@ Item {
   // the board files so the same board can be opened on two machines without
   // dragging one machine's window preference along with it.
   function applyState(raw) {
+    if (!root.storageReady) return
     var st = null
     try { st = Store.parseJson(raw) } catch (e) { st = null }
     var board = st && Store.safeRelative(st.lastBoard) ? st.lastBoard : ""
@@ -459,6 +486,7 @@ Item {
       if (st.windowMode === undefined) root.windowMode = root.startWindowed
     }
     root.stateReady = true
+    if (root.storageNotice !== "") root.activePane.flash(root.storageNotice)
   }
 
   // ----------------------------------------------------------------- lifecycle
@@ -679,11 +707,11 @@ Item {
   // shell writes its state, staged imports and the trash index itself, with
   // its own umask; only the folder keeps those to their owner. The data folder
   // is named first, so it is one of them rather than a parent made in passing.
-  Process {
+  BoardFileProcess {
     id: initProc
     running: true
     command: root.fileCommand("private", [root.dataDir, root.boardsDir, root.backupsDir, root.trashDir, root.imagesDir, root.locksDir])
-    onExited: migrateProc.running = true
+    onExited: function(code) { root.storageChecked(code) }
   }
 
   Process {
@@ -707,6 +735,60 @@ Item {
     onLoadFailed: root.applyState("")
   }
 
+  Component {
+    id: boardContent
+    BoardSplit { workspace: root }
+  }
+  Component {
+    id: startupContent
+    Item {
+      focus: true
+      Keys.onEscapePressed: root.dismiss()
+      Keys.onPressed: function(event) {
+        if (event.key === Qt.Key_R && root.startupError !== "") {
+          event.accepted = true
+          root.retryStartup()
+        }
+      }
+      Column {
+        anchors.centerIn: parent
+        width: Math.max(0, Math.min(parent.width - 48, 600))
+        spacing: root.theme.sp(20)
+        Text {
+          width: parent.width
+          text: root.startupError === "" ? "Opening boards…" : "Cannot open boards"
+          textFormat: Text.PlainText
+          color: root.theme.foreground
+          font.family: root.theme.fontFamily
+          font.pixelSize: root.theme.fontSubtitle
+          wrapMode: Text.Wrap
+        }
+        Text {
+          objectName: "startup-error"
+          width: parent.width
+          text: root.startupError
+          textFormat: Text.PlainText
+          color: root.theme.foreground
+          font.family: root.theme.fontFamily
+          font.pixelSize: root.theme.fontSubtitle
+          wrapMode: Text.Wrap
+        }
+        Text {
+          visible: root.startupError !== ""
+          text: "Retry · R"
+          textFormat: Text.PlainText
+          color: root.theme.accent
+          font.family: root.theme.fontFamily
+          font.pixelSize: root.theme.fontSubtitle
+          Accessible.role: Accessible.Button
+          Accessible.name: "Retry opening boards"
+          Accessible.onPressAction: root.retryStartup()
+          MouseArea { anchors.fill: parent; onClicked: root.retryStartup() }
+        }
+      }
+    }
+  }
+
   // ----------------------------------------------------------------- surfaces
   // Built through Variants so the surface is constructed with its screen
   // already set: assigning `screen` to a window that already exists leaves it
@@ -727,9 +809,9 @@ Item {
         exclusionMode: ExclusionMode.Ignore
         anchors { top: true; bottom: true; left: true; right: true }
 
-        BoardSplit {
+        Loader {
           anchors.fill: parent
-          workspace: root
+          sourceComponent: root.stateReady ? boardContent : startupContent
         }
       }
     }
@@ -753,9 +835,7 @@ Item {
       anchors.fill: parent
       focus: true
       active: boardWindow.visible
-      sourceComponent: Component {
-        BoardSplit { workspace: root }
-      }
+      sourceComponent: root.stateReady ? boardContent : startupContent
     }
   }
 }

@@ -52,7 +52,7 @@ right-click lists what can be done with the selection. The mouse works too.
 ## What it does
 
 - Notes, boxes, ellipses, diamonds and pictures pasted from the clipboard, joined by connectors
-- Headings, bold, italic, key labels and theme colours inside a note
+- Plain-text notes: received board text is never interpreted as markup
 - An ordinary tiled window by default; `w` switches to a fullscreen overlay and back
 - Split view, `v` or `V`: two boards side by side, or two views of one
 - Boards in folders, with search and a trash, on `b`
@@ -78,7 +78,7 @@ other people find it.
 ## Documentation
 
 - [Install, update and remove](docs/install.md): the key binding, the desktop entry, dependencies, tested versions
-- [Using the board](docs/guide.md): every key, note formatting, connectors, split view, export and saving
+- [Using the board](docs/guide.md): every key, plain-text notes, connectors, split view, export and saving
 - [Boards on disk and the command line](docs/files.md): where boards live, the file format and `bin/omarchyform`
 - [Development](docs/development.md): running from a clone, the source layout, tests and benchmarks
 - [Changelog](CHANGELOG.md), [roadmap](docs/roadmap.md) and the [documentation guide](docs/README.md)
