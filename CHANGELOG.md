@@ -13,7 +13,8 @@ since older boards are migrated on load rather than rejected.
 - Board saves, reads, renames, trash/restore, publication, exports and permission
   repair now pass filenames through stdin to an in-process Python helper.
   Private board titles no longer appear in these operations' process arguments.
-  Python 3 is now a runtime dependency.
+  Python 3 is now a runtime dependency; a stock Omarchy install already has
+  it, and without it the command line answers `python3 not found`.
 
 - Canvas notes now render as bounded plain text, including in PNG exports.
   Removed inline formatting and its shortcuts/commands so a received board

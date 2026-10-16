@@ -120,7 +120,6 @@ Item {
     property var pointerEdit: null
     function beginPointerEdit() {}
     function finishPointerEdit(cancel) {}
-    function beginTextPalette(editor) {}
     function pasteInto(field) {}
     function stopEditing() {}
     function flash(text) {}

@@ -766,7 +766,7 @@ function tests(S) {
     // Nothing typed is the whole table, minus the ways into the list itself
     // and with each family of variants standing behind its one entry.
     const all = S.matchCommands("")
-    eq(all.length, S.COMMANDS.filter(c => c.listed !== false && c.needs !== "typing" && !c.group).length)
+    eq(all.length, S.COMMANDS.filter(c => c.listed !== false && !c.group).length)
     ok(all.every(c => c.listed !== false), "the ways in do not list themselves")
 
     // Asked for a selection, it is the commands that act on one — which is
@@ -878,7 +878,7 @@ function tests(S) {
 
     // Nothing typed is still the table in table order, families folded.
     eq(S.matchCommands("").map(c => c.name).join(","),
-       S.COMMANDS.filter(c => c.listed !== false && c.needs !== "typing" && !c.group).map(c => c.name).join(","),
+       S.COMMANDS.filter(c => c.listed !== false && !c.group).map(c => c.name).join(","),
        "an empty query is the table, families folded")
 
     // Scope is still the first question asked: an alias cannot smuggle a
@@ -1068,7 +1068,7 @@ function tests(S) {
     for (const command of S.COMMANDS) {
       ok(typeof command.name === "string" && command.name !== "", "a name")
       ok(typeof command.run === "string" && command.run !== "", command.name + " runs something")
-      ok(["", "edit", "target", "item", "group", "texture", "conflict", "typing"].indexOf(command.needs) >= 0,
+      ok(["", "edit", "target", "item", "group", "texture", "conflict"].indexOf(command.needs) >= 0,
          command.name + " needs something known")
       eq(names[command.name], undefined, "one entry called " + command.name)
       if (command.key !== "") eq(keys[command.key], undefined, "one command on " + command.key)

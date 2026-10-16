@@ -34,7 +34,12 @@ const LIBRARY = path.join(process.env.HOME || os.homedir(), ".local/share/omarch
 function helper(verb, args, input) {
   if (args.some(value => typeof value !== "string" || value.includes("\0")))
     return {status: 2, stdout: "", stderr: "Invalid filesystem request"}
-  return spawnSync("python3", [HELPER], { encoding: "utf8", input: [verb, String(args.length), ...args].join("\0") + "\0" + (input === undefined ? "" : input) })
+  const out = spawnSync("python3", [HELPER], { encoding: "utf8", input: [verb, String(args.length), ...args].join("\0") + "\0" + (input === undefined ? "" : input) })
+  // Without Python every read and write would fail later as "cannot write";
+  // say what is missing instead, still as JSON.
+  if (out.error && out.error.code === "ENOENT")
+    die("python3 not found", "board files are read and written through Python 3; install the python package")
+  return out
 }
 
 function revisionOf(file) {

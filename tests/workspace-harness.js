@@ -110,7 +110,7 @@ function makeDocument(workspace, board, Store) {
 function makePane(workspace, exchange, Store) {
   const root = { workspace, doc: null, selectedIndex: -1, editIndex: -1, linkingFrom: -1, cursorId: -1,
     camX: 0, camY: 0, zoom: 1, activeBoard: null, markedIds: [], showPinned: false, arranging: false,
-    finding: false, findQuery: '', findCount: 0, imageQueue: [], leaving: false, textEditor: null,
+    finding: false, findQuery: '', findCount: 0, imageQueue: [], leaving: false,
     menuVisible: false, zoomMenuVisible: false, menuIndex: 0, helpVisible: false,
     paletteVisible: false, paletteQuery: '', paletteIndex: 0, paletteRows: 9, paletteGroup: '',
     conflictVisible: false, conflictIndex: 0, paletteScope: 'all', imageBusy: false,

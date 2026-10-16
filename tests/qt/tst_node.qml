@@ -86,8 +86,6 @@ TestCase {
     function save() { saveCount++ }
     function scheduleSave() { saveCount++ }
     function flushSave() { flushCount++ }
-    property var paletteEditor: null
-    function beginTextPalette(editor) { paletteEditor = editor }
     property var pastedInto: null
     property int pasteAsks: 0
     function pasteInto(field) { pasteAsks++; pastedInto = field }

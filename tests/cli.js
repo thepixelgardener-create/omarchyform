@@ -563,6 +563,23 @@ try {
     assert.ok(S.nextFreeId(loaded.items, JSON.parse(fs.readFileSync(file, 'utf8')).nextId) <= S.MAX_ID + 1)
     console.log('ok — command line: a board at the largest id still gets ids it keeps')
   }
+
+  {
+    // Without Python the helper cannot start: the answer is still JSON, says
+    // what is missing, and the board is left as it was.
+    const file = path.join(dir, 'no-python.json')
+    run('new', file, '--note', 'kept')
+    const before = fs.readFileSync(file, 'utf8')
+    const empty = fs.mkdtempSync(path.join(dir, 'path-'))
+    const out = spawnSync(process.execPath, [cli, 'apply', file], { encoding: 'utf8',
+      input: JSON.stringify([{ op: 'add', args: ['note', 0, 300] }]), env: { ...env, PATH: empty } })
+    const answer = JSON.parse(out.stdout)
+    assert.equal(out.status, 1)
+    assert.equal(answer.ok, false)
+    assert.equal(answer.error, 'python3 not found', out.stdout)
+    assert.equal(fs.readFileSync(file, 'utf8'), before, 'the board is untouched')
+    console.log('ok — command line: a missing python3 is named, as JSON')
+  }
 } finally {
   fs.rmSync(dir, { recursive: true, force: true })
 }

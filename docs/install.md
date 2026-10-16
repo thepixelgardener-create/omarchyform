@@ -145,9 +145,11 @@ install there is nothing to do.
 
 Board filesystem operations need **Python 3** (`python`). It handles file
 locking, revisions, backups and renames directly, with filenames received on
-stdin. Picture and clipboard helpers still use **bash**, **coreutils** and
-**file**; `wl-clipboard` is described above. The filesystem helper does not
-install dependencies automatically.
+stdin. A stock Omarchy install already has it, so there is usually nothing to
+do. Without it the board says so when it opens and offers a retry, and the
+command line answers `python3 not found`. Picture and clipboard helpers still
+use **bash**, **coreutils** and **file**; `wl-clipboard` is described above.
+The filesystem helper does not install dependencies automatically.
 
 The command line, `bin/omarchyform`, runs on **Node.js**, and so do the test
 suites. The board itself does not: nothing the plugin runs starts Node, so it

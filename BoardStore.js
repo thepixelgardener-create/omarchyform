@@ -703,12 +703,6 @@ var COMMANDS = [
 // offers, as opposed to everything the board can do.
 var SELECTION_NEEDS = ["target", "item", "group", "texture"]
 
-// What a command needs a caret in a note for. Its own scope, because the list
-// opened while typing is a different list: everything else on the board acts on
-// items, and while there is a caret in a note the thing being worked on is the
-// words.
-var TYPING_NEEDS = ["typing"]
-
 // An alias is a way in, not a name: it is matched from its start, the way a
 // name is, so `select all` answers "sel" and `rectangle` does not answer "a".
 // A substring rule here would put New box in the list for half the alphabet.
@@ -743,10 +737,6 @@ function matchCommands(query, scope, group) {
     else {
       if (needle === "" && COMMANDS[i].group) continue
       if (scope === "selection" && SELECTION_NEEDS.indexOf(COMMANDS[i].needs) < 0) continue
-      if (scope === "typing" && TYPING_NEEDS.indexOf(COMMANDS[i].needs) < 0) continue
-      // And the other way: what only makes sense with a caret in a note stays
-      // out of the list the board opens, where there is nothing for it to act on.
-      if (scope !== "typing" && TYPING_NEEDS.indexOf(COMMANDS[i].needs) >= 0) continue
     }
     if (needle === "") { rest.push(COMMANDS[i]); continue }
     var name = COMMANDS[i].name.toLowerCase()

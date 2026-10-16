@@ -920,7 +920,7 @@ console.log('ok — controller: walking the header menu and running its commands
   assert.equal(c.root.paletteQuery, '')
   assert.equal(c.root.paletteIndex, 0, 'opens on the first, ready to run')
   assert.equal(c.root.paletteMatches.length,
-    S.COMMANDS.filter(x => x.listed !== false && x.needs !== "typing" && !x.group).length,
+    S.COMMANDS.filter(x => x.listed !== false && !x.group).length,
     'every command but the ways into this list, each family as its one entry')
 
   // Typing narrows it, and the cursor goes back to the top rather than staying
