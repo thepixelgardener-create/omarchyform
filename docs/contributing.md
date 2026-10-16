@@ -20,7 +20,10 @@ the CLI to create boards and is not a contribution guide.
 - Startup runs in order: the folders are made (`private`), an old single
   board is moved in, and only then is the state read, because reading it has
   the named board's path checked. `npm run test:omarchy` starts once on an
-  empty home to keep it so.
+  empty home to keep it so. Failed private-directory setup must leave state,
+  trash and board loading disabled; retry only after reporting the error.
+  A helper that fails to start must complete its request once and release
+  ownership, including when a failure callback immediately retries.
 - Resolve a delayed open by the requested path when it completes: a captured
   document may have switched paths meanwhile. A delayed split close must leave
   `activePane` pointing to the surviving, non-null document even if focus moved.
@@ -98,6 +101,10 @@ the CLI to create boards and is not a contribution guide.
 - Parse JSON in shell code with `parseJson`, never `JSON.parse`: Qt's parser
   segfaults on a 1.1 MB array (`MAX_JSON_OPEN` in `BoardStore.js`), and
   `tests/security.js` refuses any other call.
+- Canvas text must use `notePreview` and `Text.PlainText`. Never interpret note
+  contents as markup, including in exports. Keep the 4,000-character preview
+  cap without truncating the saved/editor text, and retain the real Qt hostile
+  input and aggregate preview regression.
 - A board holds at most `MAX_ITEMS` items, `MAX_LINKS` connectors and
   `MAX_BOARD_BYTES` on disk. Anything new that adds items or connectors stops
   at the limit with `FULL_ITEMS` or `FULL_LINKS`, and anything that reads a

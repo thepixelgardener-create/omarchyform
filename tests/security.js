@@ -65,7 +65,7 @@ function newBoundary(source) {
 }
 for (const source of ['fetch(url)', 'require("node:https")', 'exec curl "$url"', 'import QtWebEngine'])
   assert.equal(newBoundary(source), true)
-const runtimeFiles = fs.readdirSync(root).filter(f => /\.(qml|js|sh)$/.test(f))
+const runtimeFiles = fs.readdirSync(root).filter(f => /\.(qml|js|sh|py)$/.test(f))
 for (const folder of ['bin', 'desktop'])
   for (const file of fs.readdirSync(path.join(root, folder)))
     runtimeFiles.push(folder + '/' + file)
@@ -78,10 +78,10 @@ for (const field of ['dependencies', 'optionalDependencies', 'devDependencies'])
 for (const hook of ['preinstall', 'install', 'postinstall', 'prepare'])
   assert.equal(pkg.scripts[hook], undefined, 'new install hooks require security review')
 
-// Deliberate styled renderers: notes escaped by noteMarkup; status escaped by
+// Deliberate styled renderers: status escaped by
 // escapeMarkup; all others use application-owned hints. Additions need review.
 const styledCounts = {'Board.qml': 3, 'Browser.qml': 2, 'Conflict.qml': 1,
-  'BoardToolbar.qml': 1, 'Node.qml': 1}
+  'BoardToolbar.qml': 1}
 for (const file of fs.readdirSync(root).filter(f => f.endsWith('.qml'))) {
   const source = fs.readFileSync(path.join(root, file), 'utf8')
   assert.deepEqual(qmlPolicy(source), [], file)
@@ -259,10 +259,11 @@ assert.ok(fs.readFileSync(path.join(root, 'Omarchyform.qml'), 'utf8').includes('
 // Process arguments are readable by every account through /proc/<pid>/cmdline,
 // so nothing private may ride on them: note text, clipboard contents, a whole
 // board. Every helper call's arguments are listed here as reviewed: folders,
-// paths, board and picture names, generated names and numbers. Contents go on
+// paths, board and picture names, generated names and numbers. Board filesystem
+// requests use BoardFileProcess stdin; only image/clipboard operations retain
+// native arguments. Contents go on
 // stdin or in a staged file in a private folder. A new or changed argument
-// fails until it is reviewed and added. (Board and file names are names; they
-// appear on command lines as in any program that opens a file.)
+// fails until it is reviewed and added.
 function calls(source, fn) {
   const found = []
   for (let at = source.indexOf(fn + '('); at >= 0; at = source.indexOf(fn + '(', at + 1)) {
@@ -322,7 +323,28 @@ assert.match(fs.readFileSync(path.join(root, 'BoardPersistence.qml'), 'utf8'), /
 // plugin's folders are made private by it (existing ones too) rather than by
 // a bare mkdir, and the files the shell writes itself go only into them.
 assert.match(filesHelper, /^umask 077$/m, 'the helper writes with umask 077')
-assert.match(filesHelper, /\n  publish\)\n(?:.*\n)*?    chmod 600 -- "\$staged"\n(?:.*\n)*?    while ! ln -T/, 'an imported board is made private before it has a name')
+const privateFiles = fs.readFileSync(path.join(root, 'BoardFiles.py'), 'utf8')
+assert.match(privateFiles, /os\.umask\(0o077\)/)
+assert.match(privateFiles, /os\.chmod\(staged, 0o600\)/, 'publication makes staged content private')
+assert.doesNotMatch(privateFiles, /\b(subprocess|os\.system|os\.exec[a-z]*|os\.spawn[a-z]*)\b/, 'private filesystem operations do not start child commands')
+const privateProcess = fs.readFileSync(path.join(root, 'BoardFileProcess.qml'), 'utf8')
+assert.match(privateProcess, /\["python3", request\.activeCommand\[1\]\.replace/, 'native arguments contain only the helper path')
+assert.match(privateProcess, /worker\.write\(request\.activeCommand\[2\]/, 'operation and names travel on stdin')
+for (const [file, ids] of Object.entries({
+  'BoardPersistence.qml': ['commit'], 'BoardSession.qml': ['diskRead', 'diskSize', 'pathCheck'],
+  'BoardLibrary.qml': ['mkdirProc', 'moveProc', 'trashProc', 'restoreProc', 'purgeProc'],
+  'BoardExchange.qml': ['measure', 'publish'], 'BoardPane.qml': ['imagePublish'],
+  'Omarchyform.qml': ['initProc']
+})) {
+  const source = fs.readFileSync(path.join(root, file), 'utf8')
+  for (const id of ids) assert.match(source, new RegExp('BoardFileProcess\\s*\\{\\s*id: ' + id + '\\b'),
+    file + ': board names must go through private transport')
+}
+const privateTest = spawnSync('python3', [path.join(root, 'tests/private-files.py')], {encoding: 'utf8', timeout: 15000})
+assert.equal(privateTest.status, 0, privateTest.stderr || String(privateTest.error))
+process.stdout.write(privateTest.stdout)
+
+
 for (const file of runtimeQml) {
   const source = fs.readFileSync(path.join(root, file), 'utf8')
   assert.ok(!/command: \["mkdir"|\["mkdir",/.test(source), `${file}: folders are made private by the helper, not by mkdir`)
@@ -370,11 +392,10 @@ assert.deepEqual(unrewrittenImports('exchange.stageImport(Store.withSharedImages
 assert.ok(unrewrittenImports('').length)
 assert.deepEqual(unrewrittenImports(exchange), [], 'an imported board keeps picture names it did not carry')
 
-const colors = {foreground:'#ffffff', accent:'#00ffff', urgent:'#ff0000', muted:'#888888'}
 for (const text of ['<img src="https://example.invalid/beacon">',
   '<img src="file:///private.png">', '<a href="https://example.invalid">click</a>',
   '&lt;img src="file:///private.png"&gt;', '*<img src=x>*', '[accent]<img src=x>[/]']) {
-  assert.doesNotMatch(S.noteMarkup(text, colors), /<(img|a|iframe|script)\b/i)
+  assert.equal(S.notePreview(text), text)
   assert.doesNotMatch(S.escapeMarkup(text), /[<>]/)
 }
 for (const name of ['../private.png', '/private.png', 'file:///private.png',

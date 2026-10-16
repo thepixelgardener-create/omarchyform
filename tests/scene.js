@@ -83,7 +83,7 @@ function measure(size) {
   try {
     const home = path.join(dir, 'home')
     fs.mkdirSync(home)
-    for (const file of fs.readdirSync(repo).filter(f => /\.(qml|js|sh)$/.test(f)))
+    for (const file of fs.readdirSync(repo).filter(f => /\.(qml|js|sh|py)$/.test(f)))
       fs.copyFileSync(path.join(repo, file), path.join(dir, file))
     for (const module of ['Commons', 'Ui'])
       fs.cpSync(path.join(omarchy, 'shell', module), path.join(dir, module), { recursive: true })

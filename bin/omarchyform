@@ -24,15 +24,17 @@ const { loadStore, RowModel } = require("./store")
 // Writing goes through the same helper the board itself writes through, so
 // there is one coordinated write protocol rather than two that drift: the file
 // is replaced under a lock, only if it is still the revision this process
-// read, and the version it replaces is kept. That means bash, flock and
-// coreutils on the path — the plugin already needs all three.
-const HELPER = path.join(__dirname, "..", "BoardFiles.sh")
+// read, and the version it replaces is kept. Python performs these operations
+// directly so private filenames never reach child process arguments.
+const HELPER = path.join(__dirname, "..", "BoardFiles.py")
 // The same HOME the plugin reads, so a run under an isolated one — a test, a
 // sandbox — keeps its locks and its backups there too.
 const LIBRARY = path.join(process.env.HOME || os.homedir(), ".local/share/omarchyform")
 
 function helper(verb, args, input) {
-  return spawnSync("bash", [HELPER, verb, ...args], { encoding: "utf8", input: input === undefined ? "" : input })
+  if (args.some(value => typeof value !== "string" || value.includes("\0")))
+    return {status: 2, stdout: "", stderr: "Invalid filesystem request"}
+  return spawnSync("python3", [HELPER], { encoding: "utf8", input: [verb, String(args.length), ...args].join("\0") + "\0" + (input === undefined ? "" : input) })
 }
 
 function revisionOf(file) {

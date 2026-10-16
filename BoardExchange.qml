@@ -106,7 +106,7 @@ Item {
     measure.running = true
   }
 
-  Process {
+  BoardFileProcess {
     id: measure
     property string source: ""
     stdout: StdioCollector { id: measured; waitForEnd: true }
@@ -490,7 +490,7 @@ Item {
       }
     }
   }
-  Process {
+  BoardFileProcess {
     id: publish
     stdout: StdioCollector { id: published; waitForEnd: true }
     onExited: function(code) {

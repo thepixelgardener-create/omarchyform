@@ -100,7 +100,6 @@ breaks, and the middle button does not paste the primary selection.
 | `}` / `{` | Bring right to the front / send right to the back |
 | `?` / `F1` | Keybinding list |
 | `:` / `ctrl+p` | Run any command by name, without knowing its key |
-| `ctrl+p` while typing | Format selected text: bold, italic, key, heading or colour |
 
 Overlapping items are drawn in the order the board file lists them, and `]` `[`
 `}` `{` move the selected ones through that order. Several at once keep their
@@ -137,33 +136,16 @@ to the main menu; `Esc` closes it. Zoom presets keep the canvas centre fixed.
 
 ## What a note can say
 
-A note is plain text with a little markup in it, so a board can have a shape
-rather than being twenty identical grey rectangles.
+Notes display literal plain text. Formatting markers such as `*bold*`,
+`[accent]text[/]`, and HTML tags remain visible characters. Formatting shortcuts
+and text-colour commands are no longer offered.
 
-| Type | Or press, with text selected | Gives you |
-|---|---|---|
-| `# a line` | — | a heading: bigger and heavier |
-| `*bold*` | `ctrl+b` | emphasis |
-| `_italic_` | `ctrl+i` | quieter emphasis |
-| `` `a key` `` | `ctrl+k` | drawn in the accent, the way every key in this shell is |
-| `[accent]text[/]` | `ctrl+1` … `ctrl+4` | a span in one of the theme's four roles |
+Canvas previews and PNG exports show at most the first 4,000 characters of each
+note. Editing and saving preserve the full original text. Old boards open
+without converting or deleting their formatting markers.
 
-The chords wrap whatever is selected and take the marks off again when pressed
-a second time, so there is one key to learn rather than two. Nothing selected
-puts the marks down and leaves the caret between them.
-
-Colours are the same four roles the rest of the board uses — foreground,
-accent, urgent, muted — so coloured text follows whatever theme your desktop is
-wearing. There is still no way to put a hex colour in a board.
-
-While you are typing you see the marks; step out and you see the note. That is
-deliberate: the text you are editing and the text you are looking at have to be
-the same string, or the caret lands where the characters are not.
-
-**A board is a file other people can send you, and the note is the part they
-write.** Everything arriving from a board file is escaped before any of this is
-applied, so nothing anyone else wrote reaches the screen as markup — a note
-saying `<b>hello</b>` shows you those characters.
+This applies to every board, including downloaded and synced files: note text
+is never interpreted as markup or as a request to load an external resource.
 
 ## Item textures and command groups
 
@@ -174,7 +156,7 @@ canvas palette and are preserved by undo, duplication, saving, and PNG
 export. The canvas pattern is a separate setting.
 
 Related commands now open groups: item textures, alignment, layers, canvas
-appearance, PNG exports, text colours, and conflict choices. Search still finds
+appearance, PNG exports and conflict choices. Search still finds
 individual commands directly. Inside a group, clear the search and press
 Backspace to return to all commands; Escape closes the command list.
 

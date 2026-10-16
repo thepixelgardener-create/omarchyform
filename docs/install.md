@@ -143,11 +143,11 @@ reached — and nothing else does, so a board without it still opens, edits,
 saves, imports, exports and renders a PNG. Omarchy ships it, so on a stock
 install there is nothing to do.
 
-Saving also uses **flock** (util-linux) — the lock that stops two writers from
-both believing they are updating the same board — and pictures are recognised
-by their content with **file**, alongside the `bash` and coreutils the
-filesystem helper has always used. All four are part of a base Arch install;
-`flock` and `file` are the ones added since 0.3.0.
+Board filesystem operations need **Python 3** (`python`). It handles file
+locking, revisions, backups and renames directly, with filenames received on
+stdin. Picture and clipboard helpers still use **bash**, **coreutils** and
+**file**; `wl-clipboard` is described above. The filesystem helper does not
+install dependencies automatically.
 
 The command line, `bin/omarchyform`, runs on **Node.js**, and so do the test
 suites. The board itself does not: nothing the plugin runs starts Node, so it

@@ -3,6 +3,24 @@
 Notable changes, newest first. Board file versions are noted where they moved,
 since older boards are migrated on load rather than rejected.
 
+## Unreleased
+
+- Failed filesystem-helper launches now report the missing dependency and
+  release pending operations so retries work. Startup stops if private-storage
+  setup fails, shows a repair/retry message, and leaves board/state data unread
+  until setup succeeds.
+
+- Board saves, reads, renames, trash/restore, publication, exports and permission
+  repair now pass filenames through stdin to an in-process Python helper.
+  Private board titles no longer appear in these operations' process arguments.
+  Python 3 is now a runtime dependency.
+
+- Canvas notes now render as bounded plain text, including in PNG exports.
+  Removed inline formatting and its shortcuts/commands so a received board
+  cannot trigger markup parsing. Existing note contents are preserved;
+  formatting markers are displayed literally. Previews still show at most
+  4,000 characters, while editing retains the complete note.
+
 ## 0.4.11 — 2026-10-14
 
 ### Removed

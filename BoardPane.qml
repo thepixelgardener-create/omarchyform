@@ -266,7 +266,7 @@ Item {
     imagePublish.command = root.fileCommand("export", [root.dataDir + "/.image-export.png", path, root.dataDir])
     imagePublish.running = true
   }
-  Process {
+  BoardFileProcess {
     id: imagePublish
     onExited: function(code) {
       root.imageBusy = false
@@ -799,20 +799,6 @@ Item {
   property var textEditor: null
   onEditIndexChanged: root.textEditor = null
 
-  function beginTextPalette(editor) {
-    if (!root.canEdit || root.editIndex < 0) return
-    root.textEditor = editor
-    root.beginPalette("typing")
-  }
-
-  function markText(style) {
-    var marks = Store.TEXT_MARKS[style]
-    if (root.commandReady("typing") && marks) root.textEditor.style(marks[0], marks[1])
-  }
-
-  function headText() {
-    if (root.commandReady("typing")) root.textEditor.heading()
-  }
   readonly property var paletteMatches: root.paletteVisible
     ? Store.matchCommands(root.paletteQuery, root.paletteScope, root.paletteGroup) : []
   // How many rows the panel draws. The rest are still there to be typed at.

@@ -1660,28 +1660,6 @@ console.log('ok — controller: a failure that arrives while you are somewhere e
 }
 console.log('ok — controller: what a picture is of, and what it is drawn in')
 
-// Text commands keep the editor and selection alive while the list has focus.
-{
-  const c = controller()
-  c.root.editIndex = 0
-  const calls = []
-  const editor = { style: (...marks) => calls.push(marks), heading: () => calls.push('heading'), forceActiveFocus() {} }
-  c.root.beginTextPalette(editor)
-  assert.equal(c.root.paletteScope, 'typing')
-  assert.equal(c.root.editIndex, 0)
-  assert.ok(c.root.paletteMatches.every(command => command.needs === 'typing'))
-  c.root.setPaletteQuery('bold')
-  c.root.runPaletteChoice()
-  assert.deepEqual(calls, [['*', '*']])
-  assert.equal(c.root.editIndex, 0)
-  c.root.beginTextPalette(editor)
-  c.root.endPalette()
-  assert.equal(calls.length, 1, 'cancel changes nothing')
-  c.root.stopEditing()
-  c.root.markText('italic')
-  assert.equal(calls.length, 1, 'stale editor cannot modify a note')
-}
-
 // A board opens at 100% with the top-left of what is on it just inside the
 // window, clear of the header and the line under it. It used to put the world's
 // origin at the window's corner, and the first row of a board sat under the

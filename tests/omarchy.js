@@ -18,7 +18,7 @@ const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'omarchyform-compat-'))
 try {
   const home = path.join(dir, 'home')
   fs.mkdirSync(home)
-  for (const file of fs.readdirSync(path.join(__dirname, '..')).filter(f => /\.(qml|js|sh)$/.test(f)))
+  for (const file of fs.readdirSync(path.join(__dirname, '..')).filter(f => /\.(qml|js|sh|py)$/.test(f)))
     fs.copyFileSync(path.join(__dirname, '..', file), path.join(dir, file))
   for (const module of ['Commons', 'Ui'])
     fs.cpSync(path.join(omarchy, 'shell', module), path.join(dir, module), { recursive: true })
@@ -74,6 +74,25 @@ try {
   // editable, not read-only because its path was checked before its folder
   // existed. Nothing is summoned, so no window appears.
   if (!paste && !windowmode) {
+    const blockedHome = path.join(dir, 'blocked-home')
+    const blockedData = path.join(blockedHome, '.local/share/omarchyform')
+    fs.mkdirSync(blockedData, {recursive:true})
+    fs.writeFileSync(path.join(blockedData, 'boards'), 'BLOCKER')
+    fs.writeFileSync(path.join(blockedData, 'board.json'), 'LEGACY')
+    fs.writeFileSync(path.join(blockedData, 'state.json'), '{"lastBoard":"kept.json","windowMode":true}\n')
+    fs.copyFileSync(path.join(__dirname, 'qml/tst_startupfailure.qml'), path.join(dir, 'startupfailure.qml'))
+    const blocked = spawnSync('qs', ['--no-color', '-p', path.join(dir, 'startupfailure.qml')], {
+      encoding: 'utf8', timeout: 15000,
+      env: {...process.env, HOME: blockedHome, QT_QPA_PLATFORM: 'wayland', QT_QPA_PLATFORMTHEME: '',
+        QT_QUICK_CONTROLS_STYLE: 'Basic', XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR,
+        WAYLAND_DISPLAY: path.isAbsolute(display) ? display : path.join(process.env.XDG_RUNTIME_DIR || '', display)}
+    })
+    const failedStartup = (blocked.stdout || '') + (blocked.stderr || '')
+    if (blocked.error || blocked.status !== 0 || !failedStartup.includes('STARTUPFAILURE_TESTS_PASSED')
+        || /FAIL:|TypeError|ReferenceError/.test(failedStartup)) {
+      console.error(failedStartup, blocked.error || '')
+      process.exitCode = 1
+    } else console.log('ok — failed privacy setup blocks reads/writes; repair and retry recover')
     const fresh = path.join(dir, 'fresh-home')
     fs.mkdirSync(fresh)
     fs.copyFileSync(path.join(__dirname, 'qml/tst_freshstart.qml'), path.join(dir, 'fresh.qml'))

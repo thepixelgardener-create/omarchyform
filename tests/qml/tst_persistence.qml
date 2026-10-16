@@ -31,6 +31,10 @@ ShellRoot {
         writer.save(test.path + "/child.json", "failed")
       } else if (test.stage === 5) {
         test.check(test.read(path + ".bak") === "third", "retry preserves old version")
+        test.stage = 6
+        writer.save(test.path + "\0invalid", "must not write")
+      } else if (test.stage === 7) {
+        test.check(text === "after invalid request", "recovery after rejected header")
         console.log("PERSISTENCE_TESTS_PASSED")
         Qt.quit()
       } else test.check(false, "unexpected successful write")
@@ -40,12 +44,16 @@ ShellRoot {
       if (test.stage === 3) {
         test.check(test.read(test.path) === "third", "failed write leaves board intact")
         test.stage = 4
-        // A directory at the backup staging path must fail safely.
+        // A directory at the backup destination must fail safely.
         writer.save(test.dir + "/blocked.json", "must not replace original")
       } else if (test.stage === 4) {
         test.check(test.read(test.dir + "/blocked.json") === "original", "backup failure preserves board")
         test.stage = 5
         writer.save(test.path, "retry")
+      } else if (test.stage === 6) {
+        test.check(test.read(test.path) === "retry", "invalid header leaves board intact")
+        test.stage = 7
+        writer.save(test.path, "after invalid request")
       } else test.check(false, message)
     }
   }

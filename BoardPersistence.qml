@@ -63,9 +63,10 @@ Item {
     failed(message)
   }
 
-  Process {
+  BoardFileProcess {
     id: commit
-    // Arguments are passed separately: filenames never become shell code.
+    // This request is framed on stdin by BoardFileProcess; filenames never
+    // enter native process arguments.
     // The helper takes the lock, checks the revision, keeps the version it is
     // about to replace, and renames the staged file into place. The helper is
     // found here rather than through the controller's fileCommand: this writer
@@ -82,6 +83,7 @@ Item {
       commit.stdinEnabled = false
     }
     onExited: function(code) {
+      if (code === 127) { persistence.fail("Could not start the filesystem helper; install Python 3 and retry"); return }
       if (code === 7) {
         persistence.busy = false
         persistence.stale(persistence.target, committed.text)
