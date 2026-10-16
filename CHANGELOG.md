@@ -5,22 +5,28 @@ since older boards are migrated on load rather than rejected.
 
 ## Unreleased
 
-- Failed filesystem-helper launches now report the missing dependency and
-  release pending operations so retries work. Startup stops if private-storage
-  setup fails, shows a repair/retry message, and leaves board/state data unread
-  until setup succeeds.
+### Removed
 
-- Board saves, reads, renames, trash/restore, publication, exports and permission
-  repair now pass filenames through stdin to an in-process Python helper.
-  Private board titles no longer appear in these operations' process arguments.
-  Python 3 is now a runtime dependency; a stock Omarchy install already has
-  it, and without it the command line answers `python3 not found`.
+- Formatting in notes: headings, bold, italic, key and coloured spans, and
+  their shortcuts and commands. A shared board could make the parser hold
+  the shell for 8 seconds. Notes, and PNG exports of them, are now plain text:
+  nothing in a note is lost, and any formatting markers show as written.
+  Previews still show at most 4,000 characters; editing keeps the whole note.
 
-- Canvas notes now render as bounded plain text, including in PNG exports.
-  Removed inline formatting and its shortcuts/commands so a received board
-  cannot trigger markup parsing. Existing note contents are preserved;
-  formatting markers are displayed literally. Previews still show at most
-  4,000 characters, while editing retains the complete note.
+### Changed
+
+- **Python 3 is now needed.** Saving, reading, renaming, trash and restore,
+  publishing, exporting and folder repair go through a Python helper that
+  takes every name on stdin, so a board's title no longer shows in the
+  process list another account can read. A stock Omarchy install already has
+  Python; without it the board says so and offers a retry, and the command
+  line answers `python3 not found`.
+
+### Fixed
+
+- If the board folders cannot be made private, the board stops before reading
+  or writing anything, says what to repair and offers a retry (`R`), rather
+  than carrying on.
 
 ## 0.4.11 — 2026-10-14
 

@@ -5,16 +5,17 @@ No child processes: directory and file names never reach utility arguments.
 The shell keeps image decoding/clipboard operations; both entry points share
 this implementation for board operations and their lock/revision protocol.
 """
-import ctypes
 import datetime
 import errno
 import fcntl
 import os
-import shutil
 import stat
 import sys
-import tempfile
 from contextlib import contextmanager
+
+# shutil, tempfile and ctypes cost about 35 ms to import, more than Python's
+# own start. They are imported by the operations that use them, so a revision,
+# a size or a path check, which the board asks for most, starts in about 20.
 
 MAX_BOARD_BYTES = 33554432
 os.umask(0o077)
@@ -72,6 +73,7 @@ def locked(path):
 
 @contextmanager
 def temporary(folder, prefix='.omarchyform-'):
+    import tempfile
     fd, path = tempfile.mkstemp(dir=folder, prefix=prefix)
     os.close(fd)
     try:
@@ -84,6 +86,7 @@ def temporary(folder, prefix='.omarchyform-'):
 def move_new(source, destination):
     # Linux renameat2(RENAME_NOREPLACE), like mv -nT without a race between
     # checking the destination and renaming. Applies to directories as well.
+    import ctypes
     libc = ctypes.CDLL(None, use_errno=True)
     rename = libc.renameat2
     rename.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
@@ -144,6 +147,7 @@ def run(op, args, source):
         fits(path)
         sys.stdout.write(revision(path))
     elif op == 'snapshot':
+        import shutil
         board, lock, root = args
         under(board, root)
         with locked(lock):
@@ -159,6 +163,7 @@ def run(op, args, source):
                 with open(staged, 'rb') as stream:
                     shutil.copyfileobj(stream, sys.stdout.buffer)
     elif op == 'commit':
+        import shutil
         board, backup, lock, expected = args[:4]
         root, backup_root = (args[4:] + ['', ''])[:2]
         under(board, root)
@@ -193,6 +198,7 @@ def run(op, args, source):
     elif op == 'mkdir':
         os.mkdir(confined(*args), mode=0o700)
     elif op == 'move':
+        import shutil
         source_root, source_name, target_root, target_name = args
         old = confined(source_root, source_name)
         new = confined(target_root, target_name)
@@ -204,6 +210,7 @@ def run(op, args, source):
                 raise
             # Roots may live on different filesystems. Copy privately beside
             # the destination, then publish without replacing a collision.
+            import tempfile
             with tempfile.TemporaryDirectory(prefix='.omarchyform-move-', dir=os.path.dirname(new)) as stage:
                 copied = os.path.join(stage, 'entry')
                 if os.path.isdir(old):
@@ -216,6 +223,7 @@ def run(op, args, source):
             else:
                 os.unlink(old)
     elif op == 'purge':
+        import shutil
         root, name = args
         if '/' in name:
             refuse()
@@ -243,6 +251,7 @@ def run(op, args, source):
         os.unlink(staged)
         sys.stdout.write(candidate)
     elif op == 'export':
+        import shutil
         staged, destination, root = args
         resolved, private = os.path.realpath(destination), os.path.realpath(root)
         if not os.path.isfile(staged) or os.path.islink(destination) or resolved == private or resolved.startswith(private + '/'):
