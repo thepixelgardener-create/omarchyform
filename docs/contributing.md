@@ -24,6 +24,13 @@ the CLI to create boards and is not a contribution guide.
   trash and board loading disabled; retry only after reporting the error.
   A helper that fails to start must complete its request once and release
   ownership, including when a failure callback immediately retries.
+- A board's items go into the model a slice at a time (`loadBoard`,
+  `fillMore`), with frames between slices. Until the last is in,
+  `boardLoaded` is false and `opening` true: the model holds part of the
+  board, so nothing may save, edit, export or compare it. `openBoard` and a
+  new `loadBoard` drop a fill under way; never let a slice land on a board
+  other than the one it was read from. A new way of filling the models goes
+  through `Store.itemModelRows` and `appendRows` the same way.
 - Resolve a delayed open by the requested path when it completes: a captured
   document may have switched paths meanwhile. A delayed split close must leave
   `activePane` pointing to the surviving, non-null document even if focus moved.

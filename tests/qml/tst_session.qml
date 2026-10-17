@@ -59,6 +59,7 @@ ShellRoot {
     function fileText() { return Store.writeFile(items, links, ctl.nextId) }
     property var pointerOwner: null
     property int loadSerial: 0
+    property int fillSliceMs: Store.FILL_SLICE_MS
     // The session asks whether the library is open, and leaves word there.
     property QtObject library: QtObject {
       property bool showing: false

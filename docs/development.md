@@ -245,9 +245,9 @@ installed plugin, boards, and theme.
 thing a board can carry at the limit it is held to, and opens every one in a
 process of its own: offscreen by the real `Board` the way `loadBoard` fills
 it, then zoomed out, then saved and opened again, and by `bin/omarchyform
-validate`. Each has a wall-time budget; the ones still over the default are
-listed by name in `tests/hostile.js` with a ceiling, so they cannot get worse
-unnoticed. `node tests/hostile.js <name>...` runs only those named. CI runs it
+validate`. Each is held to the longest it may stop the shell drawing at once,
+its worst frame; the ones still over the default are listed by name in
+`tests/hostile.js` with a ceiling, so they cannot get worse unnoticed. `node tests/hostile.js <name>...` runs only those named. CI runs it
 as its own job, not a required check, with the budgets tripled.
 
 See [the compatibility review](omarchy-compatibility.md) for the tested

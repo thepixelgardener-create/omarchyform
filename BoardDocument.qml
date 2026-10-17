@@ -34,6 +34,12 @@ Item {
 
   // ------------------------------------------------------- what panes read
   readonly property bool boardLoaded: session.boardLoaded
+  // Still filling its items in, and how much of it is in (BoardSession.loadBoard).
+  readonly property bool opening: session.opening
+  readonly property real openedShare: session.openedShare
+  // How long one slice of a fill may take; tests/qml/tst_opening.qml makes it
+  // nothing, so every row is a slice of its own.
+  property int fillSliceMs: Store.FILL_SLICE_MS
   readonly property bool damaged: session.damaged
   readonly property string damageReason: session.damageReason
   readonly property string saveError: session.saveError

@@ -9,8 +9,9 @@ import "../../BoardStore.js" as Store
 // fixture in a process of its own, so one that never finishes cannot hide the
 // rest, and holds what this reports to a budget.
 //
-// The time is wall time and the worst frame, not the time a call took: text
-// is laid out when the frame is polished, after any call that set it returns.
+// The time is the worst frame, not the time a call took: text is laid out
+// when the frame is polished, after any call that set it returns, and a board
+// filled in slices takes a while without ever holding the shell up for long.
 TestCase {
   id: test
   name: "HostileBoards"
@@ -47,12 +48,13 @@ TestCase {
     return request.responseText
   }
 
-  // Twenty frames drawn after `step`: its wall time and the worst of them.
+  // Twenty frames drawn after `step`: its wall time, and the worst frame from
+  // its start, which is how long the shell was held up at once.
   function drawn(step) {
     var started = Date.now()
+    test.worst = 0
     step()
     test.frames = 0
-    test.worst = 0
     tryVerify(function () { return test.frames >= 20 }, 600000)
     return { ms: Date.now() - started, frame: Math.round(test.worst) }
   }
@@ -63,28 +65,41 @@ TestCase {
     })
   }
 
+  // BoardSession.loadBoard, without the process that read the file: what it
+  // asks of the text, then its rows added a slice at a time with the event loop
+  // run between slices, as its timer does.
+  function open(raw, steps) {
+    var t = Date.now()
+    var admitted = Store.admitBoard(raw)
+    steps.admit = (steps.admit || 0) + Date.now() - t
+    ctl.items.clear()
+    ctl.links.clear()
+    if (!admitted.data) return null
+    t = Date.now()
+    var made = Store.itemModelRows(admitted.data.items)
+    var at = 0, slices = 0
+    while (at < made.length) {
+      at = Store.appendRows(ctl.items, made, at, Store.FILL_SLICE_MS)
+      slices++
+      wait(1)
+    }
+    steps.fill = (steps.fill || 0) + Date.now() - t
+    steps.slices = (steps.slices || 0) + slices
+    Store.fillLinks(ctl.links, ctl.items, admitted.data.links)
+    return admitted.data
+  }
+
   function test_open(row) {
     var raw = read(row.file)
     var data = null
-    var nextId = 1
     var saved = ""
     var steps = {}
-    function timed(name, step) { var t = Date.now(); var r = step(); steps[name] = (steps[name] || 0) + Date.now() - t; return r }
-    // BoardSession.loadBoard, without the process that read the file: what it
-    // asks of the text, and what it fills the models with.
     var opened = drawn(function () {
-      data = timed("parse", function () { return Store.readFile(raw) })
-      var refused = timed("limit", function () {
-        return data !== null ? Store.boardLimit(data) : Store.jsonFits(raw) ? "" : Store.TOO_LONG_LIST
-      })
-      if (refused !== "") data = null
-      ctl.items.clear()
-      ctl.links.clear()
+      data = test.open(raw, steps)
       if (data) {
-        timed("items", function () { Store.fillItems(ctl.items, data.items) })
-        timed("links", function () { Store.fillLinks(ctl.links, ctl.items, data.links) })
-        nextId = Store.nextFreeId(ctl.items, data.nextId)
-        saved = timed("write", function () { return Store.writeFile(ctl.items, ctl.links, nextId) })
+        var t = Date.now()
+        saved = Store.writeFile(ctl.items, ctl.links, Store.nextFreeId(ctl.items, data.nextId))
+        steps.write = Date.now() - t
       }
       // BoardPane.resetView: the view a board opens at.
       var b = Store.bounds(ctl.items)
@@ -101,12 +116,8 @@ TestCase {
       surface.repaintGrid()
       surface.repaintLinks()
     })
-    // Saved again, and read back: what the next session opens.
-    var again = drawn(function () {
-      if (saved === "") return
-      var back = timed("reparse", function () { return Store.readFile(saved) })
-      timed("refill", function () { Store.fillItems(ctl.items, back.items) })
-    })
+    // Saved, and opened again: what the next session opens.
+    var again = drawn(function () { if (saved !== "") test.open(saved, steps) })
     console.log("HOSTILE " + JSON.stringify({ name: row.tag, opens: data !== null, items: ctl.items.count,
       links: ctl.links.count, open: opened, whole: whole, again: again, steps: steps }))
     compare(data !== null, row.opens, "opens as tests/hostile-fixtures.js says it does")

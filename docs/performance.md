@@ -4,33 +4,34 @@ Written by `npm run bench:scene -- --record` on 2026-09-30. Every frame time quo
 changelog was measured here; a frame time without the machine under it is
 not a number anyone can check.
 
-## Hostile boards — 2026-10-16
+## Hostile boards — 2026-10-17
 
 `npm run test:hostile` on Qt 6.12.0, offscreen with the software renderer,
-on the machine below. Wall time to open and draw 20 frames; twenty frames
-alone take about 350ms. Each fixture is described in
+on the machine below: the longest the board held the shell at once (its
+worst frame) while opening, and the same on 2026-10-16, before boards were
+opened a slice at a time, editors and shapes were built only when used, and
+connectors lost their round ends. Each fixture is described in
 `tests/hostile-fixtures.js`.
 
-| Fixture | Items, connectors | Open | Opened again |
+| Fixture | Items, connectors | Worst frame | Before |
 |---|---|---|---|
-| A board at 5,000 items (stacked, grid, shapes, largest ids, duplicate ids, odd values, missing pictures) | 5,000 | 8.9–11.2s | 9.9–11.8s |
-| 5,000 items, each with a 4,000-character preview | 5,000 | 29.5s | 31.7s |
-| 20,000 connectors on screen | 201, 20,000 | 22.2s | 2.4s |
-| 13 notes of joined emoji, 1 MB each | 13 | 5.2s | 5.2s |
-| 32 MB that `jsonFits` has to walk | 1 | 1.7–2.0s | — |
-| 31 notes of 1 MB: words, one unbroken line, markup | 31 | 1.0–1.5s | 0.8–1.2s |
-| 15 notes of 1 MB of newlines | 15 | 0.95s | 0.74s (56s before the fix) |
-| Refused: one past each limit, nested past 1,024, a newer version | 0 | under 0.45s | — |
+| A board at 5,000 items (stacked, grid, shapes, largest ids, duplicate ids, odd values, missing pictures) | 5,000 | 0.14–0.37s | 7.5–10.5s |
+| 5,000 items, each with a 4,000-character preview | 5,000 | 0.47s | 24.4s |
+| 20,000 connectors on screen | 201, 20,000 | 2.5–3.8s | 21.4s |
+| 13 notes of joined emoji, 1 MB each | 13 | 0.94s | 3.5s |
+| 32 MB that `jsonFits` has to walk | 1 | 1.3–2.5s | 1.3–1.7s |
+| 31 notes of 1 MB: words, one unbroken line, markup | 31 | 0.43–0.48s | 0.7–1.2s |
+| 15 notes of 1 MB of newlines, opened again | 15 | 0.28s | 55s |
+| Refused: one past each limit, nested past 1,024, a newer version | 0 | under 0.12s | — |
 
-`bin/omarchyform validate` took under 0.45s for every fixture.
+`bin/omarchyform validate` took under 0.6s for every fixture.
 
-The cost of the 5,000-item boards is building each item's delegate on the
-shell's thread, about 1.7ms each; parsing, filling the models and writing the
-board out again take under 0.3s together. The 20,000-connector board's time
-is in its first frame rather than in any step the test times, most likely
-the connector canvas; that is not confirmed. Software rendering is not the
-desktop's GPU path, so frame costs that are drawing rather than layout may
-differ live.
+A board at 5,000 items still takes 6 to 9 seconds to fill in; the shell
+draws throughout. Each item costs about 1ms to build, against 1.7ms before
+the note editor and the shape moved into Loaders. What is left of the
+connector time is working out each one's geometry in JavaScript. Software
+rendering is not the desktop's GPU path, but the connectors are a Canvas,
+which QPainter rasterises on the CPU either way.
 
 ## Fully textured large board — 2026-10-09
 

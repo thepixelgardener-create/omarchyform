@@ -101,6 +101,9 @@ Item {
     session.ctl.redoStack = []
     session.ctl.resetSelection(true)
     session.ctl.loadSerial += 1
+    // A board still being filled in is left as it is: the next one's file can
+    // arrive before the fill would notice on its own.
+    session.filling = null
     session.ctl.currentBoard = path
     session.ctl.resetView()
     // Again once it has loaded: the view frames what is on the board, and until
@@ -307,43 +310,82 @@ Item {
   }
 
   // Only a confirmed missing file may become a new, writable empty board.
+  //
+  // The items go in a slice at a time (fillMore), with frames drawn between
+  // slices: each one on screen is built on the shell's thread, and a board at
+  // the item limit held it 5 to 9 seconds at once (tests/hostile.js). Until the
+  // last is in, the board is not loaded: nothing edits or saves it, and a load
+  // or a switch that comes first leaves the rest unfilled.
   function loadBoard(raw, missing) {
     if (session.ctl.pointerOwner) session.ctl.pointerOwner.discardPointerEdit()
     session.ctl.loadSerial += 1
-    var data = Store.readFile(raw)
     // A note too long to lay out, or more items or connectors than a board
     // holds, would hold the shell up while it was drawn. The board is opened
     // the way an unreadable one is, empty and read-only, so nothing waits on
     // it and nothing saves over it; the command line can still read it and cut
     // it down (Store.boardLimit). One with a list too long to parse at all
     // never got that far, and says so (Store.jsonFits).
-    var refused = data !== null ? Store.boardLimit(data) : Store.jsonFits(raw) ? "" : Store.TOO_LONG_LIST
-    if (refused !== "") data = null
+    var admitted = Store.admitBoard(raw)
+    var data = admitted.data
     session.ctl.items.clear()
     session.ctl.links.clear()
     session.damaged = !data && !missing
-    session.damageReason = refused
+    session.damageReason = admitted.refused
     session.saveError = ""
+    session.boardLoaded = false
     session.ctl.nextId = 1
     session.ctl.nextColor = 0
+    session.ctl.resetSelection(false)
+    session.ctl.undoStack = []
+    session.ctl.redoStack = []
+    // Read from disk, so a picture it draws may have changed under its name
+    // since it was checked: each is checked again before it is drawn.
+    if (data) session.ctl.recheckPictures(Store.pictureNames(data.items))
+    session.filling = { serial: session.ctl.loadSerial, raw: raw, data: data,
+                        rows: data ? Store.itemModelRows(data.items) : [], at: 0 }
+    session.fillMore()
+  }
+
+  // The load under way, or null: its rows, and how many are in.
+  property var filling: null
+  readonly property bool opening: session.filling !== null
+  // How much of the board is in, from 0 to 1, while it is opening.
+  property real openedShare: 0
+  Timer {
+    id: fillTimer
+    interval: 1
+    onTriggered: session.fillMore()
+  }
+
+  function fillMore() {
+    var f = session.filling
+    if (!f) return
+    // Another load or a switch has begun since: this one is left unfinished.
+    if (f.serial !== session.ctl.loadSerial) {
+      if (session.filling === f) session.filling = null
+      return
+    }
+    f.at = Store.appendRows(session.ctl.items, f.rows, f.at, session.ctl.fillSliceMs)
+    session.openedShare = f.rows.length > 0 ? f.at / f.rows.length : 1
+    if (f.at < f.rows.length) { fillTimer.restart(); return }
+    session.filling = null
+    session.finishLoad(f.raw, f.data)
+  }
+
+  function finishLoad(raw, data) {
     if (data) {
-      // Read from disk, so a picture it draws may have changed under its name
-      // since it was checked: each is checked again before it is drawn.
-      session.ctl.recheckPictures(Store.pictureNames(data.items))
-      Store.fillItems(session.ctl.items, data.items)
       Store.fillLinks(session.ctl.links, session.ctl.items, data.links)
       session.ctl.nextId = Store.nextFreeId(session.ctl.items, data.nextId)
       session.ctl.nextColor = session.ctl.items.count
     }
-    session.ctl.resetSelection(false)
-    session.ctl.undoStack = []
-    session.ctl.redoStack = []
     // Only for a board being opened. A reload because the file changed under an
     // open board keeps the view where it is.
     if (session.frameWhenLoaded) {
       session.frameWhenLoaded = false
       session.ctl.resetView()
     }
+    // Whatever was selected while it filled in pointed into half a board.
+    session.ctl.resetSelection(false)
     session.lastSavedCount = session.ctl.items.count
     // A damaged board is displayed empty but stays read-only.
     session.lastSavedText = data && !session.damaged ? session.ctl.fileText() : ""
@@ -512,10 +554,10 @@ Item {
     printErrors: false
     // Loading and writing use separate FileViews. Ignore duplicate load
     // notifications once this board has been initialized.
-    onLoaded: { if (session.boardLoaded || path === "") return; session.loadBoard(text(), false) }
+    onLoaded: { if (session.boardLoaded || session.opening || path === "") return; session.loadBoard(text(), false) }
     // Nothing to read is a new board; unreadable content is not.
     onLoadFailed: function(error) {
-      if (session.boardLoaded || path === "") return
+      if (session.boardLoaded || session.opening || path === "") return
       session.loadBoard("", error === FileViewError.FileNotFound)
     }
   }

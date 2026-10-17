@@ -36,6 +36,8 @@ function makeDocument(workspace, board, Store) {
     currentBoard: board, destroyed: false, editedBy: [],
     // The gesture state the QML declares, at the values it starts with.
     pointerOwner: null, loadSerial: 0,
+    // No view builds anything here, so a board goes in as one slice.
+    fillSliceMs: Infinity,
     // Connections in the QML: every pane on this board but the one that
     // edited follows the edit.
     edited(by) {
@@ -48,7 +50,9 @@ function makeDocument(workspace, board, Store) {
     // The conflict state the QML declares, mirrored here: an undeclared
     // property reads as undefined, which is not what a string property does.
     conflict: false, resolving: '', createWhenLoaded: false,
-    revision: '', forceNextSave: false, diskReading: false, waitingSince: 0 }
+    revision: '', forceNextSave: false, diskReading: false, waitingSince: 0,
+    filling: null, openedShare: 0 }
+  Object.defineProperty(session, 'opening', { get: () => session.filling !== null })
   // The binding BoardSession.qml declares, term for term.
   Object.defineProperty(session, 'canEdit', {
     get: () => session.boardLoaded && !session.damaged && session.pendingBoard === null && !session.diskReading
@@ -63,7 +67,8 @@ function makeDocument(workspace, board, Store) {
   // The session's binding of the same name.
   Object.defineProperty(session, 'busy', { get: () => persistence.busy || session.diskReading })
   // What the document reads off its session, and off the workspace for it.
-  forward(doc, () => session, ['boardLoaded', 'damaged', 'damageReason', 'saveError', 'pendingBoard'])
+  forward(doc, () => session, ['boardLoaded', 'damaged', 'damageReason', 'saveError', 'pendingBoard',
+    'opening', 'openedShare'])
   // The binding BoardDocument.qml declares.
   Object.defineProperty(doc, 'canEdit', { get: () => session.canEdit })
   Object.defineProperty(doc, 'diskChanged', { get: () => session.conflict })
@@ -73,7 +78,9 @@ function makeDocument(workspace, board, Store) {
   forward(doc, () => workspace, ['autosaveMs', 'stateReady', 'boardsDir', 'backupsDir', 'library'])
   const context = vm.createContext({ doc, session, persistence, Store,
     itemModel: items, linkModel: links, Date, Qt: { callLater(f) { f() } },
-    saveTimer: { running: false, stop() {}, restart() {} } })
+    saveTimer: { running: false, stop() {}, restart() {} },
+    // A slice left over waits here until a test runs it (session.fillMore).
+    fillTimer: { running: false, stop() { this.running = false }, restart() { this.running = true } } })
   loadFunctions(doc, sources.document, context)
   // A signal is a function to call in QML; the harness's own stands in for it.
   doc.edited = doc.edited.bind(doc)

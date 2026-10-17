@@ -3,7 +3,7 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const { spawnSync } = require('child_process')
-for (const scenario of ['processfailure', 'persistence', 'session', 'timeout', 'exchange', 'imagebudget', 'clipboard', 'fieldpaste', 'legacy', 'ids']) {
+for (const scenario of ['processfailure', 'persistence', 'session', 'timeout', 'exchange', 'imagebudget', 'clipboard', 'fieldpaste', 'legacy', 'ids', 'opening']) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'omarchyform-persistence-'))
   try {
     fs.writeFileSync(path.join(dir, 'blocked.json'), 'original')
@@ -127,6 +127,16 @@ for (const scenario of ['processfailure', 'persistence', 'session', 'timeout', '
                                  pinned: false, src: '' })
       fs.writeFileSync(path.join(dir, 'ceiling.json'), JSON.stringify({ kind: 'omarchyform.board', version: 5,
         nextId: 7, items: [note(2, 0), note(2147483646, 300)], links: [{ from: 2, to: 2147483646 }] }, null, 2) + '\n')
+    }
+    if (scenario === 'opening') {
+      // Forty notes in a chain, and a small board to switch to midway.
+      const note = (id, text) => ({ id, kind: 'note', x: id * 240, y: 0, w: 220, h: 160, tint: 'foreground',
+                                    text, pinned: false, src: '' })
+      const board = (items, links) => JSON.stringify({ kind: 'omarchyform.board', version: 5,
+        nextId: items.length + 1, items, links }, null, 2) + '\n'
+      fs.writeFileSync(path.join(dir, 'big.json'), board(Array.from({ length: 40 }, (_, i) => note(i + 1, 'note ' + (i + 1))),
+        Array.from({ length: 39 }, (_, i) => ({ from: i + 1, to: i + 2 }))))
+      fs.writeFileSync(path.join(dir, 'other.json'), board([note(1, 'first'), note(2, 'second')], [{ from: 1, to: 2 }]))
     }
     if (scenario === 'clipboard') {
       fs.mkdirSync(path.join(dir, 'stubs'))

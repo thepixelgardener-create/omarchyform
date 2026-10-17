@@ -4,8 +4,8 @@
 //
 //   node tests/hostile.js [name...]   only the fixtures named
 //
-// The budgets are wall time on a software-rendered offscreen window, set
-// below; docs/performance.md has what they were measured at.
+// The budgets are the worst frame on a software-rendered offscreen window,
+// set below; docs/performance.md has what they were measured at.
 // OMARCHYFORM_HOSTILE_SCALE multiplies every one, for a slower machine than
 // the one that set them.
 const fs = require('fs')
@@ -18,31 +18,24 @@ const scale = Number(process.env.OMARCHYFORM_HOSTILE_SCALE || 1)
 const cli = path.join(__dirname, '..', 'bin', 'omarchyform')
 const generated = path.join(__dirname, 'hostile', 'generated')
 
-// What a board may cost to open, draw and open again, in ms of wall time. A
-// fixture listed in KNOWN is a stall still there: its ceiling is about half as
-// much again as measured on 2026-10-16 (Qt 6.12, offscreen, software), so it
-// cannot get worse unnoticed, and fixing it means lowering or deleting it.
-// Twenty frames alone take about 350ms.
+// The longest a board may hold the shell up at once, in ms: the worst frame
+// while it opens, is drawn zoomed out, and opens again. A fixture listed in
+// KNOWN is a stall still there: its ceiling is about half as much again as
+// measured on 2026-10-17 (Qt 6.12, offscreen, software), so it cannot get
+// worse unnoticed, and fixing it means lowering or deleting it. The command
+// line's budget is wall time.
 const BUDGET = { qml: 2000, cli: 2000 }
 const KNOWN = {
-  // Every item's delegate is built at once on the shell's thread, about 1.7ms
-  // each, so a board at MAX_ITEMS holds it 8 to 11s from a 0.6 MB file.
-  'max-items-stacked': 15000, 'max-items-grid': 15000, 'max-items-shapes': 15000, 'max-id': 15000,
-  'duplicate-ids': 15000, 'extreme-geometry': 16000, 'odd-values': 15000, 'pictures-missing': 16000,
-  // The same, with each delegate laying out a 4,000-character preview: 28s.
-  'max-items-previews': 40000,
-  // 20,000 connectors on screen at once: a 20s first frame, not in any step
-  // this times, so most likely the connector canvas (unconfirmed).
-  'max-links': 30000,
-  // Emoji joined into sequences: 13 notes, 5s, mostly in the first frame.
-  'notes-emoji-zwj': 8000,
-  // jsonFits walks a text it cannot settle by counting: 1.2 to 1.4s at 32 MB.
-  'escaped-quotes': 3000, 'old-history': 3000
+  // 20,000 connectors on screen at once: working out where each one goes and
+  // stroking them, 2.5 to 3.8s. Round line caps made it 20s.
+  'max-links': 6000,
+  // jsonFits walks a text it cannot settle by counting: 1.3 to 2.5s at 32 MB.
+  'escaped-quotes': 4000, 'old-history': 4000
 }
 const budget = name => ({ qml: KNOWN[name] || BUDGET.qml, cli: BUDGET.cli })
-// A process still running after this has stalled for good: opening, drawing
-// and opening again, each at the largest ceiling, and then some.
-const KILL_MS = 4 * Math.max(...Object.values(KNOWN)) * scale
+// A process still running after this has stalled for good, whatever its
+// budget: a sliced fill of the largest board takes under a minute.
+const KILL_MS = 300000 * scale
 
 const wanted = process.argv.slice(2)
 const unknown = wanted.filter(w => !fixtures.some(f => f.name === w))
@@ -76,7 +69,7 @@ try {
     const output = (qml.stdout || '') + (qml.stderr || '')
     const line = output.split('\n').find(l => l.includes('HOSTILE {'))
     const seen = line ? JSON.parse(line.slice(line.indexOf('{'))) : null
-    const cost = seen ? Math.max(seen.open.ms, seen.whole.ms, seen.again.ms) : Date.now() - started
+    const cost = seen ? Math.max(seen.open.frame, seen.whole.frame, seen.again.frame) : Date.now() - started
     const qmlOk = qml.status === 0 && !qml.error && seen && cost <= limit.qml * scale
       && !/TypeError|ReferenceError|Binding loop/.test(output)
 
