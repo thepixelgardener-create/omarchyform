@@ -539,6 +539,21 @@ TestCase {
     compare(ctl.saveCount, saves, "or anything asking to save an empty note")
   }
 
+  // A delegate the model is taking down has index -1, the same as editIndex and
+  // selectedIndex with nothing edited or selected. It is neither: taken for
+  // the note being edited, every note on a board being reloaded handed its
+  // whole text to the editor to lay out (56s for tests/hostile.js's
+  // notes-newlines).
+  function test_aNoteOnItsWayOutIsNotBeingEdited() {
+    model.setProperty(0, "itext", "a long note")
+    subject.index = -1
+    try {
+      verify(!subject.editing, "not the note being edited")
+      verify(!subject.cursor, "nor the selected one")
+      compare(findChild(subject, "note-editor").text, "", "and its editor is not handed the text")
+    } finally { subject.index = 0 }
+  }
+
   // Typing replaces the binding that filled the editor, so what it holds and
   // what the board holds can part company. Undo changes the board; the note on
   // screen follows it, and the editor has to as well the next time it is opened.

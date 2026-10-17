@@ -12,6 +12,7 @@
     "test:paste": "node tests/omarchy.js --live --paste",
     "test:drop": "node tests/drop.js",
     "test:clipboard": "node tests/clipboard.js",
+    "test:hostile": "node tests/hostile.js",
     "test:wayland": "python3 tests/wayland.py",
     "test:omarchy": "node tests/omarchy.js --live",
     "test:windowmode": "node tests/omarchy.js --live --windowmode",

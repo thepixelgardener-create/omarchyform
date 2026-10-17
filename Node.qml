@@ -56,19 +56,24 @@ Item {
   // The cursor and whatever is being typed in are live wherever they are: the
   // keyboard can walk the selection off the edge of the screen, and it has to
   // still be the selection when it gets there.
-  readonly property bool live: node.onScreen || node.cursor || node.ctl.editIndex === node.index
+  readonly property bool live: node.onScreen || node.cursor || node.editing
   // Not drawn when it is not live, which lets the scene graph skip the whole
   // subtree rather than walking thirteen items to decide each one falls
   // outside the viewport. On a three thousand item board this is the
   // difference between an idle frame costing 26ms and costing nothing.
   visible: node.live
-  readonly property bool cursor: node.ctl.selectedIndex === node.index
+  // A delegate being taken down has index -1, which is also what editIndex and
+  // selectedIndex hold when nothing is being edited or selected. Without the
+  // guard, clearing the model made every note the one being edited on its way
+  // out: each handed its whole text to the editor to lay out, and reloading a
+  // shared board of fifteen long notes held the shell for 56s.
+  readonly property bool cursor: node.index >= 0 && node.ctl.selectedIndex === node.index
   readonly property bool marked: node.live && node.ctl.isMarked(node.iid)
   // The cursor and a mark both read as selected; the cursor keeps the heavier
   // outline so you can still tell where the keyboard is.
   readonly property bool selected: node.cursor || node.marked
   readonly property bool linkSource: node.ctl.linkingFrom === node.iid
-  readonly property bool editing: node.ctl.editIndex === node.index
+  readonly property bool editing: node.index >= 0 && node.ctl.editIndex === node.index
   // What the note is actually drawing, so a test can read it back rather than
   // photograph it.
   readonly property string previewText: shown.text
@@ -345,7 +350,7 @@ Item {
       event.accepted = true
     }
 
-    readonly property bool wantsEdit: node.ctl.editIndex === node.index
+    readonly property bool wantsEdit: node.editing
     onWantsEditChanged: if (wantsEdit) {
       // The editor holds a copy of the note, not the note: it is handed the
       // board's version each time the caret arrives, so whatever changed the

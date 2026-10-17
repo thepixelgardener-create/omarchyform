@@ -59,7 +59,9 @@ the CLI to create boards and is not a contribution guide.
   [cost trace](security-review.md#cost-trace) before merge: what its time and
   memory grow with, each bounded where the input arrives, and a fixture at
   each bound in the engine the cost depends on. Benchmarks on realistic boards
-  are not that fixture.
+  are not that fixture. A new field a board carries also gets its fixture in
+  `tests/hostile-fixtures.js`, and `npm run test:hostile` must stay within
+  budget.
 - CLI failures must remain JSON, and rejected edits must leave both files and
   backups unchanged.
 

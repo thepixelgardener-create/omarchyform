@@ -10,5 +10,6 @@
 /AGENTS.md
 /CLAUDE.md
 
-# Pictures tests/ui.js makes for the Qt tests and removes afterwards.
+# What tests/ui.js and tests/hostile.js make for the Qt tests and remove afterwards.
 tests/qt/generated/
+tests/hostile/generated/

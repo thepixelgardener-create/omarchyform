@@ -4,6 +4,34 @@ Written by `npm run bench:scene -- --record` on 2026-09-30. Every frame time quo
 changelog was measured here; a frame time without the machine under it is
 not a number anyone can check.
 
+## Hostile boards — 2026-10-16
+
+`npm run test:hostile` on Qt 6.12.0, offscreen with the software renderer,
+on the machine below. Wall time to open and draw 20 frames; twenty frames
+alone take about 350ms. Each fixture is described in
+`tests/hostile-fixtures.js`.
+
+| Fixture | Items, connectors | Open | Opened again |
+|---|---|---|---|
+| A board at 5,000 items (stacked, grid, shapes, largest ids, duplicate ids, odd values, missing pictures) | 5,000 | 8.9–11.2s | 9.9–11.8s |
+| 5,000 items, each with a 4,000-character preview | 5,000 | 29.5s | 31.7s |
+| 20,000 connectors on screen | 201, 20,000 | 22.2s | 2.4s |
+| 13 notes of joined emoji, 1 MB each | 13 | 5.2s | 5.2s |
+| 32 MB that `jsonFits` has to walk | 1 | 1.7–2.0s | — |
+| 31 notes of 1 MB: words, one unbroken line, markup | 31 | 1.0–1.5s | 0.8–1.2s |
+| 15 notes of 1 MB of newlines | 15 | 0.95s | 0.74s (56s before the fix) |
+| Refused: one past each limit, nested past 1,024, a newer version | 0 | under 0.45s | — |
+
+`bin/omarchyform validate` took under 0.45s for every fixture.
+
+The cost of the 5,000-item boards is building each item's delegate on the
+shell's thread, about 1.7ms each; parsing, filling the models and writing the
+board out again take under 0.3s together. The 20,000-connector board's time
+is in its first frame rather than in any step the test times, most likely
+the connector canvas; that is not confirmed. Software rendering is not the
+desktop's GPU path, so frame costs that are drawing rather than layout may
+differ live.
+
 ## Fully textured large board — 2026-10-09
 
 Final `dev` validation used `npm run bench:scene -- 3000`, then the same

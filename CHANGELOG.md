@@ -3,6 +3,24 @@
 Notable changes, newest first. Board file versions are noted where they moved,
 since older boards are migrated on load rather than rejected.
 
+## Unreleased
+
+### Fixed
+
+- Opening another board, or the same one again after it changed on disk, no
+  longer lays out every long note's whole text on the way. Each note being
+  cleared away took itself for the one being edited, and handed its full text
+  to the editor: a shared board of fifteen 1 MB notes held the shell for 56
+  seconds when it was reloaded. It now takes a tenth of a second.
+
+### Added
+
+- `npm run test:hostile`: boards at every limit a board is held to, opened
+  offscreen by the real board and by the command line, each against a time
+  budget. The stalls it still measures are listed by name in
+  `tests/hostile.js`, among them a board at the 5,000-item limit, which holds
+  the shell for 8 to 11 seconds.
+
 ## 0.5.0 — 2026-10-16
 
 ### Removed
