@@ -34,6 +34,8 @@ and a security pass; the [changelog](../CHANGELOG.md) has each one.
 - **Reads from slow storage:** a board read blocks the shell for as long as the
   read takes. 1ms on a local disk; network storage is unmeasured.
 - CI rejecting new lint diagnostics.
+- **Opening time:** a board of 5,000 notes takes 6 to 9 seconds to open, and
+  about 30 when every note has a long preview; it is read-only until then.
 - **Stalls the hostile boards still measure** (`KNOWN` in `tests/hostile.js`):
   20,000 connectors on screen take 2.5 to 3.8 seconds to draw, and checking
   a 32 MB board's text before reading it takes 1.3 to 2.5.

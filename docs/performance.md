@@ -26,8 +26,10 @@ connectors lost their round ends. Each fixture is described in
 
 `bin/omarchyform validate` took under 0.6s for every fixture.
 
-A board at 5,000 items still takes 6 to 9 seconds to fill in; the shell
-draws throughout. Each item costs about 1ms to build, against 1.7ms before
+A board at 5,000 items still takes 6 to 9 seconds to fill in, and 26 to 32
+when every note carries a full 4,000-character preview (measured
+2026-10-19); the shell draws throughout, and the board is read-only until
+it is in. Each item costs about 1ms to build, against 1.7ms before
 the note editor and the shape moved into Loaders. What is left of the
 connector time is working out each one's geometry in JavaScript. Software
 rendering is not the desktop's GPU path, but the connectors are a Canvas,
