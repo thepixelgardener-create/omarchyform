@@ -3,20 +3,32 @@
 Notable changes, newest first. Board file versions are noted where they moved,
 since older boards are migrated on load rather than rejected.
 
+## Unreleased
+
+### Fixed
+
+- `npm run test:hostile` passed a board whenever the command line answered
+  with any JSON, an error included. Each board is now held to the success,
+  limit warning or refusal expected of it, and to its exit status.
+
 ## 0.5.1 — 2026-10-19
 
 ### Fixed
 
-- A large board no longer holds the shell up while it opens. Its items go in
-  a slice at a time with the board drawn in between, saying **Opening…** and
-  how far it has got, and it is read-only until the last one is in. If its
-  file changes meanwhile, the newer version is read once it is. A board at
-  the 5,000-item limit held everything for 8 to 11 seconds, from a file of
-  0.6 MB anyone could share; the longest the shell now waits at once is about
-  a third of a second.
+- A board of thousands of items no longer holds the shell up while it
+  opens. Its items go in a slice at a time with the board drawn in between,
+  saying **Opening…** and how far it has got, and it is read-only until the
+  last one is in. If its file changes meanwhile, the newer version is read
+  once it is. A board at the 5,000-item limit held everything for 8 to 11
+  seconds, from a file of 0.6 MB anyone could share; with short notes the
+  longest the shell now waits at once is about a third of a second, and with
+  5,000 long notes under one. All of it still takes 6 to 11 seconds to open,
+  and about half a minute with the long notes. 20,000 connectors on screen,
+  or 32 MB of text, can still hold the shell for one to four seconds;
+  `docs/performance.md` has each case.
 - Each item builds its note editor only while it is being typed in, and an
-  ellipse or diamond its shape only when it is one. Opening any board is
-  about 40% quicker for it.
+  ellipse or diamond its shape only when it is one, which makes each item
+  about 40% cheaper to build.
 - Connectors are drawn with flat ends, which look the same at their width
   and are far cheaper: 20,000 on screen at once took 20 seconds to draw, and
   take under 4.

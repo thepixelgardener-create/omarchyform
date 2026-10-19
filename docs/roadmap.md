@@ -34,8 +34,9 @@ and a security pass; the [changelog](../CHANGELOG.md) has each one.
 - **Reads from slow storage:** a board read blocks the shell for as long as the
   read takes. 1ms on a local disk; network storage is unmeasured.
 - CI rejecting new lint diagnostics.
-- **Opening time:** a board of 5,000 notes takes 6 to 9 seconds to open, and
-  about 30 when every note has a long preview; it is read-only until then.
+- **Opening time:** a board of 5,000 notes takes 6 to 11 seconds to open, and
+  about half a minute when every note has a long preview; it is read-only
+  until then.
 - **Stalls the hostile boards still measure** (`KNOWN` in `tests/hostile.js`):
   20,000 connectors on screen take 2.5 to 3.8 seconds to draw, and checking
   a 32 MB board's text before reading it takes 1.3 to 2.5.
@@ -96,15 +97,52 @@ a Python helper that takes every name on stdin, so a board's title no longer
 shows in the process list. The board stops before reading anything when its
 folders cannot be made private, and says what to repair.
 
-## 0.5.1 — Large boards open without holding the shell
+## 0.5.1 — Large boards open a slice at a time
 
 Shipped. A board opens a slice at a time with the board drawn in between,
 read-only until it is all in, and a change to its file meanwhile is read once
-it is. At the 5,000-item limit the shell waits at most about a third of a
-second at once, where it held for 8 to 11. A reload no longer hands every long
-note's text to the editor, which held a shared board of long notes for 56
-seconds. `npm run test:hostile` opens a board at every limit and holds each to
-a time.
+it is. The 5,000-item boards with short notes stop the shell for at most a
+third of a second at once, where they held it for 8 to 11 seconds; long
+previews, connector-heavy boards and large files still have the costs listed
+above. A reload no longer hands every long note's text to the editor, which
+held a shared board of long notes for 56 seconds. `npm run test:hostile` opens
+a board at every limit and holds each to a time. The live checks, held back
+for the release, ran on it afterwards and passed.
+
+## Next maintenance pass
+
+Measured with one-off offscreen probes on 2026-10-19, on the machine in
+[performance.md](performance.md#baseline-environment--2026-09-30). Making
+each probe an instrument comes before the change it measures.
+
+- **Connectors in use.** Every pan, zoom, selection and drag step repaints
+  all connectors: `Board.qml` walks every one and works out the geometry of
+  each in view before stroking, with only the id index cached. On `max-links`
+  each such step is a 2.4 to 2.7-second frame, and the walk is about 0.15
+  seconds of it: stroking 16,000 connectors is the rest, which is why zoomed
+  out, with shorter lines, it is 1.8. Ordinary diagrams cost 20 to 60 ms a
+  step with 300 or 3,000 connectors, the walk 13 to 23 ms of it at 3,000. So
+  `max-links` needs cheaper drawing, not cheaper geometry, and labels drawn
+  the same way would add to it. `test:hostile` times opening, one zoom change
+  and reopening, not sustained use.
+- **Large files through the real session.** An external reload goes through
+  `acceptDisk`, which reads the text with `readFile`, then `loadBoard`, which
+  admits the same text again, in one turn. Through a real `BoardSession`, a
+  reload of `escaped-quotes` holds the shell for 2.9 to 3.0 seconds at once
+  and `old-history` for 2.4 to 2.6, against 1.2 to 1.5 on opening and 0.8 to
+  0.9 for one `admitBoard`. A board 0.4.7 to 0.4.10 saved with a long history
+  pays this on every reload until its next save drops the history.
+  `test:hostile` calls `admitBoard` directly, so it measures neither the
+  reload nor the first open's file read. Keep the parser's crash guard and
+  whole-file reading in any change.
+- **Two numbers, two targets.** Record the worst pause and the time until the
+  board is editable separately, the 5,000 long previews included, and set a
+  target for each on a named machine before accepting a performance change.
+  The 2-second default and the 4- and 6-second exceptions, tripled in CI, are
+  regression ceilings, not responsiveness goals.
+
+Which goes first is still to choose, now on these numbers rather than on
+the code alone.
 
 ## 0.6 — Editable, labeled connectors
 
@@ -113,9 +151,13 @@ label the arrow “yes”, and select it to edit, reverse or remove it.
 
 Planned scope:
 
-- Cheaper connector drawing first: working out where 20,000 go and stroking
-  them is one of the stalls still open above, and labels would add to it.
+- Cheaper connector drawing first: stroking 20,000 is one of the stalls still
+  open above, and labels would add to it. Working out where they go is about
+  6% of it.
 - Optional plain-text labels that stay attached when items move.
+- Confirm the labeled-arrow workflow is useful before committing to the full
+  feature. Define per-label and aggregate text limits, and bounded work for
+  drawing and pointer selection, before adding a field to the board format.
 - Pointer selection of individual connectors and a keyboard-accessible list
   of connections for the selected item.
 - Named actions to edit a label, reverse a connector and remove it.
@@ -132,7 +174,10 @@ Completion checks:
 - Old boards load with empty labels. A new board-format version prevents older
   plugin versions from silently discarding labels.
 - Labels and selection remain legible at low and high zoom, in both window modes.
-- The `max-links` hostile board, every connector labeled, stays within budget.
+- The `max-links` hostile board, every connector labeled at the chosen text
+  limits, meets explicit opening and interaction targets from the maintenance
+  pass; merely retaining the existing six-second exception is insufficient.
+  Cover one-past-limit refusals, repeated pan/zoom/drag, picking and export too.
 
 ## Later candidates
 

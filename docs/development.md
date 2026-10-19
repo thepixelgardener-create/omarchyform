@@ -236,10 +236,11 @@ The separate `test:qml` suite runs the real persistence and session components
 in isolated headless Quickshell instances with temporary files. It checks backup
 contents, write ordering, failure handling, retry, queued edits, and switching
 between fresh, saved, and damaged boards. It does not interact with the running
-desktop shell. CI runs the Node and Qt Quick tests. Run `test:qml` and
-`test:omarchy` on an Omarchy machine before release. The live test opens test
-surfaces and targets keyboard events at its own process; it preserves your
-installed plugin, boards, and theme.
+desktop shell. CI runs the Node and Qt Quick tests and none of these: run
+`test:qml` and the live checks (`test:omarchy`, `test:paste`,
+`test:windowmode`, `test:hold`) on an Omarchy machine before release. The
+live tests open test surfaces and target keyboard events at their own
+process; they preserve your installed plugin, boards, and theme.
 
 `test:hostile` builds the boards in `tests/hostile-fixtures.js`, each one
 thing a board can carry at the limit it is held to, and opens every one in a
@@ -249,6 +250,11 @@ validate`. Each is held to the longest it may stop the shell drawing at once,
 its worst frame; the ones still over the default are listed by name in
 `tests/hostile.js` with a ceiling, so they cannot get worse unnoticed. `node tests/hostile.js <name>...` runs only those named. CI runs it
 as its own job, not a required check, with the budgets tripled.
+The CLI reply must match the fixture's expected success, canvas-limit warning
+or refusal and exit status; valid JSON alone is not a pass. The QML part uses
+the real `Board` with a stub controller, not a full `BoardSession`. See
+[measurement limits](performance.md#hostile-boards--2026-10-17) before treating
+these budgets as a release's responsiveness target.
 
 See [the compatibility review](omarchy-compatibility.md) for the tested
 versions, first-party references, results, and remaining limits.

@@ -26,14 +26,40 @@ connectors lost their round ends. Each fixture is described in
 
 `bin/omarchyform validate` took under 0.6s for every fixture.
 
-A board at 5,000 items still takes 6 to 9 seconds to fill in, and 26 to 32
-when every note carries a full 4,000-character preview (measured
-2026-10-19); the shell draws throughout, and the board is read-only until
-it is in. Each item costs about 1ms to build, against 1.7ms before
-the note editor and the shape moved into Loaders. What is left of the
-connector time is working out each one's geometry in JavaScript. Software
+A board at 5,000 items still takes 6 to 11 seconds to fill in, and 26 to 35
+when every note carries a full 4,000-character preview; the shell draws
+throughout, and the board is read-only until it is in. Each item costs about
+1ms to build, against 1.7ms before the note editor and the shape moved into
+Loaders. Connector painting still walks every connector and works out the
+geometry of each one in view in JavaScript before stroking it, on every pan
+and zoom step as well as on opening; these measurements do not separate those
+costs. Software
 rendering is not the desktop's GPU path, but the connectors are a Canvas,
 which QPainter rasterises on the CPU either way.
+
+These are regression measurements, not a general responsiveness guarantee.
+The runner allows 2 seconds per worst frame by default, 6 for `max-links` and
+4 for `escaped-quotes` and `old-history`; CI triples those ceilings. Total
+opening time is reported but has only a process timeout, not its own
+performance assertion. A board can therefore become much slower to finish
+opening while still passing if it keeps yielding between slices.
+
+Two full runs on 2026-10-19, on the machine below with Qt 6.12.0 and Omarchy
+4.0.0.r7083.g81fd2d2, show how far those totals move. A 5,000-item board's
+fill differed by up to half between them (stacked 9.2 and 14.4 seconds,
+missing pictures 6.9 and 10.9), and the 5,000 long previews took 26 and 35
+seconds to open, 32 and 49 to open again, with a worst frame of 0.37 and
+0.98 seconds. Boards of a few dozen items agreed within a few percent. Compare
+totals only between runs made back to back: run that way on `f4973be` and on
+0.5.1, the long previews took 25.8 seconds to open on both.
+
+The harness renders the real `Board`, but reproduces admission and filling
+with a `PaneStub` and `wait(1)` instead of running `BoardSession` and its timer.
+Its reopen is from normalized saved text. It does not time file I/O, picture
+validation, or an external reload through `acceptDisk`, which parses the input
+before `loadBoard` parses it again. Use real-session measurements alongside
+these fixtures when evaluating loading changes, and measure sustained pan,
+zoom and dragging before extending connectors.
 
 ## Fully textured large board — 2026-10-09
 
