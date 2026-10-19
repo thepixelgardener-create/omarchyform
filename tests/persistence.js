@@ -137,6 +137,9 @@ for (const scenario of ['processfailure', 'persistence', 'session', 'timeout', '
       fs.writeFileSync(path.join(dir, 'big.json'), board(Array.from({ length: 40 }, (_, i) => note(i + 1, 'note ' + (i + 1))),
         Array.from({ length: 39 }, (_, i) => ({ from: i + 1, to: i + 2 }))))
       fs.writeFileSync(path.join(dir, 'other.json'), board([note(1, 'first'), note(2, 'second')], [{ from: 1, to: 2 }]))
+      // Long enough to take a second to fill, so a write from outside lands
+      // while it is still opening.
+      fs.writeFileSync(path.join(dir, 'long.json'), board(Array.from({ length: 1000 }, (_, i) => note(i + 1, 'long ' + (i + 1))), []))
     }
     if (scenario === 'clipboard') {
       fs.mkdirSync(path.join(dir, 'stubs'))

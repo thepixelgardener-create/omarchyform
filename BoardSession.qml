@@ -102,8 +102,10 @@ Item {
     session.ctl.resetSelection(true)
     session.ctl.loadSerial += 1
     // A board still being filled in is left as it is: the next one's file can
-    // arrive before the fill would notice on its own.
+    // arrive before the fill would notice on its own. A change to its file
+    // while it was opening is that board's, not the next one's.
     session.filling = null
+    session.changedWhileOpening = false
     session.ctl.currentBoard = path
     session.ctl.resetView()
     // Again once it has loaded: the view frames what is on the board, and until
@@ -349,6 +351,8 @@ Item {
   // The load under way, or null: its rows, and how many are in.
   property var filling: null
   readonly property bool opening: session.filling !== null
+  // The file changed while the board was opening; see externalWrite.
+  property bool changedWhileOpening: false
   // How much of the board is in, from 0 to 1, while it is opening.
   property real openedShare: 0
   Timer {
@@ -393,6 +397,10 @@ Item {
     session.boardLoaded = !session.damaged
     if (session.createWhenLoaded && session.boardLoaded) session.save(true)
     session.createWhenLoaded = false
+    if (session.changedWhileOpening) {
+      session.changedWhileOpening = false
+      session.externalWrite()
+    }
     // Remember which board this was, so the next session opens it again.
     session.ctl.writeState()
     session.ctl.repaintLinks()
@@ -416,8 +424,11 @@ Item {
 
   // What changed on disk is read on the shell's thread, whole, so how big it
   // is is asked first, of the helper. A notification that arrives while that
-  // is being asked is asked about again afterwards rather than dropped.
+  // is being asked is asked about again afterwards rather than dropped, and so
+  // is one that arrives while the board is still opening: what is going in was
+  // read before it, and a large board takes seconds to fill.
   function externalWrite() {
+    if (session.opening) { session.changedWhileOpening = true; return }
     if (!session.boardLoaded || session.pendingBoard !== null || session.conflict) return
     session.measureDisk()
   }

@@ -371,3 +371,30 @@ const plain = (n) => JSON.stringify({ kind: 'omarchyform.board', version: 5, nex
   assert.equal(c.doc.nextId, 6)
   console.log('ok — editing: a board opened a slice at a time')
 }
+
+{
+  // A write to the file while the board is still opening is asked about once
+  // it is in: what went in was read before it. Without that the board showed
+  // the old version, said nothing, and only a save found out.
+  const c = controller()
+  c.doc.fillSliceMs = 0
+  const five = plain(5), three = plain(3)
+  c.session.loadBoard(five, false)
+  c.session.diskText = three
+  c.session.externalWrite()
+  assert.ok(c.doc.opening, 'still opening when the file changed')
+  while (c.doc.opening) c.session.fillMore()
+  assert.equal(c.items.count, 3, 'the version on disk once it is in: ' + c.items.count)
+  assert.match(c.root.statusText, /reloaded/)
+
+  // The same bytes again, a touch or a sync tool, are not someone else's.
+  const d = controller()
+  d.doc.fillSliceMs = 0
+  d.session.loadBoard(five, false)
+  d.session.diskText = five
+  d.session.externalWrite()
+  while (d.doc.opening) d.session.fillMore()
+  assert.equal(d.items.count, 5)
+  assert.doesNotMatch(d.root.statusText, /reloaded/, 'a touch while it opens is not read again')
+  console.log('ok — editing: a write while a board opens reaches it once it is in')
+}

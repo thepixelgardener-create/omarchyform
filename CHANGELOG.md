@@ -9,8 +9,9 @@ since older boards are migrated on load rather than rejected.
 
 - A large board no longer holds the shell up while it opens. Its items go in
   a slice at a time with the board drawn in between, saying **Opening…** and
-  how far it has got, and it is read-only until the last one is in. A board
-  at the 5,000-item limit held everything for 8 to 11 seconds, from a file of
+  how far it has got, and it is read-only until the last one is in. If its
+  file changes meanwhile, the newer version is read once it is. A board at
+  the 5,000-item limit held everything for 8 to 11 seconds, from a file of
   0.6 MB anyone could share; the longest the shell now waits at once is about
   a third of a second.
 - Each item builds its note editor only while it is being typed in, and an

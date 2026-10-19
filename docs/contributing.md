@@ -27,9 +27,11 @@ the CLI to create boards and is not a contribution guide.
 - A board's items go into the model a slice at a time (`loadBoard`,
   `fillMore`), with frames between slices. Until the last is in,
   `boardLoaded` is false and `opening` true: the model holds part of the
-  board, so nothing may save, edit, export or compare it. `openBoard` and a
-  new `loadBoard` drop a fill under way; never let a slice land on a board
-  other than the one it was read from. A new way of filling the models goes
+  board, so nothing may save, edit, export or compare it. A change to its
+  file meanwhile is kept (`changedWhileOpening`) and asked about once the
+  board is in, never dropped. `openBoard` and a new `loadBoard` drop a fill
+  under way; never let a slice land on a board other than the one it was
+  read from. A new way of filling the models goes
   through `Store.itemModelRows` and `appendRows` the same way.
 - Resolve a delayed open by the requested path when it completes: a captured
   document may have switched paths meanwhile. A delayed split close must leave

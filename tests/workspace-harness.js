@@ -51,7 +51,7 @@ function makeDocument(workspace, board, Store) {
     // property reads as undefined, which is not what a string property does.
     conflict: false, resolving: '', createWhenLoaded: false,
     revision: '', forceNextSave: false, diskReading: false, waitingSince: 0,
-    filling: null, openedShare: 0 }
+    filling: null, openedShare: 0, changedWhileOpening: false }
   Object.defineProperty(session, 'opening', { get: () => session.filling !== null })
   // The binding BoardSession.qml declares, term for term.
   Object.defineProperty(session, 'canEdit', {
@@ -151,6 +151,8 @@ function makePane(workspace, exchange, Store) {
   // The harness has always read canEdit as the session's own answer: the
   // library and an export pausing it are tested where they happen.
   Object.defineProperty(root, 'canEdit', { get: () => !!root.doc && root.doc.canEdit && !root.leaving })
+  // BoardPane.qml's binding of the same name.
+  Object.defineProperty(root, 'opening', { get: () => root.doc !== null && root.doc.opening })
   forward(root, () => workspace, ['opened', 'stateReady', 'step', 'showGrid', 'canvasPattern', 'library',
     'dataDir', 'boardsDir', 'imagesDir', 'split'])
   Object.defineProperty(root, 'active', { get: () => workspace.activePane === root })

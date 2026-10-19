@@ -8,8 +8,9 @@ import "../../BoardStore.js" as Store
 // document, its session and its writer, with every row a slice of its own so
 // the fill is still going over many ticks. While it is, the board is not
 // loaded and nothing saves it; switching to another board midway leaves none
-// of the first in the second; and opened again, the first comes back whole,
-// connectors and all, with its file as it was.
+// of the first in the second; opened again, the first comes back whole,
+// connectors and all, with its file as it was; and a write from outside while
+// a board is opening reaches it once it is in.
 ShellRoot {
   id: test
   property string dir: Quickshell.env("OMARCHYFORM_TEST_DIR")
@@ -18,11 +19,29 @@ ShellRoot {
   property var doc: null
   property string original: ""
   property bool sawPart: false
+  // Whether the outside write was noticed while long.json was still opening:
+  // if not, the stage did not test what it is for.
+  property bool changeSeenOpening: false
   function check(condition, message) {
     if (!condition) { console.error("FAIL: " + message); Qt.quit(); throw new Error(message) }
   }
   function read(path) { reader.path = ""; reader.path = path; reader.reload(); reader.waitForJob(); return reader.text() }
   FileView { id: reader; blockLoading: true; blockAllReads: true; printErrors: false }
+  // The command line, an editor or a file sync, as in tst_session.qml.
+  FileView { id: outside; preload: false; atomicWrites: true; printErrors: false }
+  function writeOutside(path, text) {
+    outside.path = ""
+    outside.path = path
+    Qt.callLater(function () { outside.setText(text) })
+  }
+  // Told of the change when the document is.
+  FileView {
+    id: watcher
+    preload: false
+    watchChanges: true
+    printErrors: false
+    onFileChanged: if (test.doc && test.doc.opening) test.changeSeenOpening = true
+  }
 
   // What a document reads off the workspace, and no panes.
   QtObject {
@@ -99,10 +118,30 @@ ShellRoot {
         test.check(test.doc.nextId === 41, "and the next id after them: " + test.doc.nextId)
         test.check(test.doc.canEdit && test.doc.openedShare === 1, "an editable board, all in")
         test.check(test.read(test.dir + "/big.json") === test.original, "its file untouched by opening")
-        test.doc.destroy()
+        watcher.path = test.dir + "/long.json"
+        test.doc.openBoard("long.json")
         test.ticks = 0
         test.stage = 5
-      } else if (test.stage === 5 && test.ticks > 2) {
+      } else if (test.stage === 5 && test.doc.opening && test.doc.items.count > 2) {
+        // Rewritten from outside while it fills: what is going in was read
+        // before the write.
+        test.writeOutside(test.dir + "/long.json", JSON.stringify({ kind: "omarchyform.board", version: 5, nextId: 4,
+          items: ["one", "two", "three"].map(function (text, i) {
+            return { id: i + 1, kind: "note", x: i * 240, y: 0, w: 220, h: 160, tint: "foreground", text: text,
+                     pinned: false, src: "" }
+          }), links: [] }) + "\n")
+        test.ticks = 0
+        test.stage = 6
+      } else if (test.stage === 6 && test.doc.boardLoaded && test.doc.items.count === 3) {
+        test.check(test.changeSeenOpening, "the write landed after the fill; make long.json longer")
+        test.check(test.texts().join() === "one,two,three", "the version from outside: " + test.texts())
+        test.check(test.doc.canEdit, "and an editable board")
+        test.doc.destroy()
+        test.ticks = 0
+        test.stage = 7
+      } else if (test.stage === 6 && test.ticks > 600) {
+        test.check(false, "a write while it was opening never reached the board: " + test.doc.items.count + " items")
+      } else if (test.stage === 7 && test.ticks > 2) {
         console.log("OPENING_TESTS_PASSED")
         Qt.quit()
       } else if (test.ticks > 2000) test.check(false, "stuck at stage " + test.stage)
