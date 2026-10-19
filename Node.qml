@@ -56,19 +56,24 @@ Item {
   // The cursor and whatever is being typed in are live wherever they are: the
   // keyboard can walk the selection off the edge of the screen, and it has to
   // still be the selection when it gets there.
-  readonly property bool live: node.onScreen || node.cursor || node.ctl.editIndex === node.index
+  readonly property bool live: node.onScreen || node.cursor || node.editing
   // Not drawn when it is not live, which lets the scene graph skip the whole
   // subtree rather than walking thirteen items to decide each one falls
   // outside the viewport. On a three thousand item board this is the
   // difference between an idle frame costing 26ms and costing nothing.
   visible: node.live
-  readonly property bool cursor: node.ctl.selectedIndex === node.index
+  // A delegate being taken down has index -1, which is also what editIndex and
+  // selectedIndex hold when nothing is being edited or selected. Without the
+  // guard, clearing the model made every note the one being edited on its way
+  // out: each handed its whole text to the editor to lay out, and reloading a
+  // shared board of fifteen long notes held the shell for 56s.
+  readonly property bool cursor: node.index >= 0 && node.ctl.selectedIndex === node.index
   readonly property bool marked: node.live && node.ctl.isMarked(node.iid)
   // The cursor and a mark both read as selected; the cursor keeps the heavier
   // outline so you can still tell where the keyboard is.
   readonly property bool selected: node.cursor || node.marked
   readonly property bool linkSource: node.ctl.linkingFrom === node.iid
-  readonly property bool editing: node.ctl.editIndex === node.index
+  readonly property bool editing: node.index >= 0 && node.ctl.editIndex === node.index
   // What the note is actually drawing, so a test can read it back rather than
   // photograph it.
   readonly property string previewText: shown.text
@@ -134,6 +139,8 @@ Item {
   onWidthChanged: node.ctl.repaintLinks()
   onHeightChanged: node.ctl.repaintLinks()
 
+  onEditingChanged: if (!editing) textViewport.contentY = 0
+
   function set(role, value) { node.ctl.items.setProperty(node.index, role, value) }
 
   // Notes and boxes are plain Rectangles; ellipses and diamonds need a path.
@@ -198,18 +205,25 @@ Item {
   // itself from seven Connections handlers, one per property that could change
   // how it looked, and a new property meant remembering to add an eighth.
   // These are bindings; there is nothing to remember.
-  Shape {
+  // Only ellipses and diamonds build one: a Shape on every note and box, hidden,
+  // was a sixth of what a 5,000-item board cost to open (tests/hostile.js).
+  Loader {
+    objectName: "item-shape"
     anchors.fill: parent
-    visible: node.painted
-    antialiasing: true
-    ShapePath {
-      fillColor: node.fill
-      strokeColor: node.outline
-      // Unchanged from the canvas, including its disagreement with the
-      // Rectangle above, which thickens on foundMatch rather than on cursor.
-      strokeWidth: node.cursor || node.linkSource ? node.theme.borderWidth * 2 : node.theme.borderWidth
-      joinStyle: ShapePath.MiterJoin
-      PathSvg { path: Store.shapePath(node.kind, node.width, node.height) }
+    active: node.painted
+    sourceComponent: Component {
+      Shape {
+        antialiasing: true
+        ShapePath {
+          fillColor: node.fill
+          strokeColor: node.outline
+          // Unchanged from the canvas, including its disagreement with the
+          // Rectangle above, which thickens on foundMatch rather than on cursor.
+          strokeWidth: node.cursor || node.linkSource ? node.theme.borderWidth * 2 : node.theme.borderWidth
+          joinStyle: ShapePath.MiterJoin
+          PathSvg { path: Store.shapePath(node.kind, node.width, node.height) }
+        }
+      }
     }
   }
 
@@ -252,7 +266,7 @@ Item {
     anchors.margins: node.theme.sp(14)
     anchors.topMargin: node.isNote ? header.height + node.theme.sp(14) : node.theme.sp(14)
     contentWidth: width
-    contentHeight: node.editing ? body.height : shown.height
+    contentHeight: editor.item ? editor.item.height : shown.height
     clip: true
     interactive: node.editing
     boundsBehavior: Flickable.StopAtBounds
@@ -275,96 +289,98 @@ Item {
     verticalAlignment: node.isNote ? Text.AlignTop : Text.AlignVCenter
   }
 
-  TextEdit {
-    id: body
-    objectName: "note-editor"
-    visible: node.editing
-    width: textViewport.width
-    height: Math.max(textViewport.height, contentHeight)
-    // Not bound to `itext`: the editor is given the note's text when the caret
-    // arrives (wantsEdit, below), which it had to be anyway. Bound, every note
-    // on a board laid its text out a second time for an editor nobody had
-    // opened, synchronously and before its wrap mode had caught up with the
-    // new text — so a long unbroken line paid for a wrap it was not going to
-    // use, and held the shell up for it.
-    color: node.theme.foreground
-    font.family: node.theme.fontFamily
-    font.pixelSize: node.theme.fontSubtitle
-    wrapMode: node.longRun ? TextEdit.WrapAnywhere : TextEdit.Wrap
-    clip: true
-    // Pinned: board files are shareable, and RichText here would let someone
-    // else's board inject markup into yours.
-    textFormat: TextEdit.PlainText
-    horizontalAlignment: node.isNote ? TextEdit.AlignLeft : TextEdit.AlignHCenter
-    verticalAlignment: node.isNote ? TextEdit.AlignTop : TextEdit.AlignVCenter
-    selectByMouse: true
-    persistentSelection: true
-    readOnly: !node.ctl.canEdit || node.ipinned
-    enabled: !node.ipinned && !node.ctl.showPinned
-    // Guarded so the model write cannot bounce back and reset the caret, and
-    // so emptying the editor when the caret leaves is never taken for an edit.
-    onTextChanged: {
-      if (!body.wantsEdit || !node.ctl.canEdit || text === node.itext) return
-      // A paste into the editor does not go through the clipboard helper's
-      // limit, and two pastes would make a note this board then refuses to
-      // open. The change is not kept, and is undone once the editor has
-      // finished making it.
-      if (text.length > Store.MAX_NOTE_LENGTH) { Qt.callLater(body.refuseOverlong); return }
-      node.set("itext", text)
-      node.ctl.scheduleSave()
-    }
-    function refuseOverlong() {
-      if (body.text.length <= Store.MAX_NOTE_LENGTH) return
-      var at = Math.min(body.cursorPosition, node.itext.length)
-      body.text = node.itext
-      body.cursorPosition = at
-      node.ctl.flash("A note holds up to 1 MB of text")
-    }
-    onActiveFocusChanged: if (!activeFocus) node.ctl.flushSave()
-    Keys.onEscapePressed: node.ctl.stopEditing()
-    // What a paste may bring in, for BoardExchange.pasteInto. Qt's own paste
-    // reads everything the clipboard's owner sends before onTextChanged can
-    // count it, and an owner that never stops sending takes the shell's memory
-    // with it; so the paste keys are taken from the editor here, and the
-    // clipboard helper reads the text instead, at most 1 MiB of it. The middle
-    // button never reaches the editor: Board.qml's pan surface takes it.
-    readonly property bool takesPaste: body.wantsEdit
-    readonly property int pasteLimit: Store.MAX_NOTE_LENGTH
-    readonly property bool pasteLines: true
+  // The editor exists only while the note is being typed in, and is made
+  // again, from the board's version of the note, each time the caret arrives.
+  // One per item, unused, was a third of what a 5,000-item board cost to open
+  // (tests/hostile.js), and bound to `itext` it laid every note's text out a
+  // second time. A paste answered after it has gone finds no field to land in.
+  Loader {
+    id: editor
+    active: node.editing
+    onLoaded: editor.item.begin()
+    sourceComponent: Component {
+      TextEdit {
+        id: body
+        objectName: "note-editor"
+        width: textViewport.width
+        height: Math.max(textViewport.height, contentHeight)
+        color: node.theme.foreground
+        font.family: node.theme.fontFamily
+        font.pixelSize: node.theme.fontSubtitle
+        wrapMode: node.longRun ? TextEdit.WrapAnywhere : TextEdit.Wrap
+        clip: true
+        // Pinned: board files are shareable, and RichText here would let someone
+        // else's board inject markup into yours.
+        textFormat: TextEdit.PlainText
+        horizontalAlignment: node.isNote ? TextEdit.AlignLeft : TextEdit.AlignHCenter
+        verticalAlignment: node.isNote ? TextEdit.AlignTop : TextEdit.AlignVCenter
+        selectByMouse: true
+        persistentSelection: true
+        readOnly: !node.ctl.canEdit || node.ipinned
+        enabled: !node.ipinned && !node.ctl.showPinned
+        // Guarded so the model write cannot bounce back and reset the caret, and
+        // so being handed the note when the caret arrives is never an edit.
+        onTextChanged: {
+          if (!body.wantsEdit || !node.ctl.canEdit || text === node.itext) return
+          // A paste into the editor does not go through the clipboard helper's
+          // limit, and two pastes would make a note this board then refuses to
+          // open. The change is not kept, and is undone once the editor has
+          // finished making it.
+          if (text.length > Store.MAX_NOTE_LENGTH) { Qt.callLater(body.refuseOverlong); return }
+          node.set("itext", text)
+          node.ctl.scheduleSave()
+        }
+        function refuseOverlong() {
+          if (body.text.length <= Store.MAX_NOTE_LENGTH) return
+          var at = Math.min(body.cursorPosition, node.itext.length)
+          body.text = node.itext
+          body.cursorPosition = at
+          node.ctl.flash("A note holds up to 1 MB of text")
+        }
+        onActiveFocusChanged: if (!activeFocus) node.ctl.flushSave()
+        // Editing can end without the caret leaving first: another item selected,
+        // another board opened. The editor goes, and what was typed is saved.
+        Component.onDestruction: if (activeFocus) node.ctl.flushSave()
+        Keys.onEscapePressed: node.ctl.stopEditing()
+        // What a paste may bring in, for BoardExchange.pasteInto. Qt's own paste
+        // reads everything the clipboard's owner sends before onTextChanged can
+        // count it, and an owner that never stops sending takes the shell's memory
+        // with it; so the paste keys are taken from the editor here, and the
+        // clipboard helper reads the text instead, at most 1 MiB of it. The middle
+        // button never reaches the editor: Board.qml's pan surface takes it.
+        readonly property bool takesPaste: body.wantsEdit
+        readonly property int pasteLimit: Store.MAX_NOTE_LENGTH
+        readonly property bool pasteLines: true
 
-    Keys.onPressed: function(event) {
-      if (event.matches(StandardKey.Paste)) {
-        event.accepted = true
-        if (!body.readOnly) node.ctl.pasteInto(body)
-        return
+        Keys.onPressed: function(event) {
+          if (event.matches(StandardKey.Paste)) {
+            event.accepted = true
+            if (!body.readOnly) node.ctl.pasteInto(body)
+            return
+          }
+          if ((event.modifiers & Qt.ControlModifier) === 0) return
+          if (event.key === Qt.Key_N) node.ctl.newBoard()
+          else if (event.key === Qt.Key_S) node.ctl.flushSave()
+          else return
+          event.accepted = true
+        }
+
+        readonly property bool wantsEdit: node.editing
+        // The editor holds a copy of the note, not the note: it is handed the
+        // board's version each time the caret arrives, so whatever changed the
+        // item meanwhile — an undo restores the note on screen, which reads
+        // `itext` directly — is what it shows.
+        function begin() {
+          body.text = node.itext
+          forceActiveFocus()
+          cursorPosition = length
+        }
+        onCursorRectangleChanged: if (wantsEdit) {
+          if (cursorRectangle.y < textViewport.contentY) textViewport.contentY = cursorRectangle.y
+          else if (cursorRectangle.y + cursorRectangle.height > textViewport.contentY + textViewport.height)
+            textViewport.contentY = cursorRectangle.y + cursorRectangle.height - textViewport.height
+        }
       }
-      if ((event.modifiers & Qt.ControlModifier) === 0) return
-      if (event.key === Qt.Key_N) node.ctl.newBoard()
-      else if (event.key === Qt.Key_S) node.ctl.flushSave()
-      else return
-      event.accepted = true
-    }
-
-    readonly property bool wantsEdit: node.ctl.editIndex === node.index
-    onWantsEditChanged: if (wantsEdit) {
-      // The editor holds a copy of the note, not the note: it is handed the
-      // board's version each time the caret arrives, so whatever changed the
-      // item meanwhile — an undo restores the note on screen, which reads
-      // `itext` directly — is what it shows, rather than what was there when
-      // it was last open.
-      if (body.text !== node.itext) body.text = node.itext
-      forceActiveFocus()
-      cursorPosition = length
-    } else {
-      textViewport.contentY = 0
-      // Let go of the copy: kept, it is laid out again whenever the note's
-      // wrap mode changes, as the text it no longer matches.
-      body.text = ""
-    }
-    onCursorRectangleChanged: if (wantsEdit) {
-      if (cursorRectangle.y < textViewport.contentY) textViewport.contentY = cursorRectangle.y
-      else if (cursorRectangle.y + cursorRectangle.height > textViewport.contentY + textViewport.height)
-        textViewport.contentY = cursorRectangle.y + cursorRectangle.height - textViewport.height
     }
   }
 

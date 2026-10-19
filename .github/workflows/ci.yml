@@ -72,3 +72,23 @@ jobs:
 
       - name: Clipboard ownership and input-method field limits
         run: npm run test:clipboard
+
+  # Boards at every limit a board is held to, opened offscreen and timed. Not
+  # a required check: a runner's speed is not this machine's, so a budget
+  # here is scaled, and what it guards is a stall of seconds coming back.
+  hostile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@eef61447b9ff4aafe5dcd4e0bbf5d482be7e7871 # v4.2.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+      - name: Install Qt Quick test runtime
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qt6-declarative-dev-tools qml6-module-qtqml qml6-module-qtqml-models qml6-module-qtquick qml6-module-qtquick-shapes qml6-module-qtquick-window qml6-module-qttest qml6-module-qtqml-workerscript
+      - name: Hostile boards within their time budgets
+        run: npm run test:hostile
+        env:
+          OMARCHYFORM_HOSTILE_SCALE: "3"

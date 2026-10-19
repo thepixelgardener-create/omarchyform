@@ -987,7 +987,15 @@ function isItemId(id) {
 
 function fillItems(items, rows) {
   items.clear()
-  if (!rows) return
+  appendRows(items, itemModelRows(rows), 0, Infinity)
+}
+
+// A board's rows as the model holds them, every one with an id of its own.
+// Worked out for all of them before any is added, so a board can be added a
+// few at a time (appendRows) and still get the ids it would all at once.
+function itemModelRows(rows) {
+  var made = []
+  if (!rows) return made
   var used = {}
   var reserved = {}
   for (var r = 0; r < rows.length; r++) {
@@ -1008,7 +1016,7 @@ function fillItems(items, rows) {
     used[id] = true
     var kind = KINDS.indexOf(n.kind) >= 0 ? n.kind
       : (n.kind === "image" && imageIsValid(n.src) ? "image" : "note")
-    items.append({
+    made.push({
       iid: id,
       kind: kind,
       ix: clampCoord(num(n.x, 0)),
@@ -1022,6 +1030,22 @@ function fillItems(items, rows) {
       isrc: kind === "image" ? n.src : ""
     })
   }
+  return made
+}
+
+// Adds made rows to the model from `from` on, until they are all in or `ms`
+// have passed, and answers where it stopped. Each row added to a board on
+// screen is an item built on the shell's thread, about a millisecond each, so
+// a large board is added a slice at a time with frames drawn in between
+// rather than in one stall of seconds (tests/hostile.js). At least one row is
+// added each time, so it always finishes.
+var FILL_SLICE_MS = 30
+function appendRows(items, made, from, ms) {
+  var start = Date.now()
+  var at = from
+  if (at >= made.length) return at
+  do { items.append(made[at++]) } while (at < made.length && Date.now() - start < ms)
+  return at
 }
 
 // Connectors reference ids, so one whose ends did not survive is dropped
@@ -1245,6 +1269,15 @@ function tooManyRows(data) {
 // Why a board cannot be opened as it is, said after its name, or "". Such a
 // board is shown the way an unreadable one is: empty, read-only, and its file
 // left alone for the command line to read and cut down.
+// What opening a board's text gives: the board, or null and why it was turned
+// away ("" when it is not a board at all, or there is none). What the shell
+// opens (BoardSession.loadBoard) and what tests/hostile.js times.
+function admitBoard(raw) {
+  var data = readFile(raw)
+  var refused = data !== null ? boardLimit(data) : jsonFits(raw) ? "" : TOO_LONG_LIST
+  return { data: refused === "" ? data : null, refused: refused }
+}
+
 function boardLimit(data) {
   if (!data) return ""
   if (overlongNote(data.items) >= 0) return "has a note longer than 1 MB"

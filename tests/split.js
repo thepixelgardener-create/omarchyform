@@ -179,6 +179,60 @@ function addNotes(c, pane, n) {
 }
 
 {
+  // A board still opening, in both panes and in two documents. A fill lands
+  // only in the document it was read for, a pane leaving a shared board does
+  // not stop it opening in the other, and neither pane changes or exports a
+  // board until all of it is in.
+  const c = controller()
+  const a = c.root, b = c.second
+  const board = (word, n) => JSON.stringify({ kind: 'omarchyform.board', version: 5, nextId: n + 1,
+    items: Array.from({ length: n }, (_, i) => ({ id: i + 1, kind: 'note', x: i * 300, y: 0, w: 220, h: 160,
+      tint: 'foreground', text: word + ' ' + (i + 1) })), links: [{ from: 1, to: 2 }] }) + '\n'
+  const texts = doc => Array.from({ length: doc.items.count }, (_, i) => doc.items.get(i).itext)
+  a.toggleSplit('side-by-side')
+  const shared = a.doc
+  shared.fillSliceMs = 0
+  c.session.loadBoard(board('shared', 5), false)
+  assert.equal(b.doc, shared)
+  assert.ok(a.opening && b.opening, 'both views of it are opening')
+  assert.ok(!a.canEdit && !b.canEdit, 'and neither can change it')
+  b.addItem('note', 0, 0)
+  assert.equal(shared.items.count, 1, 'an item added from the other view does not land in half of it')
+  b.choosePng('theme')
+  assert.match(b.statusText, /Still opening/, 'nor is half of it a picture')
+  assert.deepEqual(c.exchange.chosen, [])
+
+  // The second pane opens a board of its own while the first is still filling.
+  b.openBoard('b.json')
+  const own = b.doc
+  assert.notEqual(own, shared)
+  assert.ok(shared.opening, 'the board it left keeps opening in the first pane')
+  own.fillSliceMs = 0
+  c.of(own).session.loadBoard(board('own', 3), false)
+  while (shared.opening || own.opening) {
+    if (shared.opening) c.session.fillMore()
+    if (own.opening) c.of(own).session.fillMore()
+  }
+  assert.deepEqual(texts(shared), ['shared 1', 'shared 2', 'shared 3', 'shared 4', 'shared 5'])
+  assert.deepEqual(texts(own), ['own 1', 'own 2', 'own 3'], 'each fill in its own document')
+  assert.equal(shared.links.count, 1)
+  assert.equal(own.links.count, 1)
+  assert.ok(a.canEdit && b.canEdit, 'both boards editable once in')
+
+  // Back onto the first board while it is read again: the pane shares it as
+  // it opens, and its own is closed.
+  c.session.loadBoard(board('again', 4), false)
+  b.openBoard('a.json')
+  assert.equal(b.doc, shared, 'sharing the board still opening')
+  assert.equal(own.destroyed, true)
+  assert.ok(b.opening && !b.canEdit)
+  while (shared.opening) c.session.fillMore()
+  assert.deepEqual(texts(shared), ['again 1', 'again 2', 'again 3', 'again 4'])
+  assert.ok(a.canEdit && b.canEdit)
+  console.log('ok — split: a board opening in one pane, two, and two documents')
+}
+
+{
   // Two versions of a board, or a failed save, are not walked away from — not
   // by switching the pane, and not by closing it.
   const c = controller()

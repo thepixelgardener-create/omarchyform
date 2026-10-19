@@ -502,7 +502,16 @@ TestCase {
     compare(editor.text, "note", "or paste")
     ctl.canEdit = true
     keyClick(Qt.Key_Escape)
-    verify(!editor.takesPaste, "and once the caret has left, an answer arriving late is not taken")
+    verify(!editor || !editor.takesPaste, "and once the caret has left, an answer arriving late is not taken")
+    tryVerify(function () { return findChild(subject, "note-editor") === null }, 1000, "the editor goes")
+    // A paste held the field it was asked for in a property, the way
+    // BoardExchange holds pasteField; with the editor gone it holds nothing, so
+    // an answer meant for it cannot land in the editor the note opens next.
+    compare(ctl.pastedInto, null, "the field the paste was asked for is gone")
+    mouseDoubleClickSequence(test, 140, 140, Qt.LeftButton)
+    verify(findChild(subject, "note-editor") !== null, "the note opened again has an editor of its own")
+    compare(ctl.pastedInto, null, "which the old paste does not reach")
+    keyClick(Qt.Key_Escape)
   }
 
   // A long stretch with no space in it is wrapped anywhere, by the note and by
@@ -510,33 +519,61 @@ TestCase {
   // square of its length, long enough on the desktop for the compositor to
   // offer to kill the shell. Ordinary text still wraps at words.
   function test_aLongUnbrokenStretchWrapsAnywhere() {
-    var shown = findChild(subject, "note-text"), editor = findChild(subject, "note-editor")
+    var shown = findChild(subject, "note-text")
     model.setProperty(0, "itext", "a few words")
     compare(shown.wrapMode, Text.Wrap)
     model.setProperty(0, "itext", "see " + "x".repeat(Store.LONG_RUN))
     compare(shown.wrapMode, Text.WrapAnywhere)
     mouseDoubleClickSequence(test, 140, 140, Qt.LeftButton)
     compare(ctl.editIndex, 0)
-    compare(editor.wrapMode, TextEdit.WrapAnywhere, "and so does its editor")
+    compare(findChild(subject, "note-editor").wrapMode, TextEdit.WrapAnywhere, "and so does its editor")
     keyClick(Qt.Key_Escape)
   }
 
-  // The editor is handed the note when the caret arrives and lets go of it when
-  // the caret leaves, rather than every note on a board being laid out a second
-  // time for an editor nobody opened. Letting go must never read as an edit.
+  // The editor exists while the caret is in the note and not otherwise, rather
+  // than one per item on the board for a note nobody opened. Its going must
+  // never read as an edit.
   function test_theEditorHoldsTheNoteOnlyWhileEditing() {
     model.setProperty(0, "itext", "from the board")
-    var editor = findChild(subject, "note-editor")
-    compare(editor.text, "", "an editor nobody has opened holds nothing")
+    compare(findChild(subject, "note-editor"), null, "a note nobody has opened has no editor")
     mouseDoubleClickSequence(test, 140, 140, Qt.LeftButton)
+    var editor = findChild(subject, "note-editor")
     compare(editor.text, "from the board", "it is handed the note when the caret arrives")
+    verify(editor.activeFocus, "with the caret in it")
     keyClick("!")
     compare(model.get(0).itext, "from the board!")
     var saves = ctl.saveCount
     keyClick(Qt.Key_Escape)
-    compare(editor.text, "", "and lets go of it when the caret leaves")
+    tryVerify(function () { return findChild(subject, "note-editor") === null }, 1000, "and goes when the caret leaves")
     compare(model.get(0).itext, "from the board!", "without the note losing what was typed")
     compare(ctl.saveCount, saves, "or anything asking to save an empty note")
+  }
+
+  // Selecting another item ends editing without Escape and without the caret
+  // leaving first; the editor goes, and what was typed is flushed.
+  function test_editingEndedElsewhereSaves() {
+    mouseDoubleClickSequence(test, 140, 140, Qt.LeftButton)
+    keyClick(Qt.Key_A)
+    ctl.flushCount = 0
+    ctl.editIndex = -1
+    tryVerify(function () { return findChild(subject, "note-editor") === null }, 1000, "the editor goes")
+    compare(model.get(0).itext, "a")
+    verify(ctl.flushCount >= 1, "what was typed is flushed")
+  }
+
+  // A delegate the model is taking down has index -1, the same as editIndex and
+  // selectedIndex with nothing edited or selected. It is neither: taken for
+  // the note being edited, every note on a board being reloaded handed its
+  // whole text to the editor to lay out (56s for tests/hostile.js's
+  // notes-newlines).
+  function test_aNoteOnItsWayOutIsNotBeingEdited() {
+    model.setProperty(0, "itext", "a long note")
+    subject.index = -1
+    try {
+      verify(!subject.editing, "not the note being edited")
+      verify(!subject.cursor, "nor the selected one")
+      compare(findChild(subject, "note-editor"), null, "and it has no editor")
+    } finally { subject.index = 0 }
   }
 
   // Typing replaces the binding that filled the editor, so what it holds and

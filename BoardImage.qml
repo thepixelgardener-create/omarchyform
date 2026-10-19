@@ -163,7 +163,7 @@ Item {
         c.fillStyle = c.strokeStyle
         c.globalAlpha = renderCtl.sceneTheme.connectorAlpha
         c.lineWidth = 1.5
-        c.lineCap = "round"
+        c.lineCap = "butt"
         c.lineJoin = "round"
         var byId = Store.idIndex(nodes)
         for (var i = 0; i < edges.count; i++) {

@@ -124,6 +124,7 @@ npm run test:qml # headless persistence tests; requires installed Quickshell
 npm run test:paste # live canvas image paste test; uses an isolated clipboard stub and board library
 npm run test:windowmode # live tiled default, bar preference, window switching and reopening; isolated board data
 npm run test:ui  # Qt Quick pointer, theme, and layout tests
+npm run test:hostile # boards at every limit, opened offscreen and timed; about 5 minutes
 npm run shots -- --hold # leave an isolated board up for docs/pointer-checks.md
 npm run test:hold # that held board starts, survives a mode switch, and ends
 npm run test:omarchy -- --keep # live desktop smoke test, isolated board data
@@ -239,6 +240,15 @@ desktop shell. CI runs the Node and Qt Quick tests. Run `test:qml` and
 `test:omarchy` on an Omarchy machine before release. The live test opens test
 surfaces and targets keyboard events at its own process; it preserves your
 installed plugin, boards, and theme.
+
+`test:hostile` builds the boards in `tests/hostile-fixtures.js`, each one
+thing a board can carry at the limit it is held to, and opens every one in a
+process of its own: offscreen by the real `Board` the way `loadBoard` fills
+it, then zoomed out, then saved and opened again, and by `bin/omarchyform
+validate`. Each is held to the longest it may stop the shell drawing at once,
+its worst frame; the ones still over the default are listed by name in
+`tests/hostile.js` with a ceiling, so they cannot get worse unnoticed. `node tests/hostile.js <name>...` runs only those named. CI runs it
+as its own job, not a required check, with the budgets tripled.
 
 See [the compatibility review](omarchy-compatibility.md) for the tested
 versions, first-party references, results, and remaining limits.

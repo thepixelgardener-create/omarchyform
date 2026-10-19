@@ -338,3 +338,63 @@ const plain = (n) => JSON.stringify({ kind: 'omarchyform.board', version: 5, nex
   assert.equal(w.links.length, 6, 'the three drawn and their copies')
   console.log('ok — editing: a board at the largest id still gets ids it keeps')
 }
+
+{
+  // A board filled in a slice at a time (BoardSession.fillMore): part of it in
+  // is not a board to save, a newer load drops the older one's rows, and a
+  // board that is not one finishes at once.
+  const c = controller()
+  c.doc.fillSliceMs = 0
+  const big = JSON.stringify({ kind: 'omarchyform.board', version: 5, nextId: 6,
+    items: [1, 2, 3, 4, 5].map(id => note(id, id * 300)), links: [{ from: 1, to: 2 }] }) + '\n'
+  c.session.loadBoard(big, false)
+  assert.ok(c.doc.opening && !c.doc.boardLoaded && !c.doc.canEdit, 'a board still filling is read-only')
+  assert.equal(c.items.count, 1, 'one row a slice')
+  c.doc.save(true)
+  assert.equal(c.writes.length, 0, 'and is never written')
+
+  c.session.loadBoard(plain(2), false)
+  while (c.doc.opening) c.session.fillMore()
+  assert.equal(c.items.count, 2, 'a newer load leaves none of the older one: ' + c.items.count)
+  assert.ok(c.doc.boardLoaded && c.doc.openedShare === 1)
+
+  c.session.loadBoard(big, false)
+  c.session.loadBoard('{broken', false)
+  assert.ok(!c.doc.opening && c.doc.damaged && c.items.count === 0, 'one that is not a board finishes at once')
+  c.session.fillMore()
+  assert.equal(c.items.count, 0, 'and a slice left over from before does nothing')
+
+  c.session.loadBoard(big, false)
+  while (c.doc.opening) c.session.fillMore()
+  assert.equal(c.items.count, 5)
+  assert.equal(c.links.count, 1, 'connectors once every item is in')
+  assert.equal(c.doc.nextId, 6)
+  console.log('ok — editing: a board opened a slice at a time')
+}
+
+{
+  // A write to the file while the board is still opening is asked about once
+  // it is in: what went in was read before it. Without that the board showed
+  // the old version, said nothing, and only a save found out.
+  const c = controller()
+  c.doc.fillSliceMs = 0
+  const five = plain(5), three = plain(3)
+  c.session.loadBoard(five, false)
+  c.session.diskText = three
+  c.session.externalWrite()
+  assert.ok(c.doc.opening, 'still opening when the file changed')
+  while (c.doc.opening) c.session.fillMore()
+  assert.equal(c.items.count, 3, 'the version on disk once it is in: ' + c.items.count)
+  assert.match(c.root.statusText, /reloaded/)
+
+  // The same bytes again, a touch or a sync tool, are not someone else's.
+  const d = controller()
+  d.doc.fillSliceMs = 0
+  d.session.loadBoard(five, false)
+  d.session.diskText = five
+  d.session.externalWrite()
+  while (d.doc.opening) d.session.fillMore()
+  assert.equal(d.items.count, 5)
+  assert.doesNotMatch(d.root.statusText, /reloaded/, 'a touch while it opens is not read again')
+  console.log('ok — editing: a write while a board opens reaches it once it is in')
+}

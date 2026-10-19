@@ -271,7 +271,7 @@ FocusScope {
       ctx.strokeStyle = board.theme.connector
       ctx.fillStyle = board.theme.connector
       ctx.lineWidth = Math.max(1, 1.5 * board.ctl.zoom)
-      ctx.lineCap = "round"
+      ctx.lineCap = "butt"
       ctx.lineJoin = "round"
       ctx.globalAlpha = board.theme.connectorAlpha
       var zoom = board.ctl.zoom, camX = board.ctl.camX, camY = board.ctl.camY

@@ -4,6 +4,37 @@ Written by `npm run bench:scene -- --record` on 2026-09-30. Every frame time quo
 changelog was measured here; a frame time without the machine under it is
 not a number anyone can check.
 
+## Hostile boards — 2026-10-17
+
+`npm run test:hostile` on Qt 6.12.0, offscreen with the software renderer,
+on the machine below: the longest the board held the shell at once (its
+worst frame) while opening, and the same on 2026-10-16, before boards were
+opened a slice at a time, editors and shapes were built only when used, and
+connectors lost their round ends. Each fixture is described in
+`tests/hostile-fixtures.js`.
+
+| Fixture | Items, connectors | Worst frame | Before |
+|---|---|---|---|
+| A board at 5,000 items (stacked, grid, shapes, largest ids, duplicate ids, odd values, missing pictures) | 5,000 | 0.14–0.37s | 7.5–10.5s |
+| 5,000 items, each with a 4,000-character preview | 5,000 | 0.47s | 24.4s |
+| 20,000 connectors on screen | 201, 20,000 | 2.5–3.8s | 21.4s |
+| 13 notes of joined emoji, 1 MB each | 13 | 0.94s | 3.5s |
+| 32 MB that `jsonFits` has to walk | 1 | 1.3–2.5s | 1.3–1.7s |
+| 31 notes of 1 MB: words, one unbroken line, markup | 31 | 0.43–0.48s | 0.7–1.2s |
+| 15 notes of 1 MB of newlines, opened again | 15 | 0.28s | 55s |
+| Refused: one past each limit, nested past 1,024, a newer version | 0 | under 0.12s | — |
+
+`bin/omarchyform validate` took under 0.6s for every fixture.
+
+A board at 5,000 items still takes 6 to 9 seconds to fill in, and 26 to 32
+when every note carries a full 4,000-character preview (measured
+2026-10-19); the shell draws throughout, and the board is read-only until
+it is in. Each item costs about 1ms to build, against 1.7ms before
+the note editor and the shape moved into Loaders. What is left of the
+connector time is working out each one's geometry in JavaScript. Software
+rendering is not the desktop's GPU path, but the connectors are a Canvas,
+which QPainter rasterises on the CPU either way.
+
 ## Fully textured large board — 2026-10-09
 
 Final `dev` validation used `npm run bench:scene -- 3000`, then the same

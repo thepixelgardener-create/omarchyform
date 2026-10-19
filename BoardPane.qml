@@ -96,7 +96,8 @@ Item {
   property bool imageBusy: false
   readonly property bool exchangeBusy: root.workspace.exchange.busy
   readonly property bool dialogOpen: root.workspace.exchange.dialogOpen
-  readonly property string boardState: root.damaged ? "Read only" : root.saveError !== "" ? "Save failed"
+  readonly property string boardState: root.opening ? "Opening… " + Math.floor(root.doc.openedShare * 100) + "%"
+    : root.damaged ? "Read only" : root.saveError !== "" ? "Save failed"
     : root.diskChanged ? "Changed on disk" : root.saving ? "Saving…" : "Saved locally"
   // Only a board made to be typed into. A pane that has just been given a
   // board can hear that it loaded before it hears which board it is, and an
@@ -249,6 +250,8 @@ Item {
     // Both panes render into the same file on the way out, so a second picture
     // waits for the first rather than being drawn over it.
     if (root.workspace.imageBusy) { root.flash("Finishing image export…"); return }
+    // Half a board is not a picture of it.
+    if (root.opening) { root.flash("Still opening this board…"); return }
     root.pngPalette = Store.EXPORT_PALETTE_NAMES.indexOf(palette) >= 0 ? palette : "theme"
     root.workspace.exchange.choose("png")
   }
@@ -257,7 +260,7 @@ Item {
   // the helper is still copying the file into place.
   property bool pngCropped: false
   function exportPng(path) {
-    if (!root.activeBoard) return
+    if (!root.activeBoard || root.opening) return
     root.pngCropped = root.targets().length > 0
     root.activeBoard.exportPng(path)
   }
@@ -349,6 +352,7 @@ Item {
   // The document's state, as the views read it; loading and save coordination
   // live together in its session.
   readonly property bool boardLoaded: root.doc !== null && root.doc.boardLoaded
+  readonly property bool opening: root.doc !== null && root.doc.opening
   readonly property bool damaged: root.doc !== null && root.doc.damaged
   readonly property string damageReason: root.doc ? root.doc.damageReason : ""
   readonly property string saveError: root.doc ? root.doc.saveError : ""

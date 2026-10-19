@@ -1,0 +1,2 @@
+# Test-only Qt harnesses, compiled when their tests run; nothing ships compiled.
+tests/qt/*.cpp linguist-detectable=false
