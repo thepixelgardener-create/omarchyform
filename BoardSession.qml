@@ -304,15 +304,6 @@ Item {
     }
   }
 
-  // The board turned out to be one this must not write: shown, read-only, and
-  // its file left as it is.
-  function refuse(reason) {
-    if (saveTimer.running) saveTimer.stop()
-    session.damaged = true
-    session.damageReason = reason
-    session.boardLoaded = false
-  }
-
   // Only a confirmed missing file may become a new, writable empty board.
   //
   // The items go in a slice at a time (fillMore), with frames drawn between
