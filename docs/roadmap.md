@@ -109,13 +109,22 @@ held a shared board of long notes for 56 seconds. `npm run test:hostile` opens
 a board at every limit and holds each to a time. The live checks, held back
 for the release, ran on it afterwards and passed.
 
+## 0.5.2 — A board read again is parsed once
+
+Shipped. A board that changes on disk while it is open is parsed once on its
+way in rather than twice: a 32 MB board that has to be checked all the way
+through held the shell for 2.4 to 3.3 seconds when it was read again, and now
+takes as long as opening it. `npm run test:hostile` takes every board of a
+megabyte or more through a real session, opened and read again, and holds
+the command line's replies to what each board should get.
+
 ## Next maintenance pass
 
 Measured on 2026-10-19, on the machine in
 [performance.md](performance.md#baseline-environment--2026-09-30). Making
 each probe an instrument comes before the change it measures.
 
-- **Large files read again: done, not yet released.** An external reload
+- **Large files read again: shipped in 0.5.2.** An external reload
   went through `acceptDisk`, which read the text with `readFile`, then
   `loadBoard`, which admitted the same text again, in one turn: through a real
   `BoardSession`, a reload of `escaped-quotes` held the shell for 2.9 to 3.3
