@@ -3,6 +3,15 @@
 Notable changes, newest first. Board file versions are noted where they moved,
 since older boards are migrated on load rather than rejected.
 
+## Unreleased
+
+### Fixed
+
+- A picture whose header stops before it says how large it is is refused
+  where it lands, dropped, pasted or found in the images folder, as importing
+  a shared board already refused it. It used to land and draw as nothing, and
+  no copy of its board could then be imported anywhere.
+
 ## 0.5.2 — 2026-10-19
 
 ### Fixed

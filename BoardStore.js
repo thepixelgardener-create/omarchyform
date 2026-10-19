@@ -141,6 +141,7 @@ var PICTURE_REFUSALS = {
   "4": "is not a picture a board can show",
   "5": "is larger than 32 MB",
   "7": "has too many pixels",
+  "10": "does not say how large it is",
   "9": "carries compressed text",
   "11": "carries a compressed colour profile"
 }

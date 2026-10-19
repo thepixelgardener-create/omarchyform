@@ -90,7 +90,9 @@ the CLI to create boards and is not a contribution guide.
 - Every picture that lands in `images/` goes through `BoardFiles.sh`, which
   holds it to its bytes, its pixels (`refuse_huge_pictures`) and, for a PNG,
   compressed text and colour profiles (`refuse_compressed_text`). A new way in
-  calls all three on the bytes that land.
+  calls all three on the bytes that land. A header that does not say the
+  picture's size is refused with 10, as `imagebudget` refuses it: a size that
+  cannot be read is never taken as fine.
 - Nothing private goes on a command line: another account can read it in
   `/proc`. Send contents on stdin or in a staged file in a private folder; a
   new helper argument fails `tests/security.js` until it is added, reviewed,
