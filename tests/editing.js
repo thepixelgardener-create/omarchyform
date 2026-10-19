@@ -398,3 +398,39 @@ const plain = (n) => JSON.stringify({ kind: 'omarchyform.board', version: 5, nex
   assert.doesNotMatch(d.root.statusText, /reloaded/, 'a touch while it opens is not read again')
   console.log('ok — editing: a write while a board opens reaches it once it is in')
 }
+
+{
+  // A board changed on disk is parsed once on its way in: what acceptDisk
+  // read to check it is what loadBoard opens. Parsed twice, a 32 MB board that
+  // needs the full jsonFits walk held the shell for 2.4 to 3.3 seconds, where
+  // opening it took 1.2 to 1.8 (tests/hostile.js, through a session).
+  const c = opened(plain(2))
+  const other = plain(3)
+  const parse = JSON.parse
+  let parsed = 0
+  JSON.parse = function (text, reviver) { if (text === other) parsed++; return parse.call(JSON, text, reviver) }
+  try {
+    c.session.diskText = other
+    c.session.externalWrite()
+  } finally { JSON.parse = parse }
+  assert.equal(c.items.count, 3, 'the version on disk is in')
+  assert.match(c.root.statusText, /reloaded/)
+  assert.equal(parsed, 1, 'its text parsed once, not ' + parsed + ' times')
+
+  // Read once, and still held to all that opening holds a board to.
+  const d = opened(plain(2))
+  d.session.diskText = plain(d.store.MAX_ITEMS + 1)
+  d.session.externalWrite()
+  assert.ok(d.session.damaged && !d.doc.canEdit, 'more items than a board holds opens read-only')
+  assert.match(d.session.damageReason, /more than 5,000 items/)
+  assert.equal(d.items.count, 0)
+  assert.equal(d.writes.length, 0, 'and nothing is written over it')
+
+  const e = opened(plain(2))
+  e.session.diskText = JSON.stringify({ kind: 'omarchyform.board', version: 5, nextId: 1, items: [], links: [],
+    extra: Array(e.store.MAX_JSON_OPEN + 1).fill(0) })
+  e.session.externalWrite()
+  assert.equal(e.items.count, 2, 'a list too long to read is not read: the board stays')
+  assert.match(e.session.saveError, /Could not read the disk version/)
+  console.log('ok — editing: a board changed on disk is parsed once, and held to the same limits')
+}

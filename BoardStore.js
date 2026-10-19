@@ -1274,7 +1274,14 @@ function tooManyRows(data) {
 // opens (BoardSession.loadBoard) and what tests/hostile.js times.
 function admitBoard(raw) {
   var data = readFile(raw)
-  var refused = data !== null ? boardLimit(data) : jsonFits(raw) ? "" : TOO_LONG_LIST
+  if (data !== null) return admitRead(data)
+  return { data: null, refused: jsonFits(raw) ? "" : TOO_LONG_LIST }
+}
+
+// The same for a board readFile has already made of a text, so that a text
+// read once to check it is not parsed again to open it (BoardSession.acceptDisk).
+function admitRead(data) {
+  var refused = boardLimit(data)
   return { data: refused === "" ? data : null, refused: refused }
 }
 

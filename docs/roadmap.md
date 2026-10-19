@@ -109,40 +109,51 @@ held a shared board of long notes for 56 seconds. `npm run test:hostile` opens
 a board at every limit and holds each to a time. The live checks, held back
 for the release, ran on it afterwards and passed.
 
+## 0.5.2 — A board read again is parsed once
+
+Shipped. A board that changes on disk while it is open is parsed once on its
+way in rather than twice: a 32 MB board that has to be checked all the way
+through held the shell for 2.4 to 3.3 seconds when it was read again, and now
+takes as long as opening it. `npm run test:hostile` takes every board of a
+megabyte or more through a real session, opened and read again, and holds
+the command line's replies to what each board should get.
+
 ## Next maintenance pass
 
-Measured with one-off offscreen probes on 2026-10-19, on the machine in
+Measured on 2026-10-19, on the machine in
 [performance.md](performance.md#baseline-environment--2026-09-30). Making
 each probe an instrument comes before the change it measures.
 
-- **Connectors in use.** Every pan, zoom, selection and drag step repaints
-  all connectors: `Board.qml` walks every one and works out the geometry of
-  each in view before stroking, with only the id index cached. On `max-links`
-  each such step is a 2.4 to 2.7-second frame, and the walk is about 0.15
-  seconds of it: stroking 16,000 connectors is the rest, which is why zoomed
-  out, with shorter lines, it is 1.8. Ordinary diagrams cost 20 to 60 ms a
-  step with 300 or 3,000 connectors, the walk 13 to 23 ms of it at 3,000. So
-  `max-links` needs cheaper drawing, not cheaper geometry, and labels drawn
-  the same way would add to it. `test:hostile` times opening, one zoom change
-  and reopening, not sustained use.
-- **Large files through the real session.** An external reload goes through
-  `acceptDisk`, which reads the text with `readFile`, then `loadBoard`, which
-  admits the same text again, in one turn. Through a real `BoardSession`, a
-  reload of `escaped-quotes` holds the shell for 2.9 to 3.0 seconds at once
-  and `old-history` for 2.4 to 2.6, against 1.2 to 1.5 on opening and 0.8 to
-  0.9 for one `admitBoard`. A board 0.4.7 to 0.4.10 saved with a long history
-  pays this on every reload until its next save drops the history.
-  `test:hostile` calls `admitBoard` directly, so it measures neither the
-  reload nor the first open's file read. Keep the parser's crash guard and
-  whole-file reading in any change.
+- **Large files read again: shipped in 0.5.2.** An external reload
+  went through `acceptDisk`, which read the text with `readFile`, then
+  `loadBoard`, which admitted the same text again, in one turn: through a real
+  `BoardSession`, a reload of `escaped-quotes` held the shell for 2.9 to 3.3
+  seconds at once and `old-history` for 2.4 to 2.8, against 1.2 to 1.8 to open
+  them. `test:hostile` now takes every board of a megabyte or more through a
+  session, opened and then read again, and `acceptDisk` hands `loadBoard` its
+  reading: both now hold the shell as long as opening does, the one `jsonFits`
+  walk listed above. `tests/editing.js` counts the parses. Boards of long
+  notes still take about twice as long to read again as to open, within
+  budget; [performance.md](performance.md#a-board-read-again--2026-10-19)
+  has the lead.
+- **Connectors in use: next.** Every pan, zoom, selection and drag step
+  repaints all connectors: `Board.qml` walks every one and works out the
+  geometry of each in view before drawing, with only the id index cached. On
+  `max-links` each such step is a 2.4 to 2.7-second frame, and the walk is
+  about 0.15 seconds of it. The rest is drawing 16,000 connectors, building
+  the path in `paintConnectors` and the Canvas rasterising it, which the probe
+  does not separate; zoomed out, with shorter lines, it is 1.8. Ordinary
+  diagrams cost 20 to 60 ms a step with 300 or 3,000 connectors, the walk 13
+  to 23 ms of it at 3,000, and 60 ms is already slow for continuous dragging.
+  It is worth doing without labels, so it does not wait for 0.6; labels then
+  fit how connectors end up drawn, whether or not they are drawn the same
+  way. Profile the drawing before choosing how to change it. `test:hostile`
+  times opening, one zoom change and reopening, not sustained use.
 - **Two numbers, two targets.** Record the worst pause and the time until the
   board is editable separately, the 5,000 long previews included, and set a
   target for each on a named machine before accepting a performance change.
   The 2-second default and the 4- and 6-second exceptions, tripled in CI, are
   regression ceilings, not responsiveness goals.
-
-Which goes first is still to choose, now on these numbers rather than on
-the code alone.
 
 ## 0.6 — Editable, labeled connectors
 
@@ -151,9 +162,9 @@ label the arrow “yes”, and select it to edit, reverse or remove it.
 
 Planned scope:
 
-- Cheaper connector drawing first: stroking 20,000 is one of the stalls still
-  open above, and labels would add to it. Working out where they go is about
-  6% of it.
+- Labels that fit how connectors are drawn once the maintenance pass has made
+  that cheaper; they need not be drawn the same way. A label on each of
+  20,000 connectors adds to the cost measured there.
 - Optional plain-text labels that stay attached when items move.
 - Confirm the labeled-arrow workflow is useful before committing to the full
   feature. Define per-label and aggregate text limits, and bounded work for

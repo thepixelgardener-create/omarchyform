@@ -1,5 +1,6 @@
 // Exercise the runner's verdict with controlled child-process replies. A CLI
-// that exits with a JSON error must not pass a fixture expected to validate.
+// that exits with a JSON error must not pass a fixture expected to validate,
+// and a session that never reads a board again must not pass one that opens.
 const assert = require('assert/strict')
 const fs = require('fs')
 const path = require('path')
@@ -7,8 +8,11 @@ const vm = require('vm')
 const { fixtures } = require('./hostile-fixtures')
 const source = fs.readFileSync(path.join(__dirname, 'hostile.js'), 'utf8')
 
-function verdict(name, status, answer) {
+// `session` is what tests/hostile/session.qml reports, for a board of a
+// megabyte or more; undefined runs the runner without qs.
+function verdict(name, status, answer, session) {
   const fixture = fixtures.find(f => f.name === name)
+  const size = session === undefined ? 0 : 2 * 1024 * 1024
   const output = []
   const exited = {}
   let code = 0
@@ -18,13 +22,15 @@ function verdict(name, status, answer) {
     process: { env: {}, argv: ['node', 'hostile.js', name], execPath: process.execPath,
       exit(value) { code = value; throw exited } },
     require(module) {
-      if (module === 'fs') return { rmSync() {}, mkdirSync() {}, writeFileSync() {} }
+      if (module === 'fs') return { rmSync() {}, mkdirSync() {}, writeFileSync() {}, copyFileSync() {}, appendFileSync() {},
+        existsSync: () => session !== undefined, mkdtempSync: prefix => prefix + 'x', readFileSync: () => '' }
+      if (module === 'os') return { tmpdir: () => '/tmp' }
       if (module === 'path') return path
-      if (module === './hostile-fixtures') return { fixtures: [{ ...fixture, bytes: () => '' }] }
+      if (module === './hostile-fixtures') return { fixtures: [{ ...fixture, bytes: () => ({ length: size }) }] }
       if (module === 'child_process') return { spawnSync(command) {
-        return command === process.execPath
-          ? { status, stdout: JSON.stringify(answer), stderr: '' }
-          : { status: 0, stdout: 'HOSTILE ' + JSON.stringify(report), stderr: '' }
+        if (command === process.execPath) return { status, stdout: JSON.stringify(answer), stderr: '' }
+        if (command === '/usr/bin/qs') return { status: 0, stdout: 'SESSION ' + JSON.stringify(session), stderr: '' }
+        return { status: 0, stdout: 'HOSTILE ' + JSON.stringify(report), stderr: '' }
       } }
       throw new Error('Unexpected dependency: ' + module)
     }
@@ -53,4 +59,17 @@ assert.equal(verdict('future-version', 1, { ok: false, error: 'cannot read board
 assert.equal(verdict('deep-nesting', 1, {
   ok: false, error: 'board.json is not a board this understands'
 }).code, 0)
-console.log('ok — hostile runner: CLI successes, warnings, and refusals are checked')
+
+// Through a session: opened, and read again once replaced.
+const held = ms => ({ ms: ms + 100, worst: ms })
+const opened = (reload, opens) => ({ open: held(100), reload, opens, items: 1, damaged: !opens, conflict: false, saveError: '' })
+assert.equal(verdict('max-links', 0, success, opened(held(500), true)).code, 0)
+assert.equal(verdict('max-links', 0, success, opened(held(2500), true)).code, 1, 'a reload held past its budget fails')
+assert.equal(verdict('max-links', 0, success, opened('never', true)).code, 1, 'a board that opens must be read again')
+assert.equal(verdict('max-links', 0, success, opened(null, true)).code, 1)
+assert.equal(verdict('max-links', 0, success, opened('refused', true)).code, 1, 'a reload taken for a conflict fails')
+assert.equal(verdict('max-links', 0, success, opened(held(500), false)).code, 1, 'a board that should open must')
+assert.equal(verdict('one-past-items', 0, {
+  ok: true, warnings: ['it has more than 5,000 items; the board opens read-only until there are fewer']
+}, opened(null, false)).code, 0, 'a board shown read-only is not read again')
+console.log('ok — hostile runner: CLI successes, warnings, refusals and session reloads are checked')

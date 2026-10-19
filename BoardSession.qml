@@ -265,7 +265,9 @@ Item {
     if (board !== session.ctl.currentBoard) return
     var split = result.indexOf("\n")
     var raw = split >= 0 ? result.slice(split + 1) : ""
-    if (split < 1 || !Store.readFile(raw)) {
+    // Read once: what is opened below is this reading of it, not a second one.
+    var read = split >= 1 ? Store.readFile(raw) : null
+    if (!read) {
       session.diskReadFailed(board)
       return
     }
@@ -277,7 +279,7 @@ Item {
     session.pendingBoard = null
     session.revision = result.slice(0, split)
     session.clearConflict()
-    session.loadBoard(raw, false)
+    session.loadBoard(raw, false, read)
     session.ctl.flash(resolve ? "Kept the version from disk" : "Board changed on disk; reloaded")
   }
 
@@ -318,7 +320,11 @@ Item {
   // the item limit held it 5 to 9 seconds at once (tests/hostile.js). Until the
   // last is in, the board is not loaded: nothing edits or saves it, and a load
   // or a switch that comes first leaves the rest unfilled.
-  function loadBoard(raw, missing) {
+  //
+  // `read` is what Store.readFile has already made of this same text, when
+  // the caller had to read it first (acceptDisk): parsing it again held the
+  // shell twice as long for a large board (tests/hostile.js, session).
+  function loadBoard(raw, missing, read) {
     if (session.ctl.pointerOwner) session.ctl.pointerOwner.discardPointerEdit()
     session.ctl.loadSerial += 1
     // A note too long to lay out, or more items or connectors than a board
@@ -327,7 +333,7 @@ Item {
     // it and nothing saves over it; the command line can still read it and cut
     // it down (Store.boardLimit). One with a list too long to parse at all
     // never got that far, and says so (Store.jsonFits).
-    var admitted = Store.admitBoard(raw)
+    var admitted = read ? Store.admitRead(read) : Store.admitBoard(raw)
     var data = admitted.data
     session.ctl.items.clear()
     session.ctl.links.clear()

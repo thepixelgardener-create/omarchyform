@@ -245,14 +245,18 @@ process; they preserve your installed plugin, boards, and theme.
 `test:hostile` builds the boards in `tests/hostile-fixtures.js`, each one
 thing a board can carry at the limit it is held to, and opens every one in a
 process of its own: offscreen by the real `Board` the way `loadBoard` fills
-it, then zoomed out, then saved and opened again, and by `bin/omarchyform
-validate`. Each is held to the longest it may stop the shell drawing at once,
+it, then zoomed out, then saved and opened again; by `bin/omarchyform
+validate`; and, for a board of a megabyte or more, by a real `BoardSession`
+in Quickshell (`tests/hostile/session.qml`), which opens it and reads it again
+once another process has replaced it. That part needs `qs`: CI has none and
+skips it, so run `test:hostile` locally before a release. Each is held to the longest it may stop the shell drawing at once,
 its worst frame; the ones still over the default are listed by name in
 `tests/hostile.js` with a ceiling, so they cannot get worse unnoticed. `node tests/hostile.js <name>...` runs only those named. CI runs it
 as its own job, not a required check, with the budgets tripled.
 The CLI reply must match the fixture's expected success, canvas-limit warning
 or refusal and exit status; valid JSON alone is not a pass. The QML part uses
-the real `Board` with a stub controller, not a full `BoardSession`. See
+the real `Board` with a stub controller; the session part times what the
+session does with the text, not drawing. See
 [measurement limits](performance.md#hostile-boards--2026-10-17) before treating
 these budgets as a release's responsiveness target.
 
