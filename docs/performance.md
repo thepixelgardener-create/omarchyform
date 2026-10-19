@@ -4,6 +4,42 @@ Written by `npm run bench:scene -- --record` on 2026-09-30. Every frame time quo
 changelog was measured here; a frame time without the machine under it is
 not a number anyone can check.
 
+## A board read again — 2026-10-19
+
+The session part of `npm run test:hostile`, on the machine below with Qt
+6.12.0, offscreen: every board of a megabyte or more opened by a real
+`BoardSession`, then replaced by another process with one more byte and read
+again. The time is the longest the session's thread was held at once, the
+widest gap between ticks of a 1 ms timer; nothing is drawn. 0.5.1 parsed a
+board read again twice, in `acceptDisk` to check it and in `loadBoard` to
+open it; now `acceptDisk` hands `loadBoard` its reading. Three runs of each,
+the first two pairs back to back; the third run of 0.5.1 was slower all
+round, its openings included.
+
+| Fixture | Opening | Read again, 0.5.1 | Read again, now |
+|---|---|---|---|
+| `escaped-quotes`, 32 MB | 1.42–1.77s | 2.98–3.26s | 1.46–1.50s |
+| `old-history`, 29 MB | 1.18–1.44s | 2.40–2.84s | 1.23–1.27s |
+
+The full run with the change held every board of a megabyte or more within
+the 2-second default:
+
+| Fixture | Opening | Read again |
+|---|---|---|
+| Eight boards of about thirty 1 MB notes (`notes-*`) | 0.26–0.59s | 0.44–1.15s |
+| `max-items-previews`, 5,000 long previews, 32 MB | 0.70s | 1.23s |
+| `odd-values`, 27 MB | 0.33s | 0.40s |
+| `unknown-field`, 32 MB | 0.23s | 0.23s |
+| `whitespace`, 32 MB | 0.09s | 0.11s |
+| `one-past-note`, refused and shown read-only | 0.01s | not read again |
+
+In single runs, not back to back, the long-note boards went from 0.51–1.48s
+to 0.44–1.15s to be read again, and the long previews from 1.78s to 1.23s:
+they parsed their text twice as well. Boards of long notes still hold the
+shell about twice as long to be read again as to open, though their text needs no `jsonFits` walk. A reload also
+writes the whole board out to compare it, in `measuredDisk`, `requestDisk`
+and `acceptDisk`; whether that is the difference, these runs do not say.
+
 ## Hostile boards — 2026-10-17
 
 `npm run test:hostile` on Qt 6.12.0, offscreen with the software renderer,
@@ -55,11 +91,10 @@ totals only between runs made back to back: run that way on `f4973be` and on
 
 The harness renders the real `Board`, but reproduces admission and filling
 with a `PaneStub` and `wait(1)` instead of running `BoardSession` and its timer.
-Its reopen is from normalized saved text. It does not time file I/O, picture
-validation, or an external reload through `acceptDisk`, which parses the input
-before `loadBoard` parses it again. Use real-session measurements alongside
-these fixtures when evaluating loading changes, and measure sustained pan,
-zoom and dragging before extending connectors.
+Its reopen is from normalized saved text. Picture validation is not timed
+at all, and file reading and an external reload only by the session part,
+for boards of a megabyte or more (above). Measure sustained
+pan, zoom and dragging before changing how connectors are drawn.
 
 ## Fully textured large board — 2026-10-09
 

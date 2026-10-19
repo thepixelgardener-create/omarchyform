@@ -131,6 +131,26 @@ function tests(S) {
     eq(S.TOO_LARGE, "larger than 32 MB")
   })
 
+  test("a board's text is admitted, or turned away and why, from the text or from a reading of it", () => {
+    const rows = n => Array.from({ length: n }, (_, i) => ({ id: i + 1, kind: "rect" }))
+    const text = items => JSON.stringify({ version: 5, items, links: [] })
+    const fine = S.admitBoard(text(rows(2)))
+    eq([fine.data !== null && fine.data.items.length, fine.refused], [2, ""], "a board is admitted")
+    eq(S.admitBoard(text(rows(S.MAX_ITEMS + 1))), { data: null, refused: "has more than 5,000 items" },
+       "one past the limits is not, and says which")
+    eq(S.admitBoard("{ not json"), { data: null, refused: "" }, "nor is what is not a board, which says nothing")
+    eq(S.admitBoard("[" + Array(S.MAX_JSON_OPEN + 1).fill(0).join(",") + "]"), { data: null, refused: S.TOO_LONG_LIST },
+       "and a list too long to read says so")
+    // What readFile has already made of a text is admitted the same way, so a
+    // caller that read it to check it need not parse it again (acceptDisk).
+    for (const raw of [text(rows(2)), text(rows(S.MAX_ITEMS + 1))]) {
+      const read = S.readFile(raw)
+      const admitted = S.admitRead(read)
+      eq(admitted.refused, S.admitBoard(raw).refused, "the same verdict")
+      eq(admitted.data === read, admitted.refused === "", "and the reading itself when it is a board")
+    }
+  })
+
   test("what the helper says of each picture is read as whether to draw it, and why not", () => {
     const said = S.pictureAnswers("../up.png\tok\t1\nfit.png\tok\t10|20|30|40\ngone.png\tmissing\t\nlink.png\t3\t\n"
       + "words.png\t4\t1|2|3|4\nbig.png\t5\t\nhuge.png\t7\t\nbomb.png\t9\t5|6|7|8\nodd.png\t42\t\n"

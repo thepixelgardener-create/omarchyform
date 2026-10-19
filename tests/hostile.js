@@ -41,11 +41,12 @@ const KNOWN = {
   // jsonFits walks a text it cannot settle by counting: 1.3 to 2.5s at 32 MB.
   'escaped-quotes': 4000, 'old-history': 4000
 }
-// The same for the session, from open to read again. Reading a board again
-// parses its text twice, in acceptDisk to check it and in loadBoard to open
-// it, so a 32 MB board that needs the full jsonFits walk pays it twice at
-// once: 2.4 to 3.2s, measured on 2026-10-19.
-const KNOWN_SESSION = { 'escaped-quotes': 4900, 'old-history': 3700 }
+// The same for the session, from open to read again. None is over the default
+// now: escaped-quotes, the slowest, holds it 1.4 to 1.5s to open and the same
+// to read again, measured on 2026-10-19. Reading it again took 2.4 to 3.3s
+// until acceptDisk stopped parsing the text a second time; tests/editing.js
+// counts the parses, so that cannot come back however fast a machine is.
+const KNOWN_SESSION = {}
 const budget = name => ({ qml: KNOWN[name] || BUDGET.qml, cli: BUDGET.cli,
   session: KNOWN_SESSION[name] || BUDGET.session })
 // What the session does with a board's text itself, reading it, comparing it

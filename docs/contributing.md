@@ -40,7 +40,9 @@ the CLI to create boards and is not a contribution guide.
   through its completion/error signal. QML change handlers run immediately;
   clearing `busy` can change bindings before the next statement executes.
 - Read a board file whole, as any JSON reader would, through `readFile`; never
-  part of it as if it were the whole. The edit history 0.4.7 to 0.4.10 kept in
+  part of it as if it were the whole. Parse it once on its way in: a caller
+  that has read it already, as `acceptDisk` has, hands `loadBoard` that
+  reading. `tests/editing.js` counts the parses of a reload. The edit history 0.4.7 to 0.4.10 kept in
   a board's file is parsed with the rest and dropped, so a key after it counts,
   on any line. Writing a board leaves the history out.
 - A board with an old history, or laid out by hand, is not what this would

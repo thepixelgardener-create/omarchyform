@@ -7,6 +7,11 @@ since older boards are migrated on load rather than rejected.
 
 ### Fixed
 
+- A board that changes on disk while it is open is read once on its way in,
+  not twice. A shared board of 32 MB that has to be checked all the way
+  through before it can be read, or one that 0.4.7 to 0.4.10 saved with a
+  long history, held the shell for 2.4 to 3.3 seconds whenever it was read
+  again; it now takes as long as opening it, 1.2 to 1.5.
 - `npm run test:hostile` passed a board whenever the command line answered
   with any JSON, an error included. Each board is now held to the success,
   limit warning or refusal expected of it, and to its exit status.
