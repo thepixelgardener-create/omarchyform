@@ -11,6 +11,13 @@ since older boards are migrated on load rather than rejected.
   with any JSON, an error included. Each board is now held to the success,
   limit warning or refusal expected of it, and to its exit status.
 
+### Added
+
+- `npm run test:hostile` also takes every board of a megabyte or more through
+  a real session, opening it and reading it again once another process has
+  replaced it, and holds both to a time. That part needs Quickshell, so CI,
+  which has none, skips it.
+
 ## 0.5.1 — 2026-10-19
 
 ### Fixed
