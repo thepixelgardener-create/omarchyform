@@ -11,6 +11,9 @@ since older boards are migrated on load rather than rejected.
   where it lands, dropped, pasted or found in the images folder, as importing
   a shared board already refused it. It used to land and draw as nothing, and
   no copy of its board could then be imported anywhere.
+- `omarchyform apply … --out` with no file after it answers with a JSON error
+  instead of a stack trace, and `new … --note` with no text is refused instead
+  of adding an empty note.
 
 ## 0.5.2 — 2026-10-19
 

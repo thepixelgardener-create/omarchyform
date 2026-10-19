@@ -77,6 +77,17 @@ function answer(value) {
   process.stdout.write(JSON.stringify(value, null, 2) + "\n")
 }
 
+// The argument after a flag that takes one: `--out FILE`, `--note TEXT`.
+// Missing, it became undefined, and `apply --out` then fell out of
+// path.resolve with a stack trace, the one failure here not said in JSON. A
+// path that looks like a flag is a flag whose path was forgotten; a note's
+// text may begin with anything.
+function valueAfter(args, at, message, isPath) {
+  const value = args[at + 1]
+  if (value === undefined || (isPath && value.startsWith("--"))) die(message)
+  return value
+}
+
 // ------------------------------------------------------------------ the board
 // A board in memory is the two models BoardStore reads and writes, plus the
 // next free id: exactly what the plugin holds, minus the camera and what is
@@ -325,7 +336,8 @@ function verbNew(args) {
     die(file + " already exists; pass --force to write over it")
   const board = { items: new RowModel(), links: new RowModel(), nextId: 1 }
   const notes = []
-  for (let i = 0; i < args.length; i++) if (args[i] === "--note") notes.push(args[++i])
+  for (let i = 0; i < args.length; i++)
+    if (args[i] === "--note") notes.push(valueAfter(args, i++, "new: --note needs the note's text"))
   // Laid out along a row, far enough apart to read as separate thoughts.
   notes.forEach((text, i) => OPS.add.run(board, ["note", i * 260, 0, 220, 160, text]))
   // Nothing is expected to be there. With --force, whatever is there is what
@@ -387,6 +399,8 @@ function verbApply(args) {
   const file = args.shift()
   if (!file) die("apply: needs a board to change")
   const source = args[0] && !args[0].startsWith("--") ? args.shift() : "-"
+  const at = args.indexOf("--out")
+  const out = at >= 0 ? valueAfter(args, at, "apply: --out needs a file to write to", true) : file
   let raw
   try { raw = source === "-" ? fs.readFileSync(0, "utf8") : fs.readFileSync(source, "utf8") }
   catch (error) { die("cannot read operations from " + source, error.code || String(error)) }
@@ -406,7 +420,6 @@ function verbApply(args) {
     results.push(Object.assign({ op: entry.op }, op.run(board, entry.args || [])))
   })
 
-  const out = args.includes("--out") ? args[args.indexOf("--out") + 1] : file
   if (args.includes("--dry-run")) {
     answer({ ok: true, file, dryRun: true, applied: results, items: board.items.count, links: board.links.count })
     return

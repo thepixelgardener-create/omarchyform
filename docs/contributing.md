@@ -74,7 +74,8 @@ the CLI to create boards and is not a contribution guide.
   `tests/hostile-fixtures.js`, and `npm run test:hostile` must stay within
   budget.
 - CLI failures must remain JSON, and rejected edits must leave both files and
-  backups unchanged.
+  backups unchanged. A flag that takes a value reads it through `valueAfter`,
+  which refuses a missing one in JSON.
 
 - Reject external drag offers without reading `urls`, `text`, or raw MIME data.
   Qt's Wayland reader is not byte-bounded; a size check after a getter is too

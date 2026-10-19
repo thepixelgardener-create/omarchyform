@@ -565,6 +565,29 @@ try {
   }
 
   {
+    // A flag that takes a value, given none. `apply --out` fell out of
+    // path.resolve with a stack trace; every failure answers in JSON.
+    const file = path.join(dir, 'flags.json')
+    assert.equal(run('new', file, '--note', 'one').status, 0)
+    const before = fs.readFileSync(file, 'utf8')
+    for (const [args, what] of [
+      [['apply', file, '-', '--out'], '--out with nothing after it'],
+      [['apply', file, '-', '--out', '--dry-run'], '--out followed by another flag'],
+      [['new', path.join(dir, 'flags-new.json'), '--note'], '--note with no text']
+    ]) {
+      const failed = pipe('[]', ...args)
+      assert.equal(failed.status, 1, what + ' exits 1')
+      assert.ok(failed.out && failed.out.ok === false && /needs/.test(failed.out.error), what + ' answers with JSON: ' + failed.raw)
+    }
+    assert.equal(fs.readFileSync(file, 'utf8'), before, 'the board is unchanged')
+    assert.equal(fs.existsSync(path.join(dir, 'flags-new.json')), false, 'and nothing new is written')
+    const dashes = run('new', path.join(dir, 'dashes.json'), '--note', '--- divider ---')
+    assert.equal(dashes.status, 0, "a note's text may look like a flag")
+    assert.equal(dashes.out.items, 1)
+    console.log('ok — command line: a flag with no value is refused, as JSON')
+  }
+
+  {
     // Without Python the helper cannot start: the answer is still JSON, says
     // what is missing, and the board is left as it was.
     const file = path.join(dir, 'no-python.json')
