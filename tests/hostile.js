@@ -52,7 +52,7 @@ try {
   const manifest = chosen.map(f => {
     const file = f.name + '.omarchyform.json'
     fs.writeFileSync(path.join(generated, file), f.bytes())
-    return { name: f.name, file, opens: f.opens }
+    return { name: f.name, file, opens: f.opens, cliWarning: f.cliWarning, cliError: f.cliError }
   })
   fs.writeFileSync(path.join(generated, 'manifest.json'), JSON.stringify(manifest))
 
@@ -80,7 +80,16 @@ try {
     const cliMs = Date.now() - t0
     let answer = null
     try { answer = JSON.parse(run.stdout) } catch { /* reported below */ }
-    const cliOk = !run.error && answer !== null && cliMs <= limit.cli * scale
+    // validate intentionally accepts over-limit canvas content with warnings;
+    // malformed/newer boards fail. Neither is interchangeable with any JSON
+    // response: a broken CLI used to pass every fixture by returning an error.
+    const expectedReply = answer && (f.cliError
+      ? run.status === 1 && answer.ok === false && typeof answer.error === 'string' && answer.error.includes(f.cliError)
+      : run.status === 0 && answer.ok === true && Array.isArray(answer.warnings)
+        && (f.cliWarning
+          ? answer.warnings.length === 1 && typeof answer.warnings[0] === 'string' && answer.warnings[0].includes(f.cliWarning)
+          : answer.warnings.length === 0))
+    const cliOk = !run.error && expectedReply && cliMs <= limit.cli * scale
 
     const shown = seen
       ? `open ${seen.open.ms}ms (frame ${seen.open.frame}) whole ${seen.whole.ms}ms (frame ${seen.whole.frame}) ` +

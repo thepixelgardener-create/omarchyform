@@ -9,6 +9,9 @@
 //
 // `opens` says what the plugin does with it: true for a board that opens,
 // false for one shown empty and read-only (refused or not a board).
+// The CLI normally succeeds without warnings. `cliWarning` names an expected
+// canvas-limit warning (validate can still inspect that board); `cliError`
+// names a refusal from its loader, with exit status 1.
 const S = require('../bin/store').loadStore()
 
 const MAX = S.MAX_BOARD_BYTES
@@ -49,9 +52,9 @@ const fixtures = [
         for (let b = a + 1; b <= 201 && links.length < S.MAX_LINKS; b++) links.push({ from: a, to: b })
       return board(items, links)
     } },
-  { name: 'one-past-items', opens: false,
+  { name: 'one-past-items', opens: false, cliWarning: 'has more than 5,000 items',
     text: () => board(Array.from({ length: S.MAX_ITEMS + 1 }, (_, i) => note(i + 1, 0, 0, ''))) },
-  { name: 'one-past-links', opens: false,
+  { name: 'one-past-links', opens: false, cliWarning: 'has more than 20,000 connectors',
     text: () => board([note(1, 0, 0, ''), note(2, 300, 0, '')],
       Array.from({ length: S.MAX_LINKS + 1 }, () => ({ from: 1, to: 2 }))) },
   { name: 'dangling-links', opens: true,
@@ -68,7 +71,8 @@ const fixtures = [
   { name: 'notes-tabs', opens: true, text: () => fullNotes('\t') },
   { name: 'max-items-previews', opens: true,
     text: () => board(filled(grid(S.MAX_ITEMS, 240, (id, x, y) => note(id, x, y, '')), 'w ', 'text')) },
-  { name: 'one-past-note', opens: false, text: () => board([note(1, 0, 0, 'a'.repeat(S.MAX_NOTE_LENGTH + 1))]) },
+  { name: 'one-past-note', opens: false, cliWarning: 'is longer than 1048576 characters',
+    text: () => board([note(1, 0, 0, 'a'.repeat(S.MAX_NOTE_LENGTH + 1))]) },
 
   // Ids and numbers.
   { name: 'max-id', opens: true,
@@ -90,9 +94,10 @@ const fixtures = [
   // How it is written: the parser's limits, and bytes that cost reading.
   { name: 'open-list-under', opens: true,
     text: () => board([note(1, 0, 0, 'x')], [], { extra: Array(S.MAX_JSON_OPEN - 100).fill(0) }) },
-  { name: 'open-list-over', opens: false,
+  { name: 'open-list-over', opens: false, cliError: 'is not a board this understands',
     text: () => board([note(1, 0, 0, 'x')], [], { extra: Array(S.MAX_JSON_OPEN + 1).fill(0) }) },
-  { name: 'deep-nesting', opens: false, text: () => '{"items":[' + '['.repeat(100000) + ']'.repeat(100000) + ']}' },
+  { name: 'deep-nesting', opens: false, cliError: 'is not a board this understands',
+    text: () => '{"items":[' + '['.repeat(100000) + ']'.repeat(100000) + ']}' },
   { name: 'nesting-at-limit', opens: true,
     text: () => board([note(1, 0, 0, 'x')]).slice(0, -1) + ',"extra":' + '{"a":'.repeat(1000) + '0' + '}'.repeat(1000) + '}' },
   { name: 'escaped-quotes', opens: true,
@@ -104,8 +109,10 @@ const fixtures = [
       Array.from({ length: 68000 }, (_, i) => ({ op: 'add', id: S.MAX_ID - i, items: [note(S.MAX_ID - i, 0, 0, 'h'.repeat(300))] })) } }) },
   { name: 'pictures-missing', opens: true,
     text: () => board(grid(S.MAX_ITEMS, 240, (id, x, y) => ({ id, kind: 'image', x, y, w: 200, h: 200, src: 'p' + id + '.png' }))) },
-  { name: 'future-version', opens: false, text: () => board([note(1, 0, 0, 'x')], [], { version: 8 }) },
-  { name: 'not-a-board', opens: false, text: () => '['.repeat(1024) + ']'.repeat(1024) }
+  { name: 'future-version', opens: false, cliError: 'is format 8, newer than this understands',
+    text: () => board([note(1, 0, 0, 'x')], [], { version: 8 }) },
+  { name: 'not-a-board', opens: false, cliError: 'is not a board this understands',
+    text: () => '['.repeat(1024) + ']'.repeat(1024) }
 ]
 
 for (const f of fixtures) f.bytes = () => Buffer.from(f.text(), 'utf8')
