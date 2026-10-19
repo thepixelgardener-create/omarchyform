@@ -135,6 +135,18 @@ function imageIsValid(name) {
 // drawn, however it came to be in the folder (BoardFiles.sh checkimages). What
 // the helper answers, by name: "" for a picture that may be drawn, or why not,
 // and the revision it was found fit at.
+// What the bar's two numeric settings are held to, wherever they arrive from:
+// the bar, or a state.json that a hand or a half-finished write can leave
+// saying anything. The manifest gives the bar the same ranges
+// (tests/controller.js holds them equal). A value that is not a number is
+// null: left as it is.
+var SETTING_RANGES = { autosaveMs: [100, 5000], step: [5, 200] }
+function settingValue(key, value) {
+  var range = SETTING_RANGES.hasOwnProperty(key) ? SETTING_RANGES[key] : null
+  if (!range || typeof value !== "number" || value !== value) return null
+  return Math.max(range[0], Math.min(range[1], value))
+}
+
 var PICTURE_REFUSALS = {
   "missing": "missing",
   "3": "is a link, which a board does not follow",

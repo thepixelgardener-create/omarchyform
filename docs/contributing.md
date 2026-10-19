@@ -17,6 +17,10 @@ the CLI to create boards and is not a contribution guide.
   the next file loads, so a pointer gesture begun on the old board cannot
   write. Never combine content from the old board with the new board's path or
   revision. Pending saves must finish before the switch actually begins.
+- Settings arrive from the bar and from `state.json`, which a hand or a
+  half-finished write can leave saying anything. Both go through
+  `takeSettings`, which holds each number to `Store.SETTING_RANGES`, the
+  ranges the manifest gives the bar.
 - Startup runs in order: the folders are made (`private`), an old single
   board is moved in, and only then is the state read, because reading it has
   the named board's path checked. `npm run test:omarchy` starts once on an

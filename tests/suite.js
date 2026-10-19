@@ -151,6 +151,15 @@ function tests(S) {
     }
   })
 
+  test("a setting is held to its range, and what is not a number is not taken", () => {
+    eq([S.settingValue("autosaveMs", 0), S.settingValue("autosaveMs", 900), S.settingValue("autosaveMs", 1e9)],
+       [100, 900, 5000])
+    eq([S.settingValue("step", -Infinity), S.settingValue("step", 5), S.settingValue("step", 200), S.settingValue("step", 201)],
+       [5, 5, 200, 200], "both ends are in it")
+    eq([S.settingValue("step", "40"), S.settingValue("step", NaN), S.settingValue("step", null)], [null, null, null])
+    eq(S.settingValue("toString", 5), null, "only the settings it knows")
+  })
+
   test("what the helper says of each picture is read as whether to draw it, and why not", () => {
     const said = S.pictureAnswers("../up.png\tok\t1\nfit.png\tok\t10|20|30|40\ngone.png\tmissing\t\nlink.png\t3\t\n"
       + "words.png\t4\t1|2|3|4\nbig.png\t5\t\nhuge.png\t7\t\nbomb.png\t9\t5|6|7|8\nodd.png\t42\t\n"

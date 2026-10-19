@@ -14,6 +14,9 @@ since older boards are migrated on load rather than rejected.
 - `omarchyform apply … --out` with no file after it answers with a JSON error
   instead of a stack trace, and `new … --note` with no text is refused instead
   of adding an empty note.
+- The autosave delay and keyboard step in `state.json` are held to the
+  ranges the bar's settings are. An autosave of 0 wrote the whole board on
+  every keystroke, and a step of 0 moved nothing.
 
 ## 0.5.2 — 2026-10-19
 
