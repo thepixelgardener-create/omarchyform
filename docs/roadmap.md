@@ -111,22 +111,29 @@ for the release, ran on it afterwards and passed.
 
 ## Next maintenance pass
 
-Measure before choosing it, and before adding connector labels:
+Measured with one-off offscreen probes on 2026-10-19, on the machine in
+[performance.md](performance.md#baseline-environment--2026-09-30). Making
+each probe an instrument comes before the change it measures.
 
-- **Connectors in use.** Every pan and zoom step repaints all connectors:
-  `Board.qml` walks every one and works out the geometry of each in view
-  before stroking, with only the id index cached. One zoom change on
-  `max-links` is a 1.8-second frame. Measure repeated pan, zoom, selection and
-  dragging there and on ordinary diagrams (`npm run bench:scene` draws one
-  connector per item), and separate the JavaScript from the stroking before
-  choosing an optimization. `test:hostile` times opening, one zoom change and
-  reopening, not sustained use.
+- **Connectors in use.** Every pan, zoom, selection and drag step repaints
+  all connectors: `Board.qml` walks every one and works out the geometry of
+  each in view before stroking, with only the id index cached. On `max-links`
+  each such step is a 2.4 to 2.7-second frame, and the walk is about 0.15
+  seconds of it: stroking 16,000 connectors is the rest, which is why zoomed
+  out, with shorter lines, it is 1.8. Ordinary diagrams cost 20 to 60 ms a
+  step with 300 or 3,000 connectors, the walk 13 to 23 ms of it at 3,000. So
+  `max-links` needs cheaper drawing, not cheaper geometry, and labels drawn
+  the same way would add to it. `test:hostile` times opening, one zoom change
+  and reopening, not sustained use.
 - **Large files through the real session.** An external reload goes through
   `acceptDisk`, which reads the text with `readFile`, then `loadBoard`, which
-  admits the same text again, in one go: a 32 MB board that needs the full
-  `jsonFits` walk pays it twice. `test:hostile` calls `admitBoard` directly,
-  so it measures neither that path nor the first open's file read. Measure
-  both through `BoardSession`, and keep the parser's crash guard and
+  admits the same text again, in one turn. Through a real `BoardSession`, a
+  reload of `escaped-quotes` holds the shell for 2.9 to 3.0 seconds at once
+  and `old-history` for 2.4 to 2.6, against 1.2 to 1.5 on opening and 0.8 to
+  0.9 for one `admitBoard`. A board 0.4.7 to 0.4.10 saved with a long history
+  pays this on every reload until its next save drops the history.
+  `test:hostile` calls `admitBoard` directly, so it measures neither the
+  reload nor the first open's file read. Keep the parser's crash guard and
   whole-file reading in any change.
 - **Two numbers, two targets.** Record the worst pause and the time until the
   board is editable separately, the 5,000 long previews included, and set a
@@ -134,8 +141,8 @@ Measure before choosing it, and before adding connector labels:
   The 2-second default and the 4- and 6-second exceptions, tripled in CI, are
   regression ceilings, not responsiveness goals.
 
-The code alone does not say whether the JSON walk or the connectors should go
-first; the measurements decide.
+Which goes first is still to choose, now on these numbers rather than on
+the code alone.
 
 ## 0.6 — Editable, labeled connectors
 
@@ -144,8 +151,9 @@ label the arrow “yes”, and select it to edit, reverse or remove it.
 
 Planned scope:
 
-- Cheaper connector drawing first: working out where 20,000 go and stroking
-  them is one of the stalls still open above, and labels would add to it.
+- Cheaper connector drawing first: stroking 20,000 is one of the stalls still
+  open above, and labels would add to it. Working out where they go is about
+  6% of it.
 - Optional plain-text labels that stay attached when items move.
 - Confirm the labeled-arrow workflow is useful before committing to the full
   feature. Define per-label and aggregate text limits, and bounded work for
