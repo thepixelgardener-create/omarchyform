@@ -17,6 +17,10 @@ the CLI to create boards and is not a contribution guide.
   the next file loads, so a pointer gesture begun on the old board cannot
   write. Never combine content from the old board with the new board's path or
   revision. Pending saves must finish before the switch actually begins.
+- Settings arrive from the bar and from `state.json`, which a hand or a
+  half-finished write can leave saying anything. Both go through
+  `takeSettings`, which holds each number to `Store.SETTING_RANGES`, the
+  ranges the manifest gives the bar.
 - Startup runs in order: the folders are made (`private`), an old single
   board is moved in, and only then is the state read, because reading it has
   the named board's path checked. `npm run test:omarchy` starts once on an
@@ -74,7 +78,8 @@ the CLI to create boards and is not a contribution guide.
   `tests/hostile-fixtures.js`, and `npm run test:hostile` must stay within
   budget.
 - CLI failures must remain JSON, and rejected edits must leave both files and
-  backups unchanged.
+  backups unchanged. A flag that takes a value reads it through `valueAfter`,
+  which refuses a missing one in JSON.
 
 - Reject external drag offers without reading `urls`, `text`, or raw MIME data.
   Qt's Wayland reader is not byte-bounded; a size check after a getter is too
@@ -87,10 +92,14 @@ the CLI to create boards and is not a contribution guide.
 - Keep one-line limits on typing and IME commits, not only paste. A delayed
   field paste belongs to its pane, board path and document generation; closing
   the field invalidates it even when that same field is reopened before reply.
+  A paste onto the board, like a drop, lands only while its pane `stillShows`
+  the board and document it was asked on.
 - Every picture that lands in `images/` goes through `BoardFiles.sh`, which
   holds it to its bytes, its pixels (`refuse_huge_pictures`) and, for a PNG,
   compressed text and colour profiles (`refuse_compressed_text`). A new way in
-  calls all three on the bytes that land.
+  calls all three on the bytes that land. A header that does not say the
+  picture's size is refused with 10, as `imagebudget` refuses it: a size that
+  cannot be read is never taken as fine.
 - Nothing private goes on a command line: another account can read it in
   `/proc`. Send contents on stdin or in a staged file in a private folder; a
   new helper argument fails `tests/security.js` until it is added, reviewed,

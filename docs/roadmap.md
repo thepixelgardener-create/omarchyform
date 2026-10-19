@@ -118,6 +118,15 @@ takes as long as opening it. `npm run test:hostile` takes every board of a
 megabyte or more through a real session, opened and read again, and holds
 the command line's replies to what each board should get.
 
+## 0.5.3 — Fixes from the review of 0.5.2
+
+Shipped. A picture whose header does not say how large it is is refused
+where it lands, as importing a shared board already refused it. The command
+line answers a flag given no value in JSON instead of a stack trace. The
+autosave delay and keyboard step in `state.json` are held to the bar's
+ranges, and a paste onto the board is held to the view it was asked in, as a
+drop is.
+
 ## Next maintenance pass
 
 Measured on 2026-10-19, on the machine in

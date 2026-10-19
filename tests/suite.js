@@ -151,9 +151,19 @@ function tests(S) {
     }
   })
 
+  test("a setting is held to its range, and what is not a number is not taken", () => {
+    eq([S.settingValue("autosaveMs", 0), S.settingValue("autosaveMs", 900), S.settingValue("autosaveMs", 1e9)],
+       [100, 900, 5000])
+    eq([S.settingValue("step", -Infinity), S.settingValue("step", 5), S.settingValue("step", 200), S.settingValue("step", 201)],
+       [5, 5, 200, 200], "both ends are in it")
+    eq([S.settingValue("step", "40"), S.settingValue("step", NaN), S.settingValue("step", null)], [null, null, null])
+    eq(S.settingValue("toString", 5), null, "only the settings it knows")
+  })
+
   test("what the helper says of each picture is read as whether to draw it, and why not", () => {
     const said = S.pictureAnswers("../up.png\tok\t1\nfit.png\tok\t10|20|30|40\ngone.png\tmissing\t\nlink.png\t3\t\n"
       + "words.png\t4\t1|2|3|4\nbig.png\t5\t\nhuge.png\t7\t\nbomb.png\t9\t5|6|7|8\nodd.png\t42\t\n"
+      + "cut.png\t10\t\n"
       + "short.png\tok\nlong.png\tok\t1\textra\n\n")
     eq(said["fit.png"], { refused: "", revision: "10|20|30|40" })
     eq(said["gone.png"], { refused: "missing", revision: "" })
@@ -162,8 +172,10 @@ function tests(S) {
     eq(said["big.png"].refused, "is larger than 32 MB")
     eq(said["huge.png"].refused, "has too many pixels")
     eq(said["bomb.png"].refused, "carries compressed text")
+    eq(said["cut.png"].refused, "does not say how large it is")
     eq(said["odd.png"].refused, "could not be checked", "an answer this does not know is not a yes")
-    eq(Object.keys(said).sort(), ["big.png", "bomb.png", "fit.png", "gone.png", "huge.png", "link.png", "odd.png", "words.png"],
+    eq(Object.keys(said).sort(), ["big.png", "bomb.png", "cut.png", "fit.png", "gone.png", "huge.png", "link.png", "odd.png",
+       "words.png"],
        "and a line that is not a name and two fields says nothing")
     eq(S.pictureAnswers(""), {})
     eq(S.pictureNames([{ kind: "image", src: "a.png" }, { kind: "image", src: "a.png" }, { kind: "note", src: "n.png" },

@@ -107,6 +107,12 @@ try {
   assert.deepEqual(fs.readFileSync(path.join(images,'paste-1.png')),clipPixels)
   assert.equal(paste('image/jpeg','',images,'paste-2',clipFile).stdout,'paste-2.png','actual bytes decide the format')
   assert.equal(paste('image/png','OTHERBYTES',images,'invalid').status,8)
+  // A picture whose header stops before its size is refused where it lands, as
+  // the aggregate check refuses it, rather than kept as one nothing draws.
+  const clipCut=path.join(dir,'clipboard-cut.png')
+  fs.writeFileSync(clipCut,clipPixels.subarray(0,18))
+  assert.equal(paste('image/png','',images,'paste-cut',clipCut).status,10,'a header that does not say how large it is')
+  assert.equal(fs.existsSync(path.join(images,'paste-cut.png')),false,'and nothing lands')
   assert.equal(paste('image/png','',images,'paste-1',clipFile).status,6)
   assert.deepEqual(fs.readFileSync(path.join(images,'paste-1.png')),clipPixels)
 
@@ -368,6 +374,14 @@ try {
   assert.equal(drop('drop-wide','wide.png').status,7,'thirty thousand by four')
   fs.writeFileSync(path.join(source,'zero.png'),claiming(0,0))
   assert.equal(drop('drop-zero','zero.png').status,7,'and a header claiming nothing at all')
+  // A header that stops before it says: the size cannot be held to anything,
+  // so the picture is refused, as imagebudget refuses it. It used to land and
+  // draw as nothing, and no copy of its board could be imported anywhere.
+  fs.writeFileSync(path.join(source,'cut.png'),pngBytes.subarray(0,18))
+  assert.equal(drop('drop-cut','cut.png').status,10,'a PNG cut off before its size')
+  fs.writeFileSync(path.join(source,'cut.jpg'),Buffer.from('ffd8ffe000104a46494600010100000100010000','hex'))
+  assert.equal(drop('drop-cut-jpeg','cut.jpg').status,10,'a JPEG with no frame header')
+  assert.deepEqual(fs.readdirSync(images).filter(n=>n.startsWith('drop-cut')),[],'and neither lands')
 
   // It arrives inside a shared board by the same route, which is the one nobody
   // chose to open.
@@ -575,15 +589,17 @@ try {
   fs.writeFileSync(path.join(shelf,'words.png'),'this is not a picture')
   fs.writeFileSync(path.join(shelf,'renamed.jpg'),textCases[0][1])
   fs.writeFileSync(path.join(shelf,'empty.png'),'')
+  fs.writeFileSync(path.join(shelf,'cut.png'),pngWith().subarray(0,18))
   fs.writeFileSync(path.join(shelf,'heavy.png'),Buffer.concat([pngWith(),Buffer.alloc(33554433-pngWith().length)]))
   fs.symlinkSync(path.join(shelf,'text-5.png'),path.join(shelf,'linked.png'))
   const names=[...textCases.map((c,i)=>`text-${i}.png`),'huge.png','words.png','renamed.jpg','empty.png','heavy.png','linked.png',
-    'gone.png','../text-5.png','.hidden.png']
+    'gone.png','../text-5.png','.hidden.png','cut.png']
   const shelved=checkimages(names.map(n=>n+'\t\n').join(''))
   textCases.forEach(([what,,status],i)=>assert.equal(shelved[`text-${i}.png`].verdict,status===0?'ok':String(status),what))
   assert.equal(shelved['huge.png'].verdict,'7','too many pixels')
   assert.equal(shelved['words.png'].verdict,'4','not a picture')
   assert.equal(shelved['empty.png'].verdict,'4','nothing at all')
+  assert.equal(shelved['cut.png'].verdict,'10','a header that does not say how large it is: not drawn on trust')
   assert.equal(shelved['heavy.png'].verdict,'5','larger than a picture may be')
   assert.equal(shelved['renamed.jpg'].verdict,'9','the type is the bytes, not the name')
   assert.equal(shelved['linked.png'].verdict,'3','a link is not followed')

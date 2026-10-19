@@ -38,6 +38,10 @@ ShellRoot {
     property bool boardLoaded: true
     property bool canEdit: true
     property string currentBoard: "a.json"
+    // BoardPane's: which document the pane has been given, and whether it is
+    // still the one an answer was asked on.
+    property int docSerial: 0
+    function stillShows(board, shown) { return board === ctl.currentBoard && shown === ctl.docSerial }
     // The data folder is below the test folder, because saving a copy into the
     // app's own data folder is refused — which is the rule being relied on.
     readonly property string dataDir: test.dir + "/data"
@@ -240,6 +244,16 @@ ShellRoot {
         exchange.paste()
       } else if (test.stage === 9 && (test.pastedImage !== "" || test.lastMessage !== "")) {
         test.check(/^paste-[0-9]+\.png$/.test(test.pastedImage), "clipboard image reaches controller: " + test.lastMessage)
+        // The pane is given its board again while the clipboard is read: the
+        // same board, but a new view of it, not the one pasted into.
+        test.pastedImage = ""
+        test.lastMessage = ""
+        test.stage = 10
+        exchange.paste()
+        ctl.docSerial += 1
+      } else if (test.stage === 10 && (test.pastedImage !== "" || test.lastMessage !== "")) {
+        test.check(test.pastedImage === "", "a paste does not land in a view it was not asked in: " + test.pastedImage)
+        test.check(test.lastMessage === "Board changed; paste again", "and says so: " + test.lastMessage)
         console.log("EXCHANGE_TESTS_PASSED")
         Qt.quit()
       }

@@ -475,8 +475,7 @@ Item {
       root.splitRatio = Math.max(0.1, Math.min(0.9, st.splitRatio))
     if (st) {
       root.windowMode = st.windowMode === true
-      if (typeof st.autosaveMs === "number") root.autosaveMs = st.autosaveMs
-      if (typeof st.step === "number") root.step = st.step
+      root.takeSettings(st)
       if (typeof st.showGrid === "boolean") root.showGrid = st.showGrid
       if (Store.CANVAS_PATTERNS.indexOf(st.canvasPattern) >= 0) root.canvasPattern = st.canvasPattern
       root.canvasBackgroundChosen = st.canvasBackgroundChosen === true
@@ -505,6 +504,16 @@ Item {
     return screens[0]
   }
 
+  // The bar's numeric settings, from the bar or from state.json, held to the
+  // same ranges either way: state.json used to be taken as it was, so an
+  // autosave of 0 wrote the whole board on every keystroke.
+  function takeSettings(st) {
+    var autosave = Store.settingValue("autosaveMs", st.autosaveMs)
+    if (autosave !== null) root.autosaveMs = autosave
+    var step = Store.settingValue("step", st.step)
+    if (step !== null) root.step = step
+  }
+
   // A summon from the bar carries that widget's settings. Applying them here
   // and writing them to state keeps the two entry points in step: configure on
   // the bar, and the keybinding opens the same board the same way.
@@ -513,8 +522,7 @@ Item {
     try { p = Store.parseJson(payloadJson || "{}") } catch (e) { return false }
     if (!p || !p.settings) return false
     var st = p.settings
-    if (typeof st.autosaveMs === "number") root.autosaveMs = Math.max(100, Math.min(5000, st.autosaveMs))
-    if (typeof st.step === "number") root.step = Math.max(5, Math.min(200, st.step))
+    root.takeSettings(st)
     if (!root.canvasBackgroundChosen) {
       if (typeof st.showGrid === "boolean") root.showGrid = st.showGrid
       if (Store.CANVAS_PATTERNS.indexOf(st.canvasPattern) >= 0) root.canvasPattern = st.canvasPattern

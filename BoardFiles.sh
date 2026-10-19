@@ -50,7 +50,8 @@ max_board_image_bytes=33554432
 #
 # JPEG needs a marker walk; WebP puts the canvas in its first image header.
 # No raster or compressed metadata is decoded here. Unknown/truncated headers
-# answer nothing; the aggregate import check refuses them.
+# answer nothing, and every check refuses them: landing with 10
+# (refuse_huge_pictures), and the aggregate import check with 10 too.
 image_pixels() {
   local path=$1 kind=$2
   local -a b
@@ -127,8 +128,12 @@ image_pixels() {
 # needs saying: the file on disk may be tiny.
 refuse_huge_pictures() {
   local dimensions width height
-  dimensions=$(image_pixels "$1" "$2") || return 0
+  # A header too short or too strange to say how big the picture is answers 10,
+  # as it does in imagebudget: a size nobody can read is not taken on trust.
+  # Landed, it drew as nothing and made every copy of its board unimportable.
+  dimensions=$(image_pixels "$1" "$2") || exit 10
   read -r width height <<< "$dimensions"
+  [[ $width =~ ^[0-9]+$ && $height =~ ^[0-9]+$ ]] || exit 10
   (( width > 0 && height > 0 )) || exit 7
   (( width <= max_image_side && height <= max_image_side )) || exit 7
   (( width * height <= max_image_pixels )) || exit 7
@@ -267,7 +272,8 @@ case "$operation" in
     # The clipboard picks the format; this picks the name and the folder, so
     # nothing the clipboard says can steer where the bytes land. Exit 4 means
     # there is no image on it, which is the caller's cue to try text instead;
-    # 9 that the picture carries compressed text (refuse_compressed_text).
+    # 9 that the picture carries compressed text (refuse_compressed_text), 10
+    # that its header does not say how large it is.
     images_root=$1 base_name=$2
     plain_name "$base_name"
     mime=$(timeout 5 wl-paste --list-types 2>/dev/null | grep -m1 -E '^image/(png|jpeg|webp|gif|bmp)$' || true)
@@ -337,7 +343,8 @@ case "$operation" in
     # land or what they are called. The type comes from the content rather than
     # the name, and a file too big to sit on a board is refused before it is
     # copied. Exit 4 means "not an image this can take", 5 means "too large",
-    # 9 that it carries compressed text.
+    # 9 that it carries compressed text, 10 that its header does not say how
+    # large it is.
     images_root=$1 base_name=$2 source_path=$3
     plain_name "$base_name"
     [[ -f $source_path ]] || exit 4
@@ -395,7 +402,8 @@ case "$operation" in
     # bytes, and the size is held to the same limit a dropped file is. Exit 4
     # means the bytes are not a picture, 5 that they are too big for a board,
     # 7 that they decode to more pixels than a board will draw, 9 that they
-    # carry compressed text the shell would inflate.
+    # carry compressed text the shell would inflate, 10 that their header does
+    # not say how large they are.
     images_root=$1 staged=$2 base_name=$3
     plain_name "$base_name"
     [[ -f $staged && ! -L $staged ]]

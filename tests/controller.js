@@ -1695,6 +1695,31 @@ console.log('ok — controller: what a picture is of, and what it is drawn in')
 console.log('ok — controller: a board opens clear of the header, and a reload stays put')
 
 {
+  // state.json is the plugin's own, but a hand or a half-finished write can
+  // leave it saying anything. Its numbers are held to the ranges the bar's
+  // are, and those are the manifest's: an autosave of 0 wrote the whole board
+  // on every keystroke, and a step of 0 moved nothing.
+  const c = controller()
+  const w = c.workspace
+  w.applyState(JSON.stringify({ autosaveMs: 0, step: 100000 }))
+  assert.deepEqual([w.autosaveMs, w.step], [100, 200], 'held to the bottom and the top')
+  w.applyState(JSON.stringify({ autosaveMs: -5, step: -1 }))
+  assert.deepEqual([w.autosaveMs, w.step], [100, 5])
+  w.applyState(JSON.stringify({ autosaveMs: 900, step: 25 }))
+  assert.deepEqual([w.autosaveMs, w.step], [900, 25], 'and taken as they are inside them')
+  w.applyState('{"autosaveMs":"fast","step":null}')
+  assert.deepEqual([w.autosaveMs, w.step], [900, 25], 'what is not a number leaves them alone')
+  w.applyPayload(JSON.stringify({ settings: { autosaveMs: 1e9, step: 3 } }))
+  assert.deepEqual([w.autosaveMs, w.step], [5000, 5], 'the bar the same way')
+  const schema = require('../manifest.json').barWidget.schema
+  for (const key of ['autosaveMs', 'step']) {
+    const field = schema.find(f => f.key === key)
+    assert.deepEqual(c.store.SETTING_RANGES[key], [field.min, field.max], key + ': the ranges the manifest gives the bar')
+  }
+  console.log('ok — controller: settings from state.json are held to the bar\'s ranges')
+}
+
+{
   const c = controller()
   c.workspace.applyState('{"showGrid":false}')
   assert.equal(c.root.showGrid, false, 'an existing plain background stays plain')

@@ -141,7 +141,10 @@ for (const code of [7, 10, 12, 1]) {
 {
   const c = fixture()
   c.exchange.pasteBoard = 'x.json'
-  c.exchange.pastePane = { currentBoard: 'x.json' }
+  c.exchange.pasteShown = 0
+  // BoardPane's own test of whether an answer still belongs to this view.
+  c.exchange.pastePane = { currentBoard: 'x.json', docSerial: 0,
+    stillShows(board, shown) { return board === this.currentBoard && shown === this.docSerial } }
   c.exchange.grabbed = { text: '' }
   c.exchange.clipboard = { running: false }
   c.exited('imageGrab', 9)

@@ -3,6 +3,24 @@
 Notable changes, newest first. Board file versions are noted where they moved,
 since older boards are migrated on load rather than rejected.
 
+## 0.5.3 — 2026-10-19
+
+### Fixed
+
+- A picture whose header stops before it says how large it is is refused
+  where it lands, dropped, pasted or found in the images folder, as importing
+  a shared board already refused it. It used to land and draw as nothing, and
+  no copy of its board could then be imported anywhere.
+- `omarchyform apply … --out` with no file after it answers with a JSON error
+  instead of a stack trace, and `new … --note` with no text is refused instead
+  of adding an empty note.
+- The autosave delay and keyboard step in `state.json` are held to the
+  ranges the bar's settings are. An autosave of 0 wrote the whole board on
+  every keystroke, and a step of 0 moved nothing.
+- A paste onto the board that finishes after its pane was given the board
+  again says "Board changed; paste again", as a drop does, instead of landing
+  in a view it was not asked in.
+
 ## 0.5.2 — 2026-10-19
 
 ### Fixed

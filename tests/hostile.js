@@ -41,12 +41,14 @@ const KNOWN = {
   // jsonFits walks a text it cannot settle by counting: 1.3 to 2.5s at 32 MB.
   'escaped-quotes': 4000, 'old-history': 4000
 }
-// The same for the session, from open to read again. None is over the default
-// now: escaped-quotes, the slowest, holds it 1.4 to 1.5s to open and the same
-// to read again, measured on 2026-10-19. Reading it again took 2.4 to 3.3s
-// until acceptDisk stopped parsing the text a second time; tests/editing.js
-// counts the parses, so that cannot come back however fast a machine is.
-const KNOWN_SESSION = {}
+// The same for the session, from open to read again. Both are the jsonFits
+// walk the Board's KNOWN lists, paid once to open and once to read again:
+// escaped-quotes held it 1.42 to 1.77s and old-history 1.18 to 1.44 over seven
+// runs on 2026-10-19, too near the default to leave there. Reading them again
+// took 2.4 to 3.3s until acceptDisk stopped parsing the text a second time,
+// over both ceilings; tests/editing.js counts the parses as well, which holds
+// however fast the machine is.
+const KNOWN_SESSION = { 'escaped-quotes': 2700, 'old-history': 2200 }
 const budget = name => ({ qml: KNOWN[name] || BUDGET.qml, cli: BUDGET.cli,
   session: KNOWN_SESSION[name] || BUDGET.session })
 // What the session does with a board's text itself, reading it, comparing it

@@ -65,7 +65,7 @@ The trace's third rule is for it.
 | Input/data | Where it goes | Required property and evidence |
 | --- | --- | --- |
 | Copied notes | QML → helper → `wl-copy` | Content only on stdin; never argv/environment/logs. `security.js` inspects live Linux process metadata; `tst_clipboard.qml` exercises the QML caller, repeat copies, failure and large Unicode text. |
-| Pasted text/images | `wl-paste` → staging → QML/library | Bound bytes before returning text; reject bad image types and excessive supported dimensions; remove staging on success/failure. Filesystem and security tests. |
+| Pasted text/images | `wl-paste` → staging → QML/library | Bound bytes before returning text; reject bad image types, excessive supported dimensions and headers that do not say a picture's size; remove staging on success/failure. Filesystem and security tests. |
 | Text pasted into a field | Paste keys → `pasteInto` → helper → the field that asked | Qt's own paste reads everything a clipboard owner sends before any limit can count it, so no field may run it. The note editor, command list, find field and browser field hand Ctrl+V and Shift+Insert to the exchange, which reads through `cliptext`'s 1 MiB bound, refuses a paste that would not fit the field, and inserts only while that field is still taking text; failures go to the pane that asked. The line fields also take the middle button (primary selection); the pan surface takes it above the note editor. `security.js` refuses any text field without both; `tst_node.qml` and `tst_pan.qml` show each field no longer pastes for itself; `tst_fieldpaste.qml` runs the real exchange and helper against an owner that never stops sending, a late answer, a destroyed field and a clipboard with no text. |
 | Board JSON, titles, paths, errors | Models → Qt text | Explicit plain text for labels. Canvas notes use bounded literal previews and Text.PlainText; status escapes variable messages. Source guards, hostile markup tests and Qt title test. |
 | Long note text | Board file, import, editor, CLI → text layout on the shell's thread | A note is at most 1 MiB: a board with a longer one opens read-only and empty, import and the CLI refuse one, the editor refuses to grow one. Unbroken runs wrap anywhere, and the editor holds a note only while open, so layout stays linear. Store, controller, node, exchange and CLI tests. |
@@ -309,8 +309,10 @@ These are review obligations, not claims covered by a green test:
   that check and the read is read whole, up to what the shell can hold. The
   same holds for import size checks and bundle budgets. The CLI reads a board
   of any size (it runs in node, not the shell) and only refuses to write one
-  past 32 MiB. Pixel checks cover PNG, GIF, BMP, JPEG and WebP headers, and a
-  PNG carrying compressed text (zTXt, compressed iTXt) is refused. Foreign
+  past 32 MiB. Pixel checks cover PNG, GIF, BMP, JPEG and WebP headers, a
+  header that does not say the picture's size is refused where it lands as
+  in the aggregate check, and a PNG carrying compressed text (zTXt,
+  compressed iTXt) is refused. Foreign
   imports also have an aggregate pixel budget, described below. This is not
   a process-wide memory cap: existing local boards, subsequent duplication or
   image pastes, split panes and export scenes need separate aggregate resource
