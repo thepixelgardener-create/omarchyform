@@ -1,6 +1,6 @@
 {
   "name": "omarchyform",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "private": true,
   "description": "Development and regression checks for the Omarchyform whiteboard",
   "scripts": {

@@ -1,6 +1,6 @@
 # Roadmap
 
-Updated 2026-10-14. This is the current release direction. The dated
+Updated 2026-10-19. This is the current release direction. The dated
 [architecture review](architecture-review-0.4.5.md) and
 [competitor analysis](competitor-analysis-0.4.5.md) explain the findings behind it.
 
@@ -34,6 +34,9 @@ and a security pass; the [changelog](../CHANGELOG.md) has each one.
 - **Reads from slow storage:** a board read blocks the shell for as long as the
   read takes. 1ms on a local disk; network storage is unmeasured.
 - CI rejecting new lint diagnostics.
+- **Stalls the hostile boards still measure** (`KNOWN` in `tests/hostile.js`):
+  20,000 connectors on screen take 2.5 to 3.8 seconds to draw, and checking
+  a 32 MB board's text before reading it takes 1.3 to 2.5.
 
 These are planned. Completed changes are recorded in the changelog.
 
@@ -91,6 +94,16 @@ a Python helper that takes every name on stdin, so a board's title no longer
 shows in the process list. The board stops before reading anything when its
 folders cannot be made private, and says what to repair.
 
+## 0.5.1 — Large boards open without holding the shell
+
+Shipped. A board opens a slice at a time with the board drawn in between,
+read-only until it is all in, and a change to its file meanwhile is read once
+it is. At the 5,000-item limit the shell waits at most about a third of a
+second at once, where it held for 8 to 11. A reload no longer hands every long
+note's text to the editor, which held a shared board of long notes for 56
+seconds. `npm run test:hostile` opens a board at every limit and holds each to
+a time.
+
 ## 0.6 — Editable, labeled connectors
 
 Make relationships useful in a decision diagram: connect “Ready?” to “Ship”,
@@ -98,6 +111,8 @@ label the arrow “yes”, and select it to edit, reverse or remove it.
 
 Planned scope:
 
+- Cheaper connector drawing first: working out where 20,000 go and stroking
+  them is one of the stalls still open above, and labels would add to it.
 - Optional plain-text labels that stay attached when items move.
 - Pointer selection of individual connectors and a keyboard-accessible list
   of connections for the selected item.
@@ -115,6 +130,7 @@ Completion checks:
 - Old boards load with empty labels. A new board-format version prevents older
   plugin versions from silently discarding labels.
 - Labels and selection remain legible at low and high zoom, in both window modes.
+- The `max-links` hostile board, every connector labeled, stays within budget.
 
 ## Later candidates
 
