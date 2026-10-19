@@ -17,6 +17,9 @@ since older boards are migrated on load rather than rejected.
 - The autosave delay and keyboard step in `state.json` are held to the
   ranges the bar's settings are. An autosave of 0 wrote the whole board on
   every keystroke, and a step of 0 moved nothing.
+- A paste onto the board that finishes after its pane was given the board
+  again says "Board changed; paste again", as a drop does, instead of landing
+  in a view it was not asked in.
 
 ## 0.5.2 — 2026-10-19
 

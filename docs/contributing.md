@@ -92,6 +92,8 @@ the CLI to create boards and is not a contribution guide.
 - Keep one-line limits on typing and IME commits, not only paste. A delayed
   field paste belongs to its pane, board path and document generation; closing
   the field invalidates it even when that same field is reopened before reply.
+  A paste onto the board, like a drop, lands only while its pane `stillShows`
+  the board and document it was asked on.
 - Every picture that lands in `images/` goes through `BoardFiles.sh`, which
   holds it to its bytes, its pixels (`refuse_huge_pictures`) and, for a PNG,
   compressed text and colour profiles (`refuse_compressed_text`). A new way in
