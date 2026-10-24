@@ -18,6 +18,7 @@
     "test:windowmode": "node tests/omarchy.js --live --windowmode",
     "bench": "node tests/bench.js",
     "bench:scene": "node tests/scene.js",
+    "bench:connectors": "node tests/connectors.js",
     "shots": "node tests/shots.js",
     "preview": "node tests/preview.js",
     "test:security": "node tests/security.js && node tests/filesystem.js && node tests/desktop.js && node tests/cli.js",

@@ -120,6 +120,7 @@ npm run test:security:full # also run Quickshell and Qt tests
 npm run mutate  # mutation testing
 npm run bench   # board marshalling cost at size
 npm run bench:scene # what a board costs to draw, at size; needs a compositor
+npm run bench:connectors # what connectors cost while a board is in use; offscreen
 npm run test:qml # headless persistence tests; requires installed Quickshell
 npm run test:paste # live canvas image paste test; uses an isolated clipboard stub and board library
 npm run test:windowmode # live tiled default, bar preference, window switching and reopening; isolated board data
@@ -158,6 +159,22 @@ machine under it is not a number anyone can check, and the same board is
 vsync-bound at 60Hz and dropping frames at 144. `--record` writes that and the
 table to [docs/performance.md](performance.md), which is where the figures
 quoted in the changelog come from.
+
+`npm run bench:connectors` measures connectors in use: boards of 300, 3,000
+and 20,000 connectors panned, zoomed, selected through and dragged, one step a
+frame, at 100% and 20%. It runs offscreen with the software renderer, each
+board in a process of its own, so it opens nothing on the desktop, and splits
+each paint into the walk over the connectors, building their paths and
+rasterising them. It asserts nothing and is not in CI; it takes about four
+minutes. Measure before and after changing how connectors are drawn, back to
+back. See [performance.md](performance.md#connectors-in-use--2026-10-24).
+
+```bash
+npm run bench:connectors                     # every board
+npm run bench:connectors -- max-links        # the ones named
+npm run bench:connectors -- --frames 20      # steps per phase, default 12
+npm run bench:connectors -- --json           # one JSON line per board
+```
 
 `npm run shots` puts the real plugin through every state worth judging by eye —
 empty, a cursor beside a mark, typing, backgrounds, finding, arranging, the
