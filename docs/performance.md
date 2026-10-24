@@ -4,6 +4,65 @@ Written by `npm run bench:scene -- --record` on 2026-09-30. Every frame time quo
 changelog was measured here; a frame time without the machine under it is
 not a number anyone can check.
 
+## Connectors in use — 2026-10-24
+
+`npm run bench:connectors` (`tests/connectors.js`), on the machine below with
+Qt 6.12.0, offscreen with the software renderer in a 1100×700 window. Each
+board is panned, zoomed, selected through and dragged, one step a frame and
+twelve steps each, at 100% and at 20%; the real `Board` draws it, with
+`PaneStub` asking for the connectors' repaint the way `BoardPane` does.
+Frame is the longest frame a step took, what the eye sees; an idle frame here
+is 20 ms. Raster is the Canvas drawing the paths into its image, from the
+end of its `onPaint` to `painted()`. The script before it is timed apart,
+because nothing marks when a frame's polish starts: geometry is the paint's
+loop over every connector, culling and `Store.connectorGeometry`, and paths
+is `paintConnectors` handing what it found to a Context2D. Two runs back to
+back; a range is the two, a single figure is both. Frame and raster are
+medians of a phase's steps, the worst in brackets.
+
+| Board | At | Shown | Geometry | Paths | Raster | Frame |
+|---|---|---|---|---|---|---|
+| `chain-300`, 300 items | 100% | 15 | 2 ms | 0 ms | 2–3 ms | 21–23 ms (34) |
+| | 20% | 270 | 2–5 ms | 1–2 ms | 3–7 ms | 33–45 ms (60) |
+| `chain-3000`, 3,000 items | 100% | 15 | 25 ms | 0 ms | 1–2 ms | 21–39 ms (72) |
+| | 20% | 330 | 27–28 ms | 2 ms | 3–5 ms | 38–65 ms (75) |
+| `mesh-20000`, 5,000 items | 100% | 60 | 74 ms | 0 ms | 2 ms | 88–114 ms (148) |
+| | 20% | 1,395 | 98–99 ms | 10 ms | 10–13 ms | 126–192 ms (389) |
+| `max-links`, 201 items | 100% | 15,930 | 126–155 ms | 1,208–1,222 ms | 945–1,058 ms | 2,336–2,456 ms (2,833) |
+| | 20% | 17,306 | 187–192 ms | 1,439–1,452 ms | 192–218 ms | 1,779–1,851 ms (2,057) |
+
+Pan, zoom, selection and dragging cost the same on each board within a run,
+because each repaints every connector the same way, so they share a row. The
+parts add up to the frame: on `max-links` at 100%, 126 + 1,222 + 1,055 ms
+against a pan of 2,456. Three costs, then, and the walk is the smallest of
+them where it matters most:
+
+- **Building the paths.** On `max-links`, `paintConnectors` takes 1.2 to 1.45
+  seconds for 16,000 to 17,000 connectors: six Context2D calls each, about 12
+  µs a call, eight to ten times the geometry it draws.
+- **Rasterising them.** About a second at 100% and a fifth of that at 20%,
+  where the same connectors are a fifth as long: it follows the pixels
+  covered, not the number of connectors.
+- **Walking connectors off screen.** `mesh-20000` shows 60 connectors at 100%
+  and still spends 74 ms a frame looking at the other 19,940. The frames of
+  `chain-3000` and `mesh-20000` above that, with next to nothing drawn, are
+  the 3,000 and 5,000 delegates, which this does not separate.
+
+### Targets proposed for the change that follows
+
+On this machine and renderer, measured back to back with the change and
+without:
+
+1. `max-links`: every phase's median frame under 1 second at both zooms, from
+   1.8 to 2.5; and its opening worst frame in `test:hostile` within the
+   2-second default, so its 6-second ceiling there can go.
+2. `mesh-20000` at 100%: geometry under 10 ms, so connectors off screen cost
+   next to nothing, and frames within 30 ms of `chain-3000`'s.
+3. `chain-300` and `chain-3000`: no phase's median frame more than 10% slower.
+
+These are proposals, not assertions: the runner reports and checks nothing,
+and it is not in CI.
+
 ## A board read again — 2026-10-19
 
 The session part of `npm run test:hostile`, on the machine below with Qt
@@ -93,8 +152,9 @@ The harness renders the real `Board`, but reproduces admission and filling
 with a `PaneStub` and `wait(1)` instead of running `BoardSession` and its timer.
 Its reopen is from normalized saved text. Picture validation is not timed
 at all, and file reading and an external reload only by the session part,
-for boards of a megabyte or more (above). Measure sustained
-pan, zoom and dragging before changing how connectors are drawn.
+for boards of a megabyte or more (above). Sustained pan, zoom,
+selection and dragging are measured by `npm run bench:connectors`
+([above](#connectors-in-use--2026-10-24)).
 
 ## Fully textured large board — 2026-10-09
 

@@ -147,17 +147,16 @@ each probe an instrument comes before the change it measures.
   has the lead.
 - **Connectors in use: next.** Every pan, zoom, selection and drag step
   repaints all connectors: `Board.qml` walks every one and works out the
-  geometry of each in view before drawing, with only the id index cached. On
-  `max-links` each such step is a 2.4 to 2.7-second frame, and the walk is
-  about 0.15 seconds of it. The rest is drawing 16,000 connectors, building
-  the path in `paintConnectors` and the Canvas rasterising it, which the probe
-  does not separate; zoomed out, with shorter lines, it is 1.8. Ordinary
-  diagrams cost 20 to 60 ms a step with 300 or 3,000 connectors, the walk 13
-  to 23 ms of it at 3,000, and 60 ms is already slow for continuous dragging.
-  It is worth doing without labels, so it does not wait for 0.6; labels then
-  fit how connectors end up drawn, whether or not they are drawn the same
-  way. Profile the drawing before choosing how to change it. `test:hostile`
-  times opening, one zoom change and reopening, not sustained use.
+  geometry of each in view before drawing, with only the id index cached.
+  `npm run bench:connectors` now measures it in parts. On `max-links` each
+  step is a 1.8 to 2.5-second frame: 0.13 to 0.19 seconds of walking, 1.2 to
+  1.45 of building the path in `paintConnectors`, and up to a second of the
+  Canvas rasterising it. A 5,000-item board of 20,000 connectors spends 74 ms
+  a frame walking the ones off screen. It is worth doing without labels, so
+  it does not wait for 0.6; labels then fit how connectors end up drawn,
+  whether or not they are drawn the same way.
+  [performance.md](performance.md#connectors-in-use--2026-10-24) has the
+  measurements and the targets proposed for the change.
 - **Two numbers, two targets.** Record the worst pause and the time until the
   board is editable separately, the 5,000 long previews included, and set a
   target for each on a named machine before accepting a performance change.

@@ -264,6 +264,7 @@ FocusScope {
 
   Canvas {
     id: linkCanvas
+    objectName: "connectors"
     anchors.fill: parent
     onPaint: {
       var ctx = getContext("2d")
