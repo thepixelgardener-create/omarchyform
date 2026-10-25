@@ -116,8 +116,13 @@ TestCase {
       surface.repaintGrid()
       surface.repaintLinks()
     })
-    // Saved, and opened again: what the next session opens.
-    var again = drawn(function () { if (saved !== "") test.open(saved, steps) })
+    // Saved, and opened again: what the next session opens. BoardSession's
+    // finishLoad asks for the connectors once they are in; until this did
+    // too, the board opened again here was measured without drawing them.
+    var again = drawn(function () {
+      if (saved !== "") test.open(saved, steps)
+      surface.repaintLinks()
+    })
     console.log("HOSTILE " + JSON.stringify({ name: row.tag, opens: data !== null, items: ctl.items.count,
       links: ctl.links.count, open: opened, whole: whole, again: again, steps: steps }))
     compare(data !== null, row.opens, "opens as tests/hostile-fixtures.js says it does")

@@ -1371,11 +1371,12 @@ Item {
     root.repaintLinks()
   }
 
+  // The board moves what it has drawn rather than drawing it again, where it
+  // can (Board.panned).
   function panBy(dx, dy) {
     root.camX += dx
     root.camY += dy
-    root.repaintGrid()
-    root.repaintLinks()
+    if (root.activeBoard) root.activeBoard.panned()
   }
 
   function zoomAt(sx, sy, factor) {

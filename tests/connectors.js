@@ -8,6 +8,7 @@
 //   node tests/connectors.js max-links          the ones named
 //   node tests/connectors.js --frames 20        steps per phase (default 12)
 //   node tests/connectors.js --json             one JSON line per board
+//   node tests/connectors.js --pan              a small board panned, at scale 1 and 2
 //
 // Offscreen with Qt's software renderer, like test:hostile, so it opens
 // nothing on the desktop and runs while the displays are off. The connector
@@ -65,6 +66,37 @@ const boards = [
 
 const args = process.argv.slice(2)
 const json = args.includes('--json')
+
+// --pan: a small board panned instead, at scale 1 and 2 (tests/connectors/
+// tst_panning.qml). A canvas costs its pixels, not what is on it, so this is
+// the window size and the scale rather than the board.
+if (args.includes('--pan')) {
+  let failed = false
+  if (!json) {
+    for (const [label, value] of provenance(false)) console.log(`${label.padEnd(15)}  ${value}`)
+    console.log('\nms, median/worst of 20 steps; paints: canvases drawn during them\n')
+  }
+  for (const scale of ['1', '2']) {
+    const result = spawnSync(runner, ['-input', path.join(__dirname, 'connectors/tst_panning.qml')], {
+      encoding: 'utf8', timeout: 600000,
+      env: { ...process.env, QT_QPA_PLATFORM: 'offscreen', QT_QPA_PLATFORMTHEME: '', QT_QUICK_BACKEND: 'software',
+        QT_QUICK_CONTROLS_STYLE: 'Basic', QT_SCALE_FACTOR: scale } })
+    const output = (result.stdout || '') + (result.stderr || '')
+    const line = output.split('\n').find(l => l.includes('PANNING '))
+    if (!line || result.status !== 0) {
+      console.error(`scale ${scale}: the run failed\n` + output.split('\n').slice(-30).join('\n'))
+      failed = true
+      continue
+    }
+    for (const row of JSON.parse(line.slice(line.indexOf('PANNING ') + 8))) {
+      if (json) { console.log(JSON.stringify(row)); continue }
+      const cell = v => `${v.median}/${v.worst} (${v.paints})`.padEnd(16)
+      console.log(`scale ${row.scale}, ${row.width}×${row.height}: camera only ${cell(row.camera)}` +
+        `both drawn ${cell(row.drawn)}panned ${cell(row.panned)}`)
+    }
+  }
+  process.exit(failed ? 1 : 0)
+}
 const framesAt = args.indexOf('--frames')
 const frames = framesAt >= 0 ? Number(args[framesAt + 1]) : 12
 if (!(frames >= 2)) { console.error('--frames needs a number of at least 2'); process.exit(2) }

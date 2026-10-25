@@ -2125,6 +2125,42 @@ function connectorInView(a, b, left, top, right, bottom, margin) {
     && Math.max(ay, by) + margin >= top && Math.min(ay, by) - margin <= bottom
 }
 
+// The geometry of every connector that can touch the view, those at the
+// selected item apart. `ends` holds each connector's two item ids in turn,
+// `rows` plain copies of the items and `byId` which row holds each id: what
+// Board.qml keeps beside its models, because reading a ListModel row costs
+// more than the arithmetic. Here rather than in the board, so the walk's two
+// calls a connector stay inside this library.
+//
+// `inside` says whether every connector lies wholly within the view, its head
+// and stroke included: a drawing of them that does can be moved with the
+// camera, since nothing it leaves out could come into view.
+function connectorsInView(byId, rows, ends, left, top, right, bottom, head, gap, selectedId) {
+  var normal = [], highlighted = [], inside = true
+  for (var i = 0; i < ends.length; i += 2) {
+    var ai = byId[ends[i]], bi = byId[ends[i + 1]]
+    if (ai === undefined || bi === undefined) continue
+    var a = rows[ai], b = rows[bi]
+    if (!connectorInView(a, b, left, top, right, bottom, head)) { inside = false; continue }
+    if (inside && !connectorWithin(a, b, left, top, right, bottom, head)) inside = false
+    var g = connectorGeometry(a, b, head, gap)
+    if (!g.visible) continue
+    if (ends[i] === selectedId || ends[i + 1] === selectedId) highlighted.push(g)
+    else normal.push(g)
+  }
+  return { normal: normal, highlighted: highlighted, inside: inside }
+}
+
+// Whether a connector lies wholly within the view: the box round the centres
+// holds its line, and `margin` its head and its stroke, as connectorInView
+// takes them.
+function connectorWithin(a, b, left, top, right, bottom, margin) {
+  var ax = a.ix + a.iw / 2, ay = a.iy + a.ih / 2
+  var bx = b.ix + b.iw / 2, by = b.iy + b.ih / 2
+  return Math.min(ax, bx) - margin >= left && Math.max(ax, bx) + margin <= right
+    && Math.min(ay, by) - margin >= top && Math.max(ay, by) + margin <= bottom
+}
+
 function cycle(list, current) {
   var i = list.indexOf(current)
   return list[(i + 1) % list.length]

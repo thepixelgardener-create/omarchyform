@@ -14,7 +14,11 @@ Item {
   property real zoom: 1
   property real viewW: 800
   property real viewH: 600
-  function panBy(dx, dy) { ctl.camX += dx; ctl.camY += dy }
+  function panBy(dx, dy) {
+    ctl.camX += dx
+    ctl.camY += dy
+    if (ctl.activeBoard) ctl.activeBoard.panned()
+  }
   function zoomAt(sx, sy, factor) {
     var next = Math.max(0.2, Math.min(4, ctl.zoom * factor))
     if (next === ctl.zoom) return

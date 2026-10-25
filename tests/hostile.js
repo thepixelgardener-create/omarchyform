@@ -34,10 +34,9 @@ const generated = path.join(__dirname, 'hostile', 'generated')
 // worse unnoticed, and fixing it means lowering or deleting it. The command
 // line's budget is wall time.
 const BUDGET = { qml: 2000, cli: 2000, session: 2000 }
+// 20,000 connectors on screen at once took 2.5 to 3.8s until each head was
+// left for fill() to close (0.8 to 0.9s), and is held to the default now.
 const KNOWN = {
-  // 20,000 connectors on screen at once: working out where each one goes and
-  // stroking them, 2.5 to 3.8s. Round line caps made it 20s.
-  'max-links': 6000,
   // jsonFits walks a text it cannot settle by counting: 1.3 to 2.5s at 32 MB.
   'escaped-quotes': 4000, 'old-history': 4000
 }

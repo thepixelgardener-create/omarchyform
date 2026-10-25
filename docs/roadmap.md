@@ -38,8 +38,13 @@ and a security pass; the [changelog](../CHANGELOG.md) has each one.
   about half a minute when every note has a long preview; it is read-only
   until then.
 - **Stalls the hostile boards still measure** (`KNOWN` in `tests/hostile.js`):
-  20,000 connectors on screen take 2.5 to 3.8 seconds to draw, and checking
-  a 32 MB board's text before reading it takes 1.3 to 2.5.
+  checking a 32 MB board's text before reading it takes 1.3 to 2.5 seconds.
+- **20,000 connectors on screen** take about a second a frame at 100%,
+  nearly all of it rasterising translucent lines on the CPU; drawing them
+  opaque is a third of that but changes how crossings look
+  ([performance.md](performance.md#connectors-and-patterns-drawn-less--2026-10-25)).
+- **A zoom draws both canvases again**, at the board's full size in device
+  pixels, and so does a pan once a connector reaches past the view.
 
 These are planned. Completed changes are recorded in the changelog.
 
@@ -145,18 +150,14 @@ each probe an instrument comes before the change it measures.
   notes still take about twice as long to read again as to open, within
   budget; [performance.md](performance.md#a-board-read-again--2026-10-19)
   has the lead.
-- **Connectors in use: next.** Every pan, zoom, selection and drag step
-  repaints all connectors: `Board.qml` walks every one and works out the
-  geometry of each in view before drawing, with only the id index cached.
-  `npm run bench:connectors` now measures it in parts. On `max-links` each
-  step is a 1.8 to 2.5-second frame: 0.13 to 0.19 seconds of walking, 1.2 to
-  1.45 of building the path in `paintConnectors`, and up to a second of the
-  Canvas rasterising it. A 5,000-item board of 20,000 connectors spends 74 ms
-  a frame walking the ones off screen. It is worth doing without labels, so
-  it does not wait for 0.6; labels then fit how connectors end up drawn,
-  whether or not they are drawn the same way.
-  [performance.md](performance.md#connectors-in-use--2026-10-24) has the
-  measurements and the targets proposed for the change.
+- **Connectors in use: done on `dev`, not released.** On `max-links` a step
+  was a 1.8 to 2.5-second frame, 1.2 to 1.45 of it `closePath` measuring the
+  whole path once for every head; it is 0.27 to 0.32 seconds at 20% and 0.97
+  to 1.15 at 100%, the raster of translucent lines. The walk reads plain
+  copies of the models, and a pan moves what is drawn rather than drawing it
+  again, which on a 4K output at scale 2 was most of what a pan of a small
+  board cost. [performance.md](performance.md#connectors-and-patterns-drawn-less--2026-10-25)
+  has the measurements; a pan on the desktop is still to be measured.
 - **Two numbers, two targets.** Record the worst pause and the time until the
   board is editable separately, the 5,000 long previews included, and set a
   target for each on a named machine before accepting a performance change.

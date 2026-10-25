@@ -4,6 +4,115 @@ Written by `npm run bench:scene -- --record` on 2026-09-30. Every frame time quo
 changelog was measured here; a frame time without the machine under it is
 not a number anyone can check.
 
+## Connectors and patterns drawn less — 2026-10-25
+
+Four changes, each measured on the machine below with Qt 6.12.0, offscreen
+with the software renderer, against `dev` at `a5db4ea` in a worktree of its
+own: two runs of each, alternating, so a range is the two.
+
+- **A head is left for `fill()` to close.** Context2D's `closePath` measures
+  the bounds of the whole path it is given (`QQuickContext2D::closePath` takes
+  `m_path.boundingRect()`), so closing each head in the path every head shares
+  made the paths quadratic: the 1.2 to 1.45 seconds of the table below were
+  that call. `fill()` closes them anyway; a pixel comparison of the two found
+  none different. Without it, a Context2D call costs about 0.2 µs.
+- **The walk reads plain copies of the items and connectors.** Board.qml keeps
+  each item's place, size and kind and each connector's ends beside the
+  models, read again only for the rows that changed, and builds them only
+  once a board has a connector, since a board opens its items before its
+  connectors. The walk is `Store.connectorsInView`.
+- **A pan moves what is drawn.** The pattern canvas is a step larger than the
+  board and is held where the camera puts it, so a pan never draws it again;
+  the connectors' canvas is moved with the camera while it holds every
+  connector whole, and drawn again otherwise. Both sit in a clipped item, so
+  nothing moved shows past the board.
+- **A hidden pattern is not drawn.** A canvas that is not shown still paints
+  when asked, and every zoom asks: with the pattern off, a zoom step at 25%
+  drew 7,700 dots nobody saw, 54 ms a frame in a 1100×700 window and 85
+  fullscreen, against 21 now. This was so before any of the above.
+
+`npm run bench:connectors`, medians of each phase's frames, all four phases
+in one range, with the first two changes; its steps ask for the connectors
+to be drawn every time, so the pan does not reach it:
+
+| Board | At | Geometry | Paths | Frame before | Frame after |
+|---|---|---|---|---|---|
+| `chain-300` | 100% | 3 → 1 ms | 0 ms | 21–23 ms | 21–24 ms |
+| | 20% | 3–5 → 2 ms | 1 ms | 32–44 ms | 30–42 ms |
+| `chain-3000` | 100% | 24–25 → 7–8 ms | 0 ms | 20–39 ms | 21–26 ms |
+| | 20% | 29–30 → 9–11 ms | 2 → 0–1 ms | 35–67 ms | 26–52 ms |
+| `mesh-20000` | 100% | 73–77 → 21–46 ms | 0 ms | 81–108 ms | 35–57 ms |
+| | 20% | 98–99 → 49–51 ms | 10 → 1–2 ms | 116–167 ms | 55–91 ms |
+| `max-links` | 100% | 150–152 → 89–93 ms | 1,162–1,168 → 9–10 ms | 2,151–2,580 ms | 971–1,147 ms |
+| | 20% | 162–179 → 98–99 ms | 1,387–1,388 → 11 ms | 1,721–1,764 ms | 267–320 ms |
+
+What is left on `max-links` at 100% is the raster, 0.84 to 1.15 seconds
+before and after alike. Drawn opaque it takes about a third of the time
+(16,000 random connectors, 0.75 to 0.77 against 2.2 to 2.3 seconds), but the
+connectors are translucent by design, and drawing them opaque under the
+canvas's own opacity does not look the same: where two cross, or a head
+meets a line, they blend once rather than twice.
+
+`npm run test:hostile` on the boards with the most items and connectors,
+back to back the same way (worst frame, then the whole opening):
+
+| Fixture | Opening before | Opening after | Zoomed out before | after |
+|---|---|---|---|---|
+| `max-links` | 2.32–2.40 s (2.84–2.94) | 0.81–0.90 s (1.45–1.54) | 1.73–1.81 s | 0.33 s |
+| `max-id`, 5,000 items, 4,999 connectors | 0.22–0.28 s (6.7–7.0) | 0.26 s (6.9–7.8) | 0.09 s | 0.08 s |
+| `max-items-stacked` | 0.21–0.22 s (8.1–9.0) | 0.23 s (8.2–9.6) | 0.10 s | 0.10 s |
+
+`max-links` is held to the 2-second default now. Opened again, it took
+0.59–0.66 seconds before and 0.91 after: the harness's reopening never
+asked for the connectors to be drawn, as BoardSession's `finishLoad` does,
+and drew them only because the copies now listen to the connectors; it asks
+for them now.
+
+A pan of a small board, three notes, a diamond and one connector, with the
+dot pattern (`npm run bench:connectors -- --pan`), the median of 20 steps;
+"camera only" moves the camera and draws neither canvas, what the items
+alone cost:
+
+| Window, scale | Camera only | Both canvases drawn (before) | Panned (now) |
+|---|---|---|---|
+| 1100×700, 1 | 21 ms | 21 ms | 21 ms |
+| 1920×1080, 1 | 21 ms | 25 ms | 21 ms |
+| 1100×700, 2 | 21 ms | 34 ms | 21 ms |
+| 1920×1080, 2 | 23 ms | 60 ms | 23 ms |
+
+Each canvas costs its pixels, not what is on it, and every earlier
+measurement here ran in a window of 1100×700 or smaller at scale 1. A
+board filling a 4K output at scale 2 is the bottom row: a pan drew two
+canvases of 3840×2160 every step. Now it draws neither. A zoom still
+draws both, and so does a pan once a connector reaches past the view.
+
+A zoom costs a little more for it. The pattern canvas is a step larger
+than the board, and changes size as the step does: a zoom step of an empty
+board with the dot pattern, asked for as `BoardPane.zoomAt` asks, took
+55–56 ms at 25% and 21 at 100% in a 1100×700 window before, 56–57 and 21–22
+after; fullscreen 82–83 and 22–23 before, 85–87 and 24–25 after. At 25% it
+is the dots, 7,700 to 21,000 of them a step. One path and one fill for all
+of them took 1.4 seconds to rasterise, as 0.4.7 found; a square for each
+was no cheaper.
+
+`bench:connectors`' zoom steps never asked the pattern to be drawn, as the
+pane's zoom always has. The canvas now draws itself when the step changes,
+so on the code with all four changes its zoom phase at 20% includes the
+dots: 62 ms on `chain-300` and 80 on `chain-3000` in one run, against 40–42
+and 52 in the table above. That is the bench measuring what a zoom costs,
+not a zoom costing more.
+
+Of the targets proposed on 2026-10-24: `max-links` is under a second at 20%
+and opens within the default, but is 0.97 to 1.15 seconds at 100%, its
+raster. `mesh-20000` at 100% walks in 21 to 46 ms, not under 10, but its
+frames are within 30 ms of `chain-3000`'s in pan, selection and dragging,
+and 31 ms off in zooming. No phase on the chains is slower than its range
+before.
+
+The software renderer is not the desktop's: these say which costs went,
+not what a frame on the desktop now takes. Measuring a pan there, on the
+4K output, is still to do.
+
 ## Connectors in use — 2026-10-24
 
 `npm run bench:connectors` (`tests/connectors.js`), on the machine below with

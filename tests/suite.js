@@ -2066,6 +2066,26 @@ function tests(S) {
     ok(g.leftX > g.fromX && g.rightX > g.fromX, "head fits available space")
   })
 
+  test("the connectors in view are walked from plain copies, the selection's apart", () => {
+    const rows = [item({ iid: 4 }), item({ iid: 5, ix: 300 }), item({ iid: 6, ix: 2000 }), item({ iid: 7, ix: 30 })]
+    const byId = { 4: 0, 5: 1, 6: 2, 7: 3 }
+    // 4→5 in view, 5→6 crossing out of it, 6→6's neighbour off screen, 4→7
+    // overlapping, and an end that is no longer on the board.
+    const ends = [4, 5, 5, 6, 6, 6, 4, 7, 4, 99]
+    const all = S.connectorsInView(byId, rows, ends, 0, 0, 400, 300, 9, 2, -1)
+    eq(all.normal, [S.connectorGeometry(rows[0], rows[1], 9, 2), S.connectorGeometry(rows[1], rows[2], 9, 2)])
+    eq(all.highlighted, [])
+    const picked = S.connectorsInView(byId, rows, ends, 0, 0, 400, 300, 9, 2, 6)
+    eq(picked.normal, [S.connectorGeometry(rows[0], rows[1], 9, 2)])
+    eq(picked.highlighted, [S.connectorGeometry(rows[1], rows[2], 9, 2)], "drawn in the accent")
+    eq(all.inside, false, "one crosses out of the view and one is off it")
+    eq(S.connectorsInView(byId, rows, [4, 5], 0, 0, 400, 300, 9, 2, -1).inside, true, "whole, head and all")
+    eq(S.connectorsInView(byId, rows, [4, 5], 0, 0, 355, 300, 9, 2, -1).inside, false,
+      "the far centre is in view, but not the room its head takes")
+    eq(S.connectorsInView(byId, rows, [4, 99], 0, 0, 10, 10, 9, 2, -1).inside, true,
+      "a connector whose end is gone draws nothing anywhere")
+  })
+
   test("textures persist, default to plain, and clear when a snapshot is restored", () => {
     const model = new FakeModel([item(), item({ iid: 2, kind: "ellipse", itexture: "grid" }),
       item({ iid: 3, kind: "image", isrc: "picture.png", itexture: "dots" })])

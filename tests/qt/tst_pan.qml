@@ -735,6 +735,65 @@ TestCase {
     }
   }
 
+  // A pan moves the pattern it has drawn rather than drawing it again, and
+  // what it moves stays on the board.
+  function test_aPanMovesThePatternItHasDrawn_data() {
+    return [{ tag: "Dots", pattern: "Dots" }, { tag: "Grid", pattern: "Grid" }]
+  }
+  function test_aPanMovesThePatternItHasDrawn(row) {
+    ctl.items.clear()
+    ctl.canvasPattern = row.pattern
+    ctl.zoom = 1
+    surface.width = 500
+    surface.repaintGrid()
+    wait(100)
+    var pattern = findChild(surface, "pattern")
+    var spy = Qt.createQmlObject('import QtTest; SignalSpy { signalName: "painted" }', test)
+    spy.target = pattern
+    var outside = grabImage(test).pixel(560, 330)
+    var step = 40
+    for (var move of [[-17, 13], [31, -6]]) {
+      ctl.panBy(move[0], move[1])
+      var x = ((ctl.camX % step) + step) % step
+      var y = ((ctl.camY % step) + step) % step
+      x += Math.ceil((340 - x) / step) * step
+      y += Math.ceil((320 - y) / step) * step
+      var background = ctl.theme.canvasBackground
+      tryVerify(function () {
+        var img = grabImage(surface)
+        return img.pixel(x, y) !== background
+          && (img.pixel(x + step / 2, y) !== background) === (row.pattern !== "Dots")
+          && img.pixel(x + step / 2, y + step / 2) === background
+      }, 2000, "the pattern followed the camera")
+      // The canvas is a step wider than the board: any of it showing is here.
+      var shot = grabImage(test), drawnPast = 0
+      for (var px = 500; px < 500 + step; px++)
+        for (var py = 0; py < test.height; py++)
+          if (shot.pixel(px, py) !== outside) drawnPast++
+      compare(drawnPast, 0, "nothing drawn past the board")
+    }
+    compare(spy.count, 0, "and was not drawn again")
+    spy.destroy()
+  }
+
+  // A hidden canvas still paints when asked, and every zoom asks.
+  function test_aHiddenPatternIsNotDrawn() {
+    ctl.items.clear()
+    ctl.canvasPattern = "Dots"
+    ctl.showGrid = false
+    wait(50)
+    var spy = Qt.createQmlObject('import QtTest; SignalSpy { signalName: "painted" }', test)
+    spy.target = findChild(surface, "pattern")
+    ctl.zoom = 0.3
+    surface.repaintGrid()
+    wait(150)
+    compare(spy.count, 0, "not drawn while the pattern is off")
+    ctl.showGrid = true
+    spy.wait(2000)
+    ctl.zoom = 1
+    spy.destroy()
+  }
+
   function test_patternVisibilityAndTheme() {
     ctl.items.clear()
     ctl.showGrid = false

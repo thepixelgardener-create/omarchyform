@@ -174,7 +174,12 @@ npm run bench:connectors                     # every board
 npm run bench:connectors -- max-links        # the ones named
 npm run bench:connectors -- --frames 20      # steps per phase, default 12
 npm run bench:connectors -- --json           # one JSON line per board
+npm run bench:connectors -- --pan            # a small board panned, at scale 1 and 2
 ```
+
+`--pan` measures what a canvas costs for its size rather than its contents: a
+board of four items panned in a window of 1100×700 and of 1920×1080, at scale 1
+and 2, with each canvas drawn again every step and as `BoardPane.panBy` does it now.
 
 `npm run shots` puts the real plugin through every state worth judging by eye —
 empty, a cursor beside a mark, typing, backgrounds, finding, arranging, the

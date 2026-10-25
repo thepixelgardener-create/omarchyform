@@ -14,9 +14,9 @@ import "../../BoardStore.js" as Store
 // sees. raster: from the end of the connector canvas's onPaint to its
 // painted(), Context2D drawing the paths into the canvas's image. The script
 // before it is timed apart, once per view, because nothing marks when a
-// polish starts: geometry is the canvas's loop over every connector with
-// nothing drawn, and paths is the board's own paintConnectors handing what
-// that loop found to a Context2D.
+// polish starts: geometry is the board's own connectorsInView walking every
+// connector with nothing drawn, and paths is its paintConnectors handing what
+// that walk found to a Context2D.
 TestCase {
   id: test
   name: "Connectors"
@@ -97,26 +97,19 @@ TestCase {
     return { frame: summary(frame), raster: summary(raster) }
   }
 
-  // Board.qml's onPaint, in two halves: the loop up to the paths, then the
-  // paths, handed to a canvas that is never drawn.
+  // Board.qml's onPaint, in two halves, through the board's own functions:
+  // the walk up to the paths, then the paths, handed to a canvas that is
+  // never drawn.
   function script() {
-    var items = ctl.items, links = ctl.links, zoom = ctl.zoom, camX = ctl.camX, camY = ctl.camY
+    var zoom = ctl.zoom, camX = ctl.camX, camY = ctl.camY
     var head = Math.max(8, 9 * zoom) / zoom
-    // The board keeps this index until rows come or go, so it is not timed.
-    var byId = Store.idIndex(items)
+    // The board keeps its index and copies until the models change, so
+    // bringing them up to date is not timed.
+    surface.indexConnectors()
     var started = Date.now()
-    var left = -camX / zoom, top = -camY / zoom
-    var right = (surface.width - camX) / zoom, bottom = (surface.height - camY) / zoom
-    var shown = []
-    for (var i = 0; i < links.count; i++) {
-      var l = links.get(i)
-      var ai = byId[l.lfrom], bi = byId[l.lto]
-      if (ai === undefined || bi === undefined) continue
-      var a = items.get(ai), b = items.get(bi)
-      if (!Store.connectorInView(a, b, left, top, right, bottom, head)) continue
-      var g = Store.connectorGeometry(a, b, head, 2 / zoom)
-      if (g.visible) shown.push(g)
-    }
+    var found = surface.connectorsInView(-camX / zoom, -camY / zoom,
+      (surface.width - camX) / zoom, (surface.height - camY) / zoom, head, zoom, -1)
+    var shown = found.normal.concat(found.highlighted)
     var walked = Date.now()
     var ctx = scratch.getContext("2d")
     ctx.reset()
