@@ -478,7 +478,7 @@ function paletteTint(palette, group, tint) {
 }
 
 // ----------------------------------------------------------- the status line
-// One line under the header, and every tier listed below wanting it. Which one gets
+// One line in the header, and every tier listed below wanting it. Which one gets
 // it is decided here, once, because it used to be decided twice — the view drew
 // the line and the controller worked out separately whether a failure was on
 // screen, so that it could stop timing one that was not. The two disagreed
@@ -503,11 +503,14 @@ function paletteTint(palette, group, tint) {
 //   linking
 //   flash           what just happened, and goes away by itself.
 //   switching       what it is busy with.
-//   saving
 //   hints           nothing in particular: the keys.
+//
+// A write on its way is not on the list: the disk beside the name says it.
+// The line said "saving…" for the moment each write took, and every edit made
+// the keys blink out of the header and back.
 var STATUS_TIERS = ["none", "saveError", "trashIndexError", "conflict", "damaged", "failure",
                     "palette", "arrange", "backgrounds", "editing", "linking",
-                    "flash", "switching", "saving", "hints"]
+                    "flash", "switching", "hints"]
 
 function statusTier(s) {
   if (!s) return "none"
@@ -526,11 +529,31 @@ function statusTier(s) {
   if (s.linking) return "linking"
   if (s.statusText !== "") return "flash"
   if (s.switching) return "switching"
-  if (s.saving) return "saving"
   // The keys are for the pane the keyboard is in. Beside it, a pane that is
   // only being looked at says nothing until it has something to say.
   return s.active === false ? "none" : "hints"
 }
+
+// The mark beside a board's name: a disk when what is on screen is in the
+// file, the disk being written when it is not there yet, a warning when it
+// cannot get there, a lock when it is not to be written at all. Opening has
+// no mark; the header says how far it has got instead.
+function saveMark(s) {
+  if (s.opening) return "opening"
+  if (s.damaged) return "readonly"
+  if (s.saveError !== "" || s.diskChanged) return "failed"
+  if (s.waiting || s.saving) return "unsaved"
+  return "saved"
+}
+
+// Nerd Font glyphs. The shell draws its own icons from the same font, so a
+// glyph that is missing here is missing from the bar as well.
+var SAVE_GLYPHS = {
+  saved: String.fromCodePoint(0xF0193), unsaved: String.fromCodePoint(0xF0CFB),
+  failed: String.fromCodePoint(0xF0F42), readonly: String.fromCodePoint(0xF033E)
+}
+var FIT_GLYPH = String.fromCodePoint(0xF18F4)
+var MENU_GLYPH = String.fromCodePoint(0xF035C)
 
 // ------------------------------------------------------------ connectors
 // Only one connector runs between any pair, so drawing one is three different
@@ -872,7 +895,7 @@ var KEY_HELP_SECTIONS = [
   ] },
   { title: "Connect", rows: [
     ["x", "connect: x on one, click or tab to the other, x again"],
-    // Which of the two it will be is said on the line under the header while the
+    // Which of the two it will be is said on the line in the header while the
     // far end is being chosen, so this row says that there is a choice rather
     // than asking anyone to work out which side of it they are on.
     ["x on a connected pair", "turn that connector round, or remove it — the line says which"],

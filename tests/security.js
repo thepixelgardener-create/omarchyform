@@ -80,8 +80,7 @@ for (const hook of ['preinstall', 'install', 'postinstall', 'prepare'])
 
 // Deliberate styled renderers: status escaped by
 // escapeMarkup; all others use application-owned hints. Additions need review.
-const styledCounts = {'Board.qml': 3, 'Browser.qml': 2, 'Conflict.qml': 1,
-  'BoardToolbar.qml': 1}
+const styledCounts = {'Board.qml': 3, 'Browser.qml': 2, 'Conflict.qml': 1}
 for (const file of fs.readdirSync(root).filter(f => f.endsWith('.qml'))) {
   const source = fs.readFileSync(path.join(root, file), 'utf8')
   assert.deepEqual(qmlPolicy(source), [], file)

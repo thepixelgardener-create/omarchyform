@@ -91,6 +91,8 @@ TestCase {
     ctl.diskChanged = false
     ctl.damaged = false
     ctl.arranging = false
+    ctl.leaveWarned = false
+    ctl.saveMark = "saved"
     ctl.theme.fontBody = 12
     surface.width = test.width
     surface.height = test.height
@@ -655,6 +657,54 @@ TestCase {
   // A theme with large text in a small window is where a hint stops fitting.
   // It has to wrap into the line rather than run off the side of the board or
   // climb over the header, whichever of the four things it is saying.
+  // The line of keys is in the header: beside the name where it fits between
+  // the name and the buttons, and on a row of its own under them where not.
+  function test_theLineSitsInTheHeader() {
+    var line = findChild(surface, "board-status")
+    var toolbar = findChild(surface, "board-toolbar")
+    var title = findChild(surface, "board-title")
+    var mark = findChild(surface, "save-mark")
+    var fit = findChild(surface, "fit-button")
+    surface.width = 1400
+    wait(0)
+    verify(line.visible)
+    var after = mark.mapToItem(surface, mark.width, 0).x
+    verify(line.x >= after, "after the name and its mark")
+    verify(line.x + line.width <= fit.mapToItem(surface, 0, 0).x, "before the buttons")
+    verify(line.y < title.mapToItem(surface, 0, title.height).y, "on the name's row")
+    verify(line.y >= toolbar.y && line.y + line.height <= toolbar.y + toolbar.height, "inside the header")
+    compare(line.lineCount, 1)
+    var slim = toolbar.height
+
+    surface.width = 500
+    wait(0)
+    verify(line.y >= title.mapToItem(surface, 0, title.height).y, "too long for that, a row under the name")
+    verify(line.y + line.height <= toolbar.y + toolbar.height, "still inside the header")
+    verify(toolbar.height > slim, "which grows to hold it")
+    verify(surface.canvasTop >= toolbar.y + toolbar.height, "and the board is framed below it")
+  }
+
+  // The words the header used to say are a mark now, and asking to close a
+  // board that is not in its file says the next ask closes all the same.
+  function test_theMarkSaysWhetherTheBoardIsInItsFile() {
+    var mark = findChild(surface, "save-mark")
+    compare(mark.text, Store.SAVE_GLYPHS.saved)
+    ctl.saveMark = "unsaved"
+    compare(mark.text, Store.SAVE_GLYPHS.unsaved)
+    compare(mark.color, ctl.theme.accent)
+    ctl.saveMark = "failed"
+    compare(mark.color, ctl.theme.urgent)
+
+    var line = findChild(surface, "board-status")
+    ctl.saveError = "notes.json could not be written — ctrl+s to retry"
+    verify(line.text.indexOf("close anyway") < 0, "nothing about closing until it is asked for")
+    ctl.leaveWarned = true
+    verify(line.text.replace(/<[^>]*>/g, "").indexOf("esc: close anyway") > 0, "then the line says it")
+    ctl.saveError = ""
+    ctl.diskChanged = true
+    verify(line.text.replace(/<[^>]*>/g, "").indexOf("esc: close anyway") > 0, "and for two versions too")
+  }
+
   function test_theLineWrapsInASmallWindowAtALargeSize_data() {
     return test_theStatusLineSaysWhatTheGestureWillDo_data()
   }
@@ -671,7 +721,9 @@ TestCase {
     verify(line.width <= surface.width, "the line stays inside the board")
     verify(line.x >= 0, "and starts inside it")
     verify(line.contentWidth <= line.width + 1, "it wrapped rather than running off the side")
-    verify(line.y >= surface.headerHeight, "and sits under the header rather than over it")
+    var title = findChild(surface, "board-title")
+    verify(line.y >= title.mapToItem(surface, 0, title.height).y, "and has a row of its own under the name")
+    verify(line.y + line.height <= surface.headerHeight, "inside the header, which grows to hold it")
     verify(line.y + line.height < surface.height, "with the canvas still showing below it")
     verify(surface.canvasTop >= line.y + line.height, "and the board is framed below it, however many lines it took")
   }
@@ -722,8 +774,9 @@ TestCase {
       surface.repaintGrid()
       var x = ((ctl.camX % step) + step) % step
       var y = ((ctl.camY % step) + step) % step
-      x += Math.ceil((340 - x) / step) * step
-      y += Math.ceil((320 - y) / step) * step
+      // Left of the middle, where an empty board says how to start.
+      x += Math.ceil((120 - x) / step) * step
+      y += Math.ceil((420 - y) / step) * step
       var background = ctl.theme.canvasBackground
       tryVerify(function () {
         var img = grabImage(surface)

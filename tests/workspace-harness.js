@@ -73,6 +73,7 @@ function makeDocument(workspace, board, Store) {
   Object.defineProperty(doc, 'canEdit', { get: () => session.canEdit })
   Object.defineProperty(doc, 'diskChanged', { get: () => session.conflict })
   Object.defineProperty(doc, 'saving', { get: () => session.busy })
+  Object.defineProperty(doc, 'waiting', { get: () => session.waitingSince !== 0 })
   Object.defineProperty(doc, 'boardPath', { get: () => '/boards/' + doc.currentBoard })
   Object.defineProperty(doc, 'boardTitle', { get: () => Store.displayName({ path: doc.currentBoard, dir: false }) })
   forward(doc, () => workspace, ['autosaveMs', 'stateReady', 'boardsDir', 'backupsDir', 'library'])
@@ -127,7 +128,8 @@ function makePane(workspace, exchange, Store) {
   // What the header says the board is: a binding in the QML, term for term.
   Object.defineProperty(root, 'boardState', { get: () => root.damaged ? 'Read only'
     : root.saveError !== '' ? 'Save failed'
-    : root.diskChanged ? 'Changed on disk' : root.saving ? 'Saving…' : 'Saved locally' })
+    : root.diskChanged ? 'Changed on disk' : root.saving ? 'Saving…'
+    : root.waiting ? 'Not saved yet' : 'Saved locally' })
   // What the pane reads off its document and the workspace.
   Object.defineProperty(root, 'items', { get: () => root.doc ? root.doc.items : empty })
   Object.defineProperty(root, 'links', { get: () => root.doc ? root.doc.links : empty })
@@ -142,7 +144,7 @@ function makePane(workspace, exchange, Store) {
     }
   })
   Object.defineProperty(root, 'nextId', { get: () => root.doc ? root.doc.nextId : 1 })
-  for (const key of ['boardLoaded', 'damaged', 'diskChanged', 'saving'])
+  for (const key of ['boardLoaded', 'damaged', 'diskChanged', 'saving', 'waiting'])
     Object.defineProperty(root, key, { get: () => !!root.doc && root.doc[key] })
   for (const key of ['damageReason', 'saveError', 'currentBoard', 'boardTitle'])
     Object.defineProperty(root, key, { get: () => root.doc ? root.doc[key] : '' })

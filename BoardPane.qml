@@ -75,7 +75,7 @@ Item {
   property int editIndex: -1      // -1 means normal mode: every key is a command
   property int linkingFrom: -1    // id of the first end while connecting
   // What pressing x again would do to the two ends chosen so far, so the line
-  // under the header can say it before it happens. addLink asks the same
+  // in the header can say it before it happens. addLink asks the same
   // question of the same table when it carries it out, so the promise and the
   // change cannot come apart.
   //
@@ -98,7 +98,14 @@ Item {
   readonly property bool dialogOpen: root.workspace.exchange.dialogOpen
   readonly property string boardState: root.opening ? "Opening… " + Math.floor(root.doc.openedShare * 100) + "%"
     : root.damaged ? "Read only" : root.saveError !== "" ? "Save failed"
-    : root.diskChanged ? "Changed on disk" : root.saving ? "Saving…" : "Saved locally"
+    : root.diskChanged ? "Changed on disk" : root.saving ? "Saving…"
+    : root.waiting ? "Not saved yet" : "Saved locally"
+  // What the mark beside the name shows; boardState is what it says aloud.
+  readonly property string saveMark: Store.saveMark({ opening: root.opening, damaged: root.damaged,
+    saveError: root.saveError, diskChanged: root.diskChanged, waiting: root.waiting, saving: root.saving })
+  // Asked to close while a board's edits are not in its file: the line says
+  // so, and the next ask closes. See Omarchyform.close.
+  readonly property bool leaveWarned: root.workspace.leaveWarned
   // Only a board made to be typed into. A pane that has just been given a
   // board can hear that it loaded before it hears which board it is, and an
   // empty wish matched against a name not yet there is a match.
@@ -319,7 +326,7 @@ Item {
     root.failureKind = ""
   }
 
-  // Everything the line under the header is decided from, gathered in one
+  // Everything the line in the header is decided from, gathered in one
   // place. A function rather than a property so that the suite gets it along
   // with the rest of the controller: the decision it feeds is the same one the
   // board draws with, and a second copy of it here is how `opened` went missing
@@ -334,7 +341,7 @@ Item {
       paletteVisible: root.paletteVisible, arranging: root.arranging,
       showPinned: root.showPinned, editing: root.editIndex >= 0,
       linking: root.linkingFrom >= 0, statusText: root.statusText,
-      switching: root.pendingBoard !== null || root.leaving, saving: root.saving
+      switching: root.pendingBoard !== null || root.leaving
     }
   }
 
@@ -410,6 +417,7 @@ Item {
     root.workspace.saveConflictCopy(root.doc, root.doc.fileText(), base + "-mine")
   }
   readonly property bool saving: root.doc !== null && root.doc.saving
+  readonly property bool waiting: root.doc !== null && root.doc.waiting
   readonly property var pendingBoard: root.doc ? root.doc.pendingBoard : null
   // One picture renders at a time across the workspace, and nothing changes
   // under it while it does: a board shown twice is still one board.

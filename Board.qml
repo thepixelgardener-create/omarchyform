@@ -14,9 +14,9 @@ FocusScope {
   focus: true
   readonly property real headerHeight: toolbar.y + toolbar.height
   // Where the canvas comes clear of everything laid over its top: the header,
-  // the backgrounds banner, and the line of hints or the find query under
-  // them. That line wraps in a narrow window, so framing the board from the
-  // header alone put its top row underneath the hints.
+  // with the line of hints or the find query in it, and the backgrounds banner
+  // under it. The line wraps in a narrow window and the header grows to hold
+  // it; framing the board from a fixed header put its top row under the hints.
   readonly property real canvasTop: Math.max(headerHeight,
     banner.visible ? banner.y + banner.height : 0,
     status.visible ? status.y + status.height : 0,
@@ -801,8 +801,8 @@ FocusScope {
   }
 
   // The board steps back while a panel is asking for attention, as the desktop
-  // does behind the shell's own menu. Over the canvas and under the header and
-  // the line beneath it, which go on saying what the keys do in that panel.
+  // does behind the shell's own menu. Over the canvas and under the header,
+  // whose line goes on saying what the keys do in that panel.
   // The browser dims everything itself, header and all, as it covers it.
   Rectangle {
     objectName: "panel-scrim"
@@ -818,6 +818,8 @@ FocusScope {
     anchors { top: parent.top; left: parent.left; right: parent.right; margins: board.theme.sp(16) }
     height: implicitHeight
     visible: !board.ctl.browsing && !board.ctl.helpVisible
+    lineWidth: findLine.visible ? findLine.implicitWidth : status.visible ? status.implicitWidth : 0
+    lineHeight: findLine.visible ? findLine.height : status.visible ? status.height : 0
   }
 
   Column {
@@ -872,9 +874,9 @@ FocusScope {
     objectName: "conflict-panel"
     ctl: board.ctl
     anchors.horizontalCenter: parent.horizontalCenter
-    // Below the line under the header, not a fixed distance below the header:
-    // that line wraps in a narrow window, and its second row drew over the top
-    // of the panel.
+    // Below the header as tall as it is, not a fixed distance below its top:
+    // its line wraps in a narrow window, and a second row of it drew over the
+    // top of the panel.
     y: board.canvasTop + board.theme.sp(8)
   }
 
@@ -949,17 +951,16 @@ FocusScope {
   Row {
     id: findLine
     visible: board.ctl.finding && !board.ctl.helpVisible && !board.ctl.browsing
-    anchors.horizontalCenter: parent.horizontalCenter
-    anchors.top: banner.visible ? banner.bottom : toolbar.bottom
-    anchors.topMargin: board.theme.sp(8)
-    width: Math.min(parent.width - board.theme.sp(32), implicitWidth)
+    x: toolbar.x + toolbar.lineX + (toolbar.lineSpan - width) / 2
+    y: toolbar.y + toolbar.lineY
+    width: Math.min(toolbar.lineSpan, implicitWidth)
     height: implicitHeight
 
     Text {
       textFormat: Text.PlainText
       id: findLabel
       text: "find: "
-      color: board.theme.foreground
+      color: board.ctl.theme.barForeground
       opacity: 0.85
       font.family: board.theme.fontFamily
       font.pixelSize: board.theme.fontBody
@@ -977,9 +978,9 @@ FocusScope {
       LineField {
         id: findField
         objectName: "find-field"
-        color: board.theme.foreground
-        selectionColor: board.theme.accent
-        selectedTextColor: board.theme.canvasBackground
+        color: board.ctl.theme.barForeground
+        selectionColor: board.ctl.theme.accent
+        selectedTextColor: board.ctl.theme.barBackground
         font.family: board.theme.fontFamily
         font.pixelSize: board.theme.fontBody
 
@@ -1026,9 +1027,9 @@ FocusScope {
       // centred in over to the left. A theme with large text in a small window
       // wraps it instead, the way the status line it stands in for wrapped.
       width: Math.min(implicitWidth,
-                      Math.max(0, board.width - board.theme.sp(32) - findLabel.width - findView.width))
+                      Math.max(0, toolbar.width - board.theme.sp(16) - findLabel.width - findView.width))
       wrapMode: Text.Wrap
-      color: board.theme.foreground
+      color: board.ctl.theme.barForeground
       opacity: 0.85
       font.family: board.theme.fontFamily
       font.pixelSize: board.theme.fontBody
@@ -1039,21 +1040,20 @@ FocusScope {
     }
   }
 
-  // Under the header rather than at the far edge: the name, the commands and
+  // In the header rather than at the far edge: the name, the commands and
   // whatever the board is saying are one block to look at, and the bottom of
-  // the canvas is left to the board.
+  // the canvas is left to the board. The header says where: beside the name,
+  // or under it when the line is too long for that.
   Text {
     id: status
     objectName: "board-status"
-    anchors.left: parent.left
-    anchors.right: parent.right
-    anchors.leftMargin: board.theme.sp(16)
-    anchors.rightMargin: board.theme.sp(16)
+    x: toolbar.x + toolbar.lineX
+    y: toolbar.y + toolbar.lineY
+    width: toolbar.lineSpan
     horizontalAlignment: Text.AlignHCenter
     wrapMode: Text.Wrap
-    anchors.top: banner.visible ? banner.bottom : toolbar.bottom
-    anchors.topMargin: board.theme.sp(8)
-    color: board.theme.foreground
+    // The bar's text, held back as its other secondary text is.
+    color: board.ctl.theme.barForeground
     opacity: 0.85
     font.family: board.theme.fontFamily
     font.pixelSize: board.theme.fontBody
@@ -1067,12 +1067,17 @@ FocusScope {
     // by the same call the controller makes to know whether a failure is on
     // screen and its time is running. Here it is only joined and coloured.
     readonly property string tier: Store.statusTier(board.ctl.statusState())
+    // Asked to close with either of the first and third unresolved, the line
+    // says the next ask closes all the same.
+    readonly property string closeAnyway: board.ctl.leaveWarned
+      ? " · " + Store.hintMarkup("esc", "close anyway", board.ctl.accentMarkup) : ""
     text:
-      status.tier === "saveError" ? Store.escapeMarkup(board.ctl.saveError)
+      status.tier === "saveError" ? Store.escapeMarkup(board.ctl.saveError) + status.closeAnyway
       : status.tier === "trashIndexError" ? Store.escapeMarkup(board.ctl.library.trashIndexError)
       : status.tier === "conflict"
       ? Store.escapeMarkup(board.ctl.boardTitle) + " changed on disk · "
         + Store.hintMarkup("ctrl+s", "choose which version to keep", board.ctl.accentMarkup)
+        + status.closeAnyway
       : status.tier === "damaged"
       ? Store.escapeMarkup(board.ctl.damageReason !== ""
           ? board.ctl.boardTitle + " " + board.ctl.damageReason + " — not opening it"
@@ -1097,7 +1102,6 @@ FocusScope {
       ? Store.linkHint(board.ctl.linkOutcome, board.ctl.accentMarkup)
       : status.tier === "flash" ? Store.escapeMarkup(board.ctl.statusText)
       : status.tier === "switching" ? "saving before switching boards…"
-      : status.tier === "saving" ? "saving…"
       // The other pane is still there when the window is too small to show
       // it, and the line says how to reach it rather than leave it forgotten.
       : (board.ctl.squeezed ? Store.hintMarkup("o", "the other pane", board.ctl.accentMarkup) + " \u00b7 " : "")

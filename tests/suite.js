@@ -1004,7 +1004,7 @@ function tests(S) {
       opened: true, helpVisible: false, browserVisible: false, finding: false,
       saveError: "", trashIndexError: "", diskChanged: false, damaged: false,
       failureText: "", paletteVisible: false, arranging: false, showPinned: false,
-      editing: false, linking: false, statusText: "", switching: false, saving: false
+      editing: false, linking: false, statusText: "", switching: false
     }
     const on = over => S.statusTier(Object.assign({}, quiet, over))
 
@@ -1025,8 +1025,7 @@ function tests(S) {
       ["editing", { editing: true }],
       ["linking", { linking: true }],
       ["flash", { statusText: "Copied" }],
-      ["switching", { switching: true }],
-      ["saving", { saving: true }]
+      ["switching", { switching: true }]
     ]
     for (const [tier, state] of turnsOn) eq(on(state), tier, tier + " on its own")
     eq(turnsOn.length + 2, S.STATUS_TIERS.length, "every tier is named and reachable")
@@ -1056,6 +1055,29 @@ function tests(S) {
        "nor a failure")
     eq(on({ failureText: "Could not copy that picture", diskChanged: true }), "conflict",
        "and a failure does not cover a board that is not being saved")
+    // The disk beside the name says a write is on its way. The line used to
+    // as well, and every edit blinked the keys out of the header and back.
+    eq(on({ saving: true }), "hints", "a write on its way leaves the keys where they are")
+  })
+
+  // The mark beside a board's name stands in for the words that were there.
+  // It shows something different only where a person would act differently.
+  test("the mark beside the name says whether the board is in its file", () => {
+    const saved = { opening: false, damaged: false, saveError: "", diskChanged: false,
+                    waiting: false, saving: false }
+    const mark = over => S.saveMark(Object.assign({}, saved, over))
+    eq(mark({}), "saved", "nothing waiting is a disk")
+    eq(mark({ waiting: true }), "unsaved", "typing autosave has not reached yet is not")
+    eq(mark({ saving: true }), "unsaved", "nor is a write still on its way")
+    eq(mark({ saveError: "disk full", saving: true }), "failed", "a write that failed is a warning")
+    eq(mark({ diskChanged: true, waiting: true }), "failed", "and so are two versions of a board")
+    eq(mark({ damaged: true, saveError: "x" }), "readonly", "a board not to be written is locked")
+    eq(mark({ opening: true, damaged: true }), "opening", "and one still opening says how far it is")
+    for (const m of ["saved", "unsaved", "failed", "readonly"]) {
+      eq(typeof S.SAVE_GLYPHS[m], "string", m + " has a glyph")
+      eq(S.SAVE_GLYPHS[m].length, 2, m + " is one glyph from the Nerd Font's private area")
+    }
+    eq(new Set(Object.values(S.SAVE_GLYPHS)).size, 4, "and no two look alike")
   })
 
   test("canvas previews are bounded literal text without changing stored notes", () => {

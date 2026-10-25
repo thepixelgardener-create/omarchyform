@@ -85,7 +85,7 @@ useful regressions, but the live suite verifies the host integration.
 | `BoardPane.qml` | One view of a board and the controller its views read: camera, selection, modes and every command |
 | `BoardDocument.qml` | One open board: its items and connectors, ids, undo history and the session saving it |
 | `Board.qml` | The canvas surface — grid, connectors, keys, cheat sheet |
-| `BoardToolbar.qml` | The header: the board's name and save state, the zoom, and the menu |
+| `BoardToolbar.qml` | The header: the board's name and save mark, where the status line goes, fit, and the menu |
 | `Theme.qml` | Colours, fonts, sizes and weights, all read from the shell's theme with fallbacks |
 | `Surface.qml` | The card a panel is drawn on, in the shell's menu colours and the theme's border for them |
 | `Node.qml` | One item: note, box, ellipse, diamond or picture. Shapes are `QtQuick.Shapes` geometry, so they stay sharp at any zoom |

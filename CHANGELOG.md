@@ -3,6 +3,24 @@
 Notable changes, newest first. Board file versions are noted where they moved,
 since older boards are migrated on load rather than rejected.
 
+## Unreleased
+
+### Changed
+
+- The header is one line: the board's name, a disk for whether it is saved,
+  the line of keys (or whatever the board is saying) and two icon buttons, fit
+  and menu. The words `Saved locally` and the zoom percentage are gone; the
+  zoom is in the menu.
+- The disk is accent-coloured with a pencil while an edit is waiting to be
+  written, red with `!` when a write failed or the board changed on disk, and a
+  lock when the board is read-only.
+- The line no longer flashes `saving…` on every write; the disk says it.
+- Closing while a write has failed or a board has two versions no longer
+  closes at once: the first `esc` (or keybinding, or bar click) adds
+  `esc: close anyway` to the line, and the second closes.
+- Panning repaints less: the dots, grid and connectors are moved rather than
+  drawn again, and a hidden pattern is not drawn at all.
+
 ## 0.5.3 — 2026-10-19
 
 ### Fixed

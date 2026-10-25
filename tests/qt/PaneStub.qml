@@ -67,7 +67,7 @@ Item {
       paletteVisible: ctl.paletteVisible, arranging: ctl.arranging,
       showPinned: ctl.showPinned, editing: ctl.editIndex >= 0,
       linking: ctl.linkingFrom >= 0, statusText: ctl.statusText,
-      switching: ctl.pendingBoard !== null, saving: ctl.saving
+      switching: ctl.pendingBoard !== null
     }
   }
   function isMarked(id) { return false }
@@ -122,6 +122,9 @@ Item {
   property string failureText: ""
   property string boardTitle: "notes"
   property string boardState: "Saved locally"
+  property bool waiting: false
+  property string saveMark: "saved"
+  property bool leaveWarned: false
   property string currentBoard: "notes.json"
   property string dataDir: "/tmp"
   property string accentMarkup: "#00ffff"
