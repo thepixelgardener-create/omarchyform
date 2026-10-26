@@ -132,6 +132,16 @@ autosave delay and keyboard step in `state.json` are held to the bar's
 ranges, and a paste onto the board is held to the view it was asked in, as a
 drop is.
 
+## 0.5.4 — Panning draws less
+
+Shipped. A pan moves the connectors and the dot pattern rather than drawing
+them again, and a hidden pattern is not drawn: on a laptop's panel a pan step
+went from 6 ms of drawing to none. Connectors are drawn in under half the
+time, 20,000 on screen in about a second a frame rather than 1.7 to 2.6. The
+header is one line, with a disk that says whether the board is saved.
+`npm run test:hostile` reports the worst pause and the time until a board is
+editable against targets set for each.
+
 ## Next maintenance pass
 
 Measured on 2026-10-19, on the machine in
