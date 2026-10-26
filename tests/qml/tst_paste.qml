@@ -10,12 +10,16 @@ ShellRoot {
   property int ticks: 0
   property int closedAt: 0
   property double reportedAt: 0
+  property string pasteBoard: ""
+  property var pasteDoc: null
   function check(ok, message) {
     if (!ok) { console.error("FAIL: " + message); Qt.quit(); throw new Error(message) }
   }
   Omarchyform { id: plugin }
   FileView { id: disk; blockLoading: true; blockAllReads: true }
   FileView { id: marker; blockLoading: true; blockAllReads: true; atomicWrites: false }
+  FileView { id: delayed; atomicWrites: false }
+  FileView { id: release; atomicWrites: false }
   Timer {
     interval: 50
     repeat: true
@@ -50,6 +54,27 @@ ShellRoot {
         disk.waitForJob()
         var saved = JSON.parse(disk.text())
         test.check(saved.items.length === 2 && saved.items[0].kind === "image", "pasted images persist")
+
+        test.pasteBoard = plugin.activePane.currentBoard
+        test.pasteDoc = plugin.activePane.doc
+        delayed.path = Quickshell.env("OMARCHYFORM_TEST_DIR") + "/delay-clipboard"
+        delayed.setText("x")
+        delayed.waitForJob()
+        plugin.activePane.pasteClipboard()
+        plugin.activePane.openBoard("from-cli.json", false)
+        test.stage = 40
+      } else if (test.stage === 40 && plugin.activePane.boardLoaded && plugin.activePane.currentBoard === "from-cli.json") {
+        plugin.activePane.openBoard(test.pasteBoard, false)
+        test.stage = 41
+      } else if (test.stage === 41 && plugin.activePane.boardLoaded && plugin.activePane.currentBoard === test.pasteBoard) {
+        test.check(plugin.activePane.doc === test.pasteDoc, "the round trip reuses the document")
+        release.path = Quickshell.env("OMARCHYFORM_TEST_DIR") + "/release-clipboard"
+        release.setText("x")
+        test.stage = 42
+      } else if (test.stage === 42) {
+        test.check(plugin.activePane.items.count === 2, "the delayed paste does not land on the returned board")
+        if (plugin.activePane.failureText === "") return
+        test.check(plugin.activePane.failureText === "Board changed; paste again", "the old paste is rejected after the round trip")
 
         // And what the board does when the clipboard does not answer. The stub
         // refuses while this marker exists, so the failure arrives the way a
