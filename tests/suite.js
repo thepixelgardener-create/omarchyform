@@ -2108,6 +2108,24 @@ function tests(S) {
       "a connector whose end is gone draws nothing anywhere")
   })
 
+  test("the walk goes on past what it leaves out, and holds a drawing to every side of the view", () => {
+    const rows = [item({ iid: 4 }), item({ iid: 5, ix: 300 }), item({ iid: 6, ix: 2000 }), item({ iid: 7, ix: 30 }),
+      item({ iid: 8, iy: 150 })]
+    const byId = { 4: 0, 5: 1, 6: 2, 7: 3, 8: 4 }
+    // An end gone, one off screen and one overlapping, then one to draw.
+    eq(S.connectorsInView(byId, rows, [4, 99, 6, 6, 4, 7, 4, 5], 0, 0, 400, 300, 9, 2, -1).normal,
+      [S.connectorGeometry(rows[0], rows[1], 9, 2)], "the last is still drawn")
+    // 4→5 runs from x 50 to 350 and 4→8 from y 50 to 200; a head takes 9.
+    const inside = (ends, left, top, right, bottom) =>
+      S.connectorsInView(byId, rows, ends, left, top, right, bottom, 9, 2, -1).inside
+    eq(inside([4, 5], 41, 0, 400, 300), true, "the near end's head just inside the left")
+    eq(inside([4, 5], 42, 0, 400, 300), false, "past the left")
+    eq(inside([4, 8], 0, 41, 400, 300), true, "just inside the top")
+    eq(inside([4, 8], 0, 42, 400, 300), false, "past the top")
+    eq(inside([4, 8], 0, 0, 400, 209), true, "just inside the bottom")
+    eq(inside([4, 8], 0, 0, 400, 208), false, "past the bottom")
+  })
+
   test("textures persist, default to plain, and clear when a snapshot is restored", () => {
     const model = new FakeModel([item(), item({ iid: 2, kind: "ellipse", itexture: "grid" }),
       item({ iid: 3, kind: "image", isrc: "picture.png", itexture: "dots" })])
