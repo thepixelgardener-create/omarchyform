@@ -50,6 +50,14 @@ const KNOWN = {
 const KNOWN_SESSION = { 'escaped-quotes': 2700, 'old-history': 2200 }
 const budget = name => ({ qml: KNOWN[name] || BUDGET.qml, cli: BUDGET.cli,
   session: KNOWN_SESSION[name] || BUDGET.session })
+// Goals rather than ceilings, on the machine docs/performance.md names under
+// its targets: the longest a board may hold the shell at once (the worst of
+// its frames and of the session's holds) and how long until it can be edited
+// (its slices and connectors in, or the session's opening if longer). A board
+// in ordinary use is held to the first pair, every other to the second. A
+// miss is listed, not failed: BUDGET is what may not get worse, these are
+// what to work on.
+const TARGET = { ordinary: { worst: 100, editable: 1000 }, limit: { worst: 500, editable: 10000 } }
 // What the session does with a board's text itself, reading it, comparing it
 // and parsing it, grows with its bytes; what grows with its items is the
 // Board's to time. So the session takes the boards of a megabyte or more.
@@ -71,12 +79,14 @@ const chosen = wanted.length ? fixtures.filter(f => wanted.includes(f.name)) : f
 fs.rmSync(generated, { recursive: true, force: true })
 fs.mkdirSync(generated)
 const failures = []
+const misses = []
 try {
   const manifest = chosen.map(f => {
     const file = f.name + '.omarchyform.json'
     const bytes = f.bytes()
     fs.writeFileSync(path.join(generated, file), bytes)
-    return { name: f.name, file, size: bytes.length, opens: f.opens, cliWarning: f.cliWarning, cliError: f.cliError }
+    return { name: f.name, file, size: bytes.length, opens: f.opens, ordinary: !!f.ordinary,
+      cliWarning: f.cliWarning, cliError: f.cliError }
   })
   fs.writeFileSync(path.join(generated, 'manifest.json'), JSON.stringify(manifest))
 
@@ -118,12 +128,14 @@ try {
     // The board in a session: opened, then read again once another process
     // has replaced it with one more byte. A board shown read-only is not read
     // again, so it has only its opening.
-    let sessionOk = true, sessionShown = ''
+    let sessionOk = true, sessionShown = '', sessionHeld = 0, sessionOpen = 0
     const viaSession = haveQs && f.size >= SESSION_BYTES ? session(f) : null
     if (viaSession) {
       const r = viaSession.seen
       const reread = r && f.opens ? r.reload !== null && typeof r.reload === 'object' : r && r.reload === null
       const held = r ? Math.max(r.open.worst, reread && r.reload ? r.reload.worst : 0) : 0
+      sessionHeld = held
+      sessionOpen = r && r.opens ? r.open.ms : 0
       sessionOk = viaSession.run.status === 0 && !viaSession.run.error && r !== null && r.opens === f.opens && reread
         && held <= limit.session * scale && !/TypeError|ReferenceError/.test(viaSession.output)
       sessionShown = !r ? '; session no report'
@@ -131,11 +143,22 @@ try {
           : typeof r.reload === 'object' ? ` reload ${r.reload.ms}ms (held ${r.reload.worst})` : ` reload ${r.reload}`)
     }
 
+    // The two numbers, against the targets.
+    const target = f.ordinary ? TARGET.ordinary : TARGET.limit
+    const worst = Math.max(seen ? cost : 0, sessionHeld)
+    const editable = f.opens && seen ? Math.max(seen.editable || 0, sessionOpen) : null
+    const over = [worst > target.worst ? `worst ${worst}ms over ${target.worst}` : '',
+      editable !== null && editable > target.editable ? `editable ${editable}ms over ${target.editable}` : '']
+      .filter(Boolean)
+    if (seen && over.length) misses.push(`${f.name}: ${over.join(', ')}`)
+    const judged = seen ? `editable ${editable === null ? '-' : editable + 'ms'} worst ${worst}ms` +
+      (over.length ? ' (over target)' : '') + '; ' : ''
+
     const shown = seen
       ? `open ${seen.open.ms}ms (frame ${seen.open.frame}) whole ${seen.whole.ms}ms (frame ${seen.whole.frame}) ` +
         `again ${seen.again.ms}ms, ${seen.items} items ${seen.links} links ${JSON.stringify(seen.steps)}`
       : qml.error ? `killed after ${KILL_MS}ms` : 'no report'
-    console.log(`${qmlOk && cliOk && sessionOk ? 'ok  ' : 'FAIL'} ${f.name.padEnd(20)} ${shown}; cli ${cliMs}ms${sessionShown}`)
+    console.log(`${qmlOk && cliOk && sessionOk ? 'ok  ' : 'FAIL'} ${f.name.padEnd(20)} ${judged}${shown}; cli ${cliMs}ms${sessionShown}`)
     if (!qmlOk) failures.push(f.name + ' (board)' + (seen ? '' : '\n' + output.slice(-4000)))
     if (!cliOk) failures.push(f.name + ' (cli): ' + (run.error ? run.error.message : (run.stdout + run.stderr).slice(0, 400)))
     if (!sessionOk) failures.push(f.name + ' (session)' + (viaSession.seen ? '' : '\n' + viaSession.output.slice(-4000)))
@@ -165,6 +188,9 @@ function session(f) {
   } finally { fs.rmSync(dir, { recursive: true, force: true }) }
 }
 
+if (misses.length)
+  console.log('\nOver target, a goal rather than a failure (docs/performance.md#targets--2026-10-26):\n  '
+    + misses.join('\n  ') + '\n')
 if (failures.length) {
   console.error('\nOver budget or broken:\n  ' + failures.join('\n  '))
   process.exit(1)

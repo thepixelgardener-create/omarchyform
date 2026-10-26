@@ -7,10 +7,16 @@
 //   node tests/scene.js                 100, 500, 1000 and 3000 items
 //   node tests/scene.js 3000            one size
 //   node tests/scene.js 3000 --textures every item textured
+//   node tests/scene.js 4 --timing      Qt's own timing of each frame as well
 //
 // Columns are milliseconds per frame, mean and 95th percentile. A phase at
 // the refresh interval (6.9ms at 144Hz, 16.7ms at 60) is vsync-bound and has
 // room to spare; above it, the board is dropping frames while you use it.
+// A phase at the refresh interval says nothing about how much of the frame it
+// used: --timing asks Qt to log its timing of every frame (QSG_RENDER_TIMING,
+// in whole milliseconds) and adds the medians of the work in it, the GUI
+// thread's polish, where a Canvas paints, and the render thread's sync and
+// render without the wait for the swap.
 //
 // A diagnostic, not a pass/fail gate, and not part of tests/run: it needs a
 // compositor, and frame times on a busy desktop are noisy. Run it before and
@@ -29,7 +35,8 @@ const args = process.argv.slice(2)
 // changelog quotes have a checked-in record of the machine that produced them.
 const record = args.includes('--record')
 const textures = args.includes('--textures')
-const sizes = args.filter(a => !['--record', '--textures'].includes(a)).map(Number).filter(n => n > 0)
+const timing = args.includes('--timing')
+const sizes = args.filter(a => !['--record', '--textures', '--timing'].includes(a)).map(Number).filter(n => n > 0)
 const plan = sizes.length ? sizes : [100, 500, 1000, 3000]
 
 function measure(size) {
@@ -62,7 +69,8 @@ function measure(size) {
         WAYLAND_DISPLAY: path.isAbsolute(display) ? display
           : path.join(process.env.XDG_RUNTIME_DIR || '', display),
         OMARCHYFORM_BENCH_ITEMS: String(size), OMARCHYFORM_BENCH_TEXTURES: textures ? '1' : '0',
-        OMARCHYFORM_TEST_DIR: dir }
+        OMARCHYFORM_TEST_DIR: dir,
+        ...(timing ? { QSG_RENDER_TIMING: '1', QT_FORCE_STDERR_LOGGING: '1' } : {}) }
     })
     const output = (result.stdout || '') + (result.stderr || '')
     if (!output.includes('BENCH_DONE')) {
@@ -71,11 +79,29 @@ function measure(size) {
     }
     const rows = []
     let window = '?'
+    // --timing: Qt's lines for the frames each phase records, in log order.
+    const timed = {}
+    let phase = null, recording = false
     for (const line of output.split('\n')) {
+      const marked = line.match(/BENCH phase (.+)$/)
+      if (marked) { phase = marked[1].trim(); recording = false }
+      if (line.includes('BENCH recording')) recording = true
+      if (timing && phase && recording) {
+        const t = timed[phase] || (timed[phase] = { polish: [], render: [] })
+        const polish = line.match(/Frame prepared, polish=(\d+) ms/)
+        if (polish) t.polish.push(Number(polish[1]))
+        const rendered = line.match(/frame rendered in \d+ms, sync=(\d+), render=(\d+)/)
+        if (rendered) t.render.push(Number(rendered[1]) + Number(rendered[2]))
+      }
       const m = line.match(/BENCH (\S[^\t]*)\t([\d.]+)\t([\d.]+)/)
       if (m) rows.push({ name: m[1], mean: Number(m[2]), p95: Number(m[3]) })
       const w = line.match(/BENCH window (\d+)x(\d+)/)
       if (w) window = `${w[1]}×${w[2]}`
+    }
+    const median = list => list.slice().sort((a, b) => a - b)[Math.floor(list.length / 2)]
+    for (const r of rows) {
+      const t = timed[r.name]
+      if (t && t.polish.length && t.render.length) { r.polish = median(t.polish); r.render = median(t.render) }
     }
     return { rows, window }
   } finally { fs.rmSync(dir, { recursive: true, force: true }) }
@@ -115,6 +141,15 @@ for (let i = 0; i < names.length; i++) {
     return `${r.mean.toFixed(1)}/${r.p95.toFixed(1)}`.padStart(13)
   })
   process.stdout.write(names[i].padEnd(width) + cells.join('') + '\n')
+}
+if (timing) {
+  process.stdout.write('\nQt\'s timing, median ms per frame: polish (GUI thread) / sync and render\n')
+  process.stdout.write('phase'.padEnd(width) + table.map(t => String(t.size).padStart(13)).join('') + '\n')
+  for (let i = 0; i < names.length; i++)
+    process.stdout.write(names[i].padEnd(width) + table.map(t => {
+      const r = t.rows[i]
+      return (r.polish === undefined ? 'no lines' : `${r.polish}/${r.render}`).padStart(13)
+    }).join('') + '\n')
 }
 // The idle row is the refresh interval this machine actually achieved, which
 // is the budget every other row should be read against — measured rather than

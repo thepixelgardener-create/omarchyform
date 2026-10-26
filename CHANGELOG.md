@@ -19,7 +19,27 @@ since older boards are migrated on load rather than rejected.
   closes at once: the first `esc` (or keybinding, or bar click) adds
   `esc: close anyway` to the line, and the second closes.
 - Panning repaints less: the dots, grid and connectors are moved rather than
-  drawn again, and a hidden pattern is not drawn at all.
+  drawn again, and a hidden pattern is not drawn at all. On a laptop's own
+  panel a pan step took 6 ms of drawing and now takes none; a window across a
+  4K output at scale 2 has nine times as much to draw.
+- A board of thousands of connectors draws them in under half the time. A
+  pan or zoom of 20,000 on screen took 1.7 to 2.6 seconds a frame and now
+  takes about one at 100% and a third of one zoomed out, and a board that
+  shows a few of its 20,000 spends 21 to 46 ms a frame finding them, not 73
+  to 77. Measured offscreen; `docs/performance.md` has each case.
+
+### Added
+
+- `npm run bench:connectors` measures what connectors cost while a board is
+  panned, zoomed, selected through and dragged, and with `--pan` what a pan of
+  a small board costs at each window size and scale.
+- `npm run bench:scene -- --timing` adds Qt's own timing of the work in each
+  frame, which a frame held to the refresh interval does not show.
+- `npm run test:hostile` reports two numbers for every board, the longest it
+  holds the shell at once and the time until it can be edited, and lists the
+  boards over the targets `docs/performance.md` sets for each, without
+  failing them. Two boards of ordinary size, 50 and 500 items, are measured
+  beside the ones at the limits.
 
 ## 0.5.3 — 2026-10-19
 

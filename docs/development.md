@@ -148,8 +148,16 @@ columns.
 npm run bench:scene            # 100, 500, 1000 and 3000 items
 npm run bench:scene -- 3000    # one size
 npm run bench:scene -- 3000 --textures # every item uses a non-plain texture
+npm run bench:scene -- 4 --timing # Qt's own timing of the work in each frame as well
 npm run bench:scene -- --record  # and write docs/performance.md
 ```
+
+A phase at the refresh interval does not say how much of the frame it used.
+`--timing` has Qt log its timing of every frame (`QSG_RENDER_TIMING`, in whole
+milliseconds) and adds a table of the medians of the work in it: the GUI
+thread's polish, where a canvas paints, and the render thread's sync and
+render, without the wait for the swap. That is how a pan on the desktop was
+measured: see [performance.md](performance.md#a-pan-on-the-desktop--2026-10-26).
 
 It prints what it measured on before what it measured — Qt, Quickshell, the
 compositor, the refresh rate, the GPU, and the size of the window it was given,
@@ -281,6 +289,15 @@ the real `Board` with a stub controller; the session part times what the
 session does with the text, not drawing. See
 [measurement limits](performance.md#hostile-boards--2026-10-17) before treating
 these budgets as a release's responsiveness target.
+
+It reports two more numbers for every board: the worst pause, the longest the
+board or the session held the shell at once, and the time until the board can
+be edited, its slices and connectors in (or the session's opening, if
+longer). Each has a target on a named machine, tighter for `ordinary-50` and
+`ordinary-500`, two boards at no limit, than for the rest; the boards over
+target are listed at the end, and do not fail the run. The budgets are what a
+change may not make worse, the [targets](performance.md#targets--2026-10-26)
+what to work on.
 
 See [the compatibility review](omarchy-compatibility.md) for the tested
 versions, first-party references, results, and remaining limits.

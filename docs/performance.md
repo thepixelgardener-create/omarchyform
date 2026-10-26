@@ -4,6 +4,106 @@ Written by `npm run bench:scene -- --record` on 2026-09-30. Every frame time quo
 changelog was measured here; a frame time without the machine under it is
 not a number anyone can check.
 
+## Targets — 2026-10-26
+
+Two numbers say how a board opens, and each now has a target: the **worst
+pause**, the longest the board or its session held the shell at once, and
+**editable**, the time until the board can be edited, its items and
+connectors in. The budgets in `tests/hostile.js`, 2 seconds and the ceilings
+listed there by name, are what a change may not make worse; the targets are
+what it is measured against before it is accepted. `npm run test:hostile`
+reports both numbers for every board and lists the boards over target,
+without failing them.
+
+| Boards | Worst pause | Editable |
+|---|---|---|
+| In ordinary use: `ordinary-50`, `ordinary-500` | 100 ms | 1 s |
+| Every other: at a limit, past one, or refused | 500 ms | 10 s |
+
+A response within about a tenth of a second reads as immediate, and a
+second is about as long as a wait can be without losing the thread of what
+someone was doing
+([Nielsen](https://www.nngroup.com/articles/response-times-3-important-limits/)).
+A board at a limit is one someone else wrote, or one grown far past use: a
+pause of half a second there is noticed but is not a hang, and ten seconds is
+about as long as attention holds on a board that says how far it has got.
+
+The machine is a laptop, the one under
+[Baseline environment](#baseline-environment--2026-09-30): AMD Ryzen 5 PRO
+4650U with Radeon (Renoir) graphics, 14 GB, Qt 6.12.0, Quickshell 0.3.2,
+Omarchy 4.0.0.r7320.g4601078-1. The board is drawn offscreen by the software
+renderer in an 1100×700 window, as `test:hostile` draws it. On another
+machine, or another renderer, the targets do not apply as they stand.
+
+Two runs back to back on `896cca8` with the change that reports them; a
+range is the two. Editable is the board's slices and connectors in, or the
+session's opening where that is longer, which includes reading the file.
+
+| Board | Worst pause | Editable | |
+|---|---|---|---|
+| `ordinary-50`: 50 items, 53 connectors | 80–81 ms | 34–35 ms | met |
+| `ordinary-500`: 500 items, 548 connectors | 81–83 ms | 0.30–0.34 s | met |
+| 5,000 items: stacked, grid, shapes, largest ids, duplicate ids, odd values, extreme geometry, missing pictures | 0.30–0.43 s | 5.6–8.9 s | met |
+| `notes-bidi`, `unknown-field`, `whitespace`, `dangling-links`, `open-list-under`, `nesting-at-limit` | 0.06–0.47 s | under 0.6 s | met |
+| Refused: one past each limit, nested past 1,024, a newer version, not a board | 39–82 ms | — | met |
+| `max-items-previews`: 5,000 notes of 4,000-character previews | 1.16–1.38 s | 27.9–32.3 s | both over |
+| `escaped-quotes`: 32 MB `jsonFits` has to walk | 1.44–1.56 s | 1.47–1.53 s | pause over |
+| `old-history` | 1.30–1.31 s | 1.26–1.37 s | pause over |
+| `max-links`: 20,000 connectors on screen | 0.91–1.32 s | 0.20–0.22 s | pause over |
+| 1 MB notes: words, unbroken, markup, newlines, tabs | 0.96–1.03 s | 0.53–1.12 s | pause over |
+| `notes-emoji-zwj` | 0.61–0.62 s | 4.4–4.5 s | pause over |
+| `notes-one-cluster` | 0.52–0.53 s | 0.37–0.39 s | pause over |
+
+The ordinary boards' worst frame is the board zoomed out to 20%; opening
+them held the shell 35 to 44 ms. Where the misses come from, which is what
+to work on:
+
+- **Reading a board of long notes again.** On seven boards of long notes,
+  the worst pause is the session reading the board again once another
+  process has changed it: 0.52 to 1.38 seconds, 1.6 to 1.9 times what
+  opening the same board holds (0.30 to 0.73). This is the lead
+  [A board read again](#a-board-read-again--2026-10-19) left.
+- **5,000 long previews** take 28 to 32 seconds to become editable, three
+  times the target: building the delegates and laying out their text, as
+  [Hostile boards](#hostile-boards--2026-10-17) describes.
+- **The `jsonFits` walk** holds the shell 1.2 to 1.6 seconds on the two
+  boards of 32 MB, opening and reading again, in the board and the session
+  alike.
+- **20,000 connectors on screen** take 0.91 to 1.32 seconds for their first
+  frame, the raster
+  [Connectors and patterns drawn less](#connectors-and-patterns-drawn-less--2026-10-25)
+  left.
+- **Joined emoji** hold one frame for 0.61 seconds while 13 notes of 1 MB
+  are laid out.
+
+## A pan on the desktop — 2026-10-26
+
+The pan of
+[Connectors and patterns drawn less](#connectors-and-patterns-drawn-less--2026-10-25),
+measured on the desktop rather than offscreen: the laptop's own panel,
+1920×1080 at scale 1.5 and 60 Hz, drawn by the GPU, on the machine of the
+targets above. `npm run bench:scene -- 4 --timing` opens a board of four
+items and three connectors, all in view, with the dot pattern, in window
+mode, here tiled beside another window at 621×670 logical pixels. `dev` at
+`896cca8` against 0.5.3 from a worktree with the same harness, alternating.
+
+Every phase of both took 16.7 ms a frame, the refresh interval: neither drops
+a frame at this size, and a frame time cannot say how much of the frame was
+left. Qt's own timing of each frame can, in whole milliseconds; the medians
+of each phase's 59 recorded frames, a range over three runs of each:
+
+| Four items | 0.5.3 | Now |
+|---|---|---|
+| Pan: polish, GUI thread | 5–6 ms | 0 ms |
+| Pan: sync and render, render thread | 1 ms | 0 ms |
+| Zoom: polish | 4 ms | 4–5 ms |
+| Zoom: sync and render | 1 ms | 1 ms |
+
+A pan step drew both canvases, each 0.94 megapixels here, and now draws
+neither; a zoom still draws both. The 4K output at scale 2 where the cost was
+found has nine times those pixels and was not connected: a pan there is
+still to measure, with the same command.
+
 ## Connectors and patterns drawn less — 2026-10-25
 
 Four changes, each measured on the machine below with Qt 6.12.0, offscreen
@@ -110,8 +210,9 @@ and 31 ms off in zooming. No phase on the chains is slower than its range
 before.
 
 The software renderer is not the desktop's: these say which costs went,
-not what a frame on the desktop now takes. Measuring a pan there, on the
-4K output, is still to do.
+not what a frame on the desktop now takes.
+[A pan on the desktop](#a-pan-on-the-desktop--2026-10-26) measures one on a
+laptop's panel; the 4K output is still to do.
 
 ## Connectors in use — 2026-10-24
 
@@ -246,7 +347,9 @@ The runner allows 2 seconds per worst frame by default, 6 for `max-links` and
 4 for `escaped-quotes` and `old-history`; CI triples those ceilings. Total
 opening time is reported but has only a process timeout, not its own
 performance assertion. A board can therefore become much slower to finish
-opening while still passing if it keeps yielding between slices.
+opening while still passing if it keeps yielding between slices. Since
+2026-10-26 the time until a board is editable is reported against a
+[target](#targets--2026-10-26), and still fails nothing.
 
 Two full runs on 2026-10-19, on the machine below with Qt 6.12.0 and Omarchy
 4.0.0.r7083.g81fd2d2, show how far those totals move. A 5,000-item board's

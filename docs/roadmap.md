@@ -150,19 +150,28 @@ each probe an instrument comes before the change it measures.
   notes still take about twice as long to read again as to open, within
   budget; [performance.md](performance.md#a-board-read-again--2026-10-19)
   has the lead.
-- **Connectors in use: done on `dev`, not released.** On `max-links` a step
+- **Connectors in use: shipped in 0.5.4.** On `max-links` a step
   was a 1.8 to 2.5-second frame, 1.2 to 1.45 of it `closePath` measuring the
   whole path once for every head; it is 0.27 to 0.32 seconds at 20% and 0.97
   to 1.15 at 100%, the raster of translucent lines. The walk reads plain
   copies of the models, and a pan moves what is drawn rather than drawing it
   again, which on a 4K output at scale 2 was most of what a pan of a small
   board cost. [performance.md](performance.md#connectors-and-patterns-drawn-less--2026-10-25)
-  has the measurements; a pan on the desktop is still to be measured.
-- **Two numbers, two targets.** Record the worst pause and the time until the
-  board is editable separately, the 5,000 long previews included, and set a
-  target for each on a named machine before accepting a performance change.
-  The 2-second default and the 4- and 6-second exceptions, tripled in CI, are
-  regression ceilings, not responsiveness goals.
+  has the measurements. On a laptop's panel a pan step went from 6 ms of
+  drawing to none ([performance.md](performance.md#a-pan-on-the-desktop--2026-10-26));
+  the 4K output is still to measure, with `npm run bench:scene -- 4 --timing`.
+- **Two numbers, two targets: set on 2026-10-26.** `test:hostile` reports
+  the worst pause and the time until a board is editable for every board,
+  two of ordinary size among them, and lists the ones over target without
+  failing: 100 ms and 1 second for a board in ordinary use, 500 ms and 10
+  seconds for the rest, on the laptop
+  [performance.md](performance.md#targets--2026-10-26) names. Both ordinary
+  boards meet them. Eleven boards miss: 5,000 long previews take 28 to 32
+  seconds to become editable; reading a board of long notes again holds the
+  shell up to 1.4 seconds, the `jsonFits` walk at 32 MB 1.6, the first frame
+  of 20,000 connectors 1.3, and joined emoji 0.6. The 2-second default and
+  the 4-second exceptions, tripled in CI, stay the regression ceilings.
+  Accept a performance change against the targets, measured back to back.
 
 ## 0.6 — Editable, labeled connectors
 

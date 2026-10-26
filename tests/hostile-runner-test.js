@@ -9,16 +9,18 @@ const { fixtures } = require('./hostile-fixtures')
 const source = fs.readFileSync(path.join(__dirname, 'hostile.js'), 'utf8')
 
 // `session` is what tests/hostile/session.qml reports, for a board of a
-// megabyte or more; undefined runs the runner without qs.
-function verdict(name, status, answer, session) {
+// megabyte or more; undefined runs the runner without qs. `frame` is the
+// worst frame the board reports.
+function verdict(name, status, answer, session, frame = 1) {
   const fixture = fixtures.find(f => f.name === name)
   const size = session === undefined ? 0 : 2 * 1024 * 1024
   const output = []
+  const logged = []
   const exited = {}
   let code = 0
-  const report = { open: { frame: 1 }, whole: { frame: 1 }, again: { frame: 1 }, steps: {} }
+  const report = { editable: 50, open: { frame }, whole: { frame: 1 }, again: { frame: 1 }, steps: {} }
   const context = {
-    __dirname, console: { log() {}, error(s) { output.push(s) } },
+    __dirname, console: { log(s) { logged.push(s) }, error(s) { output.push(s) } },
     process: { env: {}, argv: ['node', 'hostile.js', name], execPath: process.execPath,
       exit(value) { code = value; throw exited } },
     require(module) {
@@ -36,7 +38,7 @@ function verdict(name, status, answer, session) {
     }
   }
   try { vm.runInNewContext(source, context) } catch (error) { if (error !== exited) throw error }
-  return { code, output: output.join('\n') }
+  return { code, output: output.join('\n'), logged: logged.join('\n') }
 }
 
 const success = { ok: true, warnings: [] }
@@ -72,4 +74,13 @@ assert.equal(verdict('max-links', 0, success, opened(held(500), false)).code, 1,
 assert.equal(verdict('one-past-items', 0, {
   ok: true, warnings: ['it has more than 5,000 items; the board opens read-only until there are fewer']
 }, opened(null, false)).code, 0, 'a board shown read-only is not read again')
-console.log('ok — hostile runner: CLI successes, warnings, refusals and session reloads are checked')
+// A target is a goal: missing it is listed and does not fail the run, and a
+// board in ordinary use is held to a tighter one than a board at a limit.
+const slow = verdict('max-links', 0, success, undefined, 900)
+assert.equal(slow.code, 0, 'a worst frame over its target but within budget passes')
+assert.match(slow.logged, /max-links: worst 900ms over 500/)
+assert.doesNotMatch(verdict('max-links', 0, success, undefined, 150).logged, /over target/)
+assert.match(verdict('ordinary-50', 0, success, undefined, 150).logged, /ordinary-50: worst 150ms over 100/)
+assert.equal(verdict('max-links', 0, success, undefined, 2500).code, 1, 'past the budget still fails')
+
+console.log('ok — hostile runner: CLI successes, warnings, refusals, session reloads and targets are checked')

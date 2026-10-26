@@ -94,8 +94,15 @@ TestCase {
     var data = null
     var saved = ""
     var steps = {}
+    // Until the last slice and the connectors are in: when BoardSession would
+    // set boardLoaded and the board could be edited. The worst frame is the
+    // other number; a board filled in slices can be slow to finish without
+    // holding the shell up for long.
+    var editable = 0
     var opened = drawn(function () {
+      var t = Date.now()
       data = test.open(raw, steps)
+      editable = Date.now() - t
       if (data) {
         var t = Date.now()
         saved = Store.writeFile(ctl.items, ctl.links, Store.nextFreeId(ctl.items, data.nextId))
@@ -124,7 +131,7 @@ TestCase {
       surface.repaintLinks()
     })
     console.log("HOSTILE " + JSON.stringify({ name: row.tag, opens: data !== null, items: ctl.items.count,
-      links: ctl.links.count, open: opened, whole: whole, again: again, steps: steps }))
+      links: ctl.links.count, editable: editable, open: opened, whole: whole, again: again, steps: steps }))
     compare(data !== null, row.opens, "opens as tests/hostile-fixtures.js says it does")
   }
 }
