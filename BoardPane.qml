@@ -1537,6 +1537,7 @@ Item {
   Connections {
     target: root.doc
     function onEdited(by) { if (by !== root) root.followEdit() }
+    function onLoadSerialChanged() { root.docSerial += 1 }
   }
 
   // The keyboard is going to the other pane. What was half done here ends the
@@ -1588,8 +1589,8 @@ Item {
 
   function dismiss() { root.workspace.dismiss() }
 
-  // How many boards this pane has been given, closing it included. Something
-  // on its way here, a dropped picture, checks it as well as the board's name:
+  // How many board generations this pane has been given, closing it included.
+  // Something on its way here checks it as well as the board's name:
   // a pane closed and opened again on that board is not where it was dropped.
   property int docSerial: 0
   function stillShows(board, shown) { return board === root.currentBoard && shown === root.docSerial }

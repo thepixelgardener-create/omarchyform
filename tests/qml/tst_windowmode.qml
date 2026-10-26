@@ -30,6 +30,7 @@ ShellRoot {
   }
   Omarchyform { id: plugin }
   FileView { id: disk; path: plugin.statePath; blockLoading: true; blockAllReads: true; printErrors: false }
+  Image { id: exported; visible: false; cache: false }
   Timer {
     interval: 100
     repeat: true
@@ -100,6 +101,23 @@ ShellRoot {
       } else if (test.stage === 12 && plugin.activePane.activeBoard) {
         test.surface(false)
         if (!test.saved(false, false)) return
+        plugin.activePane.addItem("note", 0, 0, { text: "export survives a mode request" })
+        plugin.activePane.exportPng(Quickshell.env("OMARCHYFORM_TEST_DIR") + "/mode-export.png")
+        test.check(plugin.imageBusy, "export started before the surface changes")
+        plugin.activePane.toggleWindowMode()
+        test.check(!plugin.windowMode, "W keeps the exporting surface alive")
+        test.openWith(true)
+        test.check(!plugin.windowMode, "bar settings keep the exporting surface alive")
+        test.stage = 13
+      } else if (test.stage === 13 && !plugin.imageBusy) {
+        exported.source = "file://" + Quickshell.env("OMARCHYFORM_TEST_DIR") + "/mode-export.png"
+        if (exported.status !== Image.Ready) return
+        test.check(plugin.activePane.canEdit, "editing resumes after the export completes")
+        test.check(exported.sourceSize.width > 0, "the PNG was published")
+        test.openWith(true)
+        test.stage = 14
+      } else if (test.stage === 14 && plugin.activePane.activeBoard) {
+        test.surface(true)
         plugin.close()
         console.log("OMARCHY_TESTS_PASSED")
         Qt.quit()

@@ -38,6 +38,10 @@ try {
     // actually do.
     fs.writeFileSync(path.join(dir, 'stubs/wl-paste'),
       '#!/bin/bash\nif [[ -e "$OMARCHYFORM_TEST_DIR/no-clipboard" ]]; then exit 1; fi\n'
+      + 'if [[ -e "$OMARCHYFORM_TEST_DIR/delay-clipboard" ]]; then\n'
+      + '  while [[ ! -e "$OMARCHYFORM_TEST_DIR/release-clipboard" ]]; do sleep 0.02; done\n'
+      + '  if [[ $1 == --list-types ]]; then echo text/plain; else\n'
+      + '    printf delayed-paste\n  fi\n  exit\nfi\n'
       + 'if [[ $1 == --list-types ]]; then echo image/png; else cat "$OMARCHYFORM_TEST_DIR/pixels.png"; fi\n', {mode: 0o755})
   }
   // A board built by bin/omarchyform, waiting in the boards directory for the

@@ -379,6 +379,8 @@ Item {
   property var boardScreen: null
 
   function toggleWindowMode() {
+    // The surface owns the PNG renderer and its completion callback.
+    if (root.imageBusy) { root.activePane.flash("Finishing image export…"); return }
     root.windowMode = !root.windowMode
     root.writeState()
   }
@@ -527,7 +529,7 @@ Item {
       if (typeof st.showGrid === "boolean") root.showGrid = st.showGrid
       if (Store.CANVAS_PATTERNS.indexOf(st.canvasPattern) >= 0) root.canvasPattern = st.canvasPattern
     }
-    if (typeof st.startWindowed === "boolean" && st.startWindowed !== root.startWindowed) {
+    if (!root.imageBusy && typeof st.startWindowed === "boolean" && st.startWindowed !== root.startWindowed) {
       // A changed bar preference chooses the surface; an unchanged one leaves
       // the mode last chosen with W alone, including after a restart.
       root.startWindowed = st.startWindowed
