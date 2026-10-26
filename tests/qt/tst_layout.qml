@@ -92,6 +92,7 @@ TestCase {
     function runMenu(index) { menuVisible = false }
     property string boardTitle: "A long board name that should truncate gracefully"
     property string boardState: "Saved locally"
+    property string saveMark: "saved"
     property string saveError: ""
     property real zoom: 1
     function renameBoard() {}

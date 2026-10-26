@@ -1004,7 +1004,7 @@ function tests(S) {
       opened: true, helpVisible: false, browserVisible: false, finding: false,
       saveError: "", trashIndexError: "", diskChanged: false, damaged: false,
       failureText: "", paletteVisible: false, arranging: false, showPinned: false,
-      editing: false, linking: false, statusText: "", switching: false, saving: false
+      editing: false, linking: false, statusText: "", switching: false
     }
     const on = over => S.statusTier(Object.assign({}, quiet, over))
 
@@ -1025,8 +1025,7 @@ function tests(S) {
       ["editing", { editing: true }],
       ["linking", { linking: true }],
       ["flash", { statusText: "Copied" }],
-      ["switching", { switching: true }],
-      ["saving", { saving: true }]
+      ["switching", { switching: true }]
     ]
     for (const [tier, state] of turnsOn) eq(on(state), tier, tier + " on its own")
     eq(turnsOn.length + 2, S.STATUS_TIERS.length, "every tier is named and reachable")
@@ -1056,6 +1055,29 @@ function tests(S) {
        "nor a failure")
     eq(on({ failureText: "Could not copy that picture", diskChanged: true }), "conflict",
        "and a failure does not cover a board that is not being saved")
+    // The disk beside the name says a write is on its way. The line used to
+    // as well, and every edit blinked the keys out of the header and back.
+    eq(on({ saving: true }), "hints", "a write on its way leaves the keys where they are")
+  })
+
+  // The mark beside a board's name stands in for the words that were there.
+  // It shows something different only where a person would act differently.
+  test("the mark beside the name says whether the board is in its file", () => {
+    const saved = { opening: false, damaged: false, saveError: "", diskChanged: false,
+                    waiting: false, saving: false }
+    const mark = over => S.saveMark(Object.assign({}, saved, over))
+    eq(mark({}), "saved", "nothing waiting is a disk")
+    eq(mark({ waiting: true }), "unsaved", "typing autosave has not reached yet is not")
+    eq(mark({ saving: true }), "unsaved", "nor is a write still on its way")
+    eq(mark({ saveError: "disk full", saving: true }), "failed", "a write that failed is a warning")
+    eq(mark({ diskChanged: true, waiting: true }), "failed", "and so are two versions of a board")
+    eq(mark({ damaged: true, saveError: "x" }), "readonly", "a board not to be written is locked")
+    eq(mark({ opening: true, damaged: true }), "opening", "and one still opening says how far it is")
+    for (const m of ["saved", "unsaved", "failed", "readonly"]) {
+      eq(typeof S.SAVE_GLYPHS[m], "string", m + " has a glyph")
+      eq(S.SAVE_GLYPHS[m].length, 2, m + " is one glyph from the Nerd Font's private area")
+    }
+    eq(new Set(Object.values(S.SAVE_GLYPHS)).size, 4, "and no two look alike")
   })
 
   test("canvas previews are bounded literal text without changing stored notes", () => {
@@ -2064,6 +2086,44 @@ function tests(S) {
     near(g.fromX, 102)
     near(g.toX, 108)
     ok(g.leftX > g.fromX && g.rightX > g.fromX, "head fits available space")
+  })
+
+  test("the connectors in view are walked from plain copies, the selection's apart", () => {
+    const rows = [item({ iid: 4 }), item({ iid: 5, ix: 300 }), item({ iid: 6, ix: 2000 }), item({ iid: 7, ix: 30 })]
+    const byId = { 4: 0, 5: 1, 6: 2, 7: 3 }
+    // 4→5 in view, 5→6 crossing out of it, 6→6's neighbour off screen, 4→7
+    // overlapping, and an end that is no longer on the board.
+    const ends = [4, 5, 5, 6, 6, 6, 4, 7, 4, 99]
+    const all = S.connectorsInView(byId, rows, ends, 0, 0, 400, 300, 9, 2, -1)
+    eq(all.normal, [S.connectorGeometry(rows[0], rows[1], 9, 2), S.connectorGeometry(rows[1], rows[2], 9, 2)])
+    eq(all.highlighted, [])
+    const picked = S.connectorsInView(byId, rows, ends, 0, 0, 400, 300, 9, 2, 6)
+    eq(picked.normal, [S.connectorGeometry(rows[0], rows[1], 9, 2)])
+    eq(picked.highlighted, [S.connectorGeometry(rows[1], rows[2], 9, 2)], "drawn in the accent")
+    eq(all.inside, false, "one crosses out of the view and one is off it")
+    eq(S.connectorsInView(byId, rows, [4, 5], 0, 0, 400, 300, 9, 2, -1).inside, true, "whole, head and all")
+    eq(S.connectorsInView(byId, rows, [4, 5], 0, 0, 355, 300, 9, 2, -1).inside, false,
+      "the far centre is in view, but not the room its head takes")
+    eq(S.connectorsInView(byId, rows, [4, 99], 0, 0, 10, 10, 9, 2, -1).inside, true,
+      "a connector whose end is gone draws nothing anywhere")
+  })
+
+  test("the walk goes on past what it leaves out, and holds a drawing to every side of the view", () => {
+    const rows = [item({ iid: 4 }), item({ iid: 5, ix: 300 }), item({ iid: 6, ix: 2000 }), item({ iid: 7, ix: 30 }),
+      item({ iid: 8, iy: 150 })]
+    const byId = { 4: 0, 5: 1, 6: 2, 7: 3, 8: 4 }
+    // An end gone, one off screen and one overlapping, then one to draw.
+    eq(S.connectorsInView(byId, rows, [4, 99, 6, 6, 4, 7, 4, 5], 0, 0, 400, 300, 9, 2, -1).normal,
+      [S.connectorGeometry(rows[0], rows[1], 9, 2)], "the last is still drawn")
+    // 4→5 runs from x 50 to 350 and 4→8 from y 50 to 200; a head takes 9.
+    const inside = (ends, left, top, right, bottom) =>
+      S.connectorsInView(byId, rows, ends, left, top, right, bottom, 9, 2, -1).inside
+    eq(inside([4, 5], 41, 0, 400, 300), true, "the near end's head just inside the left")
+    eq(inside([4, 5], 42, 0, 400, 300), false, "past the left")
+    eq(inside([4, 8], 0, 41, 400, 300), true, "just inside the top")
+    eq(inside([4, 8], 0, 42, 400, 300), false, "past the top")
+    eq(inside([4, 8], 0, 0, 400, 209), true, "just inside the bottom")
+    eq(inside([4, 8], 0, 0, 400, 208), false, "past the bottom")
   })
 
   test("textures persist, default to plain, and clear when a snapshot is restored", () => {

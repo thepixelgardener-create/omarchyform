@@ -11,7 +11,9 @@
 // false for one shown empty and read-only (refused or not a board).
 // The CLI normally succeeds without warnings. `cliWarning` names an expected
 // canvas-limit warning (validate can still inspect that board); `cliError`
-// names a refusal from its loader, with exit status 1.
+// names a refusal from its loader, with exit status 1. `ordinary` marks the
+// two boards at no limit at all, there to be held to the targets for a board
+// in ordinary use (docs/performance.md#targets--2026-10-26).
 const S = require('../bin/store').loadStore()
 
 const MAX = S.MAX_BOARD_BYTES
@@ -33,8 +35,28 @@ const fullNotes = unit => {
 }
 const grid = (count, gap, make) => Array.from({ length: count }, (_, i) =>
   make(i + 1, (i % 71) * gap, Math.floor(i / 71) * gap))
+// A board as people make them: notes of a few words to a few sentences, a
+// shape every fifth item, each item joined to the one before it and every
+// tenth to the one ten back. The showcase board is 11 items, its notes 12 to
+// 137 characters.
+const ordinary = count => {
+  const words = 'ship the first draft before review, then ask what is missing and why it matters'.split(' ')
+  const items = Array.from({ length: count }, (_, i) => {
+    const text = Array.from({ length: 2 + (i * 7) % 30 }, (_, w) => words[(i + w) % words.length]).join(' ')
+    return note(i + 1, (i % 20) * 280, Math.floor(i / 20) * 220, text,
+      i % 5 === 4 ? { kind: S.KINDS[1 + ((i + 1) / 5) % 3], text: text.slice(0, 24) } : { tint: S.TINTS[i % 4] })
+  })
+  const links = []
+  for (let i = 2; i <= count; i++) links.push({ from: i - 1, to: i })
+  for (let i = 11; i <= count; i += 10) links.push({ from: i - 10, to: i })
+  return board(items, links)
+}
 
 const fixtures = [
+  // At no limit: what the targets for a board in ordinary use are held to.
+  { name: 'ordinary-50', opens: true, ordinary: true, text: () => ordinary(50) },
+  { name: 'ordinary-500', opens: true, ordinary: true, text: () => ordinary(500) },
+
   // How many: every item on screen at once, then the most connectors.
   { name: 'max-items-stacked', opens: true,
     text: () => board(Array.from({ length: S.MAX_ITEMS }, (_, i) => note(i + 1, i % 50, i % 37, 'n' + i))) },

@@ -47,6 +47,8 @@ Item {
   // of its own. Autosave is waiting, and nothing but a choice clears it.
   readonly property bool diskChanged: session.conflict
   readonly property bool saving: session.busy
+  // Typed into and not yet written: autosave is waiting for a pause.
+  readonly property bool waiting: session.waitingSince !== 0
   readonly property var pendingBoard: session.pendingBoard
   readonly property bool canEdit: session.canEdit
 

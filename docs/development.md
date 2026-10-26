@@ -85,7 +85,7 @@ useful regressions, but the live suite verifies the host integration.
 | `BoardPane.qml` | One view of a board and the controller its views read: camera, selection, modes and every command |
 | `BoardDocument.qml` | One open board: its items and connectors, ids, undo history and the session saving it |
 | `Board.qml` | The canvas surface — grid, connectors, keys, cheat sheet |
-| `BoardToolbar.qml` | The header: the board's name and save state, the zoom, and the menu |
+| `BoardToolbar.qml` | The header: the board's name and save mark, where the status line goes, fit, and the menu |
 | `Theme.qml` | Colours, fonts, sizes and weights, all read from the shell's theme with fallbacks |
 | `Surface.qml` | The card a panel is drawn on, in the shell's menu colours and the theme's border for them |
 | `Node.qml` | One item: note, box, ellipse, diamond or picture. Shapes are `QtQuick.Shapes` geometry, so they stay sharp at any zoom |
@@ -120,6 +120,7 @@ npm run test:security:full # also run Quickshell and Qt tests
 npm run mutate  # mutation testing
 npm run bench   # board marshalling cost at size
 npm run bench:scene # what a board costs to draw, at size; needs a compositor
+npm run bench:connectors # what connectors cost while a board is in use; offscreen
 npm run test:qml # headless persistence tests; requires installed Quickshell
 npm run test:paste # live canvas image paste test; uses an isolated clipboard stub and board library
 npm run test:windowmode # live tiled default, bar preference, window switching and reopening; isolated board data
@@ -147,8 +148,16 @@ columns.
 npm run bench:scene            # 100, 500, 1000 and 3000 items
 npm run bench:scene -- 3000    # one size
 npm run bench:scene -- 3000 --textures # every item uses a non-plain texture
+npm run bench:scene -- 4 --timing # Qt's own timing of the work in each frame as well
 npm run bench:scene -- --record  # and write docs/performance.md
 ```
+
+A phase at the refresh interval does not say how much of the frame it used.
+`--timing` has Qt log its timing of every frame (`QSG_RENDER_TIMING`, in whole
+milliseconds) and adds a table of the medians of the work in it: the GUI
+thread's polish, where a canvas paints, and the render thread's sync and
+render, without the wait for the swap. That is how a pan on the desktop was
+measured: see [performance.md](performance.md#a-pan-on-the-desktop--2026-10-26).
 
 It prints what it measured on before what it measured — Qt, Quickshell, the
 compositor, the refresh rate, the GPU, and the size of the window it was given,
@@ -158,6 +167,27 @@ machine under it is not a number anyone can check, and the same board is
 vsync-bound at 60Hz and dropping frames at 144. `--record` writes that and the
 table to [docs/performance.md](performance.md), which is where the figures
 quoted in the changelog come from.
+
+`npm run bench:connectors` measures connectors in use: boards of 300, 3,000
+and 20,000 connectors panned, zoomed, selected through and dragged, one step a
+frame, at 100% and 20%. It runs offscreen with the software renderer, each
+board in a process of its own, so it opens nothing on the desktop, and splits
+each paint into the walk over the connectors, building their paths and
+rasterising them. It asserts nothing and is not in CI; it takes about four
+minutes. Measure before and after changing how connectors are drawn, back to
+back. See [performance.md](performance.md#connectors-in-use--2026-10-24).
+
+```bash
+npm run bench:connectors                     # every board
+npm run bench:connectors -- max-links        # the ones named
+npm run bench:connectors -- --frames 20      # steps per phase, default 12
+npm run bench:connectors -- --json           # one JSON line per board
+npm run bench:connectors -- --pan            # a small board panned, at scale 1 and 2
+```
+
+`--pan` measures what a canvas costs for its size rather than its contents: a
+board of four items panned in a window of 1100×700 and of 1920×1080, at scale 1
+and 2, with each canvas drawn again every step and as `BoardPane.panBy` does it now.
 
 `npm run shots` puts the real plugin through every state worth judging by eye —
 empty, a cursor beside a mark, typing, backgrounds, finding, arranging, the
@@ -259,6 +289,15 @@ the real `Board` with a stub controller; the session part times what the
 session does with the text, not drawing. See
 [measurement limits](performance.md#hostile-boards--2026-10-17) before treating
 these budgets as a release's responsiveness target.
+
+It reports two more numbers for every board: the worst pause, the longest the
+board or the session held the shell at once, and the time until the board can
+be edited, its slices and connectors in (or the session's opening, if
+longer). Each has a target on a named machine, tighter for `ordinary-50` and
+`ordinary-500`, two boards at no limit, than for the rest; the boards over
+target are listed at the end, and do not fail the run. The budgets are what a
+change may not make worse, the [targets](performance.md#targets--2026-10-26)
+what to work on.
 
 See [the compatibility review](omarchy-compatibility.md) for the tested
 versions, first-party references, results, and remaining limits.

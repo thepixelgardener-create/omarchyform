@@ -14,9 +14,9 @@ FocusScope {
   focus: true
   readonly property real headerHeight: toolbar.y + toolbar.height
   // Where the canvas comes clear of everything laid over its top: the header,
-  // the backgrounds banner, and the line of hints or the find query under
-  // them. That line wraps in a narrow window, so framing the board from the
-  // header alone put its top row underneath the hints.
+  // with the line of hints or the find query in it, and the backgrounds banner
+  // under it. The line wraps in a narrow window and the header grows to hold
+  // it; framing the board from a fixed header put its top row under the hints.
   readonly property real canvasTop: Math.max(headerHeight,
     banner.visible ? banner.y + banner.height : 0,
     status.visible ? status.y + status.height : 0,
@@ -51,16 +51,113 @@ FocusScope {
   // Which row each item id is on, for the connectors. Built again only when
   // rows come or go or move, or the pane shows other items: an item's id never
   // changes in place, and a drag only changes where it is.
+  //
+  // Beside it, a plain copy of what the connectors read: each item's place,
+  // size and kind, and each connector's two ends. Reading a ListModel row
+  // costs more than the arithmetic done with it, and every paint read three
+  // for every connector: on a board of 5,000 items and 20,000 connectors the
+  // walk took 78 ms through the models and 17 through the copies
+  // (npm run bench:connectors). The copy is built with the index; a row whose
+  // values change is only marked, and read again once on the next paint
+  // however many of its values changed, so a drag of the whole board reads
+  // each row once a frame rather than once for each value written.
+  //
+  // A board's items arrive a slice at a time, a paint between slices, before
+  // any of its connectors: until there is a connector to walk only the index
+  // is kept, as it was before the copy, and copying every item so far on
+  // every slice made a 5,000-item board take a second longer to open. Its
+  // connectors then arrive one by one, so a model saying it changed costs
+  // nothing more once the copy is already marked out of date.
   property var indexedItems: null
   property var linkIndex: ({})
-  property bool linkIndexDirty: true
-  function invalidateLinkIndex() { board.linkIndexDirty = true; board.repaintLinks() }
+  property bool linkIndexDirty: false
+  property var itemRows: null
+  property var staleRows: ({})
+  property var indexedLinks: null
+  property var linkEnds: []
+  property bool linkEndsDirty: false
+  function invalidateLinkIndex() {
+    if (board.linkIndexDirty) return
+    board.linkIndexDirty = true
+    board.repaintLinks()
+  }
+  function invalidateLinkEnds() {
+    if (board.linkEndsDirty) return
+    board.linkEndsDirty = true
+    board.repaintLinks()
+  }
   Connections {
     target: board.ctl.items
     function onRowsInserted() { board.invalidateLinkIndex() }
     function onRowsRemoved() { board.invalidateLinkIndex() }
     function onRowsMoved() { board.invalidateLinkIndex() }
     function onModelReset() { board.invalidateLinkIndex() }
+    function onDataChanged(topLeft, bottomRight) {
+      if (board.itemRows === null) return
+      for (var r = topLeft.row; r <= bottomRight.row; r++) board.staleRows[r] = true
+    }
+  }
+  Connections {
+    target: board.ctl.links
+    function onRowsInserted() { board.invalidateLinkEnds() }
+    function onRowsRemoved() { board.invalidateLinkEnds() }
+    function onRowsMoved() { board.invalidateLinkEnds() }
+    function onModelReset() { board.invalidateLinkEnds() }
+    function onDataChanged() { board.invalidateLinkEnds() }
+  }
+  function itemRow(it) {
+    return { iid: it.iid, kind: it.kind, ix: it.ix, iy: it.iy, iw: it.iw, ih: it.ih }
+  }
+  // Brings the index and the copies up to the models, before a paint walks them.
+  function indexConnectors() {
+    var items = board.ctl.items, links = board.ctl.links
+    if (board.indexedLinks !== links || board.linkEndsDirty) {
+      var ends = []
+      for (var k = 0; k < links.count; k++) {
+        var l = links.get(k)
+        ends.push(l.lfrom, l.lto)
+      }
+      board.linkEnds = ends
+      board.indexedLinks = links
+      board.linkEndsDirty = false
+    }
+    var copying = board.linkEnds.length > 0
+    var rebuild = board.indexedItems !== items || board.linkIndexDirty
+      || (copying && board.itemRows === null)
+    if (!rebuild && copying) {
+      var stale = board.staleRows, copy = board.itemRows
+      for (var key in stale) {
+        var r = Number(key)
+        if (r >= items.count) continue
+        var fresh = board.itemRow(items.get(r))
+        // Nothing renumbers an item in place, or adds a row without saying
+        // so, but the index would be wrong if anything did.
+        if (!copy[r] || fresh.iid !== copy[r].iid) { rebuild = true; break }
+        copy[r] = fresh
+      }
+    }
+    board.staleRows = {}
+    if (rebuild) {
+      var index = {}, rows = copying ? [] : null
+      for (var i = 0; i < items.count; i++) {
+        var it = items.get(i)
+        if (copying) {
+          var row = board.itemRow(it)
+          index[row.iid] = i
+          rows.push(row)
+        } else index[it.iid] = i
+      }
+      board.linkIndex = index
+      board.itemRows = rows
+      board.indexedItems = items
+      board.linkIndexDirty = false
+    } else if (!copying) board.itemRows = null
+  }
+  // The geometry of every connector that can touch the given part of the
+  // board, in board units, the selected item's apart: what a paint draws.
+  function connectorsInView(left, top, right, bottom, head, zoom, selectedId) {
+    return Store.connectorsInView(board.linkIndex, board.itemRows, board.linkEnds,
+      left, top, right, bottom, head, 2 / zoom, selectedId)
   }
   // The selected item's connectors are drawn in the accent.
   Connections {
@@ -75,7 +172,9 @@ FocusScope {
   // point. The camera is passed in rather than asked for through
   // ctl.toScreenX: this runs for every corner of every connector on every
   // frame of a pan, and a call into the controller costs more than the
-  // arithmetic it does.
+  // arithmetic it does. The heads are left open for fill() to close: Context2D's
+  // closePath measures the whole path it is given, so closing each head in
+  // the one path they share took 1.2 seconds for 16,000 of them.
   function paintConnectors(ctx, geometries, zoom, camX, camY) {
     ctx.beginPath()
     for (var i = 0; i < geometries.length; i++) {
@@ -90,7 +189,6 @@ FocusScope {
       ctx.moveTo(arrow.toX * zoom + camX, arrow.toY * zoom + camY)
       ctx.lineTo(arrow.leftX * zoom + camX, arrow.leftY * zoom + camY)
       ctx.lineTo(arrow.rightX * zoom + camX, arrow.rightY * zoom + camY)
-      ctx.closePath()
     }
     ctx.fill()
   }
@@ -131,55 +229,88 @@ FocusScope {
 
   // Patterns and connectors are drawn in screen space so they keep their weight
   // however far you zoom out, rather than scaling into mush.
-  Canvas {
-    id: grid
+  //
+  // Each is a canvas the size of the board, and drawing one again costs its
+  // pixels, not what is on it: filling a 1920×1080 window at scale 2, a pan of
+  // a board of four items took 54 to 60 ms a step against 23 for the items
+  // alone, the rest the two canvases (npm run bench:connectors -- --pan). So a pan
+  // moves their drawings instead where it can, to the device pixel so a line
+  // stays as crisp as it was drawn, and the clip keeps what moves from showing
+  // past the board, beside the other pane in a split.
+  function toPixel(v) {
+    var ratio = Screen.devicePixelRatio || 1
+    return Math.round(v * ratio) / ratio
+  }
+  // What a pan asks of the board (BoardPane.panBy): the camera has moved and
+  // nothing else has changed.
+  function panned() {
+    if (!linkCanvas.inside || linkCanvas.paintedZoom !== board.ctl.zoom) linkCanvas.requestPaint()
+  }
+
+  // A pattern repeats every step, so it is never drawn again for a pan: the
+  // canvas is a step wider and taller than the board, drawn from its own
+  // corner, and held where the camera puts the pattern. The origin stays
+  // attached to the world, including when the camera crosses zero.
+  Item {
     anchors.fill: parent
+    clip: true
     visible: board.ctl.showGrid
-    readonly property string pattern: board.ctl.canvasPattern
-    onPatternChanged: requestPaint()
-    onVisibleChanged: if (visible) requestPaint()
-    onPaint: {
-      var ctx = getContext("2d")
-      ctx.reset()
-      var step = 40 * board.ctl.zoom
-      if (step < 8) return
-      // The origin stays attached to the world, including when the camera
-      // crosses zero. Lines use one path and one stroke per repaint.
-      var startX = ((board.ctl.camX % step) + step) % step
-      var startY = ((board.ctl.camY % step) + step) % step
-      if (grid.pattern === "Grid" || grid.pattern === "Ruled") {
-        ctx.strokeStyle = board.theme.dotColor
-        ctx.lineWidth = 1
-        // A continuous line carries more ink than a dot; keep it behind the
-        // notes. Snap to pixels so a stationary line stays crisp.
-        ctx.globalAlpha = 0.65
-        ctx.beginPath()
-        if (grid.pattern === "Grid") {
-          for (var gx = startX; gx < width; gx += step) {
-            var px = Math.floor(gx) + 0.5
-            ctx.moveTo(px, 0)
-            ctx.lineTo(px, height)
-          }
-        }
-        for (var gy = startY; gy < height; gy += step) {
-          var py = Math.floor(gy) + 0.5
-          ctx.moveTo(0, py)
-          ctx.lineTo(width, py)
-        }
-        ctx.stroke()
-        return
-      }
-      ctx.fillStyle = board.theme.dotColor
-      var r = Math.max(1, 1.2 * board.ctl.zoom)
-      for (var x = board.ctl.camX % step; x < width; x += step)
-        for (var y = board.ctl.camY % step; y < height; y += step) {
+    Canvas {
+      id: grid
+      objectName: "pattern"
+      readonly property string pattern: board.ctl.canvasPattern
+      readonly property real step: 40 * board.ctl.zoom
+      x: board.toPixel(((board.ctl.camX % grid.step) + grid.step) % grid.step) - grid.step
+      y: board.toPixel(((board.ctl.camY % grid.step) + grid.step) % grid.step) - grid.step
+      width: parent.width + grid.step
+      height: parent.height + grid.step
+      onPatternChanged: requestPaint()
+      onStepChanged: requestPaint()
+      onVisibleChanged: if (visible) requestPaint()
+      onPaint: {
+        // A hidden canvas still paints when asked, and every zoom asks: with
+        // the pattern off, zooming out to 25% drew 7,700 dots a step that
+        // nobody saw, 33 ms of a 54 ms frame. It is drawn when it is shown.
+        if (!grid.visible) return
+        var ctx = getContext("2d")
+        ctx.reset()
+        var step = grid.step
+        if (step < 8) return
+        // Lines use one path and one stroke per repaint.
+        if (grid.pattern === "Grid" || grid.pattern === "Ruled") {
+          ctx.strokeStyle = board.theme.dotColor
+          ctx.lineWidth = 1
+          // A continuous line carries more ink than a dot; keep it behind the
+          // notes. Snap to pixels so a stationary line stays crisp.
+          ctx.globalAlpha = 0.65
           ctx.beginPath()
-          ctx.arc(x, y, r, 0, Math.PI * 2)
-          ctx.fill()
+          if (grid.pattern === "Grid") {
+            for (var gx = 0; gx < width; gx += step) {
+              var px = Math.floor(gx) + 0.5
+              ctx.moveTo(px, 0)
+              ctx.lineTo(px, height)
+            }
+          }
+          for (var gy = 0; gy < height; gy += step) {
+            var py = Math.floor(gy) + 0.5
+            ctx.moveTo(0, py)
+            ctx.lineTo(width, py)
+          }
+          ctx.stroke()
+          return
         }
+        ctx.fillStyle = board.theme.dotColor
+        var r = Math.max(1, 1.2 * board.ctl.zoom)
+        for (var x = 0; x < width; x += step)
+          for (var y = 0; y < height; y += step) {
+            ctx.beginPath()
+            ctx.arc(x, y, r, 0, Math.PI * 2)
+            ctx.fill()
+          }
+      }
+      onWidthChanged: requestPaint()
+      onHeightChanged: requestPaint()
     }
-    onWidthChanged: requestPaint()
-    onHeightChanged: requestPaint()
   }
 
   // Background: left drag draws a marquee, right drag pans, wheel zooms,
@@ -262,71 +393,73 @@ FocusScope {
     ]
   }
 
-  Canvas {
-    id: linkCanvas
+  // A pan moves the connectors' drawing while it holds every one of them
+  // whole: one coming into view would otherwise be missing from it. Where it
+  // was drawn from is kept, and it is held that far from where the camera is.
+  Item {
     anchors.fill: parent
-    onPaint: {
-      var ctx = getContext("2d")
-      ctx.reset()
-      ctx.strokeStyle = board.theme.connector
-      ctx.fillStyle = board.theme.connector
-      ctx.lineWidth = Math.max(1, 1.5 * board.ctl.zoom)
-      ctx.lineCap = "butt"
-      ctx.lineJoin = "round"
-      ctx.globalAlpha = board.theme.connectorAlpha
-      var zoom = board.ctl.zoom, camX = board.ctl.camX, camY = board.ctl.camY
-      // Visible direction even when zoomed out, and a small gap at the border.
-      var head = Math.max(8, 9 * zoom) / zoom
-
-      var items = board.ctl.items
-      var links = board.ctl.links
-      if (board.indexedItems !== items || board.linkIndexDirty) {
-        board.linkIndex = Store.idIndex(items)
-        board.indexedItems = items
-        board.linkIndexDirty = false
+    clip: true
+    Canvas {
+      id: linkCanvas
+      objectName: "connectors"
+      anchors.fill: parent
+      property real paintedCamX: 0
+      property real paintedCamY: 0
+      property real paintedZoom: 0
+      property bool inside: false
+      transform: Translate {
+        x: board.toPixel(board.ctl.camX - linkCanvas.paintedCamX)
+        y: board.toPixel(board.ctl.camY - linkCanvas.paintedCamY)
       }
-      var byId = board.linkIndex
-      var selectedId = board.ctl.selectedIndex >= 0 && board.ctl.selectedIndex < items.count
-        ? items.get(board.ctl.selectedIndex).iid : -1
-      var normal = [], highlighted = []
-      var left = -camX / zoom, top = -camY / zoom
-      var right = (width - camX) / zoom, bottom = (height - camY) / zoom
+      onPaint: {
+        var ctx = getContext("2d")
+        ctx.reset()
+        linkCanvas.paintedCamX = board.ctl.camX
+        linkCanvas.paintedCamY = board.ctl.camY
+        linkCanvas.paintedZoom = board.ctl.zoom
+        ctx.strokeStyle = board.theme.connector
+        ctx.fillStyle = board.theme.connector
+        ctx.lineWidth = Math.max(1, 1.5 * board.ctl.zoom)
+        ctx.lineCap = "butt"
+        ctx.lineJoin = "round"
+        ctx.globalAlpha = board.theme.connectorAlpha
+        var zoom = board.ctl.zoom, camX = board.ctl.camX, camY = board.ctl.camY
+        // Visible direction even when zoomed out, and a small gap at the border.
+        var head = Math.max(8, 9 * zoom) / zoom
 
-      for (var i = 0; i < links.count; i++) {
-        var l = links.get(i)
-        var ai = byId[l.lfrom]
-        var bi = byId[l.lto]
-        if (ai === undefined || bi === undefined) continue
-        var a = items.get(ai), b = items.get(bi)
-        if (!Store.connectorInView(a, b, left, top, right, bottom, head)) continue
-        var g = Store.connectorGeometry(a, b, head, 2 / zoom)
-        if (!g.visible) continue
-        if (l.lfrom === selectedId || l.lto === selectedId) highlighted.push(g)
-        else normal.push(g)
-      }
-      board.paintConnectors(ctx, normal, zoom, camX, camY)
-      ctx.strokeStyle = board.theme.accent
-      ctx.fillStyle = board.theme.accent
-      ctx.globalAlpha = 0.95
-      ctx.lineWidth = Math.max(1.75, 1.8 * zoom)
-      board.paintConnectors(ctx, highlighted, zoom, camX, camY)
+        var items = board.ctl.items
+        board.indexConnectors()
+        var byId = board.linkIndex
+        var selectedId = board.ctl.selectedIndex >= 0 && board.ctl.selectedIndex < items.count
+          ? items.get(board.ctl.selectedIndex).iid : -1
+        var shown = board.connectorsInView(-camX / zoom, -camY / zoom,
+          (width - camX) / zoom, (height - camY) / zoom, head, zoom, selectedId)
+        var normal = shown.normal, highlighted = shown.highlighted
+        board.paintConnectors(ctx, normal, zoom, camX, camY)
+        ctx.strokeStyle = board.theme.accent
+        ctx.fillStyle = board.theme.accent
+        ctx.globalAlpha = 0.95
+        ctx.lineWidth = Math.max(1.75, 1.8 * zoom)
+        board.paintConnectors(ctx, highlighted, zoom, camX, camY)
 
-      // While picking the far end, trail a dashed line to the selection so it
-      // is obvious what is about to be joined: edge to edge, where the
-      // connector it would make is going to run.
-      var si = byId[board.ctl.linkingFrom]
-      if (si !== undefined && board.ctl.selectedIndex >= 0 && si !== board.ctl.selectedIndex) {
-        ctx.globalAlpha = 0.9
-        ctx.setLineDash([6, 5])
-        var preview = Store.connectorGeometry(items.get(si), items.get(board.ctl.selectedIndex), head, 2 / zoom)
-        if (preview.visible) {
-          board.paintConnectors(ctx, [preview], zoom, camX, camY)
+        // While picking the far end, trail a dashed line to the selection so it
+        // is obvious what is about to be joined: edge to edge, where the
+        // connector it would make is going to run.
+        var si = byId[board.ctl.linkingFrom]
+        if (si !== undefined && board.ctl.selectedIndex >= 0 && si !== board.ctl.selectedIndex) {
+          ctx.globalAlpha = 0.9
+          ctx.setLineDash([6, 5])
+          var preview = Store.connectorGeometry(items.get(si), items.get(board.ctl.selectedIndex), head, 2 / zoom)
+          if (preview.visible) {
+            board.paintConnectors(ctx, [preview], zoom, camX, camY)
+          }
+          ctx.setLineDash([])
         }
-        ctx.setLineDash([])
+        linkCanvas.inside = shown.inside && board.ctl.linkingFrom < 0
       }
+      onWidthChanged: requestPaint()
+      onHeightChanged: requestPaint()
     }
-    onWidthChanged: requestPaint()
-    onHeightChanged: requestPaint()
   }
 
   // Foreground items are above backgrounds and connectors.
@@ -668,8 +801,8 @@ FocusScope {
   }
 
   // The board steps back while a panel is asking for attention, as the desktop
-  // does behind the shell's own menu. Over the canvas and under the header and
-  // the line beneath it, which go on saying what the keys do in that panel.
+  // does behind the shell's own menu. Over the canvas and under the header,
+  // whose line goes on saying what the keys do in that panel.
   // The browser dims everything itself, header and all, as it covers it.
   Rectangle {
     objectName: "panel-scrim"
@@ -685,6 +818,8 @@ FocusScope {
     anchors { top: parent.top; left: parent.left; right: parent.right; margins: board.theme.sp(16) }
     height: implicitHeight
     visible: !board.ctl.browsing && !board.ctl.helpVisible
+    lineWidth: findLine.visible ? findLine.implicitWidth : status.visible ? status.implicitWidth : 0
+    lineHeight: findLine.visible ? findLine.height : status.visible ? status.height : 0
   }
 
   Column {
@@ -739,9 +874,9 @@ FocusScope {
     objectName: "conflict-panel"
     ctl: board.ctl
     anchors.horizontalCenter: parent.horizontalCenter
-    // Below the line under the header, not a fixed distance below the header:
-    // that line wraps in a narrow window, and its second row drew over the top
-    // of the panel.
+    // Below the header as tall as it is, not a fixed distance below its top:
+    // its line wraps in a narrow window, and a second row of it drew over the
+    // top of the panel.
     y: board.canvasTop + board.theme.sp(8)
   }
 
@@ -816,17 +951,16 @@ FocusScope {
   Row {
     id: findLine
     visible: board.ctl.finding && !board.ctl.helpVisible && !board.ctl.browsing
-    anchors.horizontalCenter: parent.horizontalCenter
-    anchors.top: banner.visible ? banner.bottom : toolbar.bottom
-    anchors.topMargin: board.theme.sp(8)
-    width: Math.min(parent.width - board.theme.sp(32), implicitWidth)
+    x: toolbar.x + toolbar.lineX + (toolbar.lineSpan - width) / 2
+    y: toolbar.y + toolbar.lineY
+    width: Math.min(toolbar.lineSpan, implicitWidth)
     height: implicitHeight
 
     Text {
       textFormat: Text.PlainText
       id: findLabel
       text: "find: "
-      color: board.theme.foreground
+      color: board.ctl.theme.barForeground
       opacity: 0.85
       font.family: board.theme.fontFamily
       font.pixelSize: board.theme.fontBody
@@ -844,9 +978,9 @@ FocusScope {
       LineField {
         id: findField
         objectName: "find-field"
-        color: board.theme.foreground
-        selectionColor: board.theme.accent
-        selectedTextColor: board.theme.canvasBackground
+        color: board.ctl.theme.barForeground
+        selectionColor: board.ctl.theme.accent
+        selectedTextColor: board.ctl.theme.barBackground
         font.family: board.theme.fontFamily
         font.pixelSize: board.theme.fontBody
 
@@ -893,9 +1027,9 @@ FocusScope {
       // centred in over to the left. A theme with large text in a small window
       // wraps it instead, the way the status line it stands in for wrapped.
       width: Math.min(implicitWidth,
-                      Math.max(0, board.width - board.theme.sp(32) - findLabel.width - findView.width))
+                      Math.max(0, toolbar.width - board.theme.sp(16) - findLabel.width - findView.width))
       wrapMode: Text.Wrap
-      color: board.theme.foreground
+      color: board.ctl.theme.barForeground
       opacity: 0.85
       font.family: board.theme.fontFamily
       font.pixelSize: board.theme.fontBody
@@ -906,21 +1040,20 @@ FocusScope {
     }
   }
 
-  // Under the header rather than at the far edge: the name, the commands and
+  // In the header rather than at the far edge: the name, the commands and
   // whatever the board is saying are one block to look at, and the bottom of
-  // the canvas is left to the board.
+  // the canvas is left to the board. The header says where: beside the name,
+  // or under it when the line is too long for that.
   Text {
     id: status
     objectName: "board-status"
-    anchors.left: parent.left
-    anchors.right: parent.right
-    anchors.leftMargin: board.theme.sp(16)
-    anchors.rightMargin: board.theme.sp(16)
+    x: toolbar.x + toolbar.lineX
+    y: toolbar.y + toolbar.lineY
+    width: toolbar.lineSpan
     horizontalAlignment: Text.AlignHCenter
     wrapMode: Text.Wrap
-    anchors.top: banner.visible ? banner.bottom : toolbar.bottom
-    anchors.topMargin: board.theme.sp(8)
-    color: board.theme.foreground
+    // The bar's text, held back as its other secondary text is.
+    color: board.ctl.theme.barForeground
     opacity: 0.85
     font.family: board.theme.fontFamily
     font.pixelSize: board.theme.fontBody
@@ -934,12 +1067,17 @@ FocusScope {
     // by the same call the controller makes to know whether a failure is on
     // screen and its time is running. Here it is only joined and coloured.
     readonly property string tier: Store.statusTier(board.ctl.statusState())
+    // Asked to close with either of the first and third unresolved, the line
+    // says the next ask closes all the same.
+    readonly property string closeAnyway: board.ctl.leaveWarned
+      ? " · " + Store.hintMarkup("esc", "close anyway", board.ctl.accentMarkup) : ""
     text:
-      status.tier === "saveError" ? Store.escapeMarkup(board.ctl.saveError)
+      status.tier === "saveError" ? Store.escapeMarkup(board.ctl.saveError) + status.closeAnyway
       : status.tier === "trashIndexError" ? Store.escapeMarkup(board.ctl.library.trashIndexError)
       : status.tier === "conflict"
       ? Store.escapeMarkup(board.ctl.boardTitle) + " changed on disk · "
         + Store.hintMarkup("ctrl+s", "choose which version to keep", board.ctl.accentMarkup)
+        + status.closeAnyway
       : status.tier === "damaged"
       ? Store.escapeMarkup(board.ctl.damageReason !== ""
           ? board.ctl.boardTitle + " " + board.ctl.damageReason + " — not opening it"
@@ -964,7 +1102,6 @@ FocusScope {
       ? Store.linkHint(board.ctl.linkOutcome, board.ctl.accentMarkup)
       : status.tier === "flash" ? Store.escapeMarkup(board.ctl.statusText)
       : status.tier === "switching" ? "saving before switching boards…"
-      : status.tier === "saving" ? "saving…"
       // The other pane is still there when the window is too small to show
       // it, and the line says how to reach it rather than leave it forgotten.
       : (board.ctl.squeezed ? Store.hintMarkup("o", "the other pane", board.ctl.accentMarkup) + " \u00b7 " : "")

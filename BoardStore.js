@@ -478,7 +478,7 @@ function paletteTint(palette, group, tint) {
 }
 
 // ----------------------------------------------------------- the status line
-// One line under the header, and every tier listed below wanting it. Which one gets
+// One line in the header, and every tier listed below wanting it. Which one gets
 // it is decided here, once, because it used to be decided twice — the view drew
 // the line and the controller worked out separately whether a failure was on
 // screen, so that it could stop timing one that was not. The two disagreed
@@ -503,11 +503,14 @@ function paletteTint(palette, group, tint) {
 //   linking
 //   flash           what just happened, and goes away by itself.
 //   switching       what it is busy with.
-//   saving
 //   hints           nothing in particular: the keys.
+//
+// A write on its way is not on the list: the disk beside the name says it.
+// The line said "saving…" for the moment each write took, and every edit made
+// the keys blink out of the header and back.
 var STATUS_TIERS = ["none", "saveError", "trashIndexError", "conflict", "damaged", "failure",
                     "palette", "arrange", "backgrounds", "editing", "linking",
-                    "flash", "switching", "saving", "hints"]
+                    "flash", "switching", "hints"]
 
 function statusTier(s) {
   if (!s) return "none"
@@ -526,11 +529,31 @@ function statusTier(s) {
   if (s.linking) return "linking"
   if (s.statusText !== "") return "flash"
   if (s.switching) return "switching"
-  if (s.saving) return "saving"
   // The keys are for the pane the keyboard is in. Beside it, a pane that is
   // only being looked at says nothing until it has something to say.
   return s.active === false ? "none" : "hints"
 }
+
+// The mark beside a board's name: a disk when what is on screen is in the
+// file, the disk being written when it is not there yet, a warning when it
+// cannot get there, a lock when it is not to be written at all. Opening has
+// no mark; the header says how far it has got instead.
+function saveMark(s) {
+  if (s.opening) return "opening"
+  if (s.damaged) return "readonly"
+  if (s.saveError !== "" || s.diskChanged) return "failed"
+  if (s.waiting || s.saving) return "unsaved"
+  return "saved"
+}
+
+// Nerd Font glyphs. The shell draws its own icons from the same font, so a
+// glyph that is missing here is missing from the bar as well.
+var SAVE_GLYPHS = {
+  saved: String.fromCodePoint(0xF0193), unsaved: String.fromCodePoint(0xF0CFB),
+  failed: String.fromCodePoint(0xF0F42), readonly: String.fromCodePoint(0xF033E)
+}
+var FIT_GLYPH = String.fromCodePoint(0xF18F4)
+var MENU_GLYPH = String.fromCodePoint(0xF035C)
 
 // ------------------------------------------------------------ connectors
 // Only one connector runs between any pair, so drawing one is three different
@@ -872,7 +895,7 @@ var KEY_HELP_SECTIONS = [
   ] },
   { title: "Connect", rows: [
     ["x", "connect: x on one, click or tab to the other, x again"],
-    // Which of the two it will be is said on the line under the header while the
+    // Which of the two it will be is said on the line in the header while the
     // far end is being chosen, so this row says that there is a choice rather
     // than asking anyone to work out which side of it they are on.
     ["x on a connected pair", "turn that connector round, or remove it — the line says which"],
@@ -2123,6 +2146,42 @@ function connectorInView(a, b, left, top, right, bottom, margin) {
   var bx = b.ix + b.iw / 2, by = b.iy + b.ih / 2
   return Math.max(ax, bx) + margin >= left && Math.min(ax, bx) - margin <= right
     && Math.max(ay, by) + margin >= top && Math.min(ay, by) - margin <= bottom
+}
+
+// The geometry of every connector that can touch the view, those at the
+// selected item apart. `ends` holds each connector's two item ids in turn,
+// `rows` plain copies of the items and `byId` which row holds each id: what
+// Board.qml keeps beside its models, because reading a ListModel row costs
+// more than the arithmetic. Here rather than in the board, so the walk's two
+// calls a connector stay inside this library.
+//
+// `inside` says whether every connector lies wholly within the view, its head
+// and stroke included: a drawing of them that does can be moved with the
+// camera, since nothing it leaves out could come into view.
+function connectorsInView(byId, rows, ends, left, top, right, bottom, head, gap, selectedId) {
+  var normal = [], highlighted = [], inside = true
+  for (var i = 0; i < ends.length; i += 2) {
+    var ai = byId[ends[i]], bi = byId[ends[i + 1]]
+    if (ai === undefined || bi === undefined) continue
+    var a = rows[ai], b = rows[bi]
+    if (!connectorInView(a, b, left, top, right, bottom, head)) { inside = false; continue }
+    if (inside && !connectorWithin(a, b, left, top, right, bottom, head)) inside = false
+    var g = connectorGeometry(a, b, head, gap)
+    if (!g.visible) continue
+    if (ends[i] === selectedId || ends[i + 1] === selectedId) highlighted.push(g)
+    else normal.push(g)
+  }
+  return { normal: normal, highlighted: highlighted, inside: inside }
+}
+
+// Whether a connector lies wholly within the view: the box round the centres
+// holds its line, and `margin` its head and its stroke, as connectorInView
+// takes them.
+function connectorWithin(a, b, left, top, right, bottom, margin) {
+  var ax = a.ix + a.iw / 2, ay = a.iy + a.ih / 2
+  var bx = b.ix + b.iw / 2, by = b.iy + b.ih / 2
+  return Math.min(ax, bx) - margin >= left && Math.max(ax, bx) + margin <= right
+    && Math.min(ay, by) - margin >= top && Math.max(ay, by) + margin <= bottom
 }
 
 function cycle(list, current) {

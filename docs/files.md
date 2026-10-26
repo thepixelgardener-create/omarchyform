@@ -104,7 +104,8 @@ on `b`. Writing the board that is open is fine too: the board watches its file,
 so a board the CLI changes appears in front of you.
 
 If you have unsaved changes on screen as well, both versions are kept and
-neither is guessed at. Autosaving stops, the header says `Changed on disk`, and
+neither is guessed at. Autosaving stops, the disk beside the board's name turns
+red, and
 `ctrl+s` puts the three choices on screen:
 
 | | |

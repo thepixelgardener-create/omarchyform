@@ -544,6 +544,7 @@ Item {
       root.launchOpenPath = request.path
     if (root.applyPayload(payloadJson)) root.writeState()
     root.boardScreen = root.focusedScreen()
+    root.leaveWarned = false
     root.opened = true
     Qt.callLater(function () {
       root.activePane.focusKeys()
@@ -554,11 +555,43 @@ Item {
     })
   }
 
+  // A board on screen whose edits are not in its file: its write failed, or
+  // someone else's version is on disk. Closing keeps them in the session, as
+  // it always has, but once the window is gone nothing says so. The first ask
+  // to close says it on that board's line instead, and the next one closes.
+  property bool leaveWarned: false
+  function unsavedPane() {
+    var shown = root.split ? root.panes : [root.panes[0]]
+    for (var i = 0; i < shown.length; i++) {
+      var doc = shown[i].doc
+      if (doc && (doc.saveError !== "" || doc.diskChanged)) return shown[i]
+    }
+    return null
+  }
+  // Saved after all, by a retry or a choice: a later failure warns again.
+  readonly property bool unsaved: root.unsavedPane() !== null
+  onUnsavedChanged: if (!root.unsaved) root.leaveWarned = false
+
   // The host calls close() for IPC hide/toggle; Escape and window close use
-  // the same cleanup before notifying the scoped shell facade.
-  function close() {
+  // the same cleanup before notifying the scoped shell facade. `force` is the
+  // window already gone, closed by the compositor: there is nothing left to
+  // warn on. False when it stays open.
+  function close(force) {
     for (var p = 0; p < root.panes.length; p++)
-      if (root.panes[p].imageBusy) { root.panes[p].flash("Finishing image export…"); return }
+      if (root.panes[p].imageBusy) { root.panes[p].flash("Finishing image export…"); return false }
+    var unsaved = force === true || !root.opened ? null : root.unsavedPane()
+    if (unsaved && !root.leaveWarned) {
+      root.leaveWarned = true
+      // Where the line can be seen: the browser covers the header, and help
+      // and the find query stand in its line's place. Escape takes each of
+      // them down before it gets here; the keybinding and the bar do not.
+      if (root.library.showing) root.library.hide()
+      root.activate(unsaved)
+      unsaved.helpVisible = false
+      if (unsaved.finding) unsaved.endFind()
+      return false
+    }
+    root.leaveWarned = false
     // Closing is not a decision either. A board with two versions keeps both —
     // the edits stay in the session, and the question is still there when it
     // comes back — rather than being asked on the way out of the window.
@@ -570,10 +603,13 @@ Item {
     root.opened = false
     for (var v = 0; v < root.panes.length; v++) root.panes[v].closeView()
     root.library.reset()
+    return true
   }
 
-  function dismiss() {
-    root.close()
+  // The shell's hide calls close() again, which would answer a warning with
+  // the close it was holding back.
+  function dismiss(force) {
+    if (!root.close(force)) return
     if (root.shell && typeof root.shell.hide === "function")
       root.shell.hide((root.manifest && root.manifest.id) || "thepixelgardener.omarchyform")
   }
@@ -837,7 +873,7 @@ Item {
 
     // Closing from the titlebar or a compositor keybind ends the session the
     // same way Escape does.
-    onVisibleChanged: if (!visible && root.opened && root.windowMode) root.dismiss()
+    onVisibleChanged: if (!visible && root.opened && root.windowMode) root.dismiss(true)
 
     Loader {
       anchors.fill: parent

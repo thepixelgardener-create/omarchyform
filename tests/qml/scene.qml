@@ -131,6 +131,9 @@ ShellRoot {
       return
     }
     bench.phases[bench.phase].enter()
+    // Marks for tests/scene.js --timing, which reads Qt's own timing of each
+    // frame from the log and needs to know which phase a frame was in.
+    console.log("BENCH phase " + bench.phases[bench.phase].name)
   }
 
   Host.PluginShellApi {
@@ -150,6 +153,7 @@ ShellRoot {
       bench.seen += 1
       // The settle frames are stepped but not recorded: the first frame after
       // a phase change carries the cost of the change, not of the phase.
+      if (bench.seen === 1) console.log("BENCH recording")
       if (bench.seen > 0) bench.samples.push(frames.frameTime * 1000)
       if (bench.seen >= bench.framesPerPhase) bench.advance()
     }

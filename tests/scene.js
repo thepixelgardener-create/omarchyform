@@ -7,10 +7,16 @@
 //   node tests/scene.js                 100, 500, 1000 and 3000 items
 //   node tests/scene.js 3000            one size
 //   node tests/scene.js 3000 --textures every item textured
+//   node tests/scene.js 4 --timing      Qt's own timing of each frame as well
 //
 // Columns are milliseconds per frame, mean and 95th percentile. A phase at
 // the refresh interval (6.9ms at 144Hz, 16.7ms at 60) is vsync-bound and has
 // room to spare; above it, the board is dropping frames while you use it.
+// A phase at the refresh interval says nothing about how much of the frame it
+// used: --timing asks Qt to log its timing of every frame (QSG_RENDER_TIMING,
+// in whole milliseconds) and adds the medians of the work in it, the GUI
+// thread's polish, where a Canvas paints, and the render thread's sync and
+// render without the wait for the swap.
 //
 // A diagnostic, not a pass/fail gate, and not part of tests/run: it needs a
 // compositor, and frame times on a busy desktop are noisy. Run it before and
@@ -19,61 +25,18 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const { spawnSync } = require('child_process')
+const { provenance } = require('./machine')
 
 const repo = path.join(__dirname, '..')
 const omarchy = process.env.OMARCHY_PATH || '/usr/share/omarchy'
-
-// What the numbers were measured on. A frame time means nothing without it —
-// the same board is vsync-bound at 60Hz and drops frames at 144 — and a figure
-// quoted in a changelog a year from now is only checkable against the machine
-// that produced it. Everything here is read from what is already installed and
-// every probe is allowed to fail: a missing tool costs one row, not a run.
-function ask(command) {
-  try {
-    const out = spawnSync('sh', ['-c', command], { encoding: 'utf8', timeout: 5000 })
-    const text = (out.stdout || '').trim()
-    return text === '' ? null : text.split('\n')[0]
-  } catch { return null }
-}
-
-// The screen the numbers were measured on, scale included. A fractionally
-// scaled display draws more pixels than its resolution says, and that is the
-// first thing to check when a frame time will not reproduce elsewhere.
-function display() {
-  try {
-    const out = spawnSync('hyprctl', ['-j', 'monitors'], { encoding: 'utf8', timeout: 5000 })
-    const monitors = JSON.parse(out.stdout || '[]')
-    if (monitors.length === 0) return null
-    const one = monitors.find(m => m.focused) || monitors[0]
-    const scale = Number(one.scale)
-    return `${one.width}\u00d7${one.height} at ${scale}x, `
-      + (monitors.length > 1 ? `${monitors.length} outputs` : 'single output')
-  } catch { return null }
-}
-
-function provenance() {
-  return [
-    ['Qt', ask('qmake6 -query QT_VERSION || /usr/lib/qt6/bin/qmake6 -query QT_VERSION')],
-    ['Quickshell', ask(`qs --version 2>&1 | sed 's/^Quickshell //; s/ *(revision.*//'`)],
-    ['Compositor', ask(`hyprctl version -j 2>/dev/null | sed -n 's/.*"version": *"\\([^"]*\\)".*/Hyprland \\1/p'`)],
-    ['Refresh', ask(`hyprctl monitors -j 2>/dev/null | sed -n 's/.*"refreshRate": *\\([0-9]*\\.[0-9]\\).*/\\1 Hz/p'`)],
-    ['GPU', ask(`lspci 2>/dev/null | grep -iE 'vga|3d' | head -1 | sed 's/.*: //'`)],
-    ['CPU', ask(`sed -n 's/^model name[ \t]*: //p' /proc/cpuinfo | head -1`)],
-    ['OS', ask(`. /etc/os-release 2>/dev/null && echo "$PRETTY_NAME"`)],
-    // The two ways this machine names its Omarchy disagree — the version file
-    // says the release, the package says the revision. A bug report carries the
-    // package version, so that is the one recorded here and in docs/install.md.
-    ['Omarchy', ask(`omarchy-version 2>/dev/null || cat ${omarchy}/version 2>/dev/null`)],
-    ['Display', display()]
-  ].filter(row => row[1])
-}
 
 const args = process.argv.slice(2)
 // --record writes docs/performance.md as well as printing, so the numbers a
 // changelog quotes have a checked-in record of the machine that produced them.
 const record = args.includes('--record')
 const textures = args.includes('--textures')
-const sizes = args.filter(a => !['--record', '--textures'].includes(a)).map(Number).filter(n => n > 0)
+const timing = args.includes('--timing')
+const sizes = args.filter(a => !['--record', '--textures', '--timing'].includes(a)).map(Number).filter(n => n > 0)
 const plan = sizes.length ? sizes : [100, 500, 1000, 3000]
 
 function measure(size) {
@@ -106,7 +69,8 @@ function measure(size) {
         WAYLAND_DISPLAY: path.isAbsolute(display) ? display
           : path.join(process.env.XDG_RUNTIME_DIR || '', display),
         OMARCHYFORM_BENCH_ITEMS: String(size), OMARCHYFORM_BENCH_TEXTURES: textures ? '1' : '0',
-        OMARCHYFORM_TEST_DIR: dir }
+        OMARCHYFORM_TEST_DIR: dir,
+        ...(timing ? { QSG_RENDER_TIMING: '1', QT_FORCE_STDERR_LOGGING: '1' } : {}) }
     })
     const output = (result.stdout || '') + (result.stderr || '')
     if (!output.includes('BENCH_DONE')) {
@@ -115,11 +79,29 @@ function measure(size) {
     }
     const rows = []
     let window = '?'
+    // --timing: Qt's lines for the frames each phase records, in log order.
+    const timed = {}
+    let phase = null, recording = false
     for (const line of output.split('\n')) {
+      const marked = line.match(/BENCH phase (.+)$/)
+      if (marked) { phase = marked[1].trim(); recording = false }
+      if (line.includes('BENCH recording')) recording = true
+      if (timing && phase && recording) {
+        const t = timed[phase] || (timed[phase] = { polish: [], render: [] })
+        const polish = line.match(/Frame prepared, polish=(\d+) ms/)
+        if (polish) t.polish.push(Number(polish[1]))
+        const rendered = line.match(/frame rendered in \d+ms, sync=(\d+), render=(\d+)/)
+        if (rendered) t.render.push(Number(rendered[1]) + Number(rendered[2]))
+      }
       const m = line.match(/BENCH (\S[^\t]*)\t([\d.]+)\t([\d.]+)/)
       if (m) rows.push({ name: m[1], mean: Number(m[2]), p95: Number(m[3]) })
       const w = line.match(/BENCH window (\d+)x(\d+)/)
       if (w) window = `${w[1]}×${w[2]}`
+    }
+    const median = list => list.slice().sort((a, b) => a - b)[Math.floor(list.length / 2)]
+    for (const r of rows) {
+      const t = timed[r.name]
+      if (t && t.polish.length && t.render.length) { r.polish = median(t.polish); r.render = median(t.render) }
     }
     return { rows, window }
   } finally { fs.rmSync(dir, { recursive: true, force: true }) }
@@ -159,6 +141,15 @@ for (let i = 0; i < names.length; i++) {
     return `${r.mean.toFixed(1)}/${r.p95.toFixed(1)}`.padStart(13)
   })
   process.stdout.write(names[i].padEnd(width) + cells.join('') + '\n')
+}
+if (timing) {
+  process.stdout.write('\nQt\'s timing, median ms per frame: polish (GUI thread) / sync and render\n')
+  process.stdout.write('phase'.padEnd(width) + table.map(t => String(t.size).padStart(13)).join('') + '\n')
+  for (let i = 0; i < names.length; i++)
+    process.stdout.write(names[i].padEnd(width) + table.map(t => {
+      const r = t.rows[i]
+      return (r.polish === undefined ? 'no lines' : `${r.polish}/${r.render}`).padStart(13)
+    }).join('') + '\n')
 }
 // The idle row is the refresh interval this machine actually achieved, which
 // is the budget every other row should be read against — measured rather than

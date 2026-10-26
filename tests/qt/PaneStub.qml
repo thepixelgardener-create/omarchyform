@@ -14,7 +14,11 @@ Item {
   property real zoom: 1
   property real viewW: 800
   property real viewH: 600
-  function panBy(dx, dy) { ctl.camX += dx; ctl.camY += dy }
+  function panBy(dx, dy) {
+    ctl.camX += dx
+    ctl.camY += dy
+    if (ctl.activeBoard) ctl.activeBoard.panned()
+  }
   function zoomAt(sx, sy, factor) {
     var next = Math.max(0.2, Math.min(4, ctl.zoom * factor))
     if (next === ctl.zoom) return
@@ -63,7 +67,7 @@ Item {
       paletteVisible: ctl.paletteVisible, arranging: ctl.arranging,
       showPinned: ctl.showPinned, editing: ctl.editIndex >= 0,
       linking: ctl.linkingFrom >= 0, statusText: ctl.statusText,
-      switching: ctl.pendingBoard !== null, saving: ctl.saving
+      switching: ctl.pendingBoard !== null
     }
   }
   function isMarked(id) { return false }
@@ -118,6 +122,9 @@ Item {
   property string failureText: ""
   property string boardTitle: "notes"
   property string boardState: "Saved locally"
+  property bool waiting: false
+  property string saveMark: "saved"
+  property bool leaveWarned: false
   property string currentBoard: "notes.json"
   property string dataDir: "/tmp"
   property string accentMarkup: "#00ffff"

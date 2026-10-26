@@ -10,6 +10,7 @@
 /AGENTS.md
 /CLAUDE.md
 
-# What tests/ui.js and tests/hostile.js make for the Qt tests and remove afterwards.
+# What tests/ui.js, tests/hostile.js and tests/connectors.js make for the Qt tests and remove afterwards.
 tests/qt/generated/
 tests/hostile/generated/
+tests/connectors/generated/

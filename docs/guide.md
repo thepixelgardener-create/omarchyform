@@ -27,8 +27,8 @@ a board last used that way.
 ## Keys
 
 Press `?` or `F1` on the board for this list. The board's name, the menu and
-whatever it is currently telling you all sit together at the top; the rest of
-the canvas is yours.
+whatever it is currently telling you all sit together in the header, on one
+line where they fit; the rest of the canvas is yours.
 
 You do not have to know any of them. `:` — or `ctrl+p`, or **Commands** in the
 header menu — opens a list of every command by name: type a few letters, press
@@ -62,7 +62,7 @@ breaks, and the middle button does not paste the primary selection.
 | `p` / `Shift+P` | Pin as background / select backgrounds to unpin |
 | `s` | Cycle the shape: note, box, ellipse, diamond |
 | `x` | Connect: `x` on one, `tab` or `hjkl` to the other, `x` again |
-| `x` on a connected pair | Turn that connector round, or remove it — the line under the header says which |
+| `x` on a connected pair | Turn that connector round, or remove it — the line in the header says which |
 | `X` | Remove every connector on this item at once |
 | `u` / `ctrl+r` | Undo / redo |
 | `ctrl+n` | New board, already waiting for the first note |
@@ -127,8 +127,8 @@ nothing at all: it will not select, move, resize, type into or delete what it
 lands on. Deleting is `del`, `backspace`, or **Delete** in the command list,
 and it can be undone with `u`.
 
-The header shows the zoom on the right, beside the menu, and clicking it fits the
-board to the window, as `f` does. To pick a level, the header menu includes
+The button on the right of the header, beside the menu, fits the board to the
+window, as `f` does. To see or pick a level, the header menu includes
 **Zoom**: open it with `m`, use `Tab` / `Shift+Tab` to reach Zoom, then press
 `Enter`. Choose 25%, 50%,
 75%, 100%, 125%, 150%, 200%, 300%, or 400% with Tab and Enter. **Back** returns
@@ -164,7 +164,7 @@ Backspace to return to all commands; Escape closes the command list.
 
 Select one item, press `x`, click the other item or move to it with `tab` or
 `h` `j` `k` `l`, and press `x` again. A dashed line follows the selection while
-you choose, and the line under the header says what the second `x` will do
+you choose, and the line in the header says what the second `x` will do
 before you press it.
 
 Clicking a target keeps the source while you choose. Dragging and editing are
@@ -217,7 +217,7 @@ one you want is a few letters away and there is nothing new on the board to
 look at. What a picture says is at least 13:1 against the fill behind it in
 every palette, and every border and connector clears 3:1 against the page.
 
-The line under the header afterwards tells you what it made: what it was of,
+The line in the header afterwards tells you what it made: what it was of,
 and what it was drawn in.
 
 ## Backgrounds
@@ -283,7 +283,7 @@ The layout and both boards are remembered for next time.
 Drag the line between the panes to resize them, and double-click it — or run
 **Even out the split** from the command list — to put it back in the middle.
 Neither pane goes below 320 pixels. In a window too small for two, the pane
-you are in has all of it and the line under its header offers `o` for the
+you are in has all of it and the line in its header offers `o` for the
 other; the split comes back when the room does.
 
 Deleting a board or a folder moves it to `~/.local/share/omarchyform/trash/`
@@ -396,6 +396,14 @@ for writes to finish. A failed backup or write leaves the board open in memory
 and shows an error; use `ctrl+s` to retry. A slow save stays in progress until
 the disk operation completes; retrying cannot replace its destination. Closing the surface keeps an in-flight
 save running in the shell; it does not wait for disk completion.
+
+The disk beside the board's name says where it stands: a plain disk when what is
+on screen is in the file, the accent-coloured disk with a pencil while an edit
+has not been written yet, a red disk with `!` when a write failed or someone else's
+version is on disk, and a lock when the board is read-only. Closing with a red
+disk keeps your edits in the shell, but nothing would say so once the board is
+gone: the first `esc` — or the keybinding, or the bar's icon — adds
+`esc: close anyway` to the line instead of closing, and the second closes.
 
 When a conflict is resolved with **Use disk version**, the latest content and
 its revision are read together under the write lock. A failed read or replacement

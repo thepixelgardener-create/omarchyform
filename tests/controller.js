@@ -223,6 +223,60 @@ const { controller } = require('./workspace-harness')
   assert.equal(c.root.saveError, '')
 }
 {
+  // Closing on a write that failed keeps the edits in the session, as it
+  // always has, but with the window gone nothing would say so. The first ask
+  // says it on the line instead; the second closes. The shell's hide calls
+  // close() again, so the first ask must not reach it.
+  const c = controller()
+  const hidden = []
+  c.workspace.shell = { hide(id) { hidden.push(id); c.workspace.close() } }
+  c.workspace.opened = true
+  c.root.addItem('note', 0, 0)
+  c.persistence.busy = false
+  c.session.failedSave('disk full')
+  // Asked from the bar with the browser over the header and help up, where
+  // nothing would show the line saying so.
+  c.library.showing = true
+  c.root.helpVisible = true
+  c.root.finding = true
+  c.workspace.dismiss()
+  assert.equal(c.workspace.opened, true, 'the first ask to close leaves it open')
+  assert.equal(c.workspace.leaveWarned, true, 'and the line says the next one closes')
+  assert.equal(c.library.showing, false, 'where it can be seen: the browser is put away')
+  assert.equal(c.root.helpVisible, false, 'and so is help')
+  assert.equal(c.root.finding, false, 'and the find query standing in for the line')
+  assert.deepEqual(hidden, [], 'without asking the shell, whose hide would close it')
+  c.workspace.dismiss()
+  assert.equal(c.workspace.opened, false, 'the second closes')
+  assert.equal(hidden.length, 1)
+  assert.equal(c.workspace.leaveWarned, false, 'and the next failure warns again')
+  // Closing retried the write; it failed again.
+  c.persistence.busy = false
+  c.session.failedSave('disk full')
+  c.workspace.opened = true
+  assert.equal(c.workspace.close(true), true, 'a window the compositor already closed is not asked')
+  assert.equal(c.workspace.opened, false)
+}
+{
+  // A board already closed is not asked again: there is no line to say it on.
+  const c = controller()
+  c.root.addItem('note', 0, 0)
+  c.persistence.busy = false
+  c.session.failedSave('disk full')
+  c.workspace.opened = false
+  assert.equal(c.workspace.close(), true)
+  assert.equal(c.workspace.leaveWarned, false)
+}
+{
+  // Nothing unsaved, nothing asked.
+  const c = controller()
+  c.workspace.opened = true
+  c.root.addItem('note', 0, 0)
+  c.complete()
+  assert.equal(c.workspace.close(), true)
+  assert.equal(c.workspace.opened, false)
+}
+{
   // A slow write is only a delay: the switch waits for it instead of vanishing.
   const c = controller()
   c.root.addItem('note', 0, 0)
@@ -1093,7 +1147,9 @@ console.log('ok — controller: the command palette and one dispatch for every c
     // so the question is still there when it comes back.
     c.root.endConflictChoice()
     const closed = c.writes.length
-    c.workspace.close()
+    c.workspace.opened = true
+    assert.equal(c.workspace.close(), false, 'the first ask to close says so instead')
+    assert.equal(c.workspace.close(), true, 'and the second closes')
     assert.equal(c.writes.length, closed, 'closing writes nothing over the other version')
     assert.equal(c.session.conflict, true, 'and leaves the question standing')
     assert.equal(c.items.count, 2, 'with the edits still in hand')
