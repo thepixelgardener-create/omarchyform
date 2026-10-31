@@ -83,10 +83,10 @@ Three things worth noting whenever they happen, in any task:
   Note whether their eyes go there at all, and whether they act on what it says
    — particularly while connecting, where it names the outcome before they
   commit to it.
-- **Clicking the second item while connecting.** A click starts a fresh
-  selection and ends the half-made connector; the far end is reached with `tab`
-  or `hjkl`. If people keep doing it, that is the evidence a separate plan for
-  pointer-driven connecting would need.
+- **Clicking the second item while connecting.** A click chooses the far end
+  and keeps the source, as `tab` or `hjkl` do; the connector is made only when
+  `x` is pressed again. Note whether people expect the click itself to finish
+  it, and whether they look for the second `x` in the line under the header.
 
 ## Reading it afterwards
 

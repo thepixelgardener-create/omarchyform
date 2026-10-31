@@ -4,6 +4,7 @@ const childProcess = require('child_process')
 // Every call is bounded: a helper that hangs fails the run with a timeout
 // instead of stalling it. A call may still pass a timeout of its own.
 const spawnSync=(command,args,options)=>childProcess.spawnSync(command,args,{timeout:30000,...options})
+const {loadStore}=require('../bin/store')
 const dir=fs.mkdtempSync(path.join(os.tmpdir(),'omarchyform-files-'))
 try {
   const boards=path.join(dir,'boards'),trash=path.join(dir,'trash'),outside=path.join(dir,'outside')
@@ -262,6 +263,28 @@ try {
   // without being loaded.
   assert.equal(Number(run('filesize',board).stdout),fs.statSync(board).size)
   assert.equal(run('filesize',path.join(boards,'not-here.json')).stdout,'0')
+  // An import is read once, by the helper, and no further than a board may
+  // be: a size asked first and a read made afterwards could disagree.
+  assert.equal(run('read',board).stdout,fs.readFileSync(board,'utf8'))
+  assert.equal(run('read',path.join(boards,'not-here.json')).stdout,'','nothing there reads as nothing')
+  assert.equal(run('read',boards).stdout,'','and so does a folder')
+  const fifo=path.join(dir,'import.fifo')
+  assert.equal(spawnSync('mkfifo',[fifo]).status,0)
+  const piped=run('read',fifo)
+  assert.equal(piped.status,0,'a FIFO does not hold the helper at open')
+  assert.equal(piped.stdout,'')
+  const MAX_BOARD_BYTES=loadStore().MAX_BOARD_BYTES
+  const oversize=path.join(dir,'oversize.json')
+  fs.writeFileSync(oversize,'')
+  fs.truncateSync(oversize,MAX_BOARD_BYTES+1)
+  const refusedRead=run('read',oversize)
+  assert.equal(refusedRead.status,5,'larger than a board is refused')
+  assert.equal(refusedRead.stdout,'','with none of it read out')
+  fs.truncateSync(oversize,MAX_BOARD_BYTES)
+  const readAtLimit=spawnSync('bash',[path.join(__dirname,'../BoardFiles.sh'),'read',oversize],{encoding:'utf8',maxBuffer:MAX_BOARD_BYTES+1024})
+  assert.equal(readAtLimit.status,0)
+  assert.equal(Buffer.byteLength(readAtLimit.stdout),MAX_BOARD_BYTES,'exactly the limit is read whole')
+  fs.unlinkSync(oversize)
 
   // And the same thing for real: two writers that both read the same revision,
   // started together. The lock decides which goes first; the revision check

@@ -564,10 +564,29 @@ FocusScope {
   // Keyboard owner. Lives above the canvas so Escape always lands here.
   Item {
     id: keys
+    objectName: "board-keys"
     anchors.fill: parent
     // Focus moves between the canvas and the browser declaratively. Leaving
     // both claiming it strands the keyboard on whichever hid last.
     focus: !board.ctl.browsing
+
+    // What a screen reader hears on the canvas: the board, and the item the
+    // keyboard is on. It lives here, on the one thing that holds focus, rather
+    // than on each item: Accessible on the delegates broke grabToImage, which
+    // the PNG export and the screenshot harness both go through (Node.qml).
+    // The text is cut short; a note may hold a megabyte of it.
+    Accessible.role: Accessible.Pane
+    Accessible.name: "Board " + board.ctl.boardTitle
+    Accessible.description: keys.describeSelection()
+    function describeSelection() {
+      var at = board.ctl.selectedIndex, count = board.ctl.items.count
+      if (at < 0 || at >= count) return count === 0 ? "Empty" : count + " items, none selected"
+      var item = board.ctl.items.get(at)
+      var kind = ({ note: "Note", rect: "Box", ellipse: "Ellipse", diamond: "Diamond", image: "Picture" })[item.kind] || "Item"
+      var text = item.itext.length > 200 ? item.itext.slice(0, 200) + "…" : item.itext
+      return kind + " " + (at + 1) + " of " + count + (item.ipinned ? ", in the background" : "")
+        + (board.ctl.linkingFrom >= 0 ? ", connecting" : "") + (text !== "" ? ": " + text : "")
+    }
 
     // Printable keys are a table rather than a ladder of else-ifs: adding a
     // command is one line, and the cheat sheet is the only other place to

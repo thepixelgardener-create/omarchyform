@@ -8,6 +8,7 @@ this implementation for board operations and their lock/revision protocol.
 import datetime
 import errno
 import fcntl
+import io
 import os
 import stat
 import sys
@@ -57,6 +58,41 @@ def revision(path):
 def fits(path):
     if os.path.isfile(path) and os.stat(path).st_size > MAX_BOARD_BYTES:
         refuse(5)
+
+
+def bounded(source, sink):
+    # Copy at most a board's worth. A size asked for first and a read made
+    # afterwards are two looks at a file that may change between them; this
+    # bounds the bytes actually read, so a file that grows meanwhile is
+    # refused with 5 rather than read whole.
+    remaining = MAX_BOARD_BYTES + 1
+    while remaining:
+        block = source.read(min(65536, remaining))
+        if not block:
+            return
+        sink.write(block)
+        remaining -= len(block)
+    refuse(5)
+
+
+def read_bounded(path):
+    # One open, then everything about the file is asked of that descriptor.
+    # Not blocking, so a FIFO cannot hold the helper at open(); anything that
+    # is not a regular file reads as nothing, as a missing one does.
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | os.O_CLOEXEC)
+    except FileNotFoundError:
+        return b''
+    info = os.fstat(fd)
+    if not stat.S_ISREG(info.st_mode):
+        os.close(fd)
+        return b''
+    with os.fdopen(fd, 'rb') as stream:
+        if info.st_size > MAX_BOARD_BYTES:
+            refuse(5)
+        data = io.BytesIO()
+        bounded(stream, data)
+        return data.getvalue()
 
 
 def parents(path):
@@ -155,6 +191,8 @@ def run(op, args, source):
         make_private(args)
     elif op == 'revision':
         sys.stdout.write(revision(args[0]))
+    elif op == 'read':
+        sys.stdout.buffer.write(read_bounded(args[0]))
     elif op == 'filesize':
         sys.stdout.write(str(os.stat(args[0]).st_size if os.path.isfile(args[0]) else 0))
     elif op == 'check':
@@ -171,7 +209,8 @@ def run(op, args, source):
             fits(board)
             before = revision(board)
             with temporary(os.path.dirname(lock), '.omarchyform-snapshot-') as staged:
-                shutil.copyfile(board, staged)
+                with open(board, 'rb') as original, open(staged, 'wb') as copy:
+                    bounded(original, copy)
                 if before != revision(board):
                     refuse(7)
                 sys.stdout.buffer.write((before + '\n').encode())

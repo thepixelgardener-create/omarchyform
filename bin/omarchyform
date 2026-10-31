@@ -77,6 +77,14 @@ function answer(value) {
   process.stdout.write(JSON.stringify(value, null, 2) + "\n")
 }
 
+// Every failure is meant to be refused by name before it can throw. One that
+// is not still answers in JSON and exits 1 rather than ending in a stack
+// trace a program reading stdout cannot parse. Boards are only written by the
+// helper in one step at the end, so a throw before then has written nothing.
+process.on("uncaughtException", error => {
+  die("internal error", error && error.message ? error.message : String(error))
+})
+
 // The argument after a flag that takes one: `--out FILE`, `--note TEXT`.
 // Missing, it became undefined, and `apply --out` then fell out of
 // path.resolve with a stack trace, the one failure here not said in JSON. A
@@ -270,7 +278,12 @@ const OPS = {
     args: "id, true|false",
     does: "pin an item behind the working canvas, or bring it back",
     run(board, a) {
-      board.items.setProperty(mustRow(board, a[0], "pin"), "ipinned", a[1] !== false)
+      // Missing means pin, as it always has. Anything else is said outright:
+      // "false" in quotes used to pin, being something other than false.
+      const pinned = a[1] === undefined || a[1] === true || a[1] === "true" ? true
+        : a[1] === false || a[1] === "false" ? false : null
+      if (pinned === null) die(`pin: ${JSON.stringify(a[1])} is not true or false`)
+      board.items.setProperty(mustRow(board, a[0], "pin"), "ipinned", pinned)
       return { changed: Number(a[0]) }
     }
   },
@@ -417,7 +430,7 @@ function verbApply(args) {
     // "constructor" would otherwise find something that is not an operation.
     const op = Object.prototype.hasOwnProperty.call(OPS, entry.op) ? OPS[entry.op] : null
     if (!op) die(`operation ${i}: there is no ${entry.op}`, Object.keys(OPS))
-    results.push(Object.assign({ op: entry.op }, op.run(board, entry.args || [])))
+    results.push(Object.assign({ op: entry.op }, op.run(board, operationArgs(entry, i))))
   })
 
   if (args.includes("--dry-run")) {
@@ -430,6 +443,22 @@ function verbApply(args) {
     ? board.revision : "-"
   const bytes = writeBoard(board, out, expected)
   answer({ ok: true, file: out, applied: results, items: board.items.count, links: board.links.count, bytes })
+}
+
+// An operation's arguments are a list of plain values. JSON can also hand
+// over an object, and an object such as {"toString": 1} cannot be turned into
+// a string or a number at all: String() and Number() throw, and the run used
+// to end in a stack trace instead of an answer. A string in place of the list
+// was indexed a character at a time. Both are refused here, before any
+// operation sees them, so every op can treat what it is given as primitive.
+function operationArgs(entry, i) {
+  if (entry.args === undefined || entry.args === null) return []
+  if (!Array.isArray(entry.args)) die(`operation ${i}: args must be a list`)
+  entry.args.forEach((value, at) => {
+    if (value !== null && typeof value === "object")
+      die(`operation ${i}: argument ${at} must be a string, a number, true, false or null`)
+  })
+  return entry.args
 }
 
 function verbOps() {
@@ -450,5 +479,7 @@ if (!verb || verb === "-h" || verb === "--help") {
   answer({ ok: true, usage: Object.keys(VERBS), hint: "omarchyform ops lists what apply accepts" })
   process.exit(verb ? 0 : 1)
 }
-if (!VERBS[verb]) die(`there is no ${verb}`, Object.keys(VERBS))
+// Its own entries only, as with OPS: "toString" or "constructor" would find
+// a method every object has, run it, and exit 0 having said nothing.
+if (!Object.prototype.hasOwnProperty.call(VERBS, verb)) die(`there is no ${verb}`, Object.keys(VERBS))
 VERBS[verb](argv)
