@@ -273,7 +273,7 @@ function calls(source, fn) {
   return found
 }
 const reviewedArguments = [
-  'BoardExchange.qml: "filesize", [path]',
+  'BoardExchange.qml: "read", [path]',
   'BoardExchange.qml: "unbundleimage", [exchange.ctl.imagesDir, bytes.path, "shared-" + Date.now() + "-" + exchange.sharing.at]',
   'BoardExchange.qml: "imagebudget", [exchange.ctl.imagesDir]',
   'BoardExchange.qml: "bundleimages", [exchange.ctl.imagesDir, String(exchange.bundleBudget)].concat(exchange.snapshot.names)',
@@ -332,7 +332,7 @@ assert.match(privateProcess, /worker\.write\(request\.activeCommand\[2\]/, 'oper
 for (const [file, ids] of Object.entries({
   'BoardPersistence.qml': ['commit'], 'BoardSession.qml': ['diskRead', 'diskSize', 'pathCheck'],
   'BoardLibrary.qml': ['mkdirProc', 'moveProc', 'trashProc', 'restoreProc', 'purgeProc'],
-  'BoardExchange.qml': ['measure', 'publish'], 'BoardPane.qml': ['imagePublish'],
+  'BoardExchange.qml': ['reading', 'publish'], 'BoardPane.qml': ['imagePublish'],
   'Omarchyform.qml': ['initProc']
 })) {
   const source = fs.readFileSync(path.join(root, file), 'utf8')

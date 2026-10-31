@@ -15,11 +15,11 @@ function fixture() {
   let busy = false
   const signals = [], staged = []
   const exchange = { root, dialogOpen: false, error: '', operation: '', firstNote: false,
-    maxImportBytes: 33554432, exportNote: '', sharing: null, imageBudget: {},
+    exportNote: '', sharing: null, imageBudget: {},
     Store: loadStore(), Date, Qt: { callLater(f) { f() } },
     output: { path: '', setText(text) { staged.push({ path: this.path, text }) } },
-    input: { path: '', reload() {}, waitForJob() {}, text() { return this.raw } },
-    measured: { text: '100' }, measure: { source: '/outside.json' }, published: { text: 'new.json' } }
+    // What the helper's bounded read handed back, and the file it was asked for.
+    importBytes: { text: '' }, reading: { source: '/outside.json' }, published: { text: 'new.json' } }
   exchange.exchange = exchange
   Object.defineProperty(exchange, 'ctl', { get: () => root.exchangePane })
   Object.defineProperty(root, 'exchangeIdle', { get: () => !busy && !exchange.dialogOpen })
@@ -55,13 +55,36 @@ for (const operation of ['publish', 'copy', 'export']) {
 }
 {
   const c = fixture()
-  c.exchange.input.raw = JSON.stringify({ version: 5, nextId: 1, items: [], links: [] })
-  c.exited('measure', 0)
+  c.exchange.importBytes.text = JSON.stringify({ version: 5, nextId: 1, items: [], links: [] })
+  c.exited('reading', 0)
   assert.equal(c.exchange.busy, true)
   assert.equal(c.exchange.ctl, c.a, 'measuring and reading do not release the import owner')
   assert.match(c.staged[0].path, /^\/a\//)
   c.exited('publish', 0)
   assert.equal(c.signals[0].pane, c.a)
+}
+{
+  // The helper read it and stopped at the bound (5), or could not read it, or
+  // read nothing: each is refused, says why, and lets go of the exchange.
+  for (const [code, text, says] of [
+    [5, '', 'That file is larger than 32 MB — too large for a board'],
+    [1, '', 'Could not read that board'],
+    [0, '', 'Could not read that board']]) {
+    const c = fixture()
+    c.exchange.importBytes.text = text
+    c.exited('reading', code)
+    assert.deepEqual(c.signals[0].args, [says, 'board'])
+    assert.equal(c.staged.length, 0)
+    assert.equal(c.exchange.busy, false)
+  }
+  // Asked of the helper as one bounded read, not a size and then a read.
+  const c = fixture()
+  c.exchange.busy = false
+  c.b.fileCommand = c.a.fileCommand
+  const asked = {}
+  c.exchange.reading = asked
+  c.exchange.importPath('/outside.json')
+  assert.deepEqual(asked.command, ['read', '/outside.json'])
 }
 {
   // A board with more in it than a board holds is refused with the reason,
@@ -71,8 +94,8 @@ for (const operation of ['publish', 'copy', 'export']) {
     [rows(5001), [], 'That board has more than 5,000 items'],
     [rows(2), Array.from({ length: 20001 }, () => ({ from: 1, to: 2 })), 'That board has more than 20,000 connectors']]) {
     const c = fixture()
-    c.exchange.input.raw = JSON.stringify({ version: 5, nextId: items.length + 1, items, links })
-    c.exited('measure', 0)
+    c.exchange.importBytes.text = JSON.stringify({ version: 5, nextId: items.length + 1, items, links })
+    c.exited('reading', 0)
     assert.equal(c.signals.length, 1)
     assert.equal(c.signals[0].name, 'failed')
     assert.deepEqual(c.signals[0].args, [says, 'board'])
@@ -82,13 +105,13 @@ for (const operation of ['publish', 'copy', 'export']) {
     ['{"version":5,"items":[],"links":[' + '0,'.repeat(100000) + '0]}', 'That board has a list too long to read'],
     ['not a board', 'That file is not a supported board']]) {
     const c = fixture()
-    c.exchange.input.raw = raw
-    c.exited('measure', 0)
+    c.exchange.importBytes.text = raw
+    c.exited('reading', 0)
     assert.deepEqual(c.signals[0].args, [says, 'board'])
   }
   const c = fixture()
-  c.exchange.input.raw = JSON.stringify({ version: 5, nextId: 5001, items: rows(5000), links: [] })
-  c.exited('measure', 0)
+  c.exchange.importBytes.text = JSON.stringify({ version: 5, nextId: 5001, items: rows(5000), links: [] })
+  c.exited('reading', 0)
   assert.equal(c.staged.length, 1, 'a board exactly full is imported')
 }
 {
@@ -123,16 +146,16 @@ for (const code of [7, 10, 12, 1]) {
 
 {
   const c = fixture()
-  c.exchange.input.raw = JSON.stringify({ version: 5, items: [{ kind: 'image', src: { toString: null, valueOf: null } }], links: [] })
-  c.exited('measure', 0)
+  c.exchange.importBytes.text = JSON.stringify({ version: 5, items: [{ kind: 'image', src: { toString: null, valueOf: null } }], links: [] })
+  c.exited('reading', 0)
   assert.equal(c.staged.length, 0)
   assert.equal(c.signals[0].name, 'failed')
   assert.equal(c.signals[0].pane, c.a, 'schema refusal belongs to the asking pane')
   assert.equal(c.exchange.busy, false, 'malformed imports do not strand exchange operations')
   assert.equal(c.exchange.sharing, null)
   c.exchange.busy = true
-  c.exchange.input.raw = JSON.stringify({ version: 5, items: [{ text: 'recovered' }], links: [] })
-  c.exited('measure', 0)
+  c.exchange.importBytes.text = JSON.stringify({ version: 5, items: [{ text: 'recovered' }], links: [] })
+  c.exited('reading', 0)
   assert.equal(JSON.parse(c.staged[0].text).items[0].text, 'recovered', 'a valid import still works')
 }
 

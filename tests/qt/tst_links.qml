@@ -68,6 +68,27 @@ TestCase {
   }
   property Component signalSpy: SignalSpy {}
 
+  // A screen reader on the canvas hears the board and the item the keyboard
+  // is on, from the one item holding focus; the delegates carry nothing, and
+  // every grabImage in this file still produces a picture.
+  function test_theCanvasSaysWhatIsSelected() {
+    var keys = findChild(surface, "board-keys")
+    verify(keys)
+    compare(keys.Accessible.name, "Board notes")
+    compare(keys.Accessible.description, "Empty")
+    ctl.items.append(note(1, 0, 0))
+    ctl.items.append(note(2, 200, 0))
+    ctl.items.setProperty(1, "itext", "Second thought")
+    compare(keys.Accessible.description, "2 items, none selected")
+    ctl.selectedIndex = 1
+    compare(keys.Accessible.description, "Note 2 of 2: Second thought")
+    ctl.items.setProperty(1, "itext", "x".repeat(300))
+    compare(keys.Accessible.description, "Note 2 of 2: " + "x".repeat(200) + "…", "a long note is cut short")
+    ctl.linkingFrom = 1
+    ctl.items.setProperty(1, "kind", "diamond")
+    compare(keys.Accessible.description, "Diamond 2 of 2, connecting: " + "x".repeat(200) + "…")
+  }
+
   // A head is a filled triangle at the far end, and the line stops at its base.
   function test_aConnectorEndsInAFilledHead() {
     ctl.items.append(note(1, 100, 250))

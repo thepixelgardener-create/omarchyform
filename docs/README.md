@@ -20,6 +20,9 @@ The [changelog](../CHANGELOG.md) separates unreleased work from tagged releases.
   requirements for code changes.
 
 - [Roadmap](roadmap.md): completed work, unreleased features and future scope.
+- [Competitive landscape, 2026-10-26](competitive-landscape-2026-10-26.md): expanded competitors, multiple filters, niche hypotheses and essential-feature priorities.
+- [Competitive review, 2026-10-25](competitive-review-2026-10-25.md): researched,
+  challenged priorities; a proposal rather than a change to the release roadmap.
 - [Split view and timeline](splitview-timeline-plan.md): split view's
   implementation decisions and validation results. The history and timeline it
   also planned were removed after 0.4.10.

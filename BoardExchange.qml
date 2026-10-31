@@ -94,54 +94,45 @@ Item {
     return stage(text, "untitled", true)
   }
 
-  // What a board arriving from outside is allowed to be. A board with its
-  // pictures inside it is a few megabytes; anything beyond this is refused
-  // before it is read into memory rather than after.
-  readonly property int maxImportBytes: Store.MAX_BOARD_BYTES
-
+  // What a board arriving from outside is allowed to be: what a board may be
+  // (Store.MAX_BOARD_BYTES). A board with its pictures inside it is a few
+  // megabytes.
+  //
+  // The helper reads it, once, and stops at that bound (exit 5). Asking its
+  // size first and reading it separately afterwards left a moment in which a
+  // file somewhere another account can write to could grow, and the read
+  // then took all of it.
   function importPath(path) {
     if (busy) return
     error = ""
     createdNote = ""
     busy = true
-    measure.source = path
-    measure.command = exchange.ctl.fileCommand("filesize", [path])
-    measure.running = true
+    reading.source = path
+    reading.command = exchange.ctl.fileCommand("read", [path])
+    reading.running = true
   }
 
   BoardFileProcess {
-    id: measure
+    id: reading
     property string source: ""
-    stdout: StdioCollector { id: measured; waitForEnd: true }
+    stdout: StdioCollector { id: importBytes; waitForEnd: true }
     onExited: function (code) {
-      var bytes = code === 0 ? parseInt(measured.text, 10) : 0
-      if (!isFinite(bytes) || bytes <= 0) { exchange.fail("Could not read that board", "board"); return }
-      if (bytes > exchange.maxImportBytes) {
-        exchange.fail("That file is " + Math.round(bytes / 1048576) + " MB — too large for a board", "board")
-        return
-      }
-      exchange.readImport(measure.source)
+      if (code === 5) { exchange.fail("That file is " + Store.TOO_LARGE + " — too large for a board", "board"); return }
+      var raw = code === 0 ? importBytes.text : ""
+      if (!raw) { exchange.fail("Could not read that board", "board"); return }
+      exchange.readImport(reading.source, raw)
     }
   }
 
-  function readImport(path) {
-    try { exchange.readImportChecked(path) }
+  function readImport(path, raw) {
+    try { exchange.readImportChecked(path, raw) }
     catch (e) {
       exchange.sharing = null
       exchange.fail("That board has invalid fields or is too large; nothing was imported", "board")
     }
   }
 
-  function readImportChecked(path) {
-    // Read it here and now. An asynchronous reload on a view that is not
-    // preloaded produced neither loaded nor loadFailed, so the import simply
-    // stopped; a chosen file is small enough to read on the spot.
-    input.path = ""
-    input.path = path
-    input.reload()
-    input.waitForJob()
-    var raw = input.text()
-    if (!raw) { exchange.fail("Could not read that board", "board"); return }
+  function readImportChecked(path, raw) {
     var data = Store.readFile(raw)
     if (!data) {
       exchange.fail(Store.jsonFits(raw) ? "That file is not a supported board" : "That board " + Store.TOO_LONG_LIST, "board")
@@ -461,13 +452,6 @@ Item {
     field.remove(from, to)
     field.insert(from, insert)
     field.cursorPosition = from + insert.length
-  }
-
-  FileView {
-    id: input
-    blockLoading: true
-    blockAllReads: true
-    printErrors: false
   }
 
   FileView {

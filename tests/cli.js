@@ -146,17 +146,63 @@ try {
       // Names every plain object answers to, which are not operations: each
       // used to find a method on the table and crash with a stack trace.
       ...['toString', 'constructor', '__proto__', 'hasOwnProperty', 'valueOf'].map(name =>
-        [[{ op: name, args: [] }], `an op called ${name}`])
+        [[{ op: name, args: [] }], `an op called ${name}`]),
+      // Arguments String() and Number() cannot convert: each used to throw
+      // out of the op with a stack trace. And a string in place of the list,
+      // which was read a character at a time.
+      [[{ op: 'setText', args: [1, { toString: 1 }] }], 'text that cannot be a string'],
+      [[{ op: 'add', args: [{ toString: 1 }] }], 'a kind that cannot be a string'],
+      [[{ op: 'move', args: [{ valueOf: 1, toString: 1 }, 0, 0] }], 'an id that cannot be a number'],
+      [[{ op: 'add', args: ['note', 0, 0, 220, 160, 'x', ['accent']] }], 'a tint that is a list'],
+      [[{ op: 'add', args: 'note' }], 'args that are a string'],
+      [[{ op: 'add', args: { 0: 'rect' } }], 'args that are an object'],
+      // A good operation first: a later refusal must still write nothing.
+      [[{ op: 'add', args: ['note', 0, 300] }, { op: 'setText', args: [1, {}] }], 'a refusal after a good op']
     ]) {
       const failed = pipe(JSON.stringify(ops), 'apply', file, '-')
       assert.equal(failed.status, 1, what + ' exits 1')
       assert.ok(failed.out && failed.out.ok === false, what + ' answers with JSON: ' + failed.raw)
       assert.ok(typeof failed.out.error === 'string' && failed.out.error.length > 0, what + ' says why')
+      assert.notEqual(failed.out.error, 'internal error', what + ' is refused by name, not caught as a crash')
     }
     assert.equal(fs.readFileSync(file, 'utf8'), before, 'and none of them changed the board')
+    assert.equal(fs.existsSync(file + '.bak'), false, 'nor left a backup')
     assert.equal(run('apply', file, path.join(dir, 'nope.json')).status, 1, 'missing ops file')
     assert.equal(pipe('not json', 'apply', file, '-').status, 1, 'ops that are not JSON')
     assert.equal(pipe('{"op":"add"}', 'apply', file, '-').status, 1, 'ops that are not a list')
+  }
+
+  {
+    // pin takes true or false, or nothing for true; "false" in quotes unpins,
+    // and anything else is refused rather than read as true.
+    const file = path.join(dir, 'pin.json')
+    run('new', file, '--note', 'one')
+    const pinned = () => JSON.parse(fs.readFileSync(file, 'utf8')).items[0].pinned
+    for (const [value, want] of [[undefined, true], [false, false], ['true', true], ['false', false], [true, true]]) {
+      const args = value === undefined ? [1] : [1, value]
+      assert.equal(pipe(JSON.stringify([{ op: 'pin', args }]), 'apply', file, '-').status, 0)
+      assert.equal(pinned(), want, `pin ${JSON.stringify(value)}`)
+    }
+    const before = fs.readFileSync(file, 'utf8')
+    for (const value of ['no', 0, null]) {
+      const refused = pipe(JSON.stringify([{ op: 'pin', args: [1, value] }]), 'apply', file, '-')
+      assert.equal(refused.status, 1, `pin ${JSON.stringify(value)} is refused`)
+      assert.match(refused.out.error, /is not true or false/)
+    }
+    assert.equal(fs.readFileSync(file, 'utf8'), before)
+    console.log('ok — command line: pin says true or false')
+  }
+
+  {
+    // Verbs are looked up the same way as ops: a name every object answers to
+    // used to run that method and exit 0 with nothing said, or crash.
+    for (const name of ['toString', 'constructor', '__proto__', 'hasOwnProperty', 'valueOf']) {
+      const failed = run(name)
+      assert.equal(failed.status, 1, `a verb called ${name} exits 1`)
+      assert.ok(failed.out && failed.out.ok === false && /there is no/.test(failed.out.error),
+        `a verb called ${name} answers with JSON: ` + failed.raw)
+    }
+    console.log('ok — command line: only its own verbs run')
   }
 
   {
