@@ -23,7 +23,7 @@ and exits 0 or 1.
 ```
 omarchyform new <file> [--note TEXT]... [--force]
 omarchyform inspect <file> [--full]
-omarchyform apply <file> [ops.json|-] [--out FILE] [--dry-run]
+omarchyform apply <file> [ops.json|-] [--out FILE] [--dry-run] [--force]
 omarchyform validate <file>
 omarchyform ops
 ```

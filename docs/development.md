@@ -112,7 +112,7 @@ The pure logic lives in plain JavaScript so it can be tested without Qt, and
 the suite loads the very file the plugin loads — there is no copy to drift.
 
 ```bash
-./tests/run     # everything available on this machine, skipping what is not installed
+./tests/run     # everything available on this machine (unit tests, security screen, Qt and Quickshell suites), skipping what is not installed
 npm test        # pure logic and controller regression tests, no dependencies
 npm run test:security # portable security/privacy screen and boundary regressions
 npm run review:marketplace # the marketplace's own security baseline, pinned, against HEAD

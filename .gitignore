@@ -14,3 +14,7 @@
 tests/qt/generated/
 tests/hostile/generated/
 tests/connectors/generated/
+
+# Bytecode Python leaves beside BoardFiles.py when a test imports it.
+__pycache__/
+*.pyc

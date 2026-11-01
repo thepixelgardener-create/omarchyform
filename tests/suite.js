@@ -608,6 +608,26 @@ function tests(S) {
     eq(S.uniquePath(e, "", "work", true), "work-2", "folders collide too, without an extension")
   })
 
+  test("uniquePath takes names every object answers to", () => {
+    const e = listing()
+    for (const name of ["constructor", "toString", "__proto__", "hasOwnProperty"]) {
+      eq(S.uniquePath(e, "", name, true), name, name + " is a free folder name")
+      eq(S.uniquePath(e, "", name, false), name + ".json", name + " is a free board name")
+    }
+    const stamped = S.trashFile([], "constructor", "")
+    eq(S.trashFile([{ file: "x" }], "constructor", "1"), "1-constructor", "trash names too")
+    ok(typeof stamped === "string")
+    eq(S.exportPalette("constructor"), null, "and no palette is called constructor")
+  })
+
+  test("childrenOf orders names that differ only in case the same way every time", () => {
+    const one = S.parseListing("f\tnotes.json\nf\tNotes.json\nf\tb.json")
+    const two = S.parseListing("f\tNotes.json\nf\tb.json\nf\tnotes.json")
+    const names = list => S.childrenOf(list, "").map(e => e.path)
+    eq(names(one).join(","), "b.json,Notes.json,notes.json")
+    eq(names(two).join(","), names(one).join(","), "whatever order the listing came in")
+  })
+
   test("uniquePath keeps counting past the second collision", () => {
     const e = S.parseListing("f\ta.json\nf\ta-2.json\nf\ta-3.json")
     eq(S.uniquePath(e, "", "a", false), "a-4.json", "skips every taken number")

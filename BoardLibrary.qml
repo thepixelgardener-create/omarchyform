@@ -81,7 +81,7 @@ Item {
     if (library.trashIndexSaving || (library.trashIndexError !== "" && !library.trashIndexNeedsRead)) return
     var parsed = null
     try { parsed = Store.parseJson(raw) } catch (e) {}
-    var listed = Store.readTrash(raw)
+    var listed = Store.trashEntriesOf(parsed)
     if (!parsed || (parsed.version !== undefined && parsed.version !== 1) || !Array.isArray(parsed.entries) || listed.length !== parsed.entries.length) {
       library.trashIndexNeedsRead = true
       library.trashIndexError = "trash index is invalid — repair index.json, then ctrl+s to reload"

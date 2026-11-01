@@ -261,7 +261,7 @@ shift
 # Compatibility entry point for CLI/tests; productive QML uses BoardFileProcess
 # directly. Both paths call the same in-process filesystem implementation.
 case "$operation" in
-  export|publish|move|check|snapshot|revision|filesize|commit|mkdir|private|purge)
+  export|publish|move|check|snapshot|revision|filesize|read|commit|mkdir|private|purge)
     { printf '%s\0' "$operation" "$#"; if (( $# )); then printf '%s\0' "$@"; fi; cat; } |
       python3 "${BASH_SOURCE[0]%/*}/BoardFiles.py"
     exit $?

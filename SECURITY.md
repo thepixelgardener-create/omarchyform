@@ -33,7 +33,8 @@ things worth attacking are:
   control characters. The paths it takes without a root are ones the person
   chose (a file dropped on the board or picked for import, and where an export
   is saved, which must be outside the data folder), the two metadata lookups
-  (`revision` and `filesize`), and the command line's saves, which write the
+  (`revision` and `filesize`), the bounded `read` of a file picked for import,
+  and the command line's saves, which write the
   file they were given. A path
   that escapes its root, or that is interpreted rather than used, is a
   vulnerability.

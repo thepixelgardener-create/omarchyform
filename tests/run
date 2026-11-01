@@ -8,6 +8,11 @@ cd -- "$root"
 # Node only: no dependencies, no compositor, no Qt.
 npm test
 
+# The security and privacy screen CI runs beside the unit tests. The
+# marketplace baseline it also runs fetches the marketplace's checker, so it is
+# left to CI (npm run review:marketplace).
+node tests/security.js
+
 # The scripts are run by the plugin, so a syntax error in one is a defect the
 # JavaScript suites cannot see.
 bash -n BoardFiles.sh desktop/install.sh tests/run
