@@ -160,12 +160,14 @@ represent. Do not offer to repair or rewrite it; say where it came from.
 ```
 omarchyform new <file> [--note TEXT]... [--force]
 omarchyform inspect <file> [--full]
-omarchyform apply <file> [ops.json|-] [--out FILE] [--dry-run]
+omarchyform apply <file> [ops.json|-] [--out FILE] [--dry-run] [--force]
 omarchyform validate <file>
 omarchyform ops
 ```
 
-Every verb answers with JSON on stdout and exits 0 or 1. **Run `omarchyform
+Every verb answers with JSON on stdout and exits 0 or 1. A flag it does not
+know, or an argument it does not expect, is refused rather than ignored, so a
+misspelt `--dry-run` cannot write. **Run `omarchyform
 ops` rather than trusting any list of operations written down elsewhere,
 including this one** — it prints the table `apply` dispatches through, so the
 two cannot drift.
@@ -183,7 +185,10 @@ echo '[{"op":"add","args":["note",0,0,220,160,"The question","accent"]},
 
 The answer names what each operation did, **including the id of anything
 added**, which is what the operations after it need. `--dry-run` answers
-without writing. `--out` writes elsewhere and leaves the original.
+without writing. `--out` writes elsewhere and leaves the original. Writing
+back over the board refuses if someone else changed it since it was read;
+`--force` writes anyway. Each operation's `args` is a list of strings, numbers,
+`true`, `false` or `null`; anything else is refused before any of it runs.
 
 Ids are handed out in order from `nextId`, so on a board you just created you
 can predict them — but read them out of the answer rather than assuming, and

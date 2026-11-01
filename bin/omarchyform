@@ -8,7 +8,7 @@
 //
 //   omarchyform new <file> [--note TEXT]... [--force]
 //   omarchyform inspect <file> [--full]
-//   omarchyform apply <file> [ops.json|-] [--out FILE] [--dry-run]
+//   omarchyform apply <file> [ops.json|-] [--out FILE] [--dry-run] [--force]
 //   omarchyform validate <file>
 //   omarchyform ops
 //
@@ -94,6 +94,21 @@ function valueAfter(args, at, message, isPath) {
   const value = args[at + 1]
   if (value === undefined || (isPath && value.startsWith("--"))) die(message)
   return value
+}
+
+// What a verb takes after its file, and nothing else. A flag misspelt was
+// once simply not seen: `apply --dryrun` wrote the board it was meant only to
+// try, and `--froce` read as no flag at all. `valued` are the flags followed
+// by a value, which is skipped here and read through valueAfter, so a note
+// may begin with "--".
+function onlyFlags(args, verb, flags, valued) {
+  const known = flags.concat(valued || [])
+  for (let i = 0; i < args.length; i++) {
+    if ((valued || []).includes(args[i])) { i++; continue }
+    if (!flags.includes(args[i]))
+      die(`${verb}: ${args[i].startsWith("-") ? "there is no flag " : "nothing more is expected, not "}${args[i]}`,
+          known.length ? known : "it takes no flags")
+  }
 }
 
 // ------------------------------------------------------------------ the board
@@ -345,6 +360,7 @@ const OPS = {
 function verbNew(args) {
   const file = args.shift()
   if (!file) die("new: needs a file to write")
+  onlyFlags(args, "new", ["--force"], ["--note"])
   if (fs.existsSync(file) && !args.includes("--force"))
     die(file + " already exists; pass --force to write over it")
   const board = { items: new RowModel(), links: new RowModel(), nextId: 1 }
@@ -362,6 +378,7 @@ function verbNew(args) {
 function verbInspect(args) {
   const file = args.shift()
   if (!file) die("inspect: needs a board to read")
+  onlyFlags(args, "inspect", ["--full"])
   const board = readBoard(file)
   const full = args.includes("--full")
   const items = S.itemRows(board.items)
@@ -382,6 +399,7 @@ function verbInspect(args) {
 function verbValidate(args) {
   const file = args.shift()
   if (!file) die("validate: needs a board to read")
+  onlyFlags(args, "validate", [])
   const { data, items, links, version } = loadBoard(file, readText(file))
   // What loading had to repair. A board is hand-editable and shareable, so
   // this is the difference between what is on disk and what would be drawn.
@@ -412,6 +430,7 @@ function verbApply(args) {
   const file = args.shift()
   if (!file) die("apply: needs a board to change")
   const source = args[0] && !args[0].startsWith("--") ? args.shift() : "-"
+  onlyFlags(args, "apply", ["--dry-run", "--force"], ["--out"])
   const at = args.indexOf("--out")
   const out = at >= 0 ? valueAfter(args, at, "apply: --out needs a file to write to", true) : file
   let raw
@@ -461,7 +480,8 @@ function operationArgs(entry, i) {
   return entry.args
 }
 
-function verbOps() {
+function verbOps(args) {
+  onlyFlags(args, "ops", [])
   answer({
     ok: true,
     ops: Object.keys(OPS).map(name => ({ op: name, args: OPS[name].args, does: OPS[name].does })),

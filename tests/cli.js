@@ -173,6 +173,36 @@ try {
   }
 
   {
+    // A flag misspelt is refused, not ignored: --dryrun used to write the
+    // board it was meant only to try, as if no flag had been given.
+    const file = path.join(dir, 'flags-typo.json')
+    run('new', file, '--note', 'kept')
+    const before = fs.readFileSync(file, 'utf8')
+    const ops = JSON.stringify([{ op: 'add', args: ['note', 0, 300] }])
+    for (const [args, stdin, what] of [
+      [['apply', file, '-', '--dryrun'], ops, 'apply --dryrun'],
+      [['apply', file, '-', '--froce'], ops, 'apply --froce'],
+      [['apply', file, '-', 'extra'], ops, 'apply with a stray argument'],
+      [['new', file, '--forec'], '', 'new --forec'],
+      [['inspect', file, '--ful'], '', 'inspect --ful'],
+      [['validate', file, '--full'], '', 'validate --full'],
+      [['ops', '--all'], '', 'ops --all']]) {
+      const failed = pipe(stdin, ...args)
+      assert.equal(failed.status, 1, what + ' exits 1')
+      assert.ok(failed.out && failed.out.ok === false && /there is no flag|nothing more is expected/.test(failed.out.error),
+        what + ' answers with JSON: ' + failed.raw)
+    }
+    assert.equal(fs.readFileSync(file, 'utf8'), before, 'and none of them wrote')
+    assert.equal(fs.existsSync(file + '.bak'), false, 'nor kept a backup')
+    const tried = pipe(ops, 'apply', file, '-', '--dry-run')
+    assert.equal(tried.status, 0)
+    assert.equal(tried.out.dryRun, true, 'spelt right, it tries')
+    assert.equal(run('inspect', file, '--full').status, 0)
+    assert.equal(pipe(ops, 'apply', file, '-', '--out', path.join(dir, 'flags-out.json'), '--force').status, 0)
+    console.log('ok — command line: a flag it does not know is refused, as JSON')
+  }
+
+  {
     // pin takes true or false, or nothing for true; "false" in quotes unpins,
     // and anything else is refused rather than read as true.
     const file = path.join(dir, 'pin.json')

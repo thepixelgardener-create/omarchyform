@@ -458,7 +458,7 @@ function boundsOfRows(rows) {
 var EXPORT_PALETTE_NAMES = ["theme", "light", "dark", "mono"]
 
 function exportPalette(name) {
-  return EXPORT_PALETTES[name] === undefined ? null : EXPORT_PALETTES[name]
+  return Object.prototype.hasOwnProperty.call(EXPORT_PALETTES, name) ? EXPORT_PALETTES[name] : null
 }
 
 // What the board says after a picture is written. The two things that can vary
@@ -876,6 +876,7 @@ var KEY_HELP_SECTIONS = [
     ["b", "boards: browse, open, create"],
     ["ctrl+n / F2", "new board / name the current board"],
     ["ctrl+o", "import a native board"],
+    ["ctrl+s", "save now; retry a failed save, or settle a conflict"],
     ["ctrl+shift+s / ctrl+e", "export editable copy / PNG of the board"],
     ["mark, then ctrl+e", "a PNG of just what is marked, backgrounds included"],
     [": png", "the same picture on white, on black, or in black and white"],
@@ -1681,11 +1682,13 @@ function childrenOf(entries, dir) {
     if (parentOf(entries[i].path) === dir) out.push(entries[i])
   out.sort(function (a, b) {
     if (a.dir !== b.dir) return a.dir ? -1 : 1
-    // Two entries in one directory cannot share a name, so there is no equal
-    // case to handle here.
-    var an = baseName(a.path).toLowerCase()
-    var bn = baseName(b.path).toLowerCase()
-    return an < bn ? -1 : 1
+    // Case only orders names that are otherwise the same: "Notes" and
+    // "notes" can both be in one directory, and a comparator that answered
+    // 1 for both orders left the sort free to put them either way round.
+    var an = baseName(a.path), bn = baseName(b.path)
+    var al = an.toLowerCase(), bl = bn.toLowerCase()
+    if (al !== bl) return al < bl ? -1 : 1
+    return an < bn ? -1 : (an > bn ? 1 : 0)
   })
   return out
 }
@@ -1763,7 +1766,9 @@ function safeRelative(path) {
 
 // "notes", "notes-2", "notes-3", ...
 function uniquePath(entries, dir, base, isDir) {
-  var taken = {}
+  // No prototype: a folder may be called "constructor" or "toString", and an
+  // ordinary object already holds something under those names.
+  var taken = Object.create(null)
   for (var i = 0; i < entries.length; i++) taken[entries[i].path] = true
   var suffix = isDir ? "" : ".json"
   var candidate = joinPath(dir, base + suffix)
@@ -1783,6 +1788,12 @@ function uniquePath(entries, dir, base, isDir) {
 function readTrash(raw) {
   var parsed
   try { parsed = parseJson(raw) } catch (e) { return [] }
+  return trashEntriesOf(parsed)
+}
+
+// The same, for an index already parsed: the library parses it once to check
+// its version and reads its entries from that.
+function trashEntriesOf(parsed) {
   if (!parsed || !Array.isArray(parsed.entries)) return []
   var out = []
   for (var i = 0; i < parsed.entries.length; i++) {
@@ -1802,7 +1813,7 @@ function writeTrash(entries) {
 // Flattened, stamped, and never colliding with something already in there.
 function trashFile(entries, relative, stamp) {
   var base = String(stamp) + "-" + String(relative).replace(/\//g, "__")
-  var taken = {}
+  var taken = Object.create(null)
   for (var i = 0; i < entries.length; i++) taken[entries[i].file] = true
   var candidate = base
   var n = 2
