@@ -1,6 +1,6 @@
 # Roadmap
 
-Updated 2026-10-19. This is the current release direction. The dated
+Updated 2026-11-04. This is the current release direction. The dated
 [architecture review](architecture-review-0.4.5.md) and
 [competitor analysis](competitor-analysis-0.4.5.md) explain the findings behind it.
 
@@ -141,6 +141,14 @@ time, 20,000 on screen in about a second a frame rather than 1.7 to 2.6. The
 header is one line, with a disk that says whether the board is saved.
 `npm run test:hostile` reports the worst pause and the time until a board is
 editable against targets set for each.
+
+## 0.5.5 — Export, paste and CLI reliability
+
+Prepared for release. PNG exports retain their surface until completion, and
+reloads invalidate delayed pastes. Imports and snapshots bound their reads,
+the CLI refuses malformed arguments and unknown flags in JSON, and board
+names sort consistently. Canvas accessibility describes the selected item.
+See the changelog for the complete maintenance changes.
 
 ## Next maintenance pass
 

@@ -3,6 +3,33 @@
 Notable changes, newest first. Board file versions are noted where they moved,
 since older boards are migrated on load rather than rejected.
 
+## 0.5.5 — 2026-11-04
+
+### Fixed
+
+- Switching between tiled and fullscreen waits while a PNG export finishes,
+  preserving the surface that owns the export and its completion callback.
+- A delayed paste is refused if its board was reloaded while the clipboard
+  was being read, including when the same board remains in the same pane.
+- Imports and board snapshots bound the bytes actually read to 32 MiB,
+  including when a file grows during the read. Imports reject non-regular
+  files without waiting for a FIFO writer.
+- CLI failures return JSON. Malformed operation arguments and unknown flags
+  are refused before writing; a misspelled `--dryrun` no longer applies edits.
+  The `pin` operation accepts the strings `"true"` and `"false"` as well as
+  booleans, and rejects other values.
+- Command and palette names cannot resolve inherited JavaScript properties.
+  Folders named `constructor` or `toString` no longer get unnecessary suffixes,
+  and board names differing only in case sort consistently.
+- The trash index is parsed once when loaded.
+
+### Added
+
+- The focused canvas exposes the board name and a short description of the
+  selected item to accessibility tools, without changing PNG export delegates.
+- Keyboard help includes `ctrl+s` for saving, retrying a failed save and
+  settling a conflict.
+
 ## 0.5.4 — 2026-10-26
 
 ### Changed
