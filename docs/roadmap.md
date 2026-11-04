@@ -144,7 +144,7 @@ editable against targets set for each.
 
 ## 0.5.5 — Export, paste and CLI reliability
 
-Prepared for release. PNG exports retain their surface until completion, and
+Shipped. PNG exports retain their surface until completion, and
 reloads invalidate delayed pastes. Imports and snapshots bound their reads,
 the CLI refuses malformed arguments and unknown flags in JSON, and board
 names sort consistently. Canvas accessibility describes the selected item.
