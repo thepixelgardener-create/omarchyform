@@ -115,10 +115,10 @@ for (const scenario of ['processfailure', 'persistence', 'session', 'timeout', '
         + ',\n  "history": ' + h + (after || '') + '\n}\n'
       fs.writeFileSync(path.join(dir, 'known.json'), old(history))
       fs.writeFileSync(path.join(dir, 'broken.json'), old('{"v":1,"records":['))
-      fs.writeFileSync(path.join(dir, 'future.json'), old(history, ',\n  "version": 8'))
+      fs.writeFileSync(path.join(dir, 'future.json'), old(history, ',\n  "version": 9'))
       const unversioned = Object.assign({}, board)
       delete unversioned.version
-      fs.writeFileSync(path.join(dir, 'sameline.json'), old(history, ', "version": 8', unversioned))
+      fs.writeFileSync(path.join(dir, 'sameline.json'), old(history, ', "version": 9', unversioned))
     }
     if (scenario === 'ids') {
       // A board that came with an item at the largest id there is, and a

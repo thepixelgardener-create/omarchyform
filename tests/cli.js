@@ -402,7 +402,7 @@ try {
     run('new', file, '--note', 'a', '--note', 'b')
     assert.equal(pipe(JSON.stringify([{ op: 'setTexture', args: [2, 'hatch'] }]), 'apply', file, '-').status, 0)
     const written = JSON.parse(fs.readFileSync(file, 'utf8'))
-    assert.equal(written.version, S.FORMAT_VERSION)
+    assert.equal(written.version, 7)
     assert.equal(written.items[1].texture, 'hatch')
     assert.equal(written.items[0].texture, undefined, 'plain is not written down')
     const unknown = pipe(JSON.stringify([{ op: 'setTexture', args: [1, 'tartan'] }]), 'apply', file, '-')
@@ -584,7 +584,7 @@ try {
     const unversioned = current.replace(/  "version": \d+,\n/, '')
     assert.notEqual(unversioned, current)
     for (const front of [current, unversioned]) for (const gap of ['\n  ', ' ']) {
-      const newer = front.slice(0, -3) + ',\n  "history": {"v":1},' + gap + '"version": 8\n}\n'
+      const newer = front.slice(0, -3) + ',\n  "history": {"v":1},' + gap + '"version": 9\n}\n'
       fs.writeFileSync(file, newer)
       const refused = pipe(JSON.stringify([{ op: 'setText', args: [1, 'no'] }]), 'apply', file)
       assert.equal(refused.status, 1, refused.raw)

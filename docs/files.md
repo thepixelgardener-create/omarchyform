@@ -49,7 +49,8 @@ boards. This needs `flock` (util-linux) on the path, alongside the `bash` and
 coreutils the plugin already uses. Older boards are migrated on load: v1 had no ids or
 shapes, v2 stored fixed pastel hexes which are mapped onto theme roles. Version 4 adds
 background pinning, version 5 pasted pictures; older plugin versions open these
-files read-only instead of silently losing that state.
+files read-only instead of silently losing that state. Version 8 adds standalone
+line and arrow objects, including their endpoint geometry.
 
 A pasted picture is written to `images/` and the item keeps only its file name,
 so a screenshot is not re-encoded into every autosave — and the same picture on

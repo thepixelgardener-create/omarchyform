@@ -3,6 +3,16 @@
 Notable changes, newest first. Board file versions are noted where they moved,
 since older boards are migrated on load rather than rejected.
 
+## Unreleased
+
+### Added
+
+- Standalone lines and arrows: choose **New line** from the command list,
+  drag either endpoint, and press `s` to cycle plain line, arrow, double-headed
+  arrow and dashed line. Lines support colour, moving, resizing, duplication,
+  undo and PNG export. Boards containing lines use format 8, which older
+  releases open read-only.
+
 ## 0.5.5 — 2026-11-04
 
 ### Fixed

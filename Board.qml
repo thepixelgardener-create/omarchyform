@@ -582,7 +582,7 @@ FocusScope {
       var at = board.ctl.selectedIndex, count = board.ctl.items.count
       if (at < 0 || at >= count) return count === 0 ? "Empty" : count + " items, none selected"
       var item = board.ctl.items.get(at)
-      var kind = ({ note: "Note", rect: "Box", ellipse: "Ellipse", diamond: "Diamond", image: "Picture" })[item.kind] || "Item"
+      var kind = ({ note: "Note", rect: "Box", ellipse: "Ellipse", diamond: "Diamond", image: "Picture", line: "Line", arrow: "Arrow", "double-arrow": "Double-headed arrow", "dashed-line": "Dashed line" })[item.kind] || "Item"
       var text = item.itext.length > 200 ? item.itext.slice(0, 200) + "…" : item.itext
       return kind + " " + (at + 1) + " of " + count + (item.ipinned ? ", in the background" : "")
         + (board.ctl.linkingFrom >= 0 ? ", connecting" : "") + (text !== "" ? ": " + text : "")

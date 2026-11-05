@@ -24,6 +24,18 @@ your place. The mode is remembered between sessions. Before 0.4.10 the board
 opened fullscreen; the [changelog](../CHANGELOG.md) says what updating does to
 a board last used that way.
 
+## Standalone lines and arrows
+
+Open the command list with `:` and choose **New line**. Lines are objects of
+their own: they do not need shapes at either end. Select one and press `s`
+to cycle **line → arrow → double-headed arrow → dashed line**.
+
+Drag the line to move it, or drag either round endpoint to change its length
+and direction. `c` changes its colour. Selection, duplication, deletion,
+undo, saving and PNG export work as for other objects. Shape cycling stays
+within notes, boxes, ellipses and diamonds; line cycling stays within line
+styles. Lines have no text editor or fill texture.
+
 ## Keys
 
 Press `?` or `F1` on the board for this list. The board's name, the menu and
@@ -60,7 +72,7 @@ breaks, and the middle button does not paste the primary selection.
 | `n` | New note beside the selected one, ready to type |
 | `r` / `e` | New box / ellipse |
 | `p` / `Shift+P` | Pin as background / select backgrounds to unpin |
-| `s` | Cycle the shape: note, box, ellipse, diamond |
+| `s` | Cycle the shape, or the selected line’s style |
 | `x` | Connect: `x` on one, `tab` or `hjkl` to the other, `x` again |
 | `x` on a connected pair | Turn that connector round, or remove it — the line in the header says which |
 | `X` | Remove every connector on this item at once |

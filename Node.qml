@@ -77,6 +77,8 @@ Item {
   // What the note is actually drawing, so a test can read it back rather than
   // photograph it.
   readonly property string previewText: shown.text
+  readonly property bool isLine: Store.isLine(node.kind)
+  readonly property var lineEnds: node.isLine ? Store.lineEnds(node.ctl.items.get(node.index)) : ({ax: 0, ay: 0, bx: 1, by: 1})
   readonly property bool isNote: node.kind === "note"
   // Text with a long unbroken stretch in it is wrapped anywhere, by the note
   // and by its editor: looking for word boundaries in it would hold the whole
@@ -146,7 +148,7 @@ Item {
   // Notes and boxes are plain Rectangles; ellipses and diamonds need a path.
   Rectangle {
     anchors.fill: parent
-    visible: !node.painted
+    visible: !node.painted && !node.isLine
     color: node.fill
     radius: node.theme.cornerRadius
     antialiasing: true
@@ -227,11 +229,32 @@ Item {
     }
   }
 
+  Loader {
+    objectName: "line-shape"
+    anchors.fill: parent
+    active: node.isLine
+    sourceComponent: Component {
+      Shape {
+        antialiasing: true
+        ShapePath {
+          fillColor: "transparent"
+          strokeColor: node.outline
+          strokeWidth: Math.max(2, node.theme.borderWidth)
+          capStyle: ShapePath.RoundCap
+          joinStyle: ShapePath.RoundJoin
+          strokeStyle: node.kind === "dashed-line" ? ShapePath.DashLine : ShapePath.SolidLine
+          dashPattern: [4, 3]
+          PathSvg { path: Store.linePath(node.kind, node.width, node.height, node.lineEnds) }
+        }
+      }
+    }
+  }
+
   // Plain and offscreen items allocate no texture geometry.
   Loader {
     objectName: "item-texture"
     anchors.fill: parent
-    active: node.live && !node.isImage && node.textureStyle !== "plain"
+    active: node.live && !node.isImage && !node.isLine && node.textureStyle !== "plain"
     sourceComponent: Component {
       Shape {
         antialiasing: true
@@ -261,7 +284,7 @@ Item {
 
   Flickable {
     id: textViewport
-    visible: !node.isImage
+    visible: !node.isImage && !node.isLine
     anchors.fill: parent
     anchors.margins: node.theme.sp(14)
     anchors.topMargin: node.isNote ? header.height + node.theme.sp(14) : node.theme.sp(14)
@@ -396,7 +419,7 @@ Item {
     anchors.margins: node.theme.borderWidth
     width: node.theme.sp(22)
     height: node.theme.sp(14)
-    visible: shown.contentHeight > textViewport.height && !node.editing
+    visible: !node.isLine && shown.contentHeight > textViewport.height && !node.editing
     color: node.theme.tintBorder(node.itint, true)
     radius: node.theme.cornerRadius > 0 ? node.theme.sp(3) : 0
     Text {
@@ -455,7 +478,7 @@ Item {
     }
     onCanceled: { if (dragging) node.ctl.finishPointerEdit(true); dragging = false }
     onDoubleClicked: {
-      if (node.ipinned || !node.ctl.canEdit || node.ctl.linkingFrom >= 0) return
+      if (node.isLine || node.ipinned || !node.ctl.canEdit || node.ctl.linkingFrom >= 0) return
       node.ctl.pushUndo()
       node.ctl.editIndex = node.index
     }
@@ -492,7 +515,7 @@ Item {
     }
     onCanceled: { if (sizing) node.ctl.finishPointerEdit(true); sizing = false }
 
-    visible: !node.ipinned && node.ctl.linkingFrom < 0 && (node.selected || hover.hovered)
+    visible: !node.isLine && !node.ipinned && node.ctl.linkingFrom < 0 && (node.selected || hover.hovered)
     Rectangle {
       anchors.centerIn: parent
       width: 8
@@ -502,4 +525,36 @@ Item {
       opacity: 0.35
     }
   }
+  Repeater {
+    model: node.isLine && node.selected && !node.ipinned && !node.ctl.showPinned && node.ctl.canEdit && node.ctl.linkingFrom < 0 ? 2 : 0
+    delegate: MouseArea {
+      id: endpoint
+      required property int index
+      objectName: "line-end-" + index
+      width: 18; height: 18
+      x: (index === 0 ? node.lineEnds.ax : node.lineEnds.bx) * node.width - width / 2
+      y: (index === 0 ? node.lineEnds.ay : node.lineEnds.by) * node.height - height / 2
+      cursorShape: Qt.CrossCursor
+      acceptedButtons: Qt.LeftButton
+      property bool moving: false
+      onPressed: { moving = true; node.ctl.beginPointerEdit() }
+      onPositionChanged: function(mouse) {
+        if (!pressed || !moving || !node.ctl.pointerEdit || !node.ctl.canEdit) return
+        var point = mapToItem(node.parent, mouse.x, mouse.y)
+        var values = Store.movedLineEnd(node.ctl.items.get(node.index), index, point.x, point.y)
+        for (var role in values) node.set(role, values[role])
+        node.ctl.repaintLinks()
+      }
+      onReleased: { if (moving) node.ctl.finishPointerEdit(false); moving = false }
+      onCanceled: { if (moving) node.ctl.finishPointerEdit(true); moving = false }
+      Rectangle {
+        anchors.centerIn: parent
+        width: 9; height: 9; radius: 5
+        color: node.theme.canvasBackground
+        border.color: node.theme.accent
+        border.width: 2
+      }
+    }
+  }
+
 }

@@ -677,10 +677,10 @@ Item {
     root.pushUndo()
     var initial = content || {}
     var w = Store.clampSize(initial.width === undefined ? (kind === "note" ? 180 : 160) : initial.width)
-    var h = Store.clampSize(initial.height === undefined ? (kind === "note" ? 140 : 110) : initial.height)
+    var h = Store.clampSize(initial.height === undefined ? (Store.isLine(kind) ? 60 : kind === "note" ? 140 : 110) : initial.height)
     var taken = Store.newIds(root.items, root.doc.nextId, 1)
     root.items.append({
-      iid: taken.ids[0], kind: kind,
+      iid: taken.ids[0], kind: kind, lax: 0.08, lay: 0.5, lbx: 0.92, lby: 0.5,
       ix: Store.clampCoord(wx - w / 2), iy: Store.clampCoord(wy - h / 2), iw: w, ih: h,
       itint: Store.TINTS[root.doc.nextColor % Store.TINTS.length],
       itext: initial.text || "", ipinned: false, isrc: initial.src || "", itexture: "plain"
@@ -1061,7 +1061,7 @@ Item {
       // An image copy points at the same file: the picture is shared by every
       // board already, and duplicating one should not duplicate megabytes.
       root.items.append({
-        iid: id, kind: n.kind,
+        iid: id, kind: n.kind, lax: Store.lineEnds(n).ax, lay: Store.lineEnds(n).ay, lbx: Store.lineEnds(n).bx, lby: Store.lineEnds(n).by,
         ix: Store.clampCoord(n.ix + Store.DUPLICATE_OFFSET), iy: Store.clampCoord(n.iy + Store.DUPLICATE_OFFSET),
         iw: n.iw, ih: n.ih, itint: n.itint, itext: n.itext, ipinned: false, isrc: n.isrc, itexture: Store.normalizeTexture(n.itexture)
       })
@@ -1145,7 +1145,7 @@ Item {
   function textureTargets() {
     var here = root.selected()
     var targets = here && here.ipinned ? [root.selectedIndex] : root.targets()
-    return targets.filter(function (at) { return root.items.get(at).kind !== "image" })
+    return targets.filter(function (at) { return root.items.get(at).kind !== "image" && !Store.isLine(root.items.get(at).kind) })
   }
 
   function setTexture(texture) {
@@ -1168,9 +1168,9 @@ Item {
     // it keeps its shape and takes the rest of the selection with it.
     if (n.kind === "image") { root.flash("an image keeps its shape"); return }
     root.pushUndo()
-    var next = Store.cycle(Store.KINDS, n.kind)
+    var next = Store.cycle(Store.isLine(n.kind) ? Store.LINE_KINDS : Store.SHAPE_KINDS, n.kind)
     for (var i = 0; i < t.length; i++)
-      if (root.items.get(t[i]).kind !== "image") root.items.setProperty(t[i], "kind", next)
+      if (root.items.get(t[i]).kind !== "image" && Store.isLine(root.items.get(t[i]).kind) === Store.isLine(n.kind)) root.items.setProperty(t[i], "kind", next)
     root.save()
   }
 
@@ -1438,6 +1438,7 @@ Item {
 
   // -------------------------------------------------------------------- modes
   function editSelected() {
+    if (root.selected() && Store.isLine(root.selected().kind)) return
     if (root.selected() && root.selected().ipinned) return
     if (!root.canEdit) return
     if (root.selectedIndex < 0) return

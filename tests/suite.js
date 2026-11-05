@@ -7,6 +7,33 @@ function tests(S) {
   const t = []
   const test = (name, fn) => t.push({ name, fn })
 
+  test("standalone lines preserve endpoints, styles and format through save and undo", () => {
+    for (const kind of S.LINE_KINDS) {
+      const source = new FakeModel([item({kind, lax: 0.9, lay: 0.1, lbx: 0.2, lby: 0.8})])
+      const file = JSON.parse(S.writeFile(source, new FakeModel(), 2))
+      eq(file.version, 8)
+      const loaded = new FakeModel()
+      S.fillItems(loaded, file.items)
+      eq(S.itemRows(loaded), S.itemRows(source))
+      loaded.setProperty(0, "lax", 0)
+      S.syncItems(loaded, file.items)
+      eq(S.itemRows(loaded), S.itemRows(source))
+      ok(!/NaN|Infinity/.test(S.linePath(kind, 100, 100, S.lineEnds(loaded.get(0)))))
+    }
+  })
+  test("line endpoint moves hold the other end and bound geometry", () => {
+    const n = item({kind: "arrow"}), before = S.lineEnds(n)
+    const changed = S.movedLineEnd(n, 0, -150, 250)
+    near(changed.ix + changed.lbx * changed.iw, n.ix + before.bx * n.iw)
+    near(changed.iy + changed.lby * changed.ih, n.iy + before.by * n.ih)
+    near(changed.ix + changed.lax * changed.iw, -150)
+    near(changed.iy + changed.lay * changed.ih, 250)
+    const huge = S.movedLineEnd(n, 1, 1e30, -1e30)
+    ok(huge.iw <= S.MAX_SIZE && huge.ih <= S.MAX_SIZE)
+    const loaded = S.itemModelRows([{id: 1, kind: "line", ax: {}, ay: -5, bx: 100, by: "bad"}])[0]
+    eq(S.lineEnds(loaded), {ax: 0.08, ay: 0, bx: 1, by: 0.5})
+  })
+
   test("state and trash paths stay relative and readable", () => {
     for (const bad of [null, 2, "", "../boards", "/outside", "a/../b", "a//b", "a/", "a\nb", "a\tb"])
       eq(S.safeRelative(bad), false, String(bad))
@@ -1481,8 +1508,8 @@ function tests(S) {
     ok(unversioned !== board)
     for (const gap of ["\n  ", " "]) {
       const where = gap === " " ? "on the history's line" : "on a line of its own"
-      eq(S.readFile(withHistory(history, "," + gap + '"version": 8')), null, "a later version 8 " + where)
-      eq(S.readFile(withHistory(history, "," + gap + '"version": 8', unversioned)), null, "the only version, 8, " + where)
+      eq(S.readFile(withHistory(history, "," + gap + '"version": 9')), null, "a later version 9 " + where)
+      eq(S.readFile(withHistory(history, "," + gap + '"version": 9', unversioned)), null, "the only version, 8, " + where)
       eq(S.readFile(withHistory(history, "," + gap + '"version": 5')).items.length, 1)
       const after = S.readFile(withHistory(history,
         "," + gap + '"items": [{"id": 9, "kind": "note", "text": "after"}], "nextId": 12, "links": []'))
@@ -2150,7 +2177,7 @@ function tests(S) {
     const model = new FakeModel([item(), item({ iid: 2, kind: "ellipse", itexture: "grid" }),
       item({ iid: 3, kind: "image", isrc: "picture.png", itexture: "dots" })])
     const file = JSON.parse(S.writeFile(model, new FakeModel(), 4))
-    eq(file.version, S.FORMAT_VERSION)
+    eq(file.version, 7)
     eq(file.items.map(r => r.texture || "plain"), ["plain", "grid", "plain"])
     const loaded = new FakeModel()
     S.fillItems(loaded, file.items)

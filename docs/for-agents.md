@@ -88,7 +88,8 @@ the version it replaced, in `backups/` for a board in the library and as
 `maximumCoordinate`, and anything past them is brought within them. Paint
 order is array order: later items are drawn over earlier ones.
 
-**`kind`** is one of `note`, `rect`, `ellipse`, `diamond`, or `image`. A note is
+**`kind`** is one of `note`, `rect`, `ellipse`, `diamond`, `image`,
+`line`, `arrow`, `double-arrow`, or `dashed-line`. A note is
 a rectangle with a rule across the top and its text aligned to the top left;
 the others centre their text. An `image` carries a file name in `src` and is
 not something to create from here — there is no op for it, because the picture
@@ -105,7 +106,7 @@ a cluster sits on, or a label for a region. Pin the shape *after* the items
 that go on top of it exist, and give it a `muted` tint.
 
 **`texture`** is optional on notes and shapes: `plain` (default), `ruled`,
-`grid`, `dots`, or `hatch`. Textured boards use format 7; any other board is 5.
+`grid`, `dots`, or `hatch`. Textured boards use format 7; boards containing standalone lines use format 8; other boards use format 5.
 Images stay plain. Unknown texture values load as plain. `setTexture` sets one.
 
 **Links.** Directed, drawn as an arrow from `from` to `to`. **Only one runs
@@ -380,3 +381,13 @@ Exporting is the shell's job, not this one's. Tell the person:
 - **Do not fill a board to make it look substantial.** Twelve items that say
   something beat forty that repeat each other, and the person can see the
   difference immediately even if you cannot.
+
+### Standalone line objects
+
+`kind` also accepts `line`, `arrow`, `double-arrow`, and `dashed-line`.
+These use ordinary item position and size, with optional endpoint fractions
+`ax`, `ay`, `bx`, `by` in [0, 1] relative to that rectangle. Defaults are
+(0.08, 0.5) and (0.92, 0.5). Endpoints are clamped on load; malformed values
+use the defaults. Imports require primitive numeric fields. Lines use format
+8 so older releases open their boards read-only. CLI `add` and `setKind`
+accept all four kinds. Line styles do not interpret text or fill textures.

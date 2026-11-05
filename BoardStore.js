@@ -36,7 +36,52 @@ function boundedMove(items, indices, dx, dy) {
   return { dx: Math.max(lowX, Math.min(highX, dx)), dy: Math.max(lowY, Math.min(highY, dy)) }
 }
 
-var KINDS = ["note", "rect", "ellipse", "diamond"]
+var SHAPE_KINDS = ["note", "rect", "ellipse", "diamond"]
+var LINE_KINDS = ["line", "arrow", "double-arrow", "dashed-line"]
+var KINDS = SHAPE_KINDS.concat(LINE_KINDS)
+function isLine(kind) { return LINE_KINDS.indexOf(kind) >= 0 }
+function lineUnit(value, fallback) { return Math.max(0, Math.min(1, num(value, fallback))) }
+function lineEnds(n) {
+  n = n || {}
+  return { ax: lineUnit(n.lax, 0.08), ay: lineUnit(n.lay, 0.5),
+           bx: lineUnit(n.lbx, 0.92), by: lineUnit(n.lby, 0.5) }
+}
+
+// Fixed-size geometry: one shaft and at most two arrowheads.
+function linePath(kind, w, h, ends) {
+  var ax = ends.ax * w, ay = ends.ay * h, bx = ends.bx * w, by = ends.by * h
+  var dx = bx - ax, dy = by - ay, length = Math.sqrt(dx * dx + dy * dy)
+  var path = "M " + ax + " " + ay + " L " + bx + " " + by
+  if (length < 0.01 || kind === "line" || kind === "dashed-line") return path
+  var ux = dx / length, uy = dy / length, head = Math.min(14, length / 3)
+  function tip(x, y, sign) {
+    return " M " + (x - sign * ux * head - uy * head / 2) + " " + (y - sign * uy * head + ux * head / 2)
+      + " L " + x + " " + y + " L " + (x - sign * ux * head + uy * head / 2) + " " + (y - sign * uy * head - ux * head / 2)
+  }
+  path += tip(bx, by, 1)
+  if (kind === "double-arrow") path += tip(ax, ay, -1)
+  return path
+}
+
+function movedLineEnd(n, end, x, y) {
+  var e = lineEnds(n), ax = n.ix + e.ax * n.iw, ay = n.iy + e.ay * n.ih
+  var bx = n.ix + e.bx * n.iw, by = n.iy + e.by * n.ih
+  x = clampCoord(x); y = clampCoord(y)
+  // Leave room for arrowheads while holding the opposite endpoint still.
+  var span = MAX_SIZE - 24
+  if (end === 0) {
+    ax = bx + Math.max(-span, Math.min(span, x - bx))
+    ay = by + Math.max(-span, Math.min(span, y - by))
+  } else {
+    bx = ax + Math.max(-span, Math.min(span, x - ax))
+    by = ay + Math.max(-span, Math.min(span, y - ay))
+  }
+  var w = clampSize(Math.abs(bx - ax) + 24), h = clampSize(Math.abs(by - ay) + 24)
+  var left = clampCoord((ax + bx - w) / 2), top = clampCoord((ay + by - h) / 2)
+  return { ix: left, iy: top, iw: w, ih: h,
+    lax: lineUnit((ax - left) / w, 0), lay: lineUnit((ay - top) / h, 0),
+    lbx: lineUnit((bx - left) / w, 1), lby: lineUnit((by - top) / h, 1) }
+}
 var CANVAS_PATTERNS = ["Dots", "Grid", "Ruled"]
 
 // The canvas's colour, a setting like its pattern rather than part of a board.
@@ -624,8 +669,9 @@ var COMMANDS = [
   { name: "New note", key: "n", run: "addRelative", arg: "note", needs: "edit" },
   { name: "New box", key: "r", run: "addRelative", arg: "rect", needs: "edit", also: ["rectangle"] },
   { name: "New ellipse", key: "e", run: "addRelative", arg: "ellipse", needs: "edit" },
+  { name: "New line", key: "", run: "addRelative", arg: "line", needs: "edit", also: ["arrow"] },
   { name: "Type in it", key: "i", run: "editSelected", needs: "target", also: ["edit", "edit text"] },
-  { name: "Change shape", key: "s", run: "cycleKind", needs: "target" },
+  { name: "Change shape", key: "s", run: "cycleKind", needs: "target", also: ["line style", "arrow style"] },
   { name: "Change colour", key: "c", run: "recolorItem", needs: "target" },
   { name: "Item texture…", key: "", run: "openGroup", arg: "texture", opens: "texture", needs: "texture", also: ["background", "fill"] },
   { name: "Texture: Plain", key: "", run: "setTexture", arg: "plain", needs: "texture", group: "texture", also: ["background", "fill"] },
@@ -809,7 +855,7 @@ function commandByName(name) {
 // does, as it does for the menu. Keyed by what a command runs, then by its
 // argument, so a new command in a family already here has one already.
 var COMMAND_ICONS = {
-  addRelative: { note: "\uf249", rect: "\uf096", ellipse: "\uf10c" },
+  addRelative: { line: "\uf068", note: "\uf249", rect: "\uf096", ellipse: "\uf10c" },
   setTexture: "\uf00a",
   editSelected: "\uf040",
   cycleKind: "\uf1b2",
@@ -886,7 +932,8 @@ var KEY_HELP_SECTIONS = [
   { title: "Make and change", rows: [
     ["n", "new note beside the selected one"],
     ["r / e", "new box / ellipse"],
-    ["s", "cycle shape: note, box, ellipse, diamond"],
+    ["s", "cycle shape or line style"],
+    [": new line", "standalone line; drag its endpoints, s cycles arrow styles"],
     ["c", "change its colour"],
     [". then Item texture", "plain, ruled, grid, dots or hatch background"],
     ["p / shift+p", "pin as background / select backgrounds"],
@@ -963,6 +1010,11 @@ function itemRows(items) {
   for (var i = 0; i < items.count; i++) {
     var n = items.get(i)
     out.push({ id: n.iid, kind: n.kind, x: n.ix, y: n.iy, w: n.iw, h: n.ih, tint: n.itint, text: n.itext, pinned: n.ipinned === true, src: n.isrc })
+    if (isLine(n.kind)) {
+      var ends = lineEnds(n)
+      out[out.length - 1].ax = ends.ax; out[out.length - 1].ay = ends.ay
+      out[out.length - 1].bx = ends.bx; out[out.length - 1].by = ends.by
+    }
     if (n.kind !== "image" && normalizeTexture(n.itexture) !== "plain") out[out.length - 1].texture = n.itexture
   }
   return out
@@ -994,6 +1046,8 @@ function syncItems(items, rows) {
   while (same < rows.length && same < items.count && items.get(same).iid === rows[same].id) same++
   for (var i = 0; i < same; i++) {
     var have = items.get(i), want = rows[i]
+    var ends = lineEnds({ lax: want.ax, lay: want.ay, lbx: want.bx, lby: want.by })
+    for (var role in ends) if (have["l" + role] !== ends[role]) items.setProperty(i, "l" + role, ends[role])
     if (have.kind !== want.kind) items.setProperty(i, "kind", want.kind)
     if (have.ix !== want.x) items.setProperty(i, "ix", want.x)
     if (have.iy !== want.y) items.setProperty(i, "iy", want.y)
@@ -1009,6 +1063,7 @@ function syncItems(items, rows) {
   for (var a = same; a < rows.length; a++) {
     var n = rows[a]
     items.append({ iid: n.id, kind: n.kind, ix: n.x, iy: n.y, iw: n.w, ih: n.h, itint: n.tint,
+                   lax: lineUnit(n.ax, 0.08), lay: lineUnit(n.ay, 0.5), lbx: lineUnit(n.bx, 0.92), lby: lineUnit(n.by, 0.5),
                    itext: n.text, ipinned: n.pinned === true, isrc: n.src, itexture: normalizeTexture(n.texture) })
   }
 }
@@ -1055,6 +1110,7 @@ function itemModelRows(rows) {
       : (n.kind === "image" && imageIsValid(n.src) ? "image" : "note")
     made.push({
       iid: id,
+      lax: lineUnit(n.ax, 0.08), lay: lineUnit(n.ay, 0.5), lbx: lineUnit(n.bx, 0.92), lby: lineUnit(n.by, 0.5),
       kind: kind,
       ix: clampCoord(num(n.x, 0)),
       iy: clampCoord(num(n.y, 0)),
@@ -1158,8 +1214,8 @@ function newIds(items, next, count) {
 // Version 6 was a board with its edit history, which Omarchyform 0.4.7 to
 // 0.4.10 kept in the file; version 7 adds item textures. Older readers open
 // these boards read-only to prevent feature loss. A board with textures still
-// writes version 7 and any other version 5, neither with a history.
-var FORMAT_VERSION = 7
+// writes version 7; lines write version 8; plain boards write version 5.
+var FORMAT_VERSION = 8
 var PLAIN_VERSION = 5
 
 // A whole number from 1 to FORMAT_VERSION. "5" and 4.5 are not versions.
@@ -1389,7 +1445,7 @@ function writeFile(items, links, nextId) {
   var textured = rows.some(function (row) { return row.texture !== undefined })
   return JSON.stringify({
     kind: FORMAT_MARKER,
-    version: textured ? FORMAT_VERSION : PLAIN_VERSION,
+    version: rows.some(function (row) { return isLine(row.kind) }) ? FORMAT_VERSION : textured ? 7 : PLAIN_VERSION,
     nextId: nextId,
     items: rows,
     links: linkRows(links)
@@ -1581,7 +1637,7 @@ function importBoard(raw) {
   var rows = []
   for (var i = 0; i < data.items.length; i++) {
     var row = data.items[i], out = {}
-    var numeric = ["id", "x", "y", "w", "h"]
+    var numeric = ["id", "x", "y", "w", "h", "ax", "ay", "bx", "by"]
     var strings = ["kind", "text", "tint", "color", "texture", "src"]
     for (var j = 0; j < numeric.length; j++) field(row, out, numeric[j], true)
     for (var k = 0; k < strings.length; k++) field(row, out, strings[k], false)

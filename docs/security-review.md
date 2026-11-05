@@ -176,7 +176,7 @@ new reads it.
 | `text` | at most 1 MiB | plain-text layout, find | In proportion to its length (the long-note row above). |
 | `kind`, `tint`, `texture`, `pinned` | one of their known values, else the default | drawing | Nothing. |
 | `src` | a plain image name in this library | picture checks, decoding | The picture rows above. |
-| `version` | 1 to 7; newer opens read-only | which fields are read | Nothing. |
+| `version` | 1 to 8; newer opens read-only | which fields are read | Nothing. |
 
 The counts, 5,000 items and 20,000 connectors, and the file's bytes are the
 board size row above.
@@ -827,3 +827,22 @@ successfully saves. The live startupfailure fixture makes the boards path a
 file, verifies no documents/state/trash are loaded and original state/legacy
 bytes remain intact, repairs the fixture and verifies successful migration and
 opening the saved board. Both cases use temporary data, not user boards.
+
+## Standalone lines — cost trace
+
+Line kinds are four fixed strings. Endpoint fields `ax`, `ay`, `bx`, `by`
+are primitive numbers on import and normalized to [0, 1] on load; invalid
+local-file values use fixed defaults. Model roles `lax`, `lay`, `lbx`, `lby`
+carry these fractions through snapshots, copies and exports. Existing byte,
+item-count, coordinate and size limits still apply. Pointer edits bound the
+rectangle and endpoints before writing and use the existing document-owned
+pointer transaction, so reloads invalidate an in-flight edit.
+
+Each line makes one vector path with one shaft and at most two heads; geometry
+construction is constant work. Dashed strokes cost at most the bounded line
+length, with a fixed dash pattern, and at most MAX_ITEMS delegates are made.
+The `max-line-objects` hostile fixture exercises all styles at MAX_ITEMS;
+`line-endpoint-bounds` exercises maximum dimensions and endpoint values at and
+past their normalized bounds. No new process, filesystem destination, network
+access, image source or text renderer is introduced. Saved lines use format 8;
+older versions refuse to edit them instead of dropping their geometry.

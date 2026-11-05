@@ -95,7 +95,7 @@ TestCase {
     function removeItem(index) { model.remove(index) }
     ListModel {
       id: model
-      ListElement { ix: 100; iy: 100; iw: 180; ih: 140; itext: ""; itexture: "plain" }
+      ListElement { lax: 0.08; lay: 0.5; lbx: 0.92; lby: 0.5; ix: 100; iy: 100; iw: 180; ih: 140; itext: ""; itexture: "plain" }
     }
   }
   property int backgroundDoubleClicks: 0
@@ -165,6 +165,56 @@ TestCase {
   }
   // Choosing the far end of a connector: a click picks the item, and neither
   // drags it nor starts typing in it.
+  function test_lineStylesRenderDifferentlyWithoutABox() {
+    model.setProperty(0, "lax", 0.08)
+    model.setProperty(0, "lay", 0.5)
+    model.setProperty(0, "lbx", 0.92)
+    model.setProperty(0, "lby", 0.5)
+    var pictures = []
+    for (var i = 0; i < Store.LINE_KINDS.length; i++) {
+      subject.kind = Store.LINE_KINDS[i]
+      verify(waitForRendering(subject))
+      var picture = grabImage(subject)
+      for (var j = 0; j < pictures.length; j++) verify(!picture.equals(pictures[j]))
+      pictures.push(picture)
+    }
+  }
+  function test_invalidatedLineGestureCannotWrite() {
+    subject.kind = "line"
+    ctl.selectedIndex = 0
+    wait(10)
+    var end = findChild(subject, "line-end-1")
+    mousePress(end, 9, 9, Qt.LeftButton)
+    ctl.pointerEdit = null
+    var before = model.get(0).iw
+    mouseMove(end, 39, 39, 20, Qt.LeftButton)
+    mouseRelease(end, 9, 9, Qt.LeftButton)
+    compare(model.get(0).iw, before)
+    compare(ctl.saveCount, 0)
+  }
+  function test_lineEndpointAndStyleStayLive() {
+    subject.kind = "arrow"
+    model.setProperty(0, "lax", 0.08)
+    model.setProperty(0, "lay", 0.5)
+    model.setProperty(0, "lbx", 0.92)
+    model.setProperty(0, "lby", 0.5)
+    ctl.selectedIndex = 0
+    wait(10)
+    var end = findChild(subject, "line-end-1")
+    verify(end !== null)
+    verify(findChild(subject, "line-shape").active)
+    var oldX = model.get(0).ix + subject.lineEnds.ax * model.get(0).iw
+    mousePress(end, 9, 9, Qt.LeftButton)
+    mouseMove(end, 39, 39, 20, Qt.LeftButton)
+    mouseRelease(end, 9, 9, Qt.LeftButton)
+    verify(subject.lineEnds.by > subject.lineEnds.ay)
+    fuzzyCompare(model.get(0).ix + subject.lineEnds.ax * model.get(0).iw, oldX, 0.01)
+    compare(ctl.saveCount, 1)
+    subject.kind = "double-arrow"
+    verify(findChild(subject, "line-shape").active)
+    subject.kind = "dashed-line"
+    verify(findChild(subject, "line-shape").active)
+  }
   function test_linkTargetDoesNotDragOrEdit() {
     ctl.linkingFrom = 2
     mousePress(test, 140, 140, Qt.LeftButton)

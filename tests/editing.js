@@ -186,7 +186,7 @@ const plain = (n) => JSON.stringify({ kind: 'omarchyform.board', version: 5, nex
   for (const front of ['versioned', 'unversioned']) {
     const board = JSON.parse(plain(2))
     if (front === 'unversioned') delete board.version
-    const c = opened(JSON.stringify(board, null, 2).slice(0, -2) + ',\n  "history": ' + history + ', "version": 8\n}\n')
+    const c = opened(JSON.stringify(board, null, 2).slice(0, -2) + ',\n  "history": ' + history + ', "version": 9\n}\n')
     assert.equal(c.root.canEdit, false, front + ': a newer version after the history is read-only')
     assert.equal(c.root.boardState, 'Read only')
     c.root.addItem('note', 0, 0)
@@ -434,3 +434,24 @@ const plain = (n) => JSON.stringify({ kind: 'omarchyform.board', version: 5, nex
   assert.match(e.session.saveError, /Could not read the disk version/)
   console.log('ok — editing: a board changed on disk is parsed once, and held to the same limits')
 }
+
+// Standalone line geometry belongs to the document, including undo and copies.
+{
+  const c = opened(plain(0)).root
+  c.addItem('line', 200, 200)
+  c.selectedIndex = 0
+  c.cycleKind()
+  assert.equal(c.items.get(0).kind, 'arrow')
+  c.items.setProperty(0, 'lay', 0.1)
+  c.items.setProperty(0, 'lby', 0.9)
+  c.cycleKind()
+  assert.equal(c.items.get(0).kind, 'double-arrow')
+  c.undo()
+  assert.equal(c.items.get(0).kind, 'arrow')
+  assert.equal(c.items.get(0).lay, 0.1)
+  c.duplicateTargets()
+  assert.equal(c.items.count, 2)
+  assert.equal(c.items.get(1).lby, 0.9)
+  assert.equal(c.items.get(1).kind, 'arrow')
+}
+console.log('ok — standalone line styles and endpoints survive undo and duplication')
