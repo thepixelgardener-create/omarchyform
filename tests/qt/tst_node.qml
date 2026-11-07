@@ -306,6 +306,9 @@ TestCase {
     mouseMove(end, 40, 15, 20, Qt.LeftButton)
     mouseRelease(end, 40, 15, Qt.LeftButton)
     fuzzyCompare(world().by, world().ay, 0.01)
+    // Qt 6.4's mouseMove takes no modifiers (CI's Qt), so a held shift never
+    // reaches the move there; the half above still runs.
+    if (mouseMove.length < 6) skip("mouseMove carries no modifiers before Qt 6.5")
     end = findChild(subject, "line-end-1")
     mousePress(end, 9, 9, Qt.LeftButton, Qt.ShiftModifier)
     mouseMove(end, 40, 15, 20, Qt.LeftButton, Qt.ShiftModifier)
