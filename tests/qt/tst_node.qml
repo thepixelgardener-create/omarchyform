@@ -306,12 +306,13 @@ TestCase {
     mouseMove(end, 40, 15, 20, Qt.LeftButton)
     mouseRelease(end, 40, 15, Qt.LeftButton)
     fuzzyCompare(world().by, world().ay, 0.01)
-    // Qt 6.4's mouseMove takes no modifiers (CI's Qt), so a held shift never
-    // reaches the move there; the half above still runs.
-    if (mouseMove.length < 6) skip("mouseMove carries no modifiers before Qt 6.5")
     end = findChild(subject, "line-end-1")
     mousePress(end, 9, 9, Qt.LeftButton, Qt.ShiftModifier)
-    mouseMove(end, 40, 15, 20, Qt.LeftButton, Qt.ShiftModifier)
+    // Qt 6.4's mouseMove (CI's Qt) takes no modifiers, so shift could not
+    // be held through the move; there the move goes through the handle's
+    // own aim, with the button really held.
+    if (mouseMove.length >= 6) mouseMove(end, 40, 15, 20, Qt.LeftButton, Qt.ShiftModifier)
+    else { verify(end.pressed, "the handle is held"); end.aim(40, 15, true) }
     mouseRelease(end, 40, 15, Qt.LeftButton, Qt.ShiftModifier)
     verify(world().by - world().ay > 4, "shift keeps the slope")
   }

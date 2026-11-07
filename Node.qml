@@ -578,13 +578,19 @@ Item {
         node.ctl.beginPointerEdit()
       }
       onPositionChanged: function(mouse) {
-        if (!endpoint.pressed || !endpoint.moving || !node.ctl.pointerEdit || !node.ctl.canEdit) return
-        var point = endpoint.mapToItem(node.parent, mouse.x, mouse.y)
+        if (!endpoint.pressed) return
+        endpoint.aim(mouse.x, mouse.y, (mouse.modifiers & Qt.ShiftModifier) !== 0)
+      }
+      // The drag, apart from the event it came in: x, y in the handle, and
+      // free when shift is held. Qt 6.4's test events cannot hold shift
+      // through a move, so its test hands that in here.
+      function aim(hx, hy, free) {
+        if (!endpoint.moving || !node.ctl.pointerEdit || !node.ctl.canEdit) return
+        var point = endpoint.mapToItem(node.parent, hx, hy)
         var n = node.ctl.items.get(node.index)
         var at = { x: point.x + endpoint.grabX, y: point.y + endpoint.grabY }
         // Level or upright when it is nearly so, and in line with the sides
         // and middles of other items; shift lets it lie anywhere.
-        var free = (mouse.modifiers & Qt.ShiftModifier) !== 0
         var pull = 10 / Math.max(0.01, node.ctl.zoom)
         if (!free) {
           at = Store.snappedLineEnd(n, endpoint.index, at.x, at.y, pull, node.ctl.items, node.index)
