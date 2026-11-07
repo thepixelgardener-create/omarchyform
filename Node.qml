@@ -236,6 +236,9 @@ Item {
     }
   }
 
+  // qmllint disable unqualified
+  // This file stays unbound for Qt 6.4's Loader (see the header), so the
+  // component below reads `node` from outside its own scope, as intended.
   Loader {
     objectName: "line-shape"
     anchors.fill: parent
@@ -258,6 +261,7 @@ Item {
       }
     }
   }
+  // qmllint enable unqualified
 
   // Plain and offscreen items allocate no texture geometry.
   Loader {
@@ -535,6 +539,8 @@ Item {
       opacity: 0.35
     }
   }
+  // qmllint disable unqualified
+  // Unbound on purpose, as the line shape above: the handles read `node`.
   Repeater {
     // A line's selection is these two handles and nothing else: a box or a
     // band around a line hid the line it was meant to point out. A marked
@@ -611,4 +617,5 @@ Item {
     }
   }
 
+  // qmllint enable unqualified
 }
