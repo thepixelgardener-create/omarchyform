@@ -38,7 +38,8 @@ Updating, the optional desktop entry and removing it are in the
 
 | Key | Does |
 |-----|------|
-| `n` | New note, ready to type |
+| `q` | New note, ready to type |
+| `w` `e` `r` `t` `z` | New box, ellipse, diamond, line, arrow |
 | `esc` | Stop typing; press again to close the board |
 | `h` `j` `k` `l` | Move to the nearest note that way |
 | `x`, move, `x` | Connect two items |
@@ -53,7 +54,7 @@ right-click lists what can be done with the selection. The mouse works too.
 
 - Notes, boxes, ellipses, diamonds and pictures pasted from the clipboard, joined by connectors
 - Plain-text notes: received board text is never interpreted as markup
-- An ordinary tiled window by default; `w` switches to a fullscreen overlay and back
+- An ordinary tiled window by default; `F11` switches to a fullscreen overlay and back
 - Split view, `v` or `V`: two boards side by side, or two views of one
 - Boards in folders, with search and a trash, on `b`
 - PNG export in your theme, on white for documents, or in black and white for print

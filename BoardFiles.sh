@@ -336,6 +336,8 @@ case "$operation" in
       image/*) ;;
       *) exit 4 ;;
     esac
+    # Both read the picture; nothing in this pipeline writes it.
+    # shellcheck disable=SC2094
     wl-copy --type "$(file -bL --mime-type -- "$images_root/$picture")" < "$images_root/$picture"
     ;;
   importimage)

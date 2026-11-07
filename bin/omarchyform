@@ -276,6 +276,10 @@ const OPS = {
       const at = mustRow(board, a[0], "move")
       board.items.setProperty(at, "ix", S.clampCoord(S.num(a[1], 0)))
       board.items.setProperty(at, "iy", S.clampCoord(S.num(a[2], 0)))
+      // As on the board: a line moved on its own comes away from what it was
+      // glued to, and lines glued to what moved go with it.
+      S.unglueMoved(board.items, [at])
+      S.followGlue(board.items)
       return { changed: Number(a[0]) }
     }
   },
@@ -286,6 +290,7 @@ const OPS = {
       const at = mustRow(board, a[0], "resize")
       board.items.setProperty(at, "iw", S.clampSize(S.num(a[1], S.MIN_SIZE)))
       board.items.setProperty(at, "ih", S.clampSize(S.num(a[2], S.MIN_SIZE)))
+      S.followGlue(board.items)
       return { changed: Number(a[0]) }
     }
   },
@@ -308,6 +313,8 @@ const OPS = {
     run(board, a) {
       const id = Number(a[0])
       const at = mustRow(board, id, "remove")
+      // A line glued to it stays where it is, unglued.
+      S.unglueFrom(board.items, { [id]: true })
       board.items.remove(at)
       for (let i = board.links.count - 1; i >= 0; i--) {
         const link = board.links.get(i)

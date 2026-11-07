@@ -21,6 +21,9 @@
     "bench:connectors": "node tests/connectors.js",
     "shots": "node tests/shots.js",
     "preview": "node tests/preview.js",
+    "lint": "node tests/lint.js",
+    "lint:qml": "node tests/qmllint-ratchet.js",
+    "check:local": "OMARCHYFORM_STRICT=1 ./tests/run && npm run test:hostile && npm run test:omarchy",
     "test:security": "node tests/security.js && node tests/filesystem.js && node tests/desktop.js && node tests/cli.js",
     "review:marketplace": "node tests/marketplace.js",
     "test:security:full": "npm run test:security && npm run test:qml && npm run test:ui && npm run test:clipboard && npm run test:drop"

@@ -391,3 +391,12 @@ These use ordinary item position and size, with optional endpoint fractions
 use the defaults. Imports require primitive numeric fields. Lines use format
 8 so older releases open their boards read-only. CLI `add` and `setKind`
 accept all four kinds. Line styles do not interpret text or fill textures.
+
+A line's ends can be glued to other items: optional `from` and `to`, each
+`{ "id": <item id>, "x": <0..1>, "y": <0..1> }`, the item and the place on it
+as fractions of its box (`{"id": 3, "x": 0, "y": 0.5}` is the middle of item
+3's left side). A glued end follows its item when the item moves or is
+resized, in the app and through CLI `move` and `resize`. Glue to an item that
+does not exist, to a line, to a pinned background or to the line itself is
+dropped on load; `remove` lets go of the removed item. Moving a glued line on
+its own lets go of both ends.

@@ -7,11 +7,37 @@ since older boards are migrated on load rather than rejected.
 
 ### Added
 
-- Standalone lines and arrows: choose **New line** from the command list,
-  drag either endpoint, and press `s` to cycle plain line, arrow, double-headed
+- Hold `ctrl` and the bar shows the ctrl shortcuts, icon and key each (undo,
+  redo, copy, paste, duplicate, save, PNG, new board, import, commands, and
+  resize or aim); let go and the usual hints come back.
+- Arrows and lines glue to shapes: drop either end on a note, box, ellipse,
+  diamond or picture and it sticks to that item's edge, following it as it
+  moves or is resized. Copies of both stay glued copy to copy; moving the line
+  on its own or deleting the item lets go. Saved as `from`/`to` on the line;
+  the command line's `move`, `resize` and `remove` keep glued lines in step.
+- Magnetic alignment while dragging: an item, line or arrow brought within a
+  few pixels of another item's edge or centre lines up with it exactly, with
+  an accent guide drawn across both; a dragged line end lands on another
+  item's side or middle the same way. Hold `shift` to place freely.
+- Standalone lines and arrows: `t` makes a line and `z` an arrow; then
+  drag either endpoint (it snaps level or upright; `shift` sets any angle), or aim it from the keyboard (`ctrl+hjkl` moves the
+  head, `ctrl+shift+hjkl` the tail), and press `s` to cycle plain line, arrow, double-headed
   arrow and dashed line. Lines support colour, moving, resizing, duplication,
   undo and PNG export. Boards containing lines use format 8, which older
   releases open read-only.
+
+### Changed
+
+- Making things moved to the top letter row, left to right: `q` note, `w` box,
+  `e` ellipse, `r` diamond, `t` line, `z` arrow. `n` no longer makes a note.
+  Fullscreen moved from `w` to `F11`.
+- Lines and arrows are drawn in their colour at full strength rather than at a
+  box border's, so a plain line no longer fades into the board. A selected
+  line shows no box, only a handle just past each end, so an arrow's tip stays
+  in sight; a marked line's handles are fainter.
+- The `?` list starts with making and moving things; files come later.
+- The bar's key hints are icons with their keys, and `:` replaces `ctrl+p`
+  there (both still open the command list).
 
 ## 0.5.5 — 2026-11-04
 

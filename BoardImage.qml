@@ -81,6 +81,8 @@ Item {
     property int selectedIndex: -1
     property int editIndex: -1
     property int linkingFrom: -1
+    // Nothing is dragged in a picture; a node only writes this while one is.
+    property var guides: []
     property bool canEdit: false
     property bool showPinned: false
     // The board's palette, with its emphasis taken out: nothing is selected in

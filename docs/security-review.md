@@ -838,8 +838,21 @@ item-count, coordinate and size limits still apply. Pointer edits bound the
 rectangle and endpoints before writing and use the existing document-owned
 pointer transaction, so reloads invalidate an in-flight edit.
 
+Glue (`from`/`to` on a line) is one level of object holding three primitive
+numbers; import rejects any other shape and copies only those three fields.
+On load an id must name an item on the same board that is not a line, not
+pinned and not the line itself, or the glue is dropped; fractions clamp to
+[0, 1]. Following glue is one pass over the items with one id index, run
+after a move, resize, align or spread, so a pointer move costs O(items) as
+moving already did; it never chains, because a line can only be glued to
+something that is not a line. Finding where a dropped end glues is one pass
+over the items from the top.
+
 Each line makes one vector path with one shaft and at most two heads; geometry
-construction is constant work. Dashed strokes cost at most the bounded line
+construction is constant work. An arrow is one closed outline of at most ten
+points and one tail arc, its head sized from the theme's border width, never
+from the board. A selected or marked line adds two endpoint handles, made only
+while it is selected. Dashed strokes cost at most the bounded line
 length, with a fixed dash pattern, and at most MAX_ITEMS delegates are made.
 The `max-line-objects` hostile fixture exercises all styles at MAX_ITEMS;
 `line-endpoint-bounds` exercises maximum dimensions and endpoint values at and

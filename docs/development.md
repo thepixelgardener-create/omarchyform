@@ -29,9 +29,16 @@ installed QML metadata still produces warnings about `PanelWindow`,
 `QProcess::ExitStatus`, the dynamic Style font object and the members of the
 shell's plugin API. qmllint also reports unqualified access inside the header
 menu's delegate and the export scene, so it exits non-zero. The live test
-checks that those types and properties work in the actual runtime. CI fails on
-one category only: a property overriding a final one, which is what makes a
-surface fail to load.
+checks that those types and properties work in the actual runtime.
+
+`npm run lint:qml` turns that into a gate without fixing the accepted warnings
+first. It lints the base commit (where HEAD left `origin/main`, or
+`QMLLINT_BASE`) and the working tree with the same qmllint, and fails when any
+file has more warnings of any kind than the base had. A property overriding a
+final one, which makes a surface fail to load, fails outright. CI runs it with
+Qt 6.4 against the pull request's base; locally it runs with your Qt against
+your branch point, so the two can list different warnings and still agree on
+whether a change added one.
 
 `keepLoaded: true` keeps this overlay mounted between summons. Save with
 `ctrl+s` and wait for the saving indicator to clear before a rescan or a shell
@@ -114,6 +121,9 @@ the suite loads the very file the plugin loads — there is no copy to drift.
 ```bash
 ./tests/run     # everything available on this machine (unit tests, security screen, Qt and Quickshell suites), skipping what is not installed
 npm test        # pure logic and controller regression tests, no dependencies
+npm run lint      # shellcheck and Python parse; shellcheck required in CI
+npm run lint:qml  # no file gains a qmllint warning against the base commit
+npm run check:local # everything CI cannot run as well; before a release
 npm run test:security # portable security/privacy screen and boundary regressions
 npm run review:marketplace # the marketplace's own security baseline, pinned, against HEAD
 npm run test:security:full # also run Quickshell and Qt tests

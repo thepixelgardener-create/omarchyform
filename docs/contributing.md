@@ -138,6 +138,15 @@ For these paths, run `npm test` and `npm run test:qml`. Changes to QML interacti
 or bindings also need `npm run test:ui`. Use temporary boards and isolated data
 folders; do not test by editing a user's real boards or restarting their shell.
 
+Changes to QML also need `npm run lint:qml`: no file may gain a qmllint warning
+of any kind (see [Development](development.md)). Changes to a shell or Python
+script need `npm run lint`, which runs shellcheck at every severity; a finding
+that is meant is disabled on its line with the reason beside it.
+
+Before a release, and after any change CI cannot run, run `npm run
+check:local`: everything above plus `test:hostile` and the live
+`test:omarchy`, which need Quickshell and a desktop with its displays on.
+
 Relevant suites: `tests/split.js`, `tests/exchange.js`, `tests/editing.js`,
 `tests/suite.js`, `tests/cli.js`, and `tests/qml/`.
 The JavaScript harness executes production QML functions but models signals and

@@ -21,6 +21,88 @@ function tests(S) {
       ok(!/NaN|Infinity/.test(S.linePath(kind, 100, 100, S.lineEnds(loaded.get(0)))))
     }
   })
+  test("a dragged line end snaps level or upright when it is nearly so", () => {
+    const xy = r => JSON.stringify({ x: r.x, y: r.y })
+    // Tail at (0, 50), head at (100, 50) in a 100 x 100 box at the origin.
+    const n = { ix: 0, iy: 0, iw: 100, ih: 100, lax: 0, lay: 0.5, lbx: 1, lby: 0.5 }
+    eq(xy(S.snappedLineEnd(n, 1, 200, 57, 10)), JSON.stringify({ x: 200, y: 50 }), "nearly level: level")
+    eq(xy(S.snappedLineEnd(n, 1, 200, 70, 10)), JSON.stringify({ x: 200, y: 70 }), "past the tolerance: as dragged")
+    eq(xy(S.snappedLineEnd(n, 1, 6, 150, 10)), JSON.stringify({ x: 0, y: 150 }), "nearly upright: upright")
+    eq(xy(S.snappedLineEnd(n, 0, 95, 45, 10)), JSON.stringify({ x: 95, y: 50 }), "a short one snaps the way it leans")
+    eq(xy(S.snappedLineEnd(n, 1, 200, 57, 0)), JSON.stringify({ x: 200, y: 57 }), "no tolerance, no snap")
+  })
+  test("a dragged item lines up with the edges and centres of the others", () => {
+    const m = new FakeModel([item({ iid: 1, ix: 0, iy: 0, iw: 100, ih: 100 }),
+                             item({ iid: 2, ix: 300, iy: 400, iw: 100, ih: 100 })])
+    const start = S.alignBox(m.get(0))
+    let r = S.magneticMove(m, [0], start, 296, 50, 8)
+    eq([r.dx, r.dy], [300, 50], "left edges meet; the other axis is as dragged")
+    eq(r.guides.length, 1, "one guide, for the axis that snapped")
+    eq([r.guides[0].x1, r.guides[0].x2], [300, 300], "drawn on the shared edge")
+    r = S.magneticMove(m, [0], start, 349, 403, 8)
+    eq([r.dx, r.dy], [350, 400], "centre to centre, top to top")
+    r = S.magneticMove(m, [0], start, 120, 200, 8)
+    eq([r.dx, r.dy, r.guides.length], [120, 200, 0], "far from everything: no pull")
+    // A line lines up by its ends, not its padded box.
+    const lines = new FakeModel([item({ iid: 1, ix: 0, iy: 0, iw: 100, ih: 100 }),
+                                 item({ iid: 2, kind: "arrow", ix: 0, iy: 300, iw: 200, ih: 60, lax: 0, lay: 0.5, lbx: 1, lby: 0.5 })])
+    r = S.magneticMove(lines, [0], S.alignBox(lines.get(0)), 0, 275, 8)
+    eq(r.dy, 280, "a box's middle onto an arrow's shaft")
+  })
+
+  test("a dragged line end lands on another item's side or middle", () => {
+    const m = new FakeModel([item({ iid: 1, kind: "arrow", ix: 0, iy: 0, iw: 100, ih: 24, lax: 0, lay: 0.5, lbx: 1, lby: 0.5 }),
+                             item({ iid: 2, ix: 300, iy: 200, iw: 100, ih: 100 })])
+    const r = S.snappedLineEnd(m.get(0), 1, 304, 246, 8, m, 0)
+    eq([r.x, r.y], [300, 250], "the middle of the box's left side")
+    eq(r.guides.length, 2)
+    const far = S.snappedLineEnd(m.get(0), 1, 200, 120, 8, m, 0)
+    eq([far.x, far.y, far.guides.length], [200, 120, 0], "nothing near: where it was put")
+  })
+  test("an end put down on a shape is glued to its outline, whatever the shape", () => {
+    for (const [kind, want] of [["rect", [200, 140]], ["ellipse", [200, 150]], ["diamond", [200, 150]]]) {
+      const m = new FakeModel([item({ iid: 1, kind, ix: 100, iy: 100, iw: 100, ih: 100 })])
+      // Dropped inside, to the right of the middle and a little low.
+      const g = S.glueAt(m, 170, kind === "rect" ? 140 : 150, -1, 8)
+      eq(g.id, 1, kind + ": glued")
+      eq([Math.round(g.px), Math.round(g.py)], want, kind + ": out on the outline")
+    }
+    const m = new FakeModel([item({ iid: 1, kind: "ellipse", ix: 100, iy: 100, iw: 100, ih: 100 })])
+    eq(S.glueAt(m, 102, 102, -1, 8), null, "an ellipse's box corner is not the ellipse")
+    eq(S.glueAt(m, 150, 150, 0, 8), null, "never to itself")
+    const pinned = new FakeModel([item({ iid: 1, ipinned: true, ix: 0, iy: 0, iw: 500, ih: 500 })])
+    eq(S.glueAt(pinned, 10, 10, -1, 8), null, "never to a background")
+  })
+
+  test("a glued line follows its item, and lets go of what it moved away from", () => {
+    const m = new FakeModel([
+      item({ iid: 1, kind: "rect", ix: 300, iy: 0, iw: 100, ih: 100 }),
+      item({ iid: 2, kind: "arrow", ix: 0, iy: 38, iw: 324, ih: 24, lax: 0, lay: 0.5, lbx: 300 / 324, lby: 0.5, bon: 1, bonx: 0, bony: 0.5 })])
+    m.setProperty(0, "iy", 200)
+    eq(S.followGlue(m), 1, "one line moved")
+    const n = m.get(1), e = S.lineEnds(n)
+    eq([n.ix + e.bx * n.iw, n.iy + e.by * n.ih], [300, 250], "the head is on the box's side again")
+    eq(Math.round(n.ix + e.ax * n.iw), 0, "the tail stays put")
+    eq(S.followGlue(m), 0, "nothing to do the second time")
+    S.unglueMoved(m, [1])
+    eq(m.get(1).bon, 0, "moved without its box, it comes away")
+  })
+
+  // Separate strokes for the shaft and each head overlap at the tip, and the
+  // GPU blends a translucent colour once per overlap: a bright knot there.
+  // One closed outline is drawn once, whatever renders it.
+  test("an arrow is one closed outline, however long and however heavy", () => {
+    for (const kind of ["arrow", "double-arrow"])
+      for (const span of [400, 30, 3])
+        for (const stroke of [1, 2, 6]) {
+          const path = S.linePath(kind, span, 20, {ax: 0, ay: 0.5, bx: 1, by: 0.5}, stroke)
+          eq((path.match(/M/g) || []).length, 1)
+          ok(/ Z$/.test(path) && !/NaN|Infinity/.test(path))
+        }
+    const thin = S.arrowHead(2), heavy = S.arrowHead(6)
+    ok(heavy.length > thin.length)
+    near(heavy.wing / heavy.length, thin.wing / thin.length)
+  })
   test("line endpoint moves hold the other end and bound geometry", () => {
     const n = item({kind: "arrow"}), before = S.lineEnds(n)
     const changed = S.movedLineEnd(n, 0, -150, 250)
@@ -2004,6 +2086,20 @@ function tests(S) {
        "nor can a key")
   })
 
+  test("the board's hints are an icon and a key each, with words for a screen reader", () => {
+    const line = S.iconHintLine(S.BOARD_HINTS, "#ff0000")
+    for (const [key, label] of S.BOARD_HINTS) {
+      eq(typeof S.HINT_GLYPHS[label], "string", label + " has an icon")
+      eq(S.HINT_GLYPHS[label].length, 2, label + " is one glyph from the Nerd Font's private area")
+      ok(line.includes(S.HINT_GLYPHS[label] + "\u00a0" + '<font color="#ff0000">' + S.escapeMarkup(key) + "</font>"), label + " is drawn")
+      ok(!line.includes(label), label + " is not spelled out on screen")
+    }
+    eq(new Set(Object.values(S.HINT_GLYPHS)).size, Object.keys(S.HINT_GLYPHS).length, "no two icons alike")
+    for (const lineInHand of [false, true])
+      for (const [, label] of S.ctrlHints(lineInHand))
+        eq(S.HINT_GLYPHS[label].length, 2, "ctrl's " + label + " has an icon too")
+    ok(S.hintWords(S.BOARD_HINTS).startsWith("q note, w box"), "the words survive")
+  })
   test("a hint line joins its hints and every set is pairs", () => {
     eq(S.hintLine([["n", "note"], ["x", "cut"]], "#ff0000", " | "),
        '<font color="#ff0000">n</font>ote | <font color="#ff0000">x</font>: cut', "joined")

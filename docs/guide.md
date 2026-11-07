@@ -12,7 +12,7 @@ process — no webview, no Electron, and no separate application service.
 The controller stays loaded between opens; canvas surfaces exist only while
 open, and pending saves can finish after closing.
 
-It opens as a tiled window by default, and `w` switches between two surfaces:
+It opens as a tiled window by default, and `F11` switches between two surfaces:
 
 - **Windowed** — an ordinary toplevel, so Hyprland tiles it beside your editor
   and browser like any other app.
@@ -26,17 +26,29 @@ a board last used that way.
 
 ## Standalone lines and arrows
 
-Open the command list with `:` and choose **New line**. Lines are objects of
+Press `t` for a new line or `z` for an arrow. Lines are objects of
 their own: they do not need shapes at either end. Select one and press `s`
 to cycle **line → arrow → double-headed arrow → dashed line**.
 
 Drag the line to move it, or drag either round endpoint to change its length
-and direction. `c` changes its colour. Selection, duplication, deletion,
+and direction. Nearly level or nearly upright, it snaps straight, and an end
+brought near another item's side or middle lands on it exactly; hold `shift`
+while dragging to set any angle or place.
+
+Drop an end on a note, box, ellipse, diamond or picture and it is glued to that
+item's edge: from then on it follows the item as it moves or is resized, so an
+arrow drawn from one box to another stays joined to both. Stepping an end onto
+an item with `ctrl+hjkl` glues it too. Moving the line on its own, or deleting
+the item, lets go; `shift` while dragging an end puts it down unglued. From the keyboard, `ctrl+hjkl` moves the head (where an arrow
+points) and `ctrl+shift+hjkl` the tail; the other end stays put. `c` changes its colour. Selection, duplication, deletion,
 undo, saving and PNG export work as for other objects. Shape cycling stays
 within notes, boxes, ellipses and diamonds; line cycling stays within line
 styles. Lines have no text editor or fill texture.
 
 ## Keys
+
+Hold `ctrl` and the bar swaps its hints for the ctrl shortcuts; let go and
+they change back.
 
 Press `?` or `F1` on the board for this list. The board's name, the menu and
 whatever it is currently telling you all sit together in the header, on one
@@ -69,8 +81,9 @@ breaks, and the middle button does not paste the primary selection.
 
 | Key | Does |
 |-----|------|
-| `n` | New note beside the selected one, ready to type |
-| `r` / `e` | New box / ellipse |
+| `q` | New note beside the selected one, ready to type |
+| `w` `e` `r` | New box / ellipse / diamond |
+| `t` / `z` | New line / arrow |
 | `p` / `Shift+P` | Pin as background / select backgrounds to unpin |
 | `s` | Cycle the shape, or the selected line’s style |
 | `x` | Connect: `x` on one, `tab` or `hjkl` to the other, `x` again |
@@ -102,7 +115,7 @@ breaks, and the middle button does not paste the primary selection.
 | `g` then `H` `J` `K` `L` | Spread them evenly; the outermost two stay put |
 | `c` | Cycle its theme role: foreground, accent, urgent, muted |
 | `b` | Boards: browse, open, create |
-| `w` | Switch between fullscreen and windowed |
+| `F11` | Switch between fullscreen and windowed |
 | `v` / `V` | Split side by side / stacked; the same key again goes back to one pane |
 | `o` | Move to the other pane |
 | `f` | Fit the whole board on screen |

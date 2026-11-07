@@ -455,3 +455,111 @@ const plain = (n) => JSON.stringify({ kind: 'omarchyform.board', version: 5, nex
   assert.equal(c.items.get(1).kind, 'arrow')
 }
 console.log('ok — standalone line styles and endpoints survive undo and duplication')
+
+// A line is aimed from the keyboard: ctrl+hjkl moves its head, ctrl+shift its
+// tail, each holding the other end where it was, as a drag does.
+{
+  const b = opened(plain(0)), c = b.root
+  const world = i => {
+    const n = c.items.get(i), e = b.store.lineEnds(n)
+    return [n.ix + e.ax * n.iw, n.iy + e.ay * n.ih, n.ix + e.bx * n.iw, n.iy + e.by * n.ih].map(v => Math.round(v * 1000) / 1000)
+  }
+  c.addItem('arrow', 200, 200)
+  c.selectOnly(0)
+  assert.equal(c.lineInHand(), 0)
+  const [ax, ay, bx, by] = world(0), step = c.worldStep
+  c.moveLineEnd(1, 0, 3)
+  assert.deepEqual(world(0), [ax, ay, bx, by + 3 * step].map(v => Math.round(v * 1000) / 1000), 'the head moves down, the tail stays')
+  c.moveLineEnd(0, -2, 0)
+  assert.deepEqual(world(0), [ax - 2 * step, ay, bx, by + 3 * step].map(v => Math.round(v * 1000) / 1000), 'then the tail moves, the head stays')
+  const steps = b.doc.undoStack.length
+  c.undo()
+  assert.deepEqual(world(0), [ax, ay, bx, by + 3 * step].map(v => Math.round(v * 1000) / 1000), 'each step is one undo')
+  assert.equal(b.doc.undoStack.length, steps - 1)
+  c.addItem('note', 600, 200)
+  c.selectOnly(1)
+  assert.equal(c.lineInHand(), -1, 'a note is resized, not aimed')
+  c.markAll()
+  assert.equal(c.lineInHand(), -1, 'and with more than one in hand, ctrl+hjkl resizes them all')
+}
+console.log('ok — a line is aimed from the keyboard, one end at a time')
+
+// A drag is magnetic: near another item's edge or centre it lines up exactly,
+// shows a guide, and lets go once the pointer is pulled past the pull. Shift
+// (no magnet) and the keyboard move by exactly what they were asked.
+{
+  const b = opened(plain(2)), c = b.root
+  // note 1 at x 0, note 2 at x 300, both 220 wide at y 0.
+  c.selectOnly(1)
+  c.beginPointerEdit()
+  c.moveTargets(-77, 40, true)
+  assert.equal(c.items.get(1).ix, 220, 'its left edge meets the other one\'s right')
+  c.moveTargets(0, -37, true)
+  assert.equal(c.items.get(1).iy, 0, 'tops meet when nearly level')
+  assert.equal(c.guides.length, 2, 'guides for both axes')
+  c.moveTargets(0, 30, true)
+  assert.ok(c.items.get(1).iy > 20, 'and it lets go when pulled further')
+  c.finishPointerEdit(false); b.land()
+  assert.equal(c.guides.length, 0, 'guides go when the drag ends')
+  const y = c.items.get(1).iy
+  c.beginPointerEdit()
+  c.moveTargets(0, -y + 3)
+  assert.equal(c.items.get(1).iy, 3, 'without the magnet it goes where it is put')
+  c.finishPointerEdit(false); b.land()
+}
+console.log('ok — a dragged item lines up with its neighbours and lets go again')
+
+// An arrow's end stepped onto a box is glued to the box's edge: it follows the
+// box as it moves or grows, is saved, copied and undone with it, and lets go
+// when the arrow is moved on its own or the box is deleted.
+{
+  const b = opened(plain(0)), c = b.root, S = b.store
+  const head = i => { const n = c.items.get(i), e = S.lineEnds(n); return [n.ix + e.bx * n.iw, n.iy + e.by * n.ih].map(v => Math.round(v * 100) / 100) }
+  c.addItem('arrow', 200, 200)
+  c.addItem('rect', 600, 200)
+  const box = () => c.items.get(1)
+  c.selectOnly(0)
+  for (let i = 0; i < 40 && !c.items.get(0).bon; i++) c.moveLineEnd(1, 1, 0)
+  assert.equal(c.items.get(0).bon, box().iid, 'the head is glued to the box')
+  assert.deepEqual(head(0), [box().ix, box().iy + box().ih / 2], 'on the middle of its left side')
+
+  c.selectOnly(1)
+  c.nudgeSelected(2, 1)
+  assert.deepEqual(head(0), [box().ix, box().iy + box().ih / 2], 'the box moved; the head went with it')
+  c.resizeSelected(0, 2)
+  assert.deepEqual(head(0), [box().ix, box().iy + box().ih / 2], 'and stays on the side as it grows')
+
+  b.land()
+  const file = written(b)
+  assert.deepEqual(file.items[0].to, { id: box().iid, x: 0, y: 0.5 }, 'the glue is written with the line')
+  const again = opened(JSON.stringify(file))
+  assert.equal(again.items.get(0).bon, box().iid, 'and read back')
+
+  c.markAll()
+  c.duplicateTargets()
+  const copyLine = c.items.get(2), copyBox = c.items.get(3)
+  assert.equal(copyLine.bon, copyBox.iid, 'a copy of both is glued copy to copy')
+  c.undo()
+  assert.equal(c.items.count, 2)
+
+  c.selectOnly(1)
+  c.removeTargets()
+  assert.equal(c.items.get(0).bon, 0, 'deleting the box lets go')
+  c.undo()
+  assert.equal(c.items.get(0).bon, box().iid, 'undo glues it back')
+
+  c.selectOnly(0)
+  c.nudgeSelected(0, 1)
+  assert.equal(c.items.get(0).bon, 0, 'the arrow moved on its own comes away')
+  c.selectOnly(1)
+  c.nudgeSelected(1, 0)
+  assert.equal(c.items.get(0).bon, 0, 'and no longer follows')
+
+  // A glue to something that is not there, to a line or to itself is dropped.
+  const odd = JSON.stringify({ kind: 'omarchyform.board', version: 8, nextId: 4, links: [], items: [
+    { id: 1, kind: 'arrow', x: 0, y: 0, w: 100, h: 24, ax: 0, ay: 0.5, bx: 1, by: 0.5, from: { id: 1, x: 0, y: 0 }, to: { id: 9, x: 0, y: 0 } },
+    { id: 2, kind: 'line', x: 0, y: 100, w: 100, h: 24, ax: 0, ay: 0.5, bx: 1, by: 0.5, to: { id: 1, x: 0, y: 0 } }] })
+  const o = opened(odd)
+  assert.deepEqual([o.items.get(0).aon, o.items.get(0).bon, o.items.get(1).bon], [0, 0, 0])
+}
+console.log('ok — an arrow glued to a box follows it, and lets go when it should')

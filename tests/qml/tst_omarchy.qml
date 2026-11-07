@@ -163,7 +163,7 @@ ShellRoot {
         test.stage = 41
         test.switchedAt = test.ticks
       } else if (test.stage === 41 && test.ticks > test.switchedAt + 5) {
-        test.key("n")
+        test.key("q")
         test.stage = 42
       } else if (test.stage === 42 && plugin.activePane.items.count === 3 && plugin.activePane.editIndex === 2) {
         test.key("a")
@@ -477,7 +477,7 @@ ShellRoot {
         var left = plugin.panes[0].activeBoard, right = plugin.panes[1].activeBoard
         test.check(plugin.squeezed || (left.visible && right.visible && right.x >= left.width),
                    "the two boards sit side by side: " + left.width + " and " + right.width + " at " + right.x)
-        test.key("n")
+        test.key("q")
         test.stage = 32
       } else if (test.stage === 32 && plugin.panes[1].editIndex === 1) {
         test.check(plugin.panes[0].items.count === 2, "a note made in one pane is on the board the other shows")
@@ -499,7 +499,7 @@ ShellRoot {
         test.stage = 37
       } else if (test.stage === 37 && plugin.layout === "stacked") {
         test.check(plugin.activePane === plugin.panes[0], "turning the split keeps the keyboard where it was")
-        test.key("w")
+        test.key("F11")
         test.switchedAt = test.ticks
         test.stage = 38
       } else if (test.stage === 38 && !plugin.windowMode && plugin.panes[0].activeBoard

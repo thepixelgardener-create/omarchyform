@@ -62,6 +62,9 @@ Item {
   // Ids of the items marked alongside the cursor. Ids rather than indices,
   // because a delete renumbers indices and a mark must survive that.
   property var markedIds: []
+  // Where a drag has lined something up with something else, in world
+  // coordinates: [{x1, y1, x2, y2}]. Drawn by the board while the drag lasts.
+  property var guides: []
   // A lookup beside the list rather than a scan through it. isMarked is a
   // binding on every delegate, so marking the board used to ask n x m
   // questions before the next frame could start — a thousand items marked
@@ -590,6 +593,7 @@ Item {
   function discardPointerEdit() {
     var edit = root.pointerEdit
     root.pointerEdit = null
+    root.guides = []
     if (edit && edit.doc.pointerOwner === root) edit.doc.pointerOwner = null
   }
 
@@ -606,6 +610,7 @@ Item {
   function finishPointerEdit(cancel) {
     var edit = root.pointerEdit
     root.pointerEdit = null
+    root.guides = []
     if (!edit || edit.doc.pointerOwner !== root) return
     edit.doc.pointerOwner = null
     if (edit.doc !== root.doc || edit.token !== edit.doc.loadSerial) return
@@ -679,12 +684,12 @@ Item {
     var w = Store.clampSize(initial.width === undefined ? (kind === "note" ? 180 : 160) : initial.width)
     var h = Store.clampSize(initial.height === undefined ? (Store.isLine(kind) ? 60 : kind === "note" ? 140 : 110) : initial.height)
     var taken = Store.newIds(root.items, root.doc.nextId, 1)
-    root.items.append({
+    root.items.append(Object.assign({
       iid: taken.ids[0], kind: kind, lax: 0.08, lay: 0.5, lbx: 0.92, lby: 0.5,
       ix: Store.clampCoord(wx - w / 2), iy: Store.clampCoord(wy - h / 2), iw: w, ih: h,
       itint: Store.TINTS[root.doc.nextColor % Store.TINTS.length],
       itext: initial.text || "", ipinned: false, isrc: initial.src || "", itexture: "plain"
-    })
+    }, Store.noGlue()))
     root.doc.nextId = taken.next
     root.doc.nextColor += 1
     root.selectedIndex = root.items.count - 1
@@ -1022,10 +1027,14 @@ Item {
 
   function applyMoves(moves) {
     root.pushUndo()
+    var moved = []
     for (var i = 0; i < moves.length; i++) {
       root.items.setProperty(moves[i].index, "ix", moves[i].x)
       root.items.setProperty(moves[i].index, "iy", moves[i].y)
+      moved.push(moves[i].index)
     }
+    Store.unglueMoved(root.items, moved)
+    Store.followGlue(root.items)
     root.save()
     root.repaintLinks()
   }
@@ -1063,9 +1072,18 @@ Item {
       root.items.append({
         iid: id, kind: n.kind, lax: Store.lineEnds(n).ax, lay: Store.lineEnds(n).ay, lbx: Store.lineEnds(n).bx, lby: Store.lineEnds(n).by,
         ix: Store.clampCoord(n.ix + Store.DUPLICATE_OFFSET), iy: Store.clampCoord(n.iy + Store.DUPLICATE_OFFSET),
-        iw: n.iw, ih: n.ih, itint: n.itint, itext: n.itext, ipinned: false, isrc: n.isrc, itexture: Store.normalizeTexture(n.itexture)
+        iw: n.iw, ih: n.ih, itint: n.itint, itext: n.itext, ipinned: false, isrc: n.isrc, itexture: Store.normalizeTexture(n.itexture),
+        aon: n.aon || 0, aonx: Store.lineUnit(n.aonx, 0.5), aony: Store.lineUnit(n.aony, 0.5),
+        bon: n.bon || 0, bonx: Store.lineUnit(n.bonx, 0.5), bony: Store.lineUnit(n.bony, 0.5)
       })
       fresh.push(id)
+    }
+    // A copied line stays glued only to copies: glued to an original, it
+    // would be pulled back over the line it was copied from.
+    for (var g = root.items.count - fresh.length; g < root.items.count; g++) {
+      var copy = root.items.get(g)
+      if (copy.aon) root.items.setProperty(g, "aon", byOriginal[copy.aon] !== undefined ? byOriginal[copy.aon] : 0)
+      if (copy.bon) root.items.setProperty(g, "bon", byOriginal[copy.bon] !== undefined ? byOriginal[copy.bon] : 0)
     }
     // A connector is copied only when both of its ends were: half of one would
     // have to guess which original it still joins.
@@ -1084,6 +1102,10 @@ Item {
   function removeAt(indices) {
     if (indices.length === 0) return
     root.pushUndo()
+    // A line glued to something deleted stays where it is, unglued.
+    var gone = ({})
+    for (var r = 0; r < indices.length; r++) gone[root.items.get(indices[r]).iid] = true
+    Store.unglueFrom(root.items, gone)
     for (var k = 0; k < indices.length; k++) {
       var id = root.items.get(indices[k]).iid
       root.items.remove(indices[k])
@@ -1266,10 +1288,31 @@ Item {
     root.focusKeys()
   }
 
-  function moveTargets(dx, dy) {
+  // `magnetic` is a pointer drag that lines up with other items when it comes
+  // near. The pointer's whole travel since the drag began is what is snapped,
+  // not each step of it, so an item lets go again once the pointer is pulled
+  // past the pull, rather than creeping.
+  function moveTargets(dx, dy, magnetic) {
     if (!root.canEdit) return
     var t = root.targets()
     var model = root.items
+    if (magnetic && root.pointerEdit && t.length > 0) {
+      var edit = root.pointerEdit
+      if (!edit.drag) {
+        var box = null
+        for (var k = 0; k < t.length; k++) {
+          var b = Store.alignBox(model.get(t[k]))
+          box = box ? { left: Math.min(box.left, b.left), top: Math.min(box.top, b.top),
+                        right: Math.max(box.right, b.right), bottom: Math.max(box.bottom, b.bottom) } : b
+        }
+        edit.drag = { x0: model.get(t[0]).ix, y0: model.get(t[0]).iy, box: box }
+      }
+      var curX = model.get(t[0]).ix - edit.drag.x0, curY = model.get(t[0]).iy - edit.drag.y0
+      var want = Store.magneticMove(model, t, edit.drag.box, curX + dx, curY + dy, 8 / root.zoom)
+      dx = want.dx - curX
+      dy = want.dy - curY
+      root.guides = want.guides
+    } else if (root.guides.length > 0) root.guides = []
     var move = Store.boundedMove(model, t, dx, dy)
     root.batching = true
     try {
@@ -1277,6 +1320,12 @@ Item {
         var n = model.get(t[i])
         model.setProperty(t[i], "ix", n.ix + move.dx)
         model.setProperty(t[i], "iy", n.iy + move.dy)
+      }
+      // A line moved without what it is glued to comes away from it; a line
+      // glued to something that moved goes with it.
+      if (move.dx !== 0 || move.dy !== 0) {
+        Store.unglueMoved(model, t)
+        Store.followGlue(model)
       }
     } finally { root.batching = false }
     root.repaintLinks()
@@ -1293,6 +1342,7 @@ Item {
         model.setProperty(t[i], "iw", Store.clampSize(n.iw + dx))
         model.setProperty(t[i], "ih", Store.clampSize(n.ih + dy))
       }
+      Store.followGlue(model)
     } finally { root.batching = false }
     root.repaintLinks()
   }
@@ -1360,6 +1410,42 @@ Item {
     root.pushUndo()
     root.resizeTargets(dx * root.worldStep, dy * root.worldStep)
     root.centerOnSelected()
+    root.scheduleSave()
+  }
+
+  // The one line the keyboard would aim, or -1. Stretching a line's box keeps
+  // its slope, so a line made with t stayed level until the mouse moved an
+  // end. With a single line in hand, ctrl+hjkl moves its head instead.
+  function lineInHand() {
+    var t = root.targets()
+    return t.length === 1 && Store.isLine(root.items.get(t[0]).kind) ? t[0] : -1
+  }
+
+  // One end moves a step; the other stays where it is, as when dragging.
+  // end 0 is the tail, 1 the head (where an arrow points).
+  function moveLineEnd(end, dx, dy) {
+    if (!root.canEdit) return
+    var at = root.lineInHand()
+    if (at < 0) return
+    var n = root.items.get(at), e = Store.lineEnds(n)
+    var x = n.ix + (end === 0 ? e.ax : e.bx) * n.iw + dx * root.worldStep
+    var y = n.iy + (end === 0 ? e.ay : e.by) * n.ih + dy * root.worldStep
+    // Stepped onto an item, the end glues to its outline, as when dropped.
+    var other = { x: n.ix + (end === 0 ? e.bx : e.ax) * n.iw, y: n.iy + (end === 0 ? e.by : e.ay) * n.ih }
+    var glue = Store.glueAt(root.items, x, y, at, 0, other)
+    if (glue) { x = glue.px; y = glue.py }
+    var values = Store.movedLineEnd(n, end, x, y)
+    var role0 = end === 0 ? "aon" : "bon"
+    values[role0] = glue ? glue.id : 0
+    values[role0 + "x"] = glue ? glue.x : Store.lineUnit(n[role0 + "x"], 0.5)
+    values[role0 + "y"] = glue ? glue.y : Store.lineUnit(n[role0 + "y"], 0.5)
+    var changed = false
+    for (var role in values) if (Math.abs(values[role] - (n[role] || 0)) > 1e-9) { changed = true; break }
+    if (!changed) return
+    root.pushUndo()
+    for (var key in values) root.items.setProperty(at, key, values[key])
+    root.centerOnSelected()
+    root.repaintLinks()
     root.scheduleSave()
   }
 

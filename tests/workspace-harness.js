@@ -117,7 +117,7 @@ function makeDocument(workspace, board, Store) {
 // One view, with the camera, selection and modes the QML pane starts with.
 function makePane(workspace, exchange, Store) {
   const root = { workspace, doc: null, selectedIndex: -1, editIndex: -1, linkingFrom: -1, cursorId: -1,
-    camX: 0, camY: 0, zoom: 1, activeBoard: null, markedIds: [], showPinned: false, arranging: false,
+    camX: 0, camY: 0, zoom: 1, activeBoard: null, markedIds: [], guides: [], showPinned: false, arranging: false,
     finding: false, findQuery: '', findCount: 0, imageQueue: [], leaving: false,
     menuVisible: false, zoomMenuVisible: false, menuIndex: 0, helpVisible: false,
     paletteVisible: false, paletteQuery: '', paletteIndex: 0, paletteRows: 9, paletteGroup: '',

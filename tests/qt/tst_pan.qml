@@ -433,6 +433,21 @@ TestCase {
     verify(plain.indexOf("esc") >= 0, "and how to get out of it")
   }
 
+  // Holding ctrl puts ctrl's chords in the bar, and letting go puts the
+  // board's own keys back. (A chord while it is held cannot be tested here:
+  // QtTest presses and lets go of the modifier itself around the key.)
+  function test_holdingCtrlShowsWhatCtrlDoes() {
+    surface.focusKeys()
+    wait(0)
+    var line = findChild(surface, "board-status")
+    verify(line.Accessible.name.indexOf("q note") === 0, "the board's keys first: " + line.Accessible.name)
+    keyPress(Qt.Key_Control, Qt.ControlModifier)
+    verify(line.Accessible.name.indexOf("z undo") === 0, "ctrl's while it is held: " + line.Accessible.name)
+    verify(line.text.indexOf("ctrl") >= 0, "and says they are ctrl's")
+    keyRelease(Qt.Key_Control, Qt.NoModifier)
+    verify(line.Accessible.name.indexOf("q note") === 0, "and the board's again once it is let go")
+  }
+
   // A flash says what just happened; the connector line says what is about to.
   // They shared one line and the flash won, so removing a connector and then
   // starting another gesture inside the two and a half seconds the message

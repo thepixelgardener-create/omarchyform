@@ -18,8 +18,10 @@ TestCase {
     property int selectedIndex: -1
     property int editIndex: -1
     property int linkingFrom: -1
+    property var guides: []
     property int minItemSize: 60
     property color itemFill: "#222222"
+    property color itemStroke: "#999999"
     // Shaped like BoardPalette.qml, because a node cannot tell the difference
     // between this and the real one. tests/contract.js checks that every token
     // a node reads is declared in both.
@@ -38,7 +40,7 @@ TestCase {
                                              urgent: "#ff5555", muted: "#888888" })
       function sp(n) { return n }
       function tintFill(tint, strong) { return ctl.itemFill }
-      function tintBorder(tint, strong) { return "#999999" }
+      function tintBorder(tint, strong) { return ctl.itemStroke }
     }
     property int undoCount: 0
     property int saveCount: 0
@@ -95,7 +97,7 @@ TestCase {
     function removeItem(index) { model.remove(index) }
     ListModel {
       id: model
-      ListElement { lax: 0.08; lay: 0.5; lbx: 0.92; lby: 0.5; ix: 100; iy: 100; iw: 180; ih: 140; itext: ""; itexture: "plain" }
+      ListElement { lax: 0.08; lay: 0.5; lbx: 0.92; lby: 0.5; aon: 0; aonx: 0.5; aony: 0.5; bon: 0; bonx: 0.5; bony: 0.5; ix: 100; iy: 100; iw: 180; ih: 140; itext: ""; itexture: "plain" }
     }
   }
   property int backgroundDoubleClicks: 0
@@ -151,6 +153,7 @@ TestCase {
     ctl.camY = 0
     ctl.zoom = 1
     ctl.itemFill = "#222222"
+    ctl.itemStroke = "#999999"
     ctl.canEdit = true
     ctl.selectedIndex = -1
     ctl.editIndex = -1
@@ -163,8 +166,58 @@ TestCase {
     backgroundMiddlePresses = 0
     model.set(0, {ix:100, iy:100, iw:180, ih:140, itext:"", itexture:"plain"})
   }
-  // Choosing the far end of a connector: a click picks the item, and neither
-  // drags it nor starts typing in it.
+  // An arrow is one filled outline: its head is solid, and a translucent
+  // colour is laid down once over shaft and head alike. The bright knot the
+  // old tip showed came from the GPU blending overlapping strokes, which this
+  // software renderer never does; tests/suite.js holds the arrow to a single
+  // closed outline for that.
+  function test_arrowHeadIsSolidAndPaintedOnce() {
+    subject.kind = "arrow"
+    ctl.itemStroke = Qt.rgba(0.6, 0.6, 0.6, 0.5)
+    model.setProperty(0, "lax", 0.08)
+    model.setProperty(0, "lay", 0.5)
+    model.setProperty(0, "lbx", 0.92)
+    model.setProperty(0, "lby", 0.5)
+    verify(waitForRendering(subject))
+    var shot = grabImage(subject), head = Store.arrowHead(ctl.theme.borderWidth)
+    // Half-strength grey over the white window is 0.8 laid once, 0.7 twice.
+    var twice = 0
+    for (var x = 0; x < subject.width; x++)
+      for (var y = 0; y < subject.height; y++)
+        if (shot.pixel(x, y).r < 0.78) twice++
+    compare(twice, 0)
+    // A third of the way from the head's base, beside the shaft: inside a
+    // filled head, and in the empty middle of a stroked chevron.
+    var along = 0.92 * subject.width - head.length * 2 / 3
+    var across = (head.stroke / 2 + head.wing * 2 / 3) / 2
+    fuzzyCompare(shot.pixel(Math.floor(along), Math.floor(0.5 * subject.height + across)).r, 0.8, 0.02)
+  }
+  // A selected line shows a handle at each end and no box or band: nothing
+  // in accent beside the line, only at its two ends.
+  function test_selectedLineHasHandlesAndNoBox() {
+    subject.kind = "line"
+    model.setProperty(0, "lax", 0.1)
+    model.setProperty(0, "lay", 0.9)
+    model.setProperty(0, "lbx", 0.9)
+    model.setProperty(0, "lby", 0.1)
+    ctl.selectedIndex = 0
+    verify(waitForRendering(test))
+    var shot = grabImage(test), at = subject.mapToItem(test, 0, 0)
+    function accent(x, y) {
+      var c = shot.pixel(Math.floor(at.x + x), Math.floor(at.y + y))
+      return c.r < 0.3 && c.g > 0.8 && c.b > 0.8
+    }
+    verify(!accent(-3, subject.height / 2), "no box edge beside the line's box")
+    verify(!accent(subject.width / 2, -3), "no box edge above the line's box")
+    var dx = 0.8 * subject.width, dy = -0.8 * subject.height, length = Math.sqrt(dx * dx + dy * dy)
+    var hits = 0
+    for (var d = 2; d < 20; d += 0.5) {
+      if (accent(subject.width / 2 - dy / length * d, subject.height / 2 + dx / length * d)) hits++
+      if (accent(subject.width / 2 + dy / length * d, subject.height / 2 - dx / length * d)) hits++
+    }
+    compare(hits, 0, "no band runs beside the line")
+    verify(findChild(subject, "line-end-0") !== null && findChild(subject, "line-end-1") !== null, "a handle at each end")
+  }
   function test_lineStylesRenderDifferentlyWithoutABox() {
     model.setProperty(0, "lax", 0.08)
     model.setProperty(0, "lay", 0.5)
@@ -215,6 +268,52 @@ TestCase {
     subject.kind = "dashed-line"
     verify(findChild(subject, "line-shape").active)
   }
+  // The head's handle sits past the tip, not on it, and taking it without
+  // moving leaves the end where it was rather than snapping it to the pointer.
+  function test_lineHandleClearsTheTipAndDoesNotJump() {
+    subject.kind = "arrow"
+    model.setProperty(0, "lax", 0.08)
+    model.setProperty(0, "lay", 0.5)
+    model.setProperty(0, "lbx", 0.92)
+    model.setProperty(0, "lby", 0.5)
+    ctl.selectedIndex = 0
+    wait(10)
+    var end = findChild(subject, "line-end-1")
+    var tip = 0.92 * subject.width
+    verify(end.x + end.width / 2 > tip + 5, "the handle is beyond the tip")
+    var before = model.get(0).ix + subject.lineEnds.bx * model.get(0).iw
+    mousePress(end, 4, 9, Qt.LeftButton)
+    mouseMove(end, 5, 9, 20, Qt.LeftButton)
+    mouseRelease(end, 5, 9, Qt.LeftButton)
+    fuzzyCompare(model.get(0).ix + subject.lineEnds.bx * model.get(0).iw, before + 1, 0.5)
+  }
+  // Dragged nearly level, an arrow lies exactly level; with shift held, it
+  // keeps the slight slope it was given.
+  function test_lineEndSnapsLevelUnlessShifted() {
+    subject.kind = "arrow"
+    model.setProperty(0, "lax", 0.08)
+    model.setProperty(0, "lay", 0.5)
+    model.setProperty(0, "lbx", 0.92)
+    model.setProperty(0, "lby", 0.5)
+    ctl.selectedIndex = 0
+    wait(10)
+    var end = findChild(subject, "line-end-1")
+    function world() {
+      var n = model.get(0), e = subject.lineEnds
+      return { ay: n.iy + e.ay * n.ih, by: n.iy + e.by * n.ih }
+    }
+    mousePress(end, 9, 9, Qt.LeftButton)
+    mouseMove(end, 40, 15, 20, Qt.LeftButton)
+    mouseRelease(end, 40, 15, Qt.LeftButton)
+    fuzzyCompare(world().by, world().ay, 0.01)
+    end = findChild(subject, "line-end-1")
+    mousePress(end, 9, 9, Qt.LeftButton, Qt.ShiftModifier)
+    mouseMove(end, 40, 15, 20, Qt.LeftButton, Qt.ShiftModifier)
+    mouseRelease(end, 40, 15, Qt.LeftButton, Qt.ShiftModifier)
+    verify(world().by - world().ay > 4, "shift keeps the slope")
+  }
+  // Choosing the far end of a connector: a click picks the item, and neither
+  // drags it nor starts typing in it.
   function test_linkTargetDoesNotDragOrEdit() {
     ctl.linkingFrom = 2
     mousePress(test, 140, 140, Qt.LeftButton)

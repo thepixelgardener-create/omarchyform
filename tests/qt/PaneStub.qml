@@ -38,6 +38,7 @@ Item {
   property int selectedIndex: -1
   property int editIndex: -1
   property int linkingFrom: -1
+  property var guides: []
   property string linkOutcome: "none"
   property var markedRect: null
   property int undoCount: 0
@@ -238,6 +239,8 @@ Item {
   function repaintLinks() {}
   function resetView() {}
   function resizeSelected(dx, dy) {}
+  function lineInHand() { return -1 }
+  function moveLineEnd(end, dx, dy) {}
   function runMenu(index) {}
   function selectNext(step) {}
   function toggleHelp() {}

@@ -335,6 +335,104 @@ ShellRoot {
         plugin.activePane.repaintGrid()
         plugin.activePane.repaintLinks()
       }
+    },
+    {
+      // Every line style, one of them selected so its endpoint handles show.
+      // Arrowheads are judged here because this is the renderer the board
+      // draws with: the Qt suite runs on the software one, which fills a
+      // stroke once wherever it overlaps itself, so a translucent arrow that
+      // knots at the tip on screen looks clean there.
+      name: "14-lines",
+      setup: function () {
+        var p = plugin.activePane
+        p.selectedIndex = -1
+        p.markedIds = []
+        p.items.clear()
+        p.links.clear()
+        for (var i = 0; i < Store.LINE_KINDS.length; i++)
+          p.addItem(Store.LINE_KINDS[i], 300, 140 + i * 110, { width: 360, height: 80 })
+        p.addItem("arrow", 720, 300, { width: 240, height: 240 })
+        p.items.setProperty(4, "lax", 0.1)
+        p.items.setProperty(4, "lay", 0.9)
+        p.items.setProperty(4, "lbx", 0.9)
+        p.items.setProperty(4, "lby", 0.1)
+        // The cursor on the diagonal, a mark on the double arrow: both weights
+        // of ring, and the handles over both kinds of end.
+        p.selectOnly(4)
+        p.markedIds = [p.items.get(2).iid]
+        p.fitToItems()
+      }
+    },
+    {
+      // At the most the board will zoom, on the diagonal arrow: where
+      // overlapping strokes showed as a brighter knot at the tip and the head
+      // looked stuck on. Centred on its middle, so the tail is in view too.
+      name: "14b-arrow-close",
+      setup: function () {
+        var p = plugin.activePane
+        p.markedIds = []
+        p.selectedIndex = -1
+        // Short enough that both ends fit at 400% in a half-height window.
+        p.items.setProperty(4, "iw", 80)
+        p.items.setProperty(4, "ih", 80)
+        var n = p.items.get(4)
+        var midX = p.toScreenX(n.ix + (n.lax + n.lbx) / 2 * n.iw)
+        var midY = p.toScreenY(n.iy + (n.lay + n.lby) / 2 * n.ih)
+        p.zoomAt(midX, midY, 4 / p.zoom)
+        p.panBy(p.viewW / 2 - midX, p.viewH / 2 - midY)
+        p.repaintGrid()
+      }
+    },
+    { name: "14c-arrow-close-selected", setup: function () { plugin.activePane.selectedIndex = 4 } },
+    {
+      // Part-way through a drag: the plain line pulled up under the diagonal
+      // arrow, held by the magnet where its nearest pairing lines up exactly
+      // (the line's middle under the arrow's head), with the guide drawn.
+      name: "14d-magnetic",
+      setup: function () {
+        var p = plugin.activePane
+        p.resetView()
+        p.items.setProperty(4, "iw", 200)
+        p.items.setProperty(4, "ih", 200)
+        p.selectOnly(0)
+        var mine = Store.alignBox(p.items.get(0)), theirs = Store.alignBox(p.items.get(4))
+        p.beginPointerEdit()
+        p.moveTargets(theirs.left + 5 - mine.left, theirs.bottom + 60 - mine.top, true)
+        p.repaintGrid()
+      }
+    },
+    {
+      // An arrow glued from a box to an ellipse, after the box was pushed down
+      // and to the left: the arrow went with it, still on both outlines.
+      name: "14e-glued",
+      setup: function () {
+        var p = plugin.activePane
+        p.finishPointerEdit(true)
+        p.resetView()
+        var cx = p.toWorldX(p.viewW / 2), cy = p.toWorldY(p.viewH / 2)
+        p.addItem("rect", cx - 260, cy - 80); p.stopEditing()
+        var box = p.items.count - 1
+        p.addItem("ellipse", cx + 220, cy - 40); p.stopEditing()
+        var ellipse = p.items.count - 1
+        p.items.setProperty(1, "aon", p.items.get(box).iid)
+        p.items.setProperty(1, "aonx", 1); p.items.setProperty(1, "aony", 0.5)
+        p.items.setProperty(1, "bon", p.items.get(ellipse).iid)
+        p.items.setProperty(1, "bonx", 0); p.items.setProperty(1, "bony", 0.5)
+        p.selectOnly(box)
+        p.nudgeSelected(-1, 0)
+        p.nudgeSelected(0, 6)
+        p.selectOnly(1)
+        p.repaintGrid()
+      }
+    },
+    {
+      // Ctrl held down with the arrow in hand: the bar says what ctrl does.
+      name: "14f-ctrl-held",
+      setup: function () {
+        var board = plugin.activePane.activeBoard
+        for (var i = 0; i < board.children.length; i++)
+          if (board.children[i].objectName === "board-keys") board.children[i].ctrlHeld = true
+      }
     }
   ]
 
@@ -342,6 +440,7 @@ ShellRoot {
   // is composed for the README picture and has no picture and no background in
   // it. Built rather than photographed: nothing here is judged by eye.
   function buildHeldBoard() {
+    plugin.activePane.finishPointerEdit(true)
     plugin.activePane.endPalette()
     plugin.activePane.conflictVisible = false
     plugin.activePane.helpVisible = false

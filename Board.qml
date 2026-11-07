@@ -481,8 +481,31 @@ FocusScope {
         // stands each item after the one before it, and cannot once that one
         // is a background living in the other layer — so an item brought
         // forward over a board that starts with one stayed where it was.
-        z: index
+        // The line under the cursor comes to the top while it is there: an
+        // end glued to a shape has its handle on the shape, and under the
+        // shape it could be neither seen nor taken.
+        z: index + (board.ctl.selectedIndex === index && Store.isLine(kind) ? Store.MAX_ITEMS : 0)
       }
+    }
+  }
+
+  // Alignment guides while a drag is lined up with another item: hairlines
+  // in screen space, so they stay one pixel wide at any zoom.
+  Repeater {
+    objectName: "align-guides"
+    model: board.ctl.guides
+    delegate: Rectangle {
+      required property var modelData
+      readonly property real sx1: modelData.x1 * board.ctl.zoom + board.ctl.camX
+      readonly property real sy1: modelData.y1 * board.ctl.zoom + board.ctl.camY
+      readonly property real sx2: modelData.x2 * board.ctl.zoom + board.ctl.camX
+      readonly property real sy2: modelData.y2 * board.ctl.zoom + board.ctl.camY
+      x: Math.round(Math.min(sx1, sx2))
+      y: Math.round(Math.min(sy1, sy2))
+      width: Math.max(1, Math.abs(sx2 - sx1))
+      height: Math.max(1, Math.abs(sy2 - sy1))
+      color: board.theme.accent
+      opacity: 0.8
     }
   }
 
@@ -592,9 +615,16 @@ FocusScope {
     // command is one line, and the cheat sheet is the only other place to
     // touch.
     readonly property var commands: ({
-      "n": function () { board.ctl.addRelative("note") },
-      "r": function () { board.ctl.addRelative("rect") },
+      // The top letter row makes things, left to right as a drawing app's
+      // toolbar reads: q w e r t z on the QWERTZ keyboard this was laid out on.
+      // Matched on the character typed, so each layout keeps its own row
+      // letters.
+      "q": function () { board.ctl.addRelative("note") },
+      "w": function () { board.ctl.addRelative("rect") },
       "e": function () { board.ctl.addRelative("ellipse") },
+      "r": function () { board.ctl.addRelative("diamond") },
+      "t": function () { board.ctl.addRelative("line") },
+      "z": function () { board.ctl.addRelative("arrow") },
       "p": function () { board.ctl.togglePin() },
       "P": function () { board.ctl.togglePinnedSelection() },
       "s": function () { board.ctl.cycleKind() },
@@ -605,7 +635,6 @@ FocusScope {
       "i": function () { board.ctl.editSelected() },
       "x": function () { board.ctl.toggleLinking() },
       "X": function () { board.ctl.unlinkSelected() },
-      "w": function () { board.ctl.toggleWindowMode() },
       "v": function () { board.ctl.toggleSplit("side-by-side") },
       "V": function () { board.ctl.toggleSplit("stacked") },
       "o": function () { board.ctl.otherPane() },
@@ -637,7 +666,16 @@ FocusScope {
       return null
     }
 
+    // Held, ctrl turns the bar's hints into what ctrl does: they stay while it
+    // is down, through any chords made with it, and go when it is let go of.
+    property bool ctrlHeld: false
+    onActiveFocusChanged: if (!activeFocus) keys.ctrlHeld = false
+    Keys.onReleased: function (event) { if (event.key === Qt.Key_Control) keys.ctrlHeld = false }
+
     Keys.onPressed: function (event) {
+      if (event.key === Qt.Key_Control) { keys.ctrlHeld = true; return }
+      // A key without ctrl means it was let go of where this could not see.
+      if ((event.modifiers & Qt.ControlModifier) === 0) keys.ctrlHeld = false
       if (board.ctl.pointerEdit) {
         board.ctl.finishPointerEdit(true)
         // Escape cancels this gesture only; it must not also dismiss the board.
@@ -733,8 +771,11 @@ FocusScope {
 
       if (ctrl) {
         // Ctrl plus a movement key resizes, the same way Shift plus one moves.
+        // A line has no size to pull, so it aims instead: ctrl moves the
+        // head, ctrl+shift the tail.
         var rd = keys.direction(event.key, "")
-        if (rd) board.ctl.resizeSelected(rd[0], rd[1])
+        if (rd && board.ctl.lineInHand() >= 0) board.ctl.moveLineEnd(shift ? 0 : 1, rd[0], rd[1])
+        else if (rd) board.ctl.resizeSelected(rd[0], rd[1])
         else if (event.key === Qt.Key_R) board.ctl.redo()
         else if (event.key === Qt.Key_Z) shift ? board.ctl.redo() : board.ctl.undo()
         else if (event.key === Qt.Key_S && shift) board.ctl.exportBoard()
@@ -762,6 +803,8 @@ FocusScope {
 
       if (event.key === Qt.Key_Escape) board.ctl.back()
       else if (event.key === Qt.Key_F2) board.ctl.renameBoard()
+      // Off w, which the top row of making keys took; F11 is fullscreen elsewhere.
+      else if (event.key === Qt.Key_F11) board.ctl.toggleWindowMode()
       else if (event.key === Qt.Key_F1) board.ctl.toggleHelp()
       else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) board.ctl.editSelected()
       else if (event.key === Qt.Key_Tab) board.ctl.selectNext(1)
@@ -1082,6 +1125,12 @@ FocusScope {
     // keyboard is escaped on the way: this is the one place on the board that
     // renders tags, and a board is a file other people can send you.
     textFormat: Text.StyledText
+    // The hints are icons on screen; a screen reader gets their words.
+    Accessible.role: Accessible.StaticText
+    Accessible.name: status.tier === "hints" ? Store.hintWords(status.hints) : status.text
+    // The bar's hints, or ctrl's while it is held.
+    readonly property var hints: keys.ctrlHeld
+      ? Store.ctrlHints(keys.ctrlHeld && board.ctl.lineInHand() >= 0) : Store.BOARD_HINTS
     // Which of the things wanting this line gets it is decided in BoardStore,
     // by the same call the controller makes to know whether a failure is on
     // screen and its time is running. Here it is only joined and coloured.
@@ -1124,7 +1173,8 @@ FocusScope {
       // The other pane is still there when the window is too small to show
       // it, and the line says how to reach it rather than leave it forgotten.
       : (board.ctl.squeezed ? Store.hintMarkup("o", "the other pane", board.ctl.accentMarkup) + " \u00b7 " : "")
-        + Store.hintLine(Store.BOARD_HINTS, board.ctl.accentMarkup)
+        + (keys.ctrlHeld ? Store.keyMarkup("ctrl", board.ctl.accentMarkup) + "&nbsp;+&nbsp;&nbsp;" : "")
+        + Store.iconHintLine(status.hints, board.ctl.accentMarkup)
   }
 
   // Which of two panes the keys go to: the accent round its edge, the way the
