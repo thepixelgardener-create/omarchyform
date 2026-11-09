@@ -2091,7 +2091,8 @@ function tests(S) {
     for (const [key, label] of S.BOARD_HINTS) {
       eq(typeof S.HINT_GLYPHS[label], "string", label + " has an icon")
       eq(S.HINT_GLYPHS[label].length, 2, label + " is one glyph from the Nerd Font's private area")
-      ok(line.includes(S.HINT_GLYPHS[label] + "\u00a0" + '<font color="#ff0000">' + S.escapeMarkup(key) + "</font>"), label + " is drawn")
+      ok(line.includes('<font size="+1">' + S.HINT_GLYPHS[label] + "</font>\u00a0" + '<font color="#ff0000">' + S.escapeMarkup(key) + "</font>"),
+         label + " is drawn, its icon a step over the text")
       ok(!line.includes(label), label + " is not spelled out on screen")
     }
     eq(new Set(Object.values(S.HINT_GLYPHS)).size, Object.keys(S.HINT_GLYPHS).length, "no two icons alike")

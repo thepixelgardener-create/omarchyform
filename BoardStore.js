@@ -642,13 +642,16 @@ Object.assign(HINT_GLYPHS, {
   "aim head": String.fromCodePoint(0xF0615)
 })
 
-// Icon, then the key in the accent. Between hints, three &nbsp; entities:
+// Icon, a step larger than the text so it reads beside the key (StyledText's
+// size="+1" is relative, about 1.2 times, so it follows the theme's text
+// size), then the key in the accent. Between hints, three &nbsp; entities:
 // StyledText collapses spaces, no-break and en spaces included, to one; the
 // entity is kept. A dot between icons would be noise.
 function iconHintLine(hints, color) {
   var out = []
   for (var i = 0; i < hints.length; i++)
-    out.push(escapeMarkup(HINT_GLYPHS[hints[i][1]] || hints[i][1]) + "\u00a0" + keyMarkup(hints[i][0], color))
+    out.push('<font size="+1">' + escapeMarkup(HINT_GLYPHS[hints[i][1]] || hints[i][1]) + "</font>\u00a0" +
+             keyMarkup(hints[i][0], color))
   return out.join("&nbsp;&nbsp;&nbsp;")
 }
 function hintWords(hints) {

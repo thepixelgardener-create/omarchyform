@@ -10,6 +10,8 @@ since older boards are migrated on load rather than rejected.
 - Hold `ctrl` and the bar shows the ctrl shortcuts, icon and key each (undo,
   redo, copy, paste, duplicate, save, PNG, new board, import, commands, and
   resize or aim); let go and the usual hints come back.
+- The bar's icons are a step larger: the hint icons, the save mark, and the
+  fit and menu buttons.
 - Arrows and lines glue to shapes: drop either end on a note, box, ellipse,
   diamond or picture and it sticks to that item's edge, following it as it
   moves or is resized. Copies of both stay glued copy to copy; moving the line

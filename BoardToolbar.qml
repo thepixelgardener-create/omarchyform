@@ -8,6 +8,9 @@ Rectangle {
   id: toolbar
   required property var ctl
   readonly property var theme: toolbar.ctl.theme
+  // The bar's icons, a step over the title beside them so a glyph reads as
+  // clearly as the word it stands for.
+  readonly property int iconSize: Math.round(theme.fontSubtitle * 1.2)
   // Solid, as the shell's bar is. It was the bar colour at 0.92, and the text of
   // a note passing under the header read through it, text over text.
   color: Qt.rgba(theme.barBackground.r, theme.barBackground.g, theme.barBackground.b, 1)
@@ -95,7 +98,7 @@ Rectangle {
           color: saveMark.mark === "failed" || saveMark.mark === "readonly" ? toolbar.theme.urgent
             : saveMark.mark === "unsaved" ? toolbar.theme.accent : toolbar.theme.barForeground
           font.family: toolbar.theme.fontFamily
-          font.pixelSize: saveMark.mark === "opening" ? toolbar.theme.fontBody : toolbar.theme.fontSubtitle
+          font.pixelSize: saveMark.mark === "opening" ? toolbar.theme.fontBody : toolbar.iconSize
           anchors.verticalCenter: title.verticalCenter
           Accessible.role: Accessible.StaticText
           Accessible.name: toolbar.ctl.boardState
@@ -126,7 +129,7 @@ Rectangle {
             color: toolbar.theme.barForeground
             opacity: 0.85
             font.family: toolbar.theme.fontFamily
-            font.pixelSize: toolbar.theme.fontSubtitle
+            font.pixelSize: toolbar.iconSize
           }
           MouseArea {
             id: zoomMouse
@@ -157,7 +160,7 @@ Rectangle {
             text: Store.MENU_GLYPH
             color: toolbar.ctl.menuVisible ? toolbar.theme.accent : toolbar.theme.barForeground
             font.family: toolbar.theme.fontFamily
-            font.pixelSize: toolbar.theme.fontSubtitle
+            font.pixelSize: toolbar.iconSize
           }
           MouseArea {
             id: menuMouse
