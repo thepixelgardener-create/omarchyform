@@ -118,6 +118,13 @@ That removes the launcher entry, the file type and the `omarchyform-open`
 command, and only the ones this installer wrote and you have not edited since;
 otherwise it says what it found and leaves the file alone.
 
+If you linked the agent skill, take the links away the same way, before the
+folder they point into is gone:
+
+```bash
+~/.config/omarchy/plugins/thepixelgardener.omarchyform/bin/omarchyform skill remove
+```
+
 Then remove the plugin:
 
 ```bash

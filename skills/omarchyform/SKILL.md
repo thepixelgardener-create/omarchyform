@@ -26,7 +26,11 @@ omarchyform inspect <file> [--full]
 omarchyform apply <file> [ops.json|-] [--out FILE] [--dry-run] [--force]
 omarchyform validate <file>
 omarchyform ops
+omarchyform skill [install|remove]
 ```
+
+The program is `bin/omarchyform`, two folders up from this file; it is not on
+the path unless the person put it there.
 
 Boards live in `~/.local/share/omarchyform/boards/`. A board written there
 appears in the board browser (`b` on an open board) under the name of its file
@@ -57,7 +61,7 @@ theme roles and the minimum item size.
 
 ## The full manual
 
-`docs/for-agents.md` in this repository is the long version: the data model,
+`docs/for-agents.md`, two folders up from this file, is the long version: the data model,
 what a board tolerates, how the command line and the keyboard differ about
 connectors, and — the part that decides whether a generated board looks made or
 generated — sizes, spacing, when to use which shape, how much text fits, and

@@ -11,6 +11,7 @@
 //   omarchyform apply <file> [ops.json|-] [--out FILE] [--dry-run] [--force]
 //   omarchyform validate <file>
 //   omarchyform ops
+//   omarchyform skill [install|remove]
 //
 // What it deliberately cannot do is draw: a picture of a board needs the
 // scene, and the scene needs the shell. `ctrl+e` on an open board exports a
@@ -498,7 +499,50 @@ function verbOps(args) {
   })
 }
 
-const VERBS = { new: verbNew, inspect: verbInspect, apply: verbApply, validate: verbValidate, ops: verbOps }
+// The skill beside this program teaches a coding agent these verbs. Omarchy
+// links its own skills into ~/.agents/skills and into each agent's own
+// folder, and this does the same with the same rule: a link is made or
+// replaced, and anything that is not a link is somebody's and is left alone.
+// Only agents that have a folder already get one, so none is made for an
+// agent that was never used.
+const SKILL = path.join(__dirname, "..", "skills", "omarchyform")
+const HOME = process.env.HOME || os.homedir()
+const AGENT_FOLDERS = [".claude/skills", ".codex/skills", ".pi/agent/skills", ".gemini/config/skills", ".hermes/skills"]
+
+function linkOf(file) {
+  try { return fs.lstatSync(file).isSymbolicLink() ? fs.readlinkSync(file) : null } catch { return undefined }
+}
+
+function verbSkill(args) {
+  const action = args[0]
+  if (action !== undefined && action !== "install" && action !== "remove")
+    die(`skill: ${action.startsWith("-") ? "there is no flag " : "nothing more is expected, not "}${action}`, ["install", "remove"])
+  onlyFlags(args.slice(1), "skill", [])
+  if (!fs.existsSync(path.join(SKILL, "SKILL.md"))) die("the skill is not beside this program", SKILL)
+  const shared = path.join(HOME, ".agents/skills")
+  const places = [shared, ...AGENT_FOLDERS.map(folder => path.join(HOME, folder))].map(folder => path.join(folder, "omarchyform"))
+  if (action === undefined)
+    return answer({ ok: true, skill: SKILL, linked: places.filter(place => linkOf(place) === SKILL),
+                    hint: "omarchyform skill install links it for your coding agents; skill remove takes the links away" })
+  const linked = [], removed = [], left = []
+  for (const place of places) {
+    const now = linkOf(place)
+    if (action === "remove") {
+      if (now === SKILL) { fs.unlinkSync(place); removed.push(place) }
+      continue
+    }
+    const folder = path.dirname(place)
+    if (folder !== shared && !fs.existsSync(folder)) continue
+    if (now === null) { left.push({ path: place, why: "it is not a link, so it is not this program's to replace" }); continue }
+    fs.mkdirSync(folder, { recursive: true })
+    if (now !== undefined) fs.unlinkSync(place)
+    fs.symlinkSync(SKILL, place)
+    linked.push(place)
+  }
+  answer(action === "remove" ? { ok: true, removed } : { ok: true, skill: SKILL, linked, left })
+}
+
+const VERBS = { new: verbNew, inspect: verbInspect, apply: verbApply, validate: verbValidate, ops: verbOps, skill: verbSkill }
 
 const argv = process.argv.slice(2)
 const verb = argv.shift()

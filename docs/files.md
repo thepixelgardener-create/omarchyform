@@ -129,7 +129,13 @@ It cannot draw: a picture of a board needs the running shell, so `ctrl+e`
 on an open board exports a PNG and nothing here does.
 
 `skills/omarchyform/SKILL.md` ships alongside it, so a coding agent asked to
-sketch something out as a board can do it without being told any of this, and
+sketch something out as a board can do it without being told any of this.
+`bin/omarchyform skill install` links it into `~/.agents/skills` and into the
+skills folder of each agent you already use (Claude Code, Codex, Pi, Gemini,
+Hermes), the way Omarchy links its own; a skill of that name that is not a
+link is left alone and named in the answer. `skill remove` takes the links
+away, and `skill` alone says where they are. Being links, they follow the
+plugin as it updates, and
 [`docs/for-agents.md`](for-agents.md) is the long version — this same
 program explained to something that drives it through files and will never see
 the screen. Most of it is the part a command list cannot teach: how big a note
