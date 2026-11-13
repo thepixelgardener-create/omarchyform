@@ -374,9 +374,9 @@ function followGlue(items) {
 
 // The ids of the items at `indices`, as a lookup.
 function idsAt(items, indices) {
-  var ids = {}
-  for (var i = 0; i < indices.length; i++) ids[items.get(indices[i]).iid] = true
-  return ids
+  var lookup = {}
+  for (var i = 0; i < indices.length; i++) lookup[items.get(indices[i]).iid] = true
+  return lookup
 }
 
 // Lets go of each end of the line at `i` whose item `release` answers true for.
