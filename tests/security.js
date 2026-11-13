@@ -232,11 +232,15 @@ assert.equal((filesHelper.match(/place_new "\$temporary" "\$images_root\//g) || 
 // checkimages has found it fit: imagePath is the only file URL into the
 // folder, and it answers one only for a picture pictureState has cleared.
 const gate = '    return root.pictureState(name) === "" ? "file://" + root.imagesDir + "/" + name : ""'
+// The command line's picture is drawn in a process of its own, which has the
+// same gate over what the command line had checked before starting it.
+const renderGate = '      return holder.pictureState(name) === "" ? "file://" + render.job.imagesDir + "/" + name : ""'
 function ungatedPictures(sources) {
   const errors = []
   for (const [file, source] of sources)
     source.split('\n').forEach((line, i) => {
-      if (/^\s*\/\//.test(line) || (file === 'Omarchyform.qml' && line === gate)) return
+      if (/^\s*\/\//.test(line) || (file === 'Omarchyform.qml' && line === gate)
+          || (file === 'BoardRender.qml' && line === renderGate)) return
       if (/(imagesDir|\/images\/)/.test(line) && /file:|resolvedUrl|Qt\.url|source\s*[:=]/.test(line))
         errors.push(`${file}:${i + 1}: a picture URL that is not imagePath's, which waits for its check`)
     })
@@ -250,6 +254,16 @@ assert.deepEqual(ungatedPictures(fs.readdirSync(root).filter(f => /\.(qml|js)$/.
   .map(f => [f, fs.readFileSync(path.join(root, f), 'utf8')])), [], 'every picture waits for its check')
 assert.ok(fs.readFileSync(path.join(root, 'Omarchyform.qml'), 'utf8').includes('  function imagePath(name) {\n' + gate + '\n  }'),
   'imagePath is the gate')
+{
+  const scene = fs.readFileSync(path.join(root, 'BoardRender.qml'), 'utf8')
+  assert.ok(scene.includes('    function imagePath(name) {\n' + renderGate + '\n    }'), 'and the gate in a picture drawn without the shell')
+  assert.match(scene, /function pictureState\(name\) \{\n\s*if \(!Store\.imageIsValid\(name\) \|\| render\.job === null\) return "missing"\n\s*var found = render\.job\.pictures\[name\]\n\s*return typeof found === "string" \? found : "could not be checked"/,
+    'which clears only what the command line was told is fit')
+  const cli = fs.readFileSync(path.join(root, 'bin/omarchyform'), 'utf8')
+  assert.match(cli, /const pictures = checkedPictures\(rows, imagesDir\)/, 'and the command line asks checkimages before it starts the scene')
+  assert.match(cli, /states\[name\] = Object\.prototype\.hasOwnProperty\.call\(answers, name\) \? answers\[name\]\.refused : "could not be checked"/,
+    'an answer the helper did not give is not a picture to draw')
+}
 
 // What the marketplace's reviewers have raised against other plugins, held
 // here as rules: docs/security-review.md, "Before submitting", lists each class
@@ -297,6 +311,12 @@ const reviewedArguments = [
   'Omarchyform.qml: "private", [root.dataDir, root.boardsDir, root.backupsDir, root.trashDir, root.imagesDir, root.locksDir]',
   'bin/omarchyform: "revision", [path.resolve(file)]',
   'bin/omarchyform: "commit", [target, aside(target, "backup"), aside(target, "lock"), expected === undefined ? "-" : expected], text',
+  'bin/omarchyform: "private", [LIBRARY, staging]',
+  // The two programs a picture starts. Neither is handed a board's path or
+  // name: the helper gets the pictures folder, with the names on stdin, and
+  // the scene finds its staging folder in its environment.
+  'bin/omarchyform: "bash", [PICTURE_HELPER, "checkimages", imagesDir]',
+  'bin/omarchyform: "qs", ["--no-color", "-p", SCENE]',
   'BoardLibrary.qml: ["find", library.boardsDir, "-mindepth", "1", "-printf", "%y\\\\t%P\\\\n"]',
   'Omarchyform.qml: ["cp", "-n", root.legacyPath, root.boardsDir + "/board.json"]'
 ]
@@ -309,6 +329,13 @@ for (const file of runtimeQml) {
 }
 for (const call of calls(fs.readFileSync(path.join(root, 'bin/omarchyform'), 'utf8'), 'helper'))
   if (call !== 'verb, args, input') usedArguments.push(`bin/omarchyform: ${call}`)
+// Every other program the command line starts, by its whole argument list.
+for (const call of calls(fs.readFileSync(path.join(root, 'bin/omarchyform'), 'utf8'), 'spawnSync')) {
+  const started = /^("[^"]+"), (\[[^\]]*\])/.exec(call)
+  assert.ok(started, 'bin/omarchyform starts a program whose arguments cannot be read off: ' + call)
+  if (started[1] !== '"python3"') usedArguments.push(`bin/omarchyform: ${started[1]}, ${started[2]}`)
+}
+assert.match(fs.readFileSync(path.join(root, 'bin/omarchyform'), 'utf8'), /spawnSync\("python3", \[HELPER\], /, 'the file helper is started with its own path and nothing else')
 assert.deepEqual(usedArguments.filter(a => !reviewedArguments.includes(a)), [],
   'a helper call with arguments not yet reviewed for private contents')
 assert.deepEqual(reviewedArguments.filter(a => !usedArguments.includes(a)), [], 'a reviewed call that is gone: take it off the list')

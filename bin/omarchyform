@@ -11,11 +11,13 @@
 //   omarchyform apply <file> [ops.json|-] [--out FILE] [--dry-run] [--force]
 //   omarchyform validate <file>
 //   omarchyform ops
+//   omarchyform render <file> <picture.png> [--colors light|dark|mono] [--only ID,ID...] [--force]
 //   omarchyform skill [install|remove]
 //
-// What it deliberately cannot do is draw: a picture of a board needs the
-// scene, and the scene needs the shell. `ctrl+e` on an open board exports a
-// PNG; nothing here does.
+// Everything but `render` is plain JavaScript and needs no Qt. A picture needs
+// the scene the board itself is drawn by, so `render` starts Quickshell on
+// its offscreen platform, in a process of its own, with no display and
+// without the running shell.
 const fs = require("fs")
 const os = require("os")
 const path = require("path")
@@ -499,6 +501,137 @@ function verbOps(args) {
   })
 }
 
+// ---------------------------------------------------------------- a picture
+// The board's own export scene, run by Quickshell with no display. This side
+// does what the shell does before it draws: the board is read and bounded by
+// the loader, and every picture on it goes through the helper's checkimages
+// before Qt may open it. The scene is handed a staging folder, private and
+// inside the library, and nothing else: no path and no name on its command
+// line, which another account could read.
+const SCENE = path.join(__dirname, "..", "BoardRender.qml")
+const PICTURE_HELPER = path.join(__dirname, "..", "BoardFiles.sh")
+// How the scene says it went, in the only words it has: its exit status.
+const RENDER_EXITS = {
+  3: "the scene could not read what it was handed",
+  4: "there is nothing on the board to draw",
+  5: "the board's pictures took too long to load; nothing was written"
+}
+// A board at every limit is drawn in well under this; past it something is
+// stuck, and the answer says so rather than waiting.
+const RENDER_MS = 120000
+
+// Which of a board's pictures may be opened: "" for one found fit, and why
+// not for any other. An answer the helper did not give is not a picture to
+// draw, as in the shell.
+function checkedPictures(rows, imagesDir) {
+  const names = S.pictureNames(rows)
+  const states = {}
+  if (!names.length) return states
+  const out = spawnSync("bash", [PICTURE_HELPER, "checkimages", imagesDir],
+    { encoding: "utf8", input: names.map(name => name + "\t\n").join("") })
+  const answers = out.status === 0 ? S.pictureAnswers(out.stdout || "") : {}
+  for (const name of names)
+    states[name] = Object.prototype.hasOwnProperty.call(answers, name) ? answers[name].refused : "could not be checked"
+  return states
+}
+
+// The size a PNG says it is, or null for a file that is not one.
+function pngSize(file) {
+  let head
+  try {
+    const fd = fs.openSync(file, "r")
+    head = Buffer.alloc(24)
+    const read = fs.readSync(fd, head, 0, 24, 0)
+    fs.closeSync(fd)
+    if (read < 24) return null
+  } catch { return null }
+  if (head.subarray(0, 8).toString("latin1") !== "\x89PNG\r\n\x1a\n" || head.subarray(12, 16).toString("latin1") !== "IHDR") return null
+  return { width: head.readUInt32BE(16), height: head.readUInt32BE(20) }
+}
+
+function verbRender(args) {
+  const file = args[0]
+  const out = args[1]
+  if (!file || file.startsWith("--") || !out || out.startsWith("--"))
+    die("render needs a board and a picture: omarchyform render <file> <picture.png>")
+  const rest = args.slice(2)
+  onlyFlags(rest, "render", ["--force"], ["--colors", "--only"])
+  if (!out.toLowerCase().endsWith(".png")) die("the picture is a PNG", "name it something.png")
+  const target = path.resolve(out)
+  if (target === path.resolve(file)) die("the picture cannot be written over the board")
+  if (fs.existsSync(target) && !rest.includes("--force")) die(out + " exists", "pass --force to write over it")
+  let colors = "light"
+  if (rest.includes("--colors")) colors = valueAfter(rest, rest.indexOf("--colors"), "--colors needs a palette")
+  if (!S.exportPalette(colors)) die(`there is no palette ${colors}`, Object.keys(S.EXPORT_PALETTES))
+
+  // Bounded as the board bounds it: one it would open empty and read-only is
+  // not drawn from here either.
+  const loaded = loadBoard(file, readText(file))
+  const beyond = S.boardLimit(loaded.data)
+  if (beyond !== "") die(`${file} ${beyond}`, "the board opens it empty and read-only, so there is no picture of it to make")
+  const board = { items: loaded.items, links: loaded.links, nextId: S.nextFreeId(loaded.items, loaded.data.nextId) }
+  const rows = S.itemRows(board.items)
+  // What is asked for by id is cropped to by place, as the board crops to
+  // what is marked.
+  const only = []
+  if (rest.includes("--only")) {
+    for (const part of valueAfter(rest, rest.indexOf("--only"), "--only needs ids, as 3,4,7").split(",")) {
+      if (!/^[0-9]+$/.test(part)) die(`--only takes ids, not ${part}`, "as 3,4,7")
+      const at = rows.findIndex(row => row.id === Number(part))
+      if (at < 0) die(`there is no item ${part}`)
+      if (!only.includes(at)) only.push(at)
+    }
+  }
+  if (!rows.length) die("there is nothing on the board to draw")
+
+  const imagesDir = path.join(LIBRARY, "images")
+  const pictures = checkedPictures(rows, imagesDir)
+  const staging = path.join(LIBRARY, "render")
+  const made = helper("private", [LIBRARY, staging])
+  if (made.status !== 0 && made.status !== 4) die("cannot make a private folder to draw in", staging)
+  // A stage whose run was killed before it could clear up is cleared by the
+  // next one, once it is too old to be a run still going.
+  for (const name of fs.readdirSync(staging)) {
+    const stale = path.join(staging, name)
+    try { if (name.startsWith("job-") && Date.now() - fs.statSync(stale).mtimeMs > 2 * RENDER_MS) fs.rmSync(stale, { recursive: true, force: true }) }
+    catch { /* another run's, and gone already */ }
+  }
+  const stage = fs.mkdtempSync(path.join(staging, "job-"))
+  // die ends the process where it stands, and a `finally` with it, so what
+  // went wrong is carried out of here and said once the stage is gone.
+  let failed = null, size = null
+  try {
+    fs.writeFileSync(path.join(stage, "board.json"), S.writeFile(board.items, board.links, board.nextId), { mode: 0o600 })
+    fs.writeFileSync(path.join(stage, "job.json"), JSON.stringify({ colors, only, pictures, imagesDir }), { mode: 0o600 })
+    // Its own runtime folder as well, so the instance it registers and the
+    // log it keeps are in the stage and go with it, and nothing of it is left
+    // beside the running shell's.
+    const run = spawnSync("qs", ["--no-color", "-p", SCENE], {
+      encoding: "utf8", timeout: RENDER_MS, maxBuffer: 16 * 1024 * 1024,
+      env: { ...process.env, QT_QPA_PLATFORM: "offscreen", QT_QPA_PLATFORMTHEME: "", QT_QUICK_BACKEND: "software",
+             QML_DISABLE_DISK_CACHE: "1", XDG_RUNTIME_DIR: stage, OMARCHYFORM_RENDER_DIR: stage }
+    })
+    const drawn = path.join(stage, "out.png")
+    if (run.error && run.error.code === "ENOENT")
+      failed = ["quickshell (qs) not found", "a picture is drawn by Quickshell, which the Omarchy shell runs on"]
+    else if (run.error && run.error.code === "ETIMEDOUT")
+      failed = ["the picture took too long to draw", `gave up after ${RENDER_MS / 1000} seconds; nothing was written`]
+    else if (Object.prototype.hasOwnProperty.call(RENDER_EXITS, run.status)) failed = [RENDER_EXITS[run.status]]
+    else if (run.status !== 0 || !(size = pngSize(drawn)))
+      failed = ["the picture could not be drawn",
+                (run.stderr || run.stdout || "").trim().split("\n").slice(-3).join("\n") || "exit " + run.status]
+    else {
+      try { fs.copyFileSync(drawn, target) } catch (error) { failed = ["cannot write " + out, error.message] }
+    }
+  } finally {
+    fs.rmSync(stage, { recursive: true, force: true })
+  }
+  if (failed) die(failed[0], failed[1])
+  const leftOut = Object.keys(pictures).filter(name => pictures[name] !== "").map(name => ({ name, why: pictures[name] }))
+  answer({ ok: true, file: target, width: size.width, height: size.height, colors,
+           items: only.length ? only.length : rows.length, picturesLeftOut: leftOut })
+}
+
 // The skill beside this program teaches a coding agent these verbs. Omarchy
 // links its own skills into ~/.agents/skills and into each agent's own
 // folder, and this does the same with the same rule: a link is made or
@@ -542,7 +675,7 @@ function verbSkill(args) {
   answer(action === "remove" ? { ok: true, removed } : { ok: true, skill: SKILL, linked, left })
 }
 
-const VERBS = { new: verbNew, inspect: verbInspect, apply: verbApply, validate: verbValidate, ops: verbOps, skill: verbSkill }
+const VERBS = { new: verbNew, inspect: verbInspect, apply: verbApply, validate: verbValidate, ops: verbOps, render: verbRender, skill: verbSkill }
 
 const argv = process.argv.slice(2)
 const verb = argv.shift()

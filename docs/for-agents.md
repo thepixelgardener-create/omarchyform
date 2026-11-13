@@ -55,11 +55,12 @@ somewhere harmless first** if you are not certain, then move it in.
 
 ### What it cannot do
 
-`bin/omarchyform` cannot draw. A picture of a board needs the scene, and the
-scene needs the running shell. If someone wants a PNG, tell them: open the
-board and press `ctrl+e`. See §7.
+It cannot draw a board in the desktop theme's own colours: those belong to the
+running shell, and `ctrl+e` on an open board is the way to them. What it can
+do is `render` a board on white, on black or in one ink, which is how you
+look at what you made. See §7.
 
-It also does not know which board is open right now, and does not touch the
+It does not know which board is open right now, and does not touch the
 trash or the pictures beside a board. It does keep backups: every write saves
 the version it replaced, in `backups/` for a board in the library and as
 `<file>.bak` beside one anywhere else.
@@ -344,13 +345,27 @@ overlap? Is anything further than about 400 from its nearest neighbour for no
 reason? Is more than a third of the board tinted? Those three questions catch
 most of it.
 
-You cannot see the board. Say so rather than claiming it looks good.
+Then look at it: `omarchyform render board.json /some/where/board.png`
+writes a picture you can open, and `--only 3,4,7` frames just those items when
+a large board is too small to read at 4096 pixels across. A picture catches
+what geometry does not: text that does not fit its item, a connector running
+behind a third item, a board that reads as a wall. If you could not look, say
+so rather than claiming it looks good.
 
 ---
 
 ## 7. Pictures
 
-Exporting is the shell's job, not this one's. Tell the person:
+`omarchyform render <board> <picture.png>` writes a PNG with no shell and no
+display: the board's bounds and 32 pixels around them, at most 4096 on a side.
+`--colors` is `light` (on white, the default), `dark` or `mono`; `--only`
+takes ids and frames just those items; `--force` writes over a picture that is
+there. The answer has the size of the picture and `picturesLeftOut`, each
+picture on the board that was not drawn and why. It needs Quickshell, which
+an Omarchy machine has; without it the answer says so.
+
+A picture in the desktop theme's own colours is the shell's job. For that,
+tell the person:
 
 - `ctrl+e` writes a PNG of the board, with no header, grid or selection rings.
 - **Marking items first** (`space` on each, or `a` for everything) gives a

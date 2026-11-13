@@ -3,7 +3,7 @@ name: omarchyform
 description: >
   Building, reading and changing Omarchyform boards from the command line, with
   no window and no display — `omarchyform new`, `inspect`, `apply`, `validate`,
-  `ops`. Use when asked to make a board, a canvas, a mind map or a diagram of
+  `ops`, `render`. Use when asked to make a board, a canvas, a mind map or a diagram of
   notes on this machine, to add notes or connectors to an existing board, to
   read what is on one, or to check a board file that looks wrong. Triggers:
   omarchyform, make me a board, sketch this out as a board, mind map, add a
@@ -26,6 +26,7 @@ omarchyform inspect <file> [--full]
 omarchyform apply <file> [ops.json|-] [--out FILE] [--dry-run] [--force]
 omarchyform validate <file>
 omarchyform ops
+omarchyform render <file> <picture.png> [--colors light|dark|mono] [--only ID,ID...] [--force]
 omarchyform skill [install|remove]
 ```
 
@@ -115,13 +116,16 @@ it came from a newer version.
 any pair of items overlap, is anything stranded far from its neighbours, is
 more than a third of the board tinted. Those catch most of it.
 
-You cannot see the board. Say so rather than claiming it looks good.
+Then look: `omarchyform render ideas.json ideas.png` draws the board to a PNG
+you can open, on white unless `--colors dark` or `mono` says otherwise, and
+`--only 3,4,7` frames just those items. If you did not look, say so rather
+than claiming it looks good.
 
 ## What this cannot do
 
-It cannot draw. A picture of a board needs the scene, and the scene needs the
-running shell — `ctrl+e` on an open board exports a PNG, and nothing here does.
-It does not touch the trash or the pictures beside a board. Every write keeps
+It cannot draw a board in the desktop theme's colours: `render` uses one of
+three fixed palettes, and `ctrl+e` on an open board is the way to the theme's
+own. It does not touch the trash or the pictures beside a board. Every write keeps
 the version it replaced: in the library's `backups/` for a board in the
 library, and as `<file>.bak` beside one anywhere else.
 

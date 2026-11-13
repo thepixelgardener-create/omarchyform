@@ -242,6 +242,19 @@ expect(referenced(read("BoardPalette.qml"), "colours.base."), declaredMembers(re
 expect(referenced(read("BoardPalette.qml"), "colours.base."),
   membersAt(blockBody(read("tests/qt/tst_export.qml"), "property QtObject theme:"), 6),
   "the tst_export stub's theme", "BoardPalette.qml")
+// And the scene `omarchyform render` draws in, which is not the shell either:
+// its controller holds what an export reads off one, and its theme what a
+// palette is built on. A member missing there is a picture that fails only
+// from the command line.
+{
+  const scene = read("BoardRender.qml")
+  expect(referenced(read("BoardImage.qml"), "picture.ctl."), nestedMembers(scene, "holder"),
+    "the render scene's controller", "BoardRender.qml")
+  expect(referenced(read("BoardPalette.qml"), "colours.base."),
+    membersAt(blockBody(scene, "readonly property QtObject theme:"), 6), "the render scene's theme", "BoardRender.qml")
+  expect(referenced(read("BoardImage.qml"), "picture.ctl.sceneTheme."),
+    membersAt(blockBody(scene, "readonly property QtObject sceneTheme:"), 6), "the render scene's palette", "BoardRender.qml")
+}
 
 // A file also reaches into itself by its own id, and QML resolves that name the
 // same way it resolves ctl. — at runtime, in code paths a green suite may never

@@ -125,8 +125,23 @@ and being written answers `{"ok": false, "error": "… changed since it was read
 and exits 1, leaving the other writer's board alone; `--force` is the explicit
 overwrite, and keeps what it replaced.
 
-It cannot draw: a picture of a board needs the running shell, so `ctrl+e`
-on an open board exports a PNG and nothing here does.
+`render` draws a board to a PNG without the board being open:
+
+```bash
+bin/omarchyform render ideas.json ideas.png                  # on white
+bin/omarchyform render ideas.json ideas.png --colors dark    # or mono, for print
+bin/omarchyform render ideas.json part.png --only 3,4,7      # just those items
+```
+
+It is the board's own export scene, the one `ctrl+e` uses, started by
+Quickshell with no display in a process of its own, so the running shell is
+not involved and cannot be held up by it. The picture is the board's bounds
+with 32 pixels around them, at most 4096 on a side, in one of the three export
+palettes; the desktop theme's own colours need the shell, so `ctrl+e` is still
+the way to those. Pictures on the board are checked before they are opened, as
+the board checks them, and one that is missing or refused is drawn as a
+missing picture and named in `picturesLeftOut` with the reason. It will not
+write over a file that exists without `--force`.
 
 `skills/omarchyform/SKILL.md` ships alongside it, so a coding agent asked to
 sketch something out as a board can do it without being told any of this.

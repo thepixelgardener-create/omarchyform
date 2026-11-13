@@ -81,6 +81,7 @@ The trace's third rule is for it.
 | Numbers in a board | Board file, import, CLI → lookups, layout, the ids handed out | No value decides an array's length or a loop's count, each range fits every type it passes through, and positions and sizes are held within the board; see [Board values](#board-values). `security.js` refuses an array written at an id; `tests/editing.js` and `tests/cli.js` take a board at the largest id through new items, copies and connectors and open it again, and `tst_ids.qml` does it through Qt's own document and `int`. |
 | CLI operations | stdin/file → model → helper | Parse as data, no evaluation. Invalid JSON must not echo content. CLI/security tests. |
 | Old board history | Board file → `readFile` → dropped | The edit history Omarchyform 0.4.7 to 0.4.10 kept after a board is parsed with the rest of the file, as any JSON reader parses it, through `parseJson`, and then dropped; it is never evaluated. A key after it counts on any line, so a newer version named there keeps the board read-only and the canvas after it is the canvas. A history that is not JSON, or holds more at once than `parseJson` allows, makes the file unreadable rather than half read. A full one costs about 0.2 s once, until the next save writes the board without it. `tests/suite.js`, `tests/editing.js`, `tests/cli.js`, `tst_legacy.qml`. |
+| A board drawn from the command line | `render` → loader → staging → Quickshell offscreen → chosen PNG | The board is read and bounded by the loader before anything starts (`boardLimit`, the byte limit), and its pictures go through `checkimages` first; the scene opens only what was cleared. The scene is handed a private staging folder inside the library by its environment: no path or name on a command line. It logs nothing and writes only `out.png` there; the stage is removed whether the run succeeds, is refused or times out, and a killed run's is cleared by the next. `tests/render.js`, `security.js`. |
 | Desktop install/open | Opt-in launcher files and summon payload | No automatic install hook; ownership/conflict checks, correct path encoding, no shell interpretation. Desktop tests and manual review. |
 
 ## Cost trace
@@ -859,3 +860,41 @@ The `max-line-objects` hostile fixture exercises all styles at MAX_ITEMS;
 past their normalized bounds. No new process, filesystem destination, network
 access, image source or text renderer is introduced. Saved lines use format 8;
 older versions refuse to edit them instead of dropping their geometry.
+
+## A picture from the command line: cost trace — 2026-11-13
+
+`omarchyform render` draws a board with the export scene (`BoardImage`,
+`Node`) under Quickshell's offscreen platform, in a process the command line
+starts and waits for. It is a new consumer of every board field the export
+already reads, in a new place, so each axis is traced for it.
+
+- **Bytes.** The board is read through the helper's bounded `read`, as every
+  other verb reads one, and what the scene is handed is the board written
+  again by `writeFile`, which cannot be larger than the board it came from.
+  The job beside it holds the palette, the cropped places (at most
+  `MAX_ITEMS` integers) and one verdict per picture name.
+- **Expansion and count.** `boardLimit` refuses a board past 5,000 items,
+  20,000 connectors or a 1 MiB note before a stage exists, and the scene asks
+  it again of what it reads. Notes are drawn through `notePreview` as on the
+  board: at most 4,000 characters each. The picture is at most 4096 pixels on
+  a side (`BoardImage.save`).
+- **Repetition.** Pictures decode once per item that draws them, as in the
+  shell. Each name is cleared by `checkimages` (size, type, pixels, compressed
+  text) before the scene starts; one not cleared, missing or reached through
+  a link is never opened and is named in the answer.
+- **Value.** `--only` ids are matched against the board's own ids and become
+  places in its list; nothing from the command line sizes an array or bounds
+  a loop.
+- **Who reads first.** Qt's image reader, held behind the same gate as in the
+  shell (`imagePath` in `BoardRender.qml`), and Quickshell's `FileView` on two
+  files this program wrote a moment before into a 0700 folder.
+- **Where it runs.** Never on the shell's thread: a board that is slow to
+  draw holds only the command, which gives up after 120 seconds and says so.
+  The scene has its own runtime folder inside the stage, so it registers
+  nothing beside the running shell.
+
+Measured on 2026-11-13 (Qt 6.12, offscreen, software), every board in
+`tests/hostile-fixtures.js` through `render`: an ordinary board of 50 items
+in 0.4 s, 5,000 items in 5 to 8 s, and the slowest, 5,000 notes with long
+previews at 32 MB, in 24 s. `npm run test:hostile` now draws or refuses each
+of them and fails on a stage left behind (`tests/render.js --hostile`).

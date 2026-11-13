@@ -7,6 +7,13 @@ since older boards are migrated on load rather than rejected.
 
 ### Added
 
+- `bin/omarchyform render <board> <picture.png>` draws a board to a PNG with
+  no display and without the board being open: on white, on black
+  (`--colors dark`) or in one ink (`mono`), the whole board or `--only` the
+  items named. It runs the board's own export scene in a process of its own.
+- `bin/omarchyform skill install` links the agent skill into `~/.agents/skills`
+  and the skills folder of each coding agent already in use; `skill remove`
+  takes the links away.
 - Hold `ctrl` and the bar shows the ctrl shortcuts, icon and key each (undo,
   redo, copy, paste, duplicate, save, PNG, new board, import, commands, and
   resize or aim); let go and the usual hints come back.
