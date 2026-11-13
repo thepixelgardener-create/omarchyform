@@ -258,6 +258,12 @@ Item {
   // stand-in serves both, so it carries the palette's members as well.
   readonly property QtObject sceneTheme: ctl.theme
   property QtObject theme: QtObject {
+    // What a picture's palette reads off the theme and off the board's own
+    // palette: without them every Board built here logged two assignments of
+    // undefined before its first test ran.
+    property bool isLight: false
+    property var chosen: null
+    property string shade: "Theme"
     property color canvasBackground: "#101315"
     property color foreground: "#cccccc"
     property color connector: "#cccccc"
