@@ -684,8 +684,7 @@ Item {
     var w = Store.clampSize(initial.width === undefined ? (kind === "note" ? 180 : 160) : initial.width)
     var h = Store.clampSize(initial.height === undefined ? (Store.isLine(kind) ? 60 : kind === "note" ? 140 : 110) : initial.height)
     var taken = Store.newIds(root.items, root.doc.nextId, 1)
-    root.items.append(Object.assign({
-      iid: taken.ids[0], kind: kind, lax: 0.08, lay: 0.5, lbx: 0.92, lby: 0.5,
+    root.items.append(Object.assign({ iid: taken.ids[0], kind: kind }, Store.lineEndRoles({}), {
       ix: Store.clampCoord(wx - w / 2), iy: Store.clampCoord(wy - h / 2), iw: w, ih: h,
       itint: Store.TINTS[root.doc.nextColor % Store.TINTS.length],
       itext: initial.text || "", ipinned: false, isrc: initial.src || "", itexture: "plain"
@@ -1063,27 +1062,19 @@ Item {
     var byOriginal = ({})
     var taken = Store.newIds(root.items, root.doc.nextId, ordered.length)
     root.doc.nextId = taken.next
+    // Every copy's id first, so a copied line can glue to the copy of an
+    // item that comes after it.
+    for (var o = 0; o < ordered.length; o++) byOriginal[root.items.get(ordered[o]).iid] = taken.ids[o]
     for (var i = 0; i < ordered.length; i++) {
       var n = root.items.get(ordered[i])
       var id = taken.ids[i]
-      byOriginal[n.iid] = id
       // An image copy points at the same file: the picture is shared by every
       // board already, and duplicating one should not duplicate megabytes.
-      root.items.append({
-        iid: id, kind: n.kind, lax: Store.lineEnds(n).ax, lay: Store.lineEnds(n).ay, lbx: Store.lineEnds(n).bx, lby: Store.lineEnds(n).by,
+      root.items.append(Object.assign({ iid: id, kind: n.kind }, Store.lineEndRoles(Store.lineEnds(n)), {
         ix: Store.clampCoord(n.ix + Store.DUPLICATE_OFFSET), iy: Store.clampCoord(n.iy + Store.DUPLICATE_OFFSET),
-        iw: n.iw, ih: n.ih, itint: n.itint, itext: n.itext, ipinned: false, isrc: n.isrc, itexture: Store.normalizeTexture(n.itexture),
-        aon: n.aon || 0, aonx: Store.lineUnit(n.aonx, 0.5), aony: Store.lineUnit(n.aony, 0.5),
-        bon: n.bon || 0, bonx: Store.lineUnit(n.bonx, 0.5), bony: Store.lineUnit(n.bony, 0.5)
-      })
+        iw: n.iw, ih: n.ih, itint: n.itint, itext: n.itext, ipinned: false, isrc: n.isrc, itexture: Store.normalizeTexture(n.itexture)
+      }, Store.copiedGlue(n, byOriginal)))
       fresh.push(id)
-    }
-    // A copied line stays glued only to copies: glued to an original, it
-    // would be pulled back over the line it was copied from.
-    for (var g = root.items.count - fresh.length; g < root.items.count; g++) {
-      var copy = root.items.get(g)
-      if (copy.aon) root.items.setProperty(g, "aon", byOriginal[copy.aon] !== undefined ? byOriginal[copy.aon] : 0)
-      if (copy.bon) root.items.setProperty(g, "bon", byOriginal[copy.bon] !== undefined ? byOriginal[copy.bon] : 0)
     }
     // A connector is copied only when both of its ends were: half of one would
     // have to guess which original it still joins.
@@ -1103,9 +1094,7 @@ Item {
     if (indices.length === 0) return
     root.pushUndo()
     // A line glued to something deleted stays where it is, unglued.
-    var gone = ({})
-    for (var r = 0; r < indices.length; r++) gone[root.items.get(indices[r]).iid] = true
-    Store.unglueFrom(root.items, gone)
+    Store.unglueFrom(root.items, indices)
     for (var k = 0; k < indices.length; k++) {
       var id = root.items.get(indices[k]).iid
       root.items.remove(indices[k])
@@ -1167,7 +1156,8 @@ Item {
   function textureTargets() {
     var here = root.selected()
     var targets = here && here.ipinned ? [root.selectedIndex] : root.targets()
-    return targets.filter(function (at) { return root.items.get(at).kind !== "image" && !Store.isLine(root.items.get(at).kind) })
+    // A picture and a line take no texture.
+    return targets.filter(function (at) { return Store.SHAPE_KINDS.indexOf(root.items.get(at).kind) >= 0 })
   }
 
   function setTexture(texture) {
@@ -1190,9 +1180,12 @@ Item {
     // it keeps its shape and takes the rest of the selection with it.
     if (n.kind === "image") { root.flash("an image keeps its shape"); return }
     root.pushUndo()
-    var next = Store.cycle(Store.isLine(n.kind) ? Store.LINE_KINDS : Store.SHAPE_KINDS, n.kind)
+    // A shape cycles through shapes and a line through lines; the rest of the
+    // selection changes only when it is the same sort of thing.
+    var family = Store.isLine(n.kind) ? Store.LINE_KINDS : Store.SHAPE_KINDS
+    var next = Store.cycle(family, n.kind)
     for (var i = 0; i < t.length; i++)
-      if (root.items.get(t[i]).kind !== "image" && Store.isLine(root.items.get(t[i]).kind) === Store.isLine(n.kind)) root.items.setProperty(t[i], "kind", next)
+      if (family.indexOf(root.items.get(t[i]).kind) >= 0) root.items.setProperty(t[i], "kind", next)
     root.save()
   }
 
@@ -1298,15 +1291,7 @@ Item {
     var model = root.items
     if (magnetic && root.pointerEdit && t.length > 0) {
       var edit = root.pointerEdit
-      if (!edit.drag) {
-        var box = null
-        for (var k = 0; k < t.length; k++) {
-          var b = Store.alignBox(model.get(t[k]))
-          box = box ? { left: Math.min(box.left, b.left), top: Math.min(box.top, b.top),
-                        right: Math.max(box.right, b.right), bottom: Math.max(box.bottom, b.bottom) } : b
-        }
-        edit.drag = { x0: model.get(t[0]).ix, y0: model.get(t[0]).iy, box: box }
-      }
+      if (!edit.drag) edit.drag = { x0: model.get(t[0]).ix, y0: model.get(t[0]).iy, box: Store.groupAlignBox(model, t) }
       var curX = model.get(t[0]).ix - edit.drag.x0, curY = model.get(t[0]).iy - edit.drag.y0
       var want = Store.magneticMove(model, t, edit.drag.box, curX + dx, curY + dy, 8 / root.zoom)
       dx = want.dx - curX
@@ -1427,18 +1412,10 @@ Item {
     if (!root.canEdit) return
     var at = root.lineInHand()
     if (at < 0) return
-    var n = root.items.get(at), e = Store.lineEnds(n)
-    var x = n.ix + (end === 0 ? e.ax : e.bx) * n.iw + dx * root.worldStep
-    var y = n.iy + (end === 0 ? e.ay : e.by) * n.ih + dy * root.worldStep
+    var n = root.items.get(at), from = Store.lineEndPoint(n, end)
     // Stepped onto an item, the end glues to its outline, as when dropped.
-    var other = { x: n.ix + (end === 0 ? e.bx : e.ax) * n.iw, y: n.iy + (end === 0 ? e.by : e.ay) * n.ih }
-    var glue = Store.glueAt(root.items, x, y, at, 0, other)
-    if (glue) { x = glue.px; y = glue.py }
-    var values = Store.movedLineEnd(n, end, x, y)
-    var role0 = end === 0 ? "aon" : "bon"
-    values[role0] = glue ? glue.id : 0
-    values[role0 + "x"] = glue ? glue.x : Store.lineUnit(n[role0 + "x"], 0.5)
-    values[role0 + "y"] = glue ? glue.y : Store.lineUnit(n[role0 + "y"], 0.5)
+    var values = Store.placeLineEnd(root.items, at, end,
+                                    from.x + dx * root.worldStep, from.y + dy * root.worldStep, 0).values
     var changed = false
     for (var role in values) if (Math.abs(values[role] - (n[role] || 0)) > 1e-9) { changed = true; break }
     if (!changed) return

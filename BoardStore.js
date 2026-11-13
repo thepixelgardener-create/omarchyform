@@ -41,11 +41,40 @@ var LINE_KINDS = ["line", "arrow", "double-arrow", "dashed-line"]
 var KINDS = SHAPE_KINDS.concat(LINE_KINDS)
 function isLine(kind) { return LINE_KINDS.indexOf(kind) >= 0 }
 function lineUnit(value, fallback) { return Math.max(0, Math.min(1, num(value, fallback))) }
+
+// A line's ends as fractions of its box, tail (a) and head (b). Without them
+// it is a level line across its box.
+function unitEnds(ax, ay, bx, by) {
+  return { ax: lineUnit(ax, 0.08), ay: lineUnit(ay, 0.5), bx: lineUnit(bx, 0.92), by: lineUnit(by, 0.5) }
+}
+// From a file row's ax, ay, bx, by, and from the model's lax, lay, lbx, lby.
+// lineEnds is asked for every line on each pointer move of a drag (alignBox),
+// so neither builds anything on the way.
+function rowEnds(row) {
+  row = row || {}
+  return unitEnds(row.ax, row.ay, row.bx, row.by)
+}
 function lineEnds(n) {
   n = n || {}
-  return { ax: lineUnit(n.lax, 0.08), ay: lineUnit(n.lay, 0.5),
-           bx: lineUnit(n.lbx, 0.92), by: lineUnit(n.lby, 0.5) }
+  return unitEnds(n.lax, n.lay, n.lbx, n.lby)
 }
+// The model's roles for a row's ends.
+function lineEndRoles(row) {
+  var e = rowEnds(row)
+  return { lax: e.ax, lay: e.ay, lbx: e.bx, lby: e.by }
+}
+// Where a line's ends are on the board.
+function linePoints(n) {
+  var e = lineEnds(n)
+  return { ax: n.ix + e.ax * n.iw, ay: n.iy + e.ay * n.ih, bx: n.ix + e.bx * n.iw, by: n.iy + e.by * n.ih }
+}
+// Where end 0 (the tail) or 1 (the head, where an arrow points) is: { x, y }.
+function lineEndPoint(n, end) {
+  var p = linePoints(n)
+  return end === 0 ? { x: p.ax, y: p.ay } : { x: p.bx, y: p.by }
+}
+// A line's box reaches this far past its ends, room for an arrowhead.
+var LINE_PAD = 24
 
 // An arrowhead grows with the stroke, so a theme with heavier borders keeps
 // the same shape: about six and a half strokes long, opening at about 46°.
@@ -88,9 +117,29 @@ function linePath(kind, w, h, ends, strokeWidth) {
 // middle and bottom. A line's are its ends', not its padded box's.
 function alignBox(n) {
   if (!isLine(n.kind)) return { left: n.ix, top: n.iy, right: n.ix + n.iw, bottom: n.iy + n.ih }
+  // Written out rather than through linePoints and spanBox: this is asked of
+  // every item on each pointer move, and at MAX_ITEMS lines the calls cost a
+  // tenth of the move.
   var e = lineEnds(n), ax = n.ix + e.ax * n.iw, ay = n.iy + e.ay * n.ih
   var bx = n.ix + e.bx * n.iw, by = n.iy + e.by * n.ih
   return { left: Math.min(ax, bx), top: Math.min(ay, by), right: Math.max(ax, bx), bottom: Math.max(ay, by) }
+}
+// What the items at `indices` line up by together: the box round all of theirs.
+function groupAlignBox(items, indices) {
+  var box = null
+  for (var i = 0; i < indices.length; i++) {
+    var b = alignBox(items.get(indices[i]))
+    box = box ? { left: Math.min(box.left, b.left), top: Math.min(box.top, b.top),
+                  right: Math.max(box.right, b.right), bottom: Math.max(box.bottom, b.bottom) } : b
+  }
+  return box
+}
+// The box two points span, and a box moved by (dx, dy).
+function spanBox(ax, ay, bx, by) {
+  return { left: Math.min(ax, bx), top: Math.min(ay, by), right: Math.max(ax, bx), bottom: Math.max(ay, by) }
+}
+function shiftBox(b, dx, dy) {
+  return { left: b.left + dx, top: b.top + dy, right: b.right + dx, bottom: b.bottom + dy }
 }
 function alignXs(b) { return [b.left, (b.left + b.right) / 2, b.right] }
 function alignYs(b) { return [b.top, (b.top + b.bottom) / 2, b.bottom] }
@@ -129,11 +178,11 @@ function magneticMove(items, targets, start, dx, dy, tolerance) {
   var skip = {}
   for (var i = 0; i < targets.length; i++) skip[targets[i]] = true
   var t = Math.max(0, num(tolerance, 0))
-  var moved = { left: start.left + dx, top: start.top + dy, right: start.right + dx, bottom: start.bottom + dy }
+  var moved = shiftBox(start, dx, dy)
   var bx = nearestAlignment(items, skip, alignXs(moved), "x", t)
   var by = nearestAlignment(items, skip, alignYs(moved), "y", t)
   var out = { dx: dx + (bx ? bx.shift : 0), dy: dy + (by ? by.shift : 0), guides: [] }
-  var final = { left: start.left + out.dx, top: start.top + out.dy, right: start.right + out.dx, bottom: start.bottom + out.dy }
+  var final = shiftBox(start, out.dx, out.dy)
   if (bx) out.guides.push(alignGuide("x", bx.at, final, bx.box))
   if (by) out.guides.push(alignGuide("y", by.at, final, by.box))
   return out
@@ -144,12 +193,11 @@ function magneticMove(items, targets, start, dx, dy, tolerance) {
 // an arrow lands square on a box's side or middle. `items` and `self` (the
 // line's own index) are optional; without them only the line itself counts.
 function snappedLineEnd(n, end, x, y, tolerance, items, self) {
-  var e = lineEnds(n)
-  var ox = n.ix + (end === 0 ? e.bx : e.ax) * n.iw, oy = n.iy + (end === 0 ? e.by : e.ay) * n.ih
+  var other = lineEndPoint(n, end === 0 ? 1 : 0), ox = other.x, oy = other.y
   var t = Math.max(0, num(tolerance, 0))
   var dx = Math.abs(x - ox), dy = Math.abs(y - oy)
   var guides = []
-  var own = { left: Math.min(x, ox), top: Math.min(y, oy), right: Math.max(x, ox), bottom: Math.max(y, oy) }
+  var own = spanBox(x, y, ox, oy)
   // Its own other end first: the nearer of level and upright wins, so a short
   // line snaps the way it leans.
   var sx = null, sy = null
@@ -164,31 +212,26 @@ function snappedLineEnd(n, end, x, y, tolerance, items, self) {
   }
   if (sx) x += sx.shift
   if (sy) y += sy.shift
-  var point = { left: x, top: y, right: x, bottom: y }
+  var point = spanBox(x, y, x, y)
   if (sx && items) guides.push(alignGuide("x", sx.at, point, sx.box))
   if (sy && items) guides.push(alignGuide("y", sy.at, point, sy.box))
   return { x: x, y: y, guides: guides }
 }
 
+// The roles that move one end to (x, y), the other end holding still.
 function movedLineEnd(n, end, x, y) {
-  var e = lineEnds(n), ax = n.ix + e.ax * n.iw, ay = n.iy + e.ay * n.ih
-  var bx = n.ix + e.bx * n.iw, by = n.iy + e.by * n.ih
+  var p = linePoints(n)
   x = clampCoord(x); y = clampCoord(y)
-  // Leave room for arrowheads while holding the opposite endpoint still.
-  var span = MAX_SIZE - 24
-  if (end === 0) {
-    ax = bx + Math.max(-span, Math.min(span, x - bx))
-    ay = by + Math.max(-span, Math.min(span, y - by))
-  } else {
-    bx = ax + Math.max(-span, Math.min(span, x - ax))
-    by = ay + Math.max(-span, Math.min(span, y - ay))
-  }
-  return lineFromPoints(ax, ay, bx, by)
+  // No further from the other end than a box with its padding can reach.
+  var span = MAX_SIZE - LINE_PAD
+  function from(still, to) { return still + Math.max(-span, Math.min(span, to - still)) }
+  if (end === 0) return lineFromPoints(from(p.bx, x), from(p.by, y), p.bx, p.by)
+  return lineFromPoints(p.ax, p.ay, from(p.ax, x), from(p.ay, y))
 }
 
 // A line's box and ends, from where its two ends are on the board.
 function lineFromPoints(ax, ay, bx, by) {
-  var w = clampSize(Math.abs(bx - ax) + 24), h = clampSize(Math.abs(by - ay) + 24)
+  var w = clampSize(Math.abs(bx - ax) + LINE_PAD), h = clampSize(Math.abs(by - ay) + LINE_PAD)
   var left = clampCoord((ax + bx - w) / 2), top = clampCoord((ay + by - h) / 2)
   return { ix: left, iy: top, iw: w, ih: h,
     lax: lineUnit((ax - left) / w, 0), lay: lineUnit((ay - top) / h, 0),
@@ -201,7 +244,6 @@ function lineFromPoints(ax, ay, bx, by) {
 // item's outline as the item moves or is resized. In the model the ends are
 // `aon`/`bon` (0 for none) with `aonx`, `aony`, `bonx`, `bony`; in the file,
 // a line's `from` and `to` are { id, x, y }.
-var GLUE_ROLES = ["aon", "aonx", "aony", "bon", "bonx", "bony"]
 function noGlue() { return { aon: 0, aonx: 0.5, aony: 0.5, bon: 0, bonx: 0.5, bony: 0.5 } }
 
 // A glue end read from a file or a row: { id, x, y } or null.
@@ -220,6 +262,15 @@ function glueRoles(row) {
   if (a) { out.aon = a.id; out.aonx = a.x; out.aony = a.y }
   if (b) { out.bon = b.id; out.bonx = b.x; out.bony = b.y }
   return out
+}
+
+// A copy's glue, from its original's: to the copy of what that is glued to,
+// `copyOf` mapping an original's id to its copy's, or to nothing. Glued to an
+// original, a copied line would be pulled back over the line it came from.
+function copiedGlue(n, copyOf) {
+  var a = copyOf[n.aon], b = copyOf[n.bon]
+  return { aon: a !== undefined ? a : 0, aonx: lineUnit(n.aonx, 0.5), aony: lineUnit(n.aony, 0.5),
+           bon: b !== undefined ? b : 0, bonx: lineUnit(n.bonx, 0.5), bony: lineUnit(n.bony, 0.5) }
 }
 
 // What an end can be glued to: anything but a line or a background.
@@ -277,6 +328,20 @@ function glueAt(items, x, y, self, tolerance, toward) {
   return null
 }
 
+// The roles that put end `end` of the line at `index` down at (x, y), by the
+// mouse or by a key. On or within `pull` of another item, the end glues to its
+// outline (glueAt) and lands there; a null `pull` puts it down free. Answers
+// { values, glued }.
+function placeLineEnd(items, index, end, x, y, pull) {
+  var n = items.get(index)
+  var glue = pull === null ? null : glueAt(items, x, y, index, pull, lineEndPoint(n, end === 0 ? 1 : 0))
+  var values = movedLineEnd(n, end, glue ? glue.px : x, glue ? glue.py : y)
+  var on = end === 0 ? "aon" : "bon"
+  values[on] = glue ? glue.id : 0
+  if (glue) { values[on + "x"] = glue.x; values[on + "y"] = glue.y }
+  return { values: values, glued: glue !== null }
+}
+
 // Where a glued end is now: on its item, or null when it is not glued or its
 // item is gone. `byId` is idIndex(items).
 function gluedPoint(items, byId, id, fx, fy) {
@@ -296,39 +361,45 @@ function followGlue(items) {
     var n = items.get(i)
     if (!isLine(n.kind) || (!n.aon && !n.bon)) continue
     if (!byId) byId = idIndex(items)
-    var e = lineEnds(n)
-    var ax = n.ix + e.ax * n.iw, ay = n.iy + e.ay * n.ih, bx = n.ix + e.bx * n.iw, by = n.iy + e.by * n.ih
-    var a = gluedPoint(items, byId, n.aon, n.aonx, n.aony), b = gluedPoint(items, byId, n.bon, n.bonx, n.bony)
-    var nax = a ? a.x : ax, nay = a ? a.y : ay, nbx = b ? b.x : bx, nby = b ? b.y : by
-    if (Math.abs(nax - ax) + Math.abs(nay - ay) + Math.abs(nbx - bx) + Math.abs(nby - by) < 1e-6) continue
-    var values = lineFromPoints(nax, nay, nbx, nby)
+    var p = linePoints(n)
+    var a = gluedPoint(items, byId, n.aon, n.aonx, n.aony) || { x: p.ax, y: p.ay }
+    var b = gluedPoint(items, byId, n.bon, n.bonx, n.bony) || { x: p.bx, y: p.by }
+    if (Math.abs(a.x - p.ax) + Math.abs(a.y - p.ay) + Math.abs(b.x - p.bx) + Math.abs(b.y - p.by) < 1e-6) continue
+    var values = lineFromPoints(a.x, a.y, b.x, b.y)
     for (var role in values) if (n[role] !== values[role]) items.setProperty(i, role, values[role])
     moved++
   }
   return moved
 }
 
+// The ids of the items at `indices`, as a lookup.
+function idsAt(items, indices) {
+  var ids = {}
+  for (var i = 0; i < indices.length; i++) ids[items.get(indices[i]).iid] = true
+  return ids
+}
+
+// Lets go of each end of the line at `i` whose item `release` answers true for.
+function releaseGlue(items, i, release) {
+  var n = items.get(i)
+  if (!isLine(n.kind)) return
+  if (n.aon && release(n.aon)) items.setProperty(i, "aon", 0)
+  if (n.bon && release(n.bon)) items.setProperty(i, "bon", 0)
+}
+
 // Lets go of whatever the lines among `indices` are glued to, unless that is
 // moving with them too: a line dragged on its own comes away from its items.
 function unglueMoved(items, indices) {
-  var moving = {}
-  for (var i = 0; i < indices.length; i++) moving[items.get(indices[i]).iid] = true
-  for (var j = 0; j < indices.length; j++) {
-    var n = items.get(indices[j])
-    if (!isLine(n.kind)) continue
-    if (n.aon && !moving[n.aon]) items.setProperty(indices[j], "aon", 0)
-    if (n.bon && !moving[n.bon]) items.setProperty(indices[j], "bon", 0)
-  }
+  var moving = idsAt(items, indices)
+  function staying(id) { return !moving[id] }
+  for (var i = 0; i < indices.length; i++) releaseGlue(items, indices[i], staying)
 }
 
-// Lets go of the items in `gone` (a lookup of ids): they are being removed.
-function unglueFrom(items, gone) {
-  for (var i = 0; i < items.count; i++) {
-    var n = items.get(i)
-    if (!isLine(n.kind)) continue
-    if (n.aon && gone[n.aon]) items.setProperty(i, "aon", 0)
-    if (n.bon && gone[n.bon]) items.setProperty(i, "bon", 0)
-  }
+// Lets go of the items at `indices`: they are being removed.
+function unglueFrom(items, indices) {
+  var gone = idsAt(items, indices)
+  function going(id) { return gone[id] === true }
+  for (var i = 0; i < items.count; i++) releaseGlue(items, i, going)
 }
 
 var CANVAS_PATTERNS = ["Dots", "Grid", "Ruled"]
@@ -616,15 +687,6 @@ function hintLine(hints, color, separator) {
 var BOARD_HINTS = [["q", "note"], ["w", "box"], ["e", "ellipse"], ["r", "diamond"],
                    ["t", "line"], ["z", "arrow"], ["x", "connect"],
                    [":", "commands"], ["/", "find"], ["?", "keys"], ["esc", "close"]]
-// Nerd Font Material Design glyphs, the family SAVE_GLYPHS comes from.
-var HINT_GLYPHS = {
-  note: String.fromCodePoint(0xF039B), box: String.fromCodePoint(0xF0E5F),
-  ellipse: String.fromCodePoint(0xF0EA1), diamond: String.fromCodePoint(0xF070C),
-  line: String.fromCodePoint(0xF055E), arrow: String.fromCodePoint(0xF005C),
-  connect: String.fromCodePoint(0xF0D3D),
-  commands: String.fromCodePoint(0xF07B7), find: String.fromCodePoint(0xF0349),
-  keys: String.fromCodePoint(0xF097B), close: String.fromCodePoint(0xF0156)
-}
 // What ctrl does, shown in the bar while ctrl is held on its own: the chords
 // are the keys a person is least likely to remember. With a single line in
 // hand, ctrl+hjkl aims it rather than resizing.
@@ -633,14 +695,22 @@ function ctrlHints(lineInHand) {
           ["s", "save"], ["e", "png"], ["n", "new board"], ["o", "import"], ["p", "commands"],
           ["hjkl", lineInHand ? "aim head" : "resize"]]
 }
-Object.assign(HINT_GLYPHS, {
+// The icon for each hint above, board's then ctrl's: Nerd Font Material
+// Design glyphs, the family SAVE_GLYPHS comes from.
+var HINT_GLYPHS = {
+  note: String.fromCodePoint(0xF039B), box: String.fromCodePoint(0xF0E5F),
+  ellipse: String.fromCodePoint(0xF0EA1), diamond: String.fromCodePoint(0xF070C),
+  line: String.fromCodePoint(0xF055E), arrow: String.fromCodePoint(0xF005C),
+  connect: String.fromCodePoint(0xF0D3D),
+  commands: String.fromCodePoint(0xF07B7), find: String.fromCodePoint(0xF0349),
+  keys: String.fromCodePoint(0xF097B), close: String.fromCodePoint(0xF0156),
   undo: String.fromCodePoint(0xF054C), redo: String.fromCodePoint(0xF044E),
   copy: String.fromCodePoint(0xF018F), paste: String.fromCodePoint(0xF0192),
   duplicate: String.fromCodePoint(0xF0191), save: String.fromCodePoint(0xF0193),
   png: String.fromCodePoint(0xF02E9), "new board": String.fromCodePoint(0xF0214),
   import: String.fromCodePoint(0xF0770), resize: String.fromCodePoint(0xF0A68),
   "aim head": String.fromCodePoint(0xF0615)
-})
+}
 
 // Icon, a step larger than the text so it reads beside the key (StyledText's
 // size="+1" is relative, about 1.2 times, so it follows the theme's text
@@ -1304,19 +1374,19 @@ function itemRows(items) {
   var out = [], byId = null
   for (var i = 0; i < items.count; i++) {
     var n = items.get(i)
-    out.push({ id: n.iid, kind: n.kind, x: n.ix, y: n.iy, w: n.iw, h: n.ih, tint: n.itint, text: n.itext, pinned: n.ipinned === true, src: n.isrc })
+    var row = { id: n.iid, kind: n.kind, x: n.ix, y: n.iy, w: n.iw, h: n.ih, tint: n.itint, text: n.itext, pinned: n.ipinned === true, src: n.isrc }
     if (isLine(n.kind)) {
       var ends = lineEnds(n)
-      out[out.length - 1].ax = ends.ax; out[out.length - 1].ay = ends.ay
-      out[out.length - 1].bx = ends.bx; out[out.length - 1].by = ends.by
+      row.ax = ends.ax; row.ay = ends.ay; row.bx = ends.bx; row.by = ends.by
       // Glue only to an item that is on the board and can hold it.
       if (n.aon || n.bon) {
         if (!byId) byId = idIndex(items)
-        if (n.aon && gluedPoint(items, byId, n.aon, 0, 0)) out[out.length - 1].from = { id: n.aon, x: lineUnit(n.aonx, 0.5), y: lineUnit(n.aony, 0.5) }
-        if (n.bon && gluedPoint(items, byId, n.bon, 0, 0)) out[out.length - 1].to = { id: n.bon, x: lineUnit(n.bonx, 0.5), y: lineUnit(n.bony, 0.5) }
+        if (n.aon && gluedPoint(items, byId, n.aon, 0, 0)) row.from = { id: n.aon, x: lineUnit(n.aonx, 0.5), y: lineUnit(n.aony, 0.5) }
+        if (n.bon && gluedPoint(items, byId, n.bon, 0, 0)) row.to = { id: n.bon, x: lineUnit(n.bonx, 0.5), y: lineUnit(n.bony, 0.5) }
       }
     }
-    if (n.kind !== "image" && normalizeTexture(n.itexture) !== "plain") out[out.length - 1].texture = n.itexture
+    if (n.kind !== "image" && normalizeTexture(n.itexture) !== "plain") row.texture = n.itexture
+    out.push(row)
   }
   return out
 }
@@ -1347,8 +1417,8 @@ function syncItems(items, rows) {
   while (same < rows.length && same < items.count && items.get(same).iid === rows[same].id) same++
   for (var i = 0; i < same; i++) {
     var have = items.get(i), want = rows[i]
-    var ends = lineEnds({ lax: want.ax, lay: want.ay, lbx: want.bx, lby: want.by })
-    for (var role in ends) if (have["l" + role] !== ends[role]) items.setProperty(i, "l" + role, ends[role])
+    var ends = lineEndRoles(want)
+    for (var role in ends) if (have[role] !== ends[role]) items.setProperty(i, role, ends[role])
     var glue = glueRoles(want)
     for (var g in glue) if (have[g] !== glue[g]) items.setProperty(i, g, glue[g])
     if (have.kind !== want.kind) items.setProperty(i, "kind", want.kind)
@@ -1365,9 +1435,10 @@ function syncItems(items, rows) {
   for (var r = items.count - 1; r >= same; r--) items.remove(r)
   for (var a = same; a < rows.length; a++) {
     var n = rows[a]
-    items.append(Object.assign({ iid: n.id, kind: n.kind, ix: n.x, iy: n.y, iw: n.w, ih: n.h, itint: n.tint,
-                   lax: lineUnit(n.ax, 0.08), lay: lineUnit(n.ay, 0.5), lbx: lineUnit(n.bx, 0.92), lby: lineUnit(n.by, 0.5),
-                   itext: n.text, ipinned: n.pinned === true, isrc: n.src, itexture: normalizeTexture(n.texture) }, glueRoles(n)))
+    items.append(Object.assign({ iid: n.id, kind: n.kind, ix: n.x, iy: n.y, iw: n.w, ih: n.h, itint: n.tint },
+                               lineEndRoles(n),
+                               { itext: n.text, ipinned: n.pinned === true, isrc: n.src, itexture: normalizeTexture(n.texture) },
+                               glueRoles(n)))
   }
 }
 
@@ -1411,9 +1482,7 @@ function itemModelRows(rows) {
     used[id] = true
     var kind = KINDS.indexOf(n.kind) >= 0 ? n.kind
       : (n.kind === "image" && imageIsValid(n.src) ? "image" : "note")
-    made.push({
-      iid: id,
-      lax: lineUnit(n.ax, 0.08), lay: lineUnit(n.ay, 0.5), lbx: lineUnit(n.bx, 0.92), lby: lineUnit(n.by, 0.5),
+    made.push(Object.assign({ iid: id }, lineEndRoles(n), {
       kind: kind,
       ix: clampCoord(num(n.x, 0)),
       iy: clampCoord(num(n.y, 0)),
@@ -1424,9 +1493,7 @@ function itemModelRows(rows) {
       itext: typeof n.text === "string" ? n.text : "",
       ipinned: n.pinned === true,
       isrc: kind === "image" ? n.src : ""
-    })
-    var glue = glueRoles({ kind: kind, from: n.from, to: n.to })
-    for (var g in glue) made[made.length - 1][g] = glue[g]
+    }, glueRoles({ kind: kind, from: n.from, to: n.to })))
   }
   // Glue holds only to an item on this board that can take it, and never to
   // the line itself; anything else is let go of as the board is read.
@@ -1525,10 +1592,12 @@ function newIds(items, next, count) {
 // that is broken.
 //
 // Version 6 was a board with its edit history, which Omarchyform 0.4.7 to
-// 0.4.10 kept in the file; version 7 adds item textures. Older readers open
-// these boards read-only to prevent feature loss. A board with textures still
-// writes version 7; lines write version 8; plain boards write version 5.
+// 0.4.10 kept in the file; version 7 adds item textures, and version 8 lines.
+// Older readers open these boards read-only to prevent feature loss. A board
+// writes the oldest version that holds what it has: 8 with a line in it, 7
+// with a texture, and 5 otherwise.
 var FORMAT_VERSION = 8
+var TEXTURE_VERSION = 7
 var PLAIN_VERSION = 5
 
 // A whole number from 1 to FORMAT_VERSION. "5" and 4.5 are not versions.
@@ -1755,10 +1824,11 @@ var FORMAT_MARKER = "omarchyform.board"
 
 function writeFile(items, links, nextId) {
   var rows = itemRows(items)
-  var textured = rows.some(function (row) { return row.texture !== undefined })
+  var version = rows.some(function (row) { return isLine(row.kind) }) ? FORMAT_VERSION
+    : rows.some(function (row) { return row.texture !== undefined }) ? TEXTURE_VERSION : PLAIN_VERSION
   return JSON.stringify({
     kind: FORMAT_MARKER,
-    version: rows.some(function (row) { return isLine(row.kind) }) ? FORMAT_VERSION : textured ? 7 : PLAIN_VERSION,
+    version: version,
     nextId: nextId,
     items: rows,
     links: linkRows(links)

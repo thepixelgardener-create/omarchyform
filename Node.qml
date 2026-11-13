@@ -133,9 +133,6 @@ Item {
     antialiasing: true
   }
 
-  // A line's ring is the same ring turned to lie along the line. Around the
-  // line's box it was a square around any diagonal, far from the line itself.
-  // Built only while the line is selected, so a board of lines pays nothing.
   HoverHandler { id: hover }
 
   x: node.ix
@@ -587,26 +584,17 @@ Item {
       function aim(hx, hy, free) {
         if (!endpoint.moving || !node.ctl.pointerEdit || !node.ctl.canEdit) return
         var point = endpoint.mapToItem(node.parent, hx, hy)
-        var n = node.ctl.items.get(node.index)
-        var at = { x: point.x + endpoint.grabX, y: point.y + endpoint.grabY }
+        var items = node.ctl.items
+        var at = { x: point.x + endpoint.grabX, y: point.y + endpoint.grabY, guides: [] }
         // Level or upright when it is nearly so, and in line with the sides
         // and middles of other items; shift lets it lie anywhere.
         var pull = 10 / Math.max(0.01, node.ctl.zoom)
-        if (!free) {
-          at = Store.snappedLineEnd(n, endpoint.index, at.x, at.y, pull, node.ctl.items, node.index)
-          node.ctl.guides = at.guides
-        } else node.ctl.guides = []
+        if (!free) at = Store.snappedLineEnd(items.get(node.index), endpoint.index, at.x, at.y, pull, items, node.index)
         // Put down on or near another item, the end is glued to its outline
-        // and goes where the item goes from then on.
-        var e = node.lineEnds
-        var other = { x: node.x + (endpoint.index === 0 ? e.bx : e.ax) * node.width, y: node.y + (endpoint.index === 0 ? e.by : e.ay) * node.height }
-        var glue = free ? null : Store.glueAt(node.ctl.items, at.x, at.y, node.index, pull, other)
-        if (glue) { at = { x: glue.px, y: glue.py }; node.ctl.guides = [] }
-        var values = Store.movedLineEnd(n, endpoint.index, at.x, at.y)
-        var held = endpoint.index === 0 ? "aon" : "bon"
-        values[held] = glue ? glue.id : 0
-        if (glue) { values[held + "x"] = glue.x; values[held + "y"] = glue.y }
-        for (var role in values) node.set(role, values[role])
+        // and goes where the item goes from then on; there it needs no guide.
+        var placed = Store.placeLineEnd(items, node.index, endpoint.index, at.x, at.y, free ? null : pull)
+        node.ctl.guides = placed.glued ? [] : at.guides
+        for (var role in placed.values) node.set(role, placed.values[role])
         node.ctl.repaintLinks()
       }
       onReleased: { if (endpoint.moving) node.ctl.finishPointerEdit(false); endpoint.moving = false }
