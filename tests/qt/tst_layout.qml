@@ -12,6 +12,10 @@ TestCase {
   height: 360
   Item {
     id: ctl
+    // What it says, as written: these suites read English.
+    function t(text, a, b, c) { return Store.translated(null, text, [a, b, c]) }
+    function tn(one, other, count, a, b) { return Store.translatedCount(null, "en", one, other, count, [a, b]) }
+    function tv(text) { return text }
     property bool helpVisible: true
     // The accent the hint lines name their keys in, as markup wants it.
     property string accentMarkup: "#00ffff"
@@ -466,6 +470,8 @@ TestCase {
       Item {
         id: c
         property bool helpVisible: true
+        function t(text, a, b, c) { return Store.translated(null, text, [a, b, c]) }
+        function tv(text) { return text }
         // The suite's own palette at this rig's text size. Only the sizes are
         // this test's business, so the colours come from the theme above
         // rather than being invented a second time.

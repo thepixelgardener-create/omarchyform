@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import "../.."
+import "../../BoardStore.js" as Store
 
 Scope {
   id: test
@@ -19,6 +20,10 @@ Scope {
   function read(path) { reader.path = ""; reader.path = path; reader.reload(); reader.waitForJob(); return reader.text() }
   QtObject {
     id: ctl
+    // What it says, as written: these suites read English.
+    function t(text, a, b, c) { return Store.translated(null, text, [a, b, c]) }
+    function tn(one, other, count, a, b) { return Store.translatedCount(null, "en", one, other, count, [a, b]) }
+    function tv(text) { return text }
     readonly property string dataDir: test.dir + "/data"
     readonly property string imagesDir: dataDir + "/images"
     readonly property string boardsDir: dataDir + "/boards"

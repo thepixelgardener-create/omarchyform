@@ -75,6 +75,10 @@ ShellRoot {
     function repaintLinks() {}
     function focusKeys() {}
     function flash(text) {}
+    // What it says, as written: these suites read English.
+    function t(text, a, b, c) { return Store.translated(null, text, [a, b, c]) }
+    function tn(one, other, count, a, b) { return Store.translatedCount(null, "en", one, other, count, [a, b]) }
+    function tv(text) { return text }
     // The board puts the three choices on screen; this only has to be callable.
     property int decisions: 0
     function decideConflict() { ctl.decisions += 1 }

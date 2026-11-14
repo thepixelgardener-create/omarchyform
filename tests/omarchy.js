@@ -87,7 +87,7 @@ try {
     fs.copyFileSync(path.join(__dirname, 'qml/tst_startupfailure.qml'), path.join(dir, 'startupfailure.qml'))
     const blocked = spawnSync('qs', ['--no-color', '-p', path.join(dir, 'startupfailure.qml')], {
       encoding: 'utf8', timeout: 15000,
-      env: {...process.env, HOME: blockedHome, QT_QPA_PLATFORM: 'wayland', QT_QPA_PLATFORMTHEME: '',
+      env: {...process.env, HOME: blockedHome, OMARCHY_LANGUAGE_FILE: path.join(blockedHome, 'no-language'), QT_QPA_PLATFORM: 'wayland', QT_QPA_PLATFORMTHEME: '',
         QT_QUICK_CONTROLS_STYLE: 'Basic', XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR,
         WAYLAND_DISPLAY: path.isAbsolute(display) ? display : path.join(process.env.XDG_RUNTIME_DIR || '', display)}
     })
@@ -102,7 +102,7 @@ try {
     fs.copyFileSync(path.join(__dirname, 'qml/tst_freshstart.qml'), path.join(dir, 'fresh.qml'))
     const started = spawnSync('qs', ['--no-color', '-p', path.join(dir, 'fresh.qml')], {
       encoding: 'utf8', timeout: 30000,
-      env: {...process.env, HOME: fresh, QT_QPA_PLATFORM: 'wayland', QT_QPA_PLATFORMTHEME: '',
+      env: {...process.env, HOME: fresh, OMARCHY_LANGUAGE_FILE: path.join(fresh, 'no-language'), QT_QPA_PLATFORM: 'wayland', QT_QPA_PLATFORMTHEME: '',
         QT_QUICK_CONTROLS_STYLE: 'Basic', XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR,
         WAYLAND_DISPLAY: path.isAbsolute(display) ? display : path.join(process.env.XDG_RUNTIME_DIR || '', display)}
     })
@@ -114,7 +114,7 @@ try {
   }
   const result = spawnSync('qs', ['--no-color', '-p', path.join(dir, 'shell.qml')], {
     encoding: 'utf8', timeout: 30000,
-    env: {...process.env, HOME: home, PATH: (paste ? path.join(dir, 'stubs') + ':' : '') + process.env.PATH, QT_QPA_PLATFORM: 'wayland',
+    env: {...process.env, HOME: home, OMARCHY_LANGUAGE_FILE: path.join(home, 'no-language'), PATH: (paste ? path.join(dir, 'stubs') + ':' : '') + process.env.PATH, QT_QPA_PLATFORM: 'wayland',
       QT_QPA_PLATFORMTHEME: '', QT_QUICK_CONTROLS_STYLE: 'Basic', XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR,
       WAYLAND_DISPLAY: path.isAbsolute(display) ? display : path.join(process.env.XDG_RUNTIME_DIR || '', display),
       OMARCHYFORM_TEST_DIR: dir}

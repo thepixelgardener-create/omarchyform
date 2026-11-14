@@ -2333,7 +2333,7 @@ function tests(S) {
     eq(S.versionLabel(at(2026, 11, 13, 0, 5), now), "Today 00:05")
     eq(S.versionLabel(at(2026, 11, 12, 23, 59), now), "Yesterday 23:59")
     eq(S.versionLabel(at(2026, 11, 3, 9, 7), now), "Tue 3 Nov 09:07")
-    eq(S.versionLabel(at(2025, 12, 31, 18, 0), now), "31 Dec 2025 18:00")
+    eq(S.versionLabel(at(2025, 12, 31, 18, 0), now), "31 Dec 2025, 18:00")
   })
 
   test("versions are rows the command list can draw, found by typing when they are from", () => {

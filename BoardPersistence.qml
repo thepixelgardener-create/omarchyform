@@ -30,6 +30,10 @@ Item {
   // expects. The app passes a path outside the boards tree, so a directory
   // people are invited to hand-edit and commit stays free of .bak files.
   property string backupTarget: ""
+  // Whoever says things in the person's language, when there is one: this
+  // writer has no controller, and its tests run it without anything else.
+  property var translator: null
+  function t(text, a) { return persistence.translator ? persistence.translator.t(text, a) : Store.fillText(text, [a]) }
   // Where the board's earlier versions are kept, and the folder that has to
   // be inside. Without one none is kept. `keepAlways` keeps the version this
   // write replaces whatever the time since the last one.
@@ -64,7 +68,7 @@ Item {
     interval: persistence.timeoutMs
     repeat: false
     running: persistence.busy
-    onTriggered: if (persistence.busy) persistence.delayed("Saving is taking longer than expected; waiting for disk")
+    onTriggered: if (persistence.busy) persistence.delayed(persistence.t("Saving is taking longer than expected; waiting for disk"))
   }
 
   function fail(message) {
@@ -93,16 +97,16 @@ Item {
       commit.stdinEnabled = false
     }
     onExited: function(code) {
-      if (code === 127) { persistence.fail("Could not start the filesystem helper; install Python 3 and retry"); return }
+      if (code === 127) { persistence.fail(persistence.t("Could not start the filesystem helper; install Python 3 and retry")); return }
       if (code === 7) {
         persistence.busy = false
         persistence.stale(persistence.target, committed.text)
         return
       }
-      if (code === 3) { persistence.fail("Board path goes through a symlink; not saved"); return }
+      if (code === 3) { persistence.fail(persistence.t("Board path goes through a symlink; not saved")); return }
       // Larger than a board is opened at: written, it could not be read back.
-      if (code === 5) { persistence.fail("Board is " + Store.TOO_LARGE + ", so it was not saved; shorten or remove a note"); return }
-      if (code !== 0) { persistence.fail("Could not replace the board; the version on disk is untouched"); return }
+      if (code === 5) { persistence.fail(persistence.t("Board is %1, so it was not saved; shorten or remove a note", persistence.t(Store.TOO_LARGE))); return }
+      if (code !== 0) { persistence.fail(persistence.t("Could not replace the board; the version on disk is untouched")); return }
       persistence.busy = false
       persistence.completed(persistence.target, persistence.contents, committed.text)
     }

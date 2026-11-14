@@ -312,7 +312,12 @@ function controller() {
   const later = []
   const pictureCheck = { running: false, asked: [], input: '', command: null, stdinEnabled: false }
   const pictureVerdicts = { text: '' }
-  const workspaceContext = vm.createContext({ root: workspace, Store, boardExchange: exchange,
+  // The language the workspace speaks through: English, as written, with what
+  // goes in put in. A test of another language hands it a catalog.
+  const boardLanguage = { catalog: {}, code: 'en',
+    t(text, a, b, c) { return Store.translated(this.catalog, text, [a, b, c]) },
+    tn(one, other, count, a, b) { return Store.translatedCount(this.catalog, this.code, one, other, count, [a, b]) } }
+  const workspaceContext = vm.createContext({ root: workspace, Store, boardExchange: exchange, boardLanguage,
     documentComponent, stateFile: { setText(text) { states.push(text) } },
     Qt: { callLater(f) { later.push(f) } }, pictureCheck, pictureVerdicts,
     // The folder check's answer starts the move of an old single board.
@@ -323,6 +328,7 @@ function controller() {
   return { root: first, second, doc: opened.doc, workspace, session: opened.session, library,
     // The library's helper processes, for what it asks of them.
     libraryProcs: { moveProc, trashProc, restoreProc, purgeProc },
+    language: boardLanguage,
     items: opened.items, links: opened.links, writes: opened.writes, states, persistence: opened.persistence,
     exchange, store: Store, complete: opened.complete, refuse: opened.refuse,
     // The helper finishing the dropped file it is copying: its exit code, and

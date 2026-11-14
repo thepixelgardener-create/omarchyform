@@ -3,7 +3,7 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const { spawnSync } = require('child_process')
-for (const scenario of ['processfailure', 'persistence', 'session', 'timeout', 'exchange', 'imagebudget', 'clipboard', 'fieldpaste', 'legacy', 'ids', 'opening', 'versions']) {
+for (const scenario of ['processfailure', 'persistence', 'session', 'timeout', 'exchange', 'imagebudget', 'clipboard', 'fieldpaste', 'legacy', 'ids', 'opening', 'versions', 'language']) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'omarchyform-persistence-'))
   try {
     fs.writeFileSync(path.join(dir, 'blocked.json'), 'original')
@@ -120,6 +120,17 @@ for (const scenario of ['processfailure', 'persistence', 'session', 'timeout', '
       delete unversioned.version
       fs.writeFileSync(path.join(dir, 'sameline.json'), old(history, ', "version": 9', unversioned))
     }
+    if (scenario === 'language') {
+      // Catalogs of its own rather than the real ones, so what it reads back
+      // is known whatever the real ones say: German, Portuguese for pt-BR to
+      // fall back to, and a Finnish one that is not JSON.
+      fs.mkdirSync(path.join(dir, 'i18n'))
+      fs.writeFileSync(path.join(dir, 'i18n/de.json'), JSON.stringify({ 'Saved as %1': 'Gespeichert als %1',
+        '%1 items': { one: '%1 Element', other: '%1 Elemente' } }))
+      fs.writeFileSync(path.join(dir, 'i18n/pt.json'), JSON.stringify({ 'Saved as %1': 'Salvo como %1' }))
+      fs.writeFileSync(path.join(dir, 'i18n/fi.json'), '[1, 2')
+      fs.copyFileSync(path.join(__dirname, '..', 'BoardLanguage.qml'), path.join(dir, 'BoardLanguage.qml'))
+    }
     if (scenario === 'versions') {
       // The folders the plugin makes private as it starts, and one board.
       for (const folder of ['boards', 'backups', 'versions']) fs.mkdirSync(path.join(dir, folder), { mode: 0o700 })
@@ -186,7 +197,9 @@ esac
       encoding: 'utf8', timeout: 15000,
       env: { ...process.env, QT_QPA_PLATFORM: 'offscreen', QT_QPA_PLATFORMTHEME: '',
         PATH: path.join(dir, 'stubs') + (scenario === 'processfailure' ? '' : ':' + process.env.PATH),
-        QT_QUICK_CONTROLS_STYLE: 'Basic', XDG_RUNTIME_DIR: dir, OMARCHYFORM_TEST_DIR: dir }
+        QT_QUICK_CONTROLS_STYLE: 'Basic', XDG_RUNTIME_DIR: dir, OMARCHYFORM_TEST_DIR: dir,
+        // A language file of the scenario's own: nothing here reads the machine's.
+        OMARCHY_LANGUAGE_FILE: path.join(dir, 'language') }
     })
     const output = (result.stdout || '') + (result.stderr || '')
     if (result.error || result.status !== 0 || !output.includes(`${scenario.toUpperCase()}_TESTS_PASSED`) || output.includes('FAIL:')) {

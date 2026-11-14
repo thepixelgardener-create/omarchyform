@@ -21,6 +21,10 @@ TestCase {
 
   Item {
     id: ctl
+    // What it says, as written: these suites read English.
+    function t(text, a, b, c) { return Store.translated(null, text, [a, b, c]) }
+    function tn(one, other, count, a, b) { return Store.translatedCount(null, "en", one, other, count, [a, b]) }
+    function tv(text) { return text }
     property alias items: itemModel
     property alias links: linkModel
     property int minItemSize: 60

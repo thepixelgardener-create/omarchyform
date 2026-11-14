@@ -76,7 +76,7 @@ Item {
     // walking away from it would drop the one that is only on screen — so the
     // switch waits for someone to say which one to keep.
     if (session.conflict) {
-      session.ctl.flash("Two versions of this board exist · ctrl+s to choose which to keep")
+      session.ctl.flash(session.ctl.t("Two versions of this board exist · ctrl+s to choose which to keep"))
       session.ctl.decideConflict()
       return
     }
@@ -172,11 +172,11 @@ Item {
   function restoreVersion(name) {
     if (isNaN(Store.versionTime(name))) return
     if (!session.boardLoaded || session.opening || session.diskReading || session.pendingBoard !== null || versionSwap.running) {
-      session.ctl.flash("the board is not ready yet")
+      session.ctl.flash(session.ctl.t("the board is not ready yet"))
       return
     }
     if (session.conflict) {
-      session.ctl.flash("Two versions of this board exist · ctrl+s to choose which to keep")
+      session.ctl.flash(session.ctl.t("Two versions of this board exist · ctrl+s to choose which to keep"))
       session.ctl.decideConflict()
       return
     }
@@ -186,11 +186,11 @@ Item {
     if (persistence.busy) { session.pendingRestore = name; return }
     session.pendingRestore = ""
     if (session.saveError !== "" || session.ctl.fileText() !== session.lastSavedText) {
-      session.ctl.flash("This board has changes that are not saved yet · ctrl+s, then go back")
+      session.ctl.flash(session.ctl.t("This board has changes that are not saved yet · ctrl+s, then go back"))
       return
     }
     versionSwap.board = session.ctl.currentBoard
-    versionSwap.label = Store.versionLabel(Store.versionTime(name), Date.now())
+    versionSwap.label = Store.versionLabel(Store.versionTime(name), Date.now(), session.ctl.tv)
     versionSwap.command = session.ctl.fileCommand("restore",
       [session.ctl.boardPath, session.ctl.versionsPathFor(session.ctl.currentBoard), name,
        session.ctl.backupPathFor(session.ctl.currentBoard), session.ctl.lockPathFor(session.ctl.currentBoard),
@@ -218,11 +218,11 @@ Item {
       // The watcher says so as well; asked for here in case it is slow to.
       session.externalWrite()
     } else if (code === 7) {
-      session.ctl.flash("The board changed on disk first, so nothing was put back")
+      session.ctl.flash(session.ctl.t("The board changed on disk first, so nothing was put back"))
       session.externalWrite()
-    } else if (code === 8) session.ctl.flash("That version is no longer there")
-    else if (code === 5) session.ctl.flash("That version is " + Store.TOO_LARGE + ", so the board is as it was")
-    else session.ctl.flash("Could not go back to that version; the board is as it was")
+    } else if (code === 8) session.ctl.flash(session.ctl.t("That version is no longer there"))
+    else if (code === 5) session.ctl.flash(session.ctl.t("That version is %1, so the board is as it was", session.ctl.tv(Store.TOO_LARGE)))
+    else session.ctl.flash(session.ctl.t("Could not go back to that version; the board is as it was"))
   }
 
   BoardFileProcess {
@@ -267,8 +267,8 @@ Item {
   }
 
   function failedSave(message) {
-    session.saveError = message + " — ctrl+s to retry"
-    if (session.ctl.library.showing) session.ctl.library.message = message + " — esc, then ctrl+s to retry"
+    session.saveError = session.ctl.t("%1 — ctrl+s to retry", message)
+    if (session.ctl.library.showing) session.ctl.library.message = session.ctl.t("%1 — esc, then ctrl+s to retry", message)
     session.pendingBoard = null
     session.pendingRestore = ""
     // A resolution that failed is not a resolution. The edits are still on
@@ -317,13 +317,13 @@ Item {
     session.pendingBoard = null
     session.restoredTo = ""
     session.conflict = true
-    session.ctl.flash(message || "Board changed on disk · ctrl+s to choose which version to keep")
+    session.ctl.flash(message || session.ctl.t("Board changed on disk · ctrl+s to choose which version to keep"))
   }
 
   // What is said when the version on disk is larger than a board may be. It is
   // not read; keeping the version on screen is still a choice there is.
   function largeOnDisk() {
-    return "Board changed on disk to something " + Store.TOO_LARGE + " · ctrl+s to choose which version to keep"
+    return session.ctl.t("Board changed on disk to something %1 · ctrl+s to choose which version to keep", session.ctl.tv(Store.TOO_LARGE))
   }
 
   function clearConflict() {
@@ -350,7 +350,7 @@ Item {
   function keptAsCopy(name) {
     session.conflict = true
     session.useDisk()
-    session.ctl.flash("Your version was saved as " + name)
+    session.ctl.flash(session.ctl.t("Your version was saved as %1", name))
   }
 
   // The helper reads bytes and their revision under the same lock as commits.
@@ -387,15 +387,15 @@ Item {
     session.loadBoard(raw, false, read)
     var wentBack = session.restoredTo
     session.restoredTo = ""
-    session.ctl.flash(resolve ? "Kept the version from disk"
-      : wentBack !== "" ? "Went back to " + wentBack + " · the board as it was is in Earlier versions too"
-      : "Board changed on disk; reloaded")
+    session.ctl.flash(resolve ? session.ctl.t("Kept the version from disk")
+      : wentBack !== "" ? session.ctl.t("Went back to %1 · the board as it was is in Earlier versions too", wentBack)
+      : session.ctl.t("Board changed on disk; reloaded"))
   }
 
   function diskReadFailed(board, why) {
     if (board !== session.ctl.currentBoard) return
     session.pendingBoard = null
-    session.saveError = (why || "Could not read the disk version") + "; local edits kept — ctrl+s to retry"
+    session.saveError = session.ctl.t("%1; local edits kept — ctrl+s to retry", why || session.ctl.t("Could not read the disk version"))
     session.ctl.flash(session.saveError)
   }
 
@@ -407,7 +407,7 @@ Item {
     stdout: StdioCollector { id: diskContents; waitForEnd: true }
     onExited: function (code) {
       // 5: the helper found it larger than a board may be, and read none of it.
-      if (code === 5) session.diskReadFailed(diskRead.board, "The disk version is " + Store.TOO_LARGE)
+      if (code === 5) session.diskReadFailed(diskRead.board, session.ctl.t("The disk version is %1", session.ctl.tv(Store.TOO_LARGE)))
       else if (code !== 0) session.diskReadFailed(diskRead.board)
       else session.acceptDisk(diskRead.board, diskRead.localText, diskRead.resolve, diskContents.text)
     }
@@ -600,6 +600,7 @@ Item {
 
   BoardPersistence {
     id: persistence
+    translator: session.ctl
     onCompleted: function(path, text, revision) { session.savedBoard(path, text, revision) }
     onFailed: function(message) { session.failedSave(message) }
     onStale: function(path, revision) { session.staleSave(path, revision) }
@@ -629,13 +630,13 @@ Item {
 
   function refusePath() {
     session.loadBoard("", false)
-    session.damageReason = "goes through a symlink"
+    session.damageReason = Store.DAMAGE_SYMLINK
   }
 
   // The helper found the file larger than a board may be, and read none of it.
   function refuseLarge() {
     session.loadBoard("", false)
-    session.damageReason = "is " + Store.TOO_LARGE
+    session.damageReason = Store.DAMAGE_LARGE
   }
 
   BoardFileProcess {

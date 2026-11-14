@@ -7,6 +7,12 @@ since older boards are migrated on load rather than rejected.
 
 ### Added
 
+- The board speaks the language Omarchy is set to (Setup > Language) and
+  follows a change while it is open. English and German are complete; any
+  other language is English until its catalog in `i18n/` is written, string by
+  string as it is. Counted messages take each language's plural forms, and the
+  command list finds a command by its English name too. Right-to-left
+  languages are still laid out left to right.
 - **Earlier versions…** in the command list takes a board back to how it
   stood before an earlier save. The file a save replaces is set aside first,
   at most one every ten minutes, forty for a board and no more than 64 MB, in

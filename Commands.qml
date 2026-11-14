@@ -101,8 +101,8 @@ Item {
         elide: Text.ElideRight
         anchors.leftMargin: typed.cursorRectangle.x + typed.cursorRectangle.width + panel.theme.sp(4)
         visible: typed.text === ""
-        text: panel.ctl.paletteGroup !== "" ? Store.groupTitle(panel.ctl.paletteGroup) + " · backspace: back"
-          : panel.ctl.paletteScope === "selection" ? "Do something with it…" : "Run a command…"
+        text: panel.ctl.paletteGroup !== "" ? panel.ctl.t("%1 · backspace: back", Store.groupTitle(panel.ctl.paletteGroup, panel.ctl.tv))
+          : panel.ctl.paletteScope === "selection" ? panel.ctl.t("Do something with it…") : panel.ctl.t("Run a command…")
         color: panel.theme.panelText
         opacity: 0.58
         font.family: panel.theme.menuFontFamily
@@ -122,8 +122,8 @@ Item {
         font.pixelSize: panel.theme.fontHeading
 
         Accessible.role: Accessible.EditableText
-        Accessible.name: "Command to run"
-        Accessible.description: panel.ctl.paletteMatches.length + " commands match"
+        Accessible.name: panel.ctl.t("Command to run")
+        Accessible.description: panel.ctl.tn("%1 command matches", "%1 commands match", panel.ctl.paletteMatches.length)
 
         onTextChanged: panel.ctl.setPaletteQuery(typed.text)
         readonly property string held: panel.ctl.paletteQuery
@@ -189,7 +189,7 @@ Item {
           // Named for anything reading the screen rather than looking at it:
           // what the command is, what it answers to, and why it cannot run.
           Accessible.role: Accessible.Button
-          Accessible.name: row.modelData.name
+          Accessible.name: panel.ctl.tv(row.modelData.name)
                            + (row.modelData.key === "" ? "" : ", " + row.modelData.key)
           Accessible.description: row.ready ? "" : panel.ctl.commandExcuse(row.modelData.needs)
           Accessible.focused: row.current
@@ -251,7 +251,7 @@ Item {
             anchors.right: excuse.left
             anchors.rightMargin: panel.theme.sp(12)
             elide: Text.ElideRight
-            text: row.modelData.name
+            text: panel.ctl.tv(row.modelData.name)
             color: row.current && row.ready ? panel.theme.cursorText : panel.theme.panelText
             // Full strength, as the menu's names are: the cursor is carried by
             // the fill and the accent, so the rest need not be dimmed to show it.

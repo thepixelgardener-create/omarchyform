@@ -113,6 +113,10 @@ ShellRoot {
     function imagePath(name) {
       return holder.pictureState(name) === "" ? "file://" + render.job.imagesDir + "/" + name : ""
     }
+    // A picture made here is said in English, as the command line itself
+    // speaks: it answers a program, and what is in the file is the board.
+    function t(text, a, b, c) { return Store.translated(null, text, [a, b, c]) }
+    function tv(text) { return text }
     function pictureState(name) {
       if (!Store.imageIsValid(name) || render.job === null) return "missing"
       var found = render.job.pictures[name]

@@ -72,7 +72,7 @@ Rectangle {
           font.bold: true
           font.underline: titleMouse.containsMouse
           Accessible.role: Accessible.Button
-          Accessible.name: "Rename " + toolbar.ctl.boardTitle
+          Accessible.name: toolbar.ctl.t("Rename %1", toolbar.ctl.boardTitle)
           Accessible.onPressAction: toolbar.ctl.renameBoard()
           MouseArea {
             id: titleMouse
@@ -119,7 +119,7 @@ Rectangle {
           // to press, and a stronger one under the pointer.
           color: zoomMouse.containsMouse ? toolbar.theme.hoverFill : toolbar.theme.controlFill
           Accessible.role: Accessible.Button
-          Accessible.name: "Fit board to window, zoom " + Math.round(toolbar.ctl.zoom * 100) + " percent"
+          Accessible.name: toolbar.ctl.t("Fit board to window, zoom %1 percent", Math.round(toolbar.ctl.zoom * 100))
           Accessible.onPressAction: toolbar.ctl.fitToItems()
           Text {
             textFormat: Text.PlainText
@@ -151,7 +151,7 @@ Rectangle {
           border.color: Qt.rgba(toolbar.theme.barForeground.r, toolbar.theme.barForeground.g,
                                 toolbar.theme.barForeground.b, 0.25)
           Accessible.role: Accessible.Button
-          Accessible.name: toolbar.ctl.menuVisible ? "Close board menu" : "Open board menu"
+          Accessible.name: toolbar.ctl.menuVisible ? toolbar.ctl.t("Close board menu") : toolbar.ctl.t("Open board menu")
           Accessible.onPressAction: toolbar.ctl.toggleMenu()
           Text {
             id: opener
@@ -182,6 +182,7 @@ Rectangle {
       Repeater {
         model: Store.menuEntries(toolbar.ctl.zoomMenuVisible)
         delegate: Rectangle {
+          id: entry
           required property var modelData
           required property int index
           width: label.implicitWidth + toolbar.theme.sp(14)
@@ -202,7 +203,8 @@ Rectangle {
             textFormat: Text.PlainText
             id: label
             anchors.centerIn: parent
-            text: modelData.id === "zoom" ? modelData.label + " " + Math.round(toolbar.ctl.zoom * 100) + "%" : modelData.label
+            text: entry.modelData.id === "zoom" ? toolbar.ctl.tv(entry.modelData.label) + " " + Math.round(toolbar.ctl.zoom * 100) + "%"
+              : toolbar.ctl.tv(entry.modelData.label)
             color: parent.onIt ? toolbar.theme.cursorText : toolbar.theme.barForeground
             font.family: toolbar.theme.fontFamily
             font.pixelSize: toolbar.theme.fontBody

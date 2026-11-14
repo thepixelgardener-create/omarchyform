@@ -90,6 +90,10 @@ Item {
   function recheckPictures(names) { doc.workspace.recheckPictures(names) }
   function lockPathFor(relative) { return doc.workspace.lockPathFor(relative) }
   function fileCommand(action, args) { return doc.workspace.fileCommand(action, args) }
+  // What the session says, in the workspace's language.
+  function t(text, a, b, c) { return doc.workspace.t(text, a, b, c) }
+  function tn(one, other, count, a, b) { return doc.workspace.tn(one, other, count, a, b) }
+  function tv(text) { return doc.workspace.tv(text) }
   function writeState() { doc.workspace.writeState() }
 
   // Every pane showing this board, for what the session has to say to the view.

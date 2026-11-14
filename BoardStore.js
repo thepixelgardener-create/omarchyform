@@ -663,18 +663,23 @@ function keyMarkup(key, color) {
   return '<font color="' + color + '">' + escapeMarkup(key) + "</font>"
 }
 
-function hintMarkup(key, label, color) {
-  if (!keyLeads(key, label)) return keyMarkup(key, color) + ": " + escapeMarkup(label)
-  return keyMarkup(label.slice(0, 1), color) + escapeMarkup(label.slice(1))
+// `say` puts a label into the person's language (a controller's tv); without
+// one it is said as written. A key lights the first letter of its word only
+// where the word, in whatever language, still starts with it.
+function asWritten(text) { return text }
+function hintMarkup(key, label, color, say) {
+  var word = (say || asWritten)(label)
+  if (!keyLeads(key, word)) return keyMarkup(key, color) + ": " + escapeMarkup(word)
+  return keyMarkup(word.slice(0, 1), color) + escapeMarkup(word.slice(1))
 }
 
 // The separator is drawn as markup, where a run of spaces collapses to one —
 // so a line separated by spaces alone arrives with its hints run together.
 // Every caller passes something visible.
-function hintLine(hints, color, separator) {
+function hintLine(hints, color, separator, say) {
   var out = []
-  for (var i = 0; i < hints.length; i++) out.push(hintMarkup(hints[i][0], hints[i][1], color))
-  return out.join(separator === undefined ? " · " : separator)
+  for (var i = 0; i < hints.length; i++) out.push(hintMarkup(hints[i][0], hints[i][1], color, say))
+  return out.join(separator === undefined || separator === null ? " · " : separator)
 }
 
 // What each surface offers, as data: the view joins and colours them, and the
@@ -724,8 +729,8 @@ function iconHintLine(hints, color) {
              keyMarkup(hints[i][0], color))
   return out.join("&nbsp;&nbsp;&nbsp;")
 }
-function hintWords(hints) {
-  return hints.map(function (h) { return h[0] + " " + h[1] }).join(", ")
+function hintWords(hints, say) {
+  return hints.map(function (h) { return h[0] + " " + (say || asWritten)(h[1]) }).join(", ")
 }
 var FIND_HINTS = [["enter", "next"], ["esc", "done"]]
 var ARRANGE_HINTS = [["hjkl", "edges"], ["c/m", "centres"], ["HJKL", "spread evenly"],
@@ -987,12 +992,13 @@ function linkAt(links, a, b) {
 // What the board says while the far end is being chosen. Written from the
 // outcome rather than beside it, so the words and the mutation move together.
 // Every string in it is ours, so there is nothing here to escape.
-function linkHint(outcome, color) {
-  var line = outcome === "remove" ? keyMarkup("x", color) + " removes this connector"
-    : outcome === "reverse" ? keyMarkup("x", color) + " turns this connector round"
-    : outcome === "create" ? keyMarkup("x", color) + " connects these two"
-    : "pick the other end, then " + keyMarkup("x", color)
-  return line + " \u00b7 " + hintMarkup("esc", "cancel", color)
+var LINK_HINTS = { remove: "%1 removes this connector", reverse: "%1 turns this connector round",
+                   create: "%1 connects these two", none: "pick the other end, then %1" }
+function linkHint(outcome, color, say) {
+  var words = (say || asWritten)(LINK_HINTS.hasOwnProperty(outcome) ? LINK_HINTS[outcome] : LINK_HINTS.none)
+  // The words are a catalog's, the key is ours: the one is escaped, and the
+  // other put in after.
+  return fillText(escapeMarkup(words), [keyMarkup("x", color)]) + " \u00b7 " + hintMarkup("esc", "cancel", color, say)
 }
 
 // Canvas text is untrusted, including notes in local/synced boards. Keep the
@@ -1172,7 +1178,11 @@ function aliasLeads(command, needle) {
 // command that `opens` that group stands for them. Browsing, with nothing
 // typed, shows the family's one entry; typing finds any of them by name; and
 // inside a family, `group`, the list is that family and nothing else.
-function matchCommands(query, scope, group) {
+//
+// `say` is the person's language: a command answers to its name there, and to
+// its English name and aliases as well, which is what every guide and every
+// other machine calls it.
+function matchCommands(query, scope, group, say) {
   var needle = String(query === undefined ? "" : query).toLowerCase().trim()
   var leading = []
   var rest = []
@@ -1192,6 +1202,11 @@ function matchCommands(query, scope, group) {
     if (needle === "") { rest.push(COMMANDS[i]); continue }
     var name = COMMANDS[i].name.toLowerCase()
     var at = name.indexOf(needle)
+    if (say) {
+      var said = String(say(COMMANDS[i].name)).toLowerCase()
+      var there = said.indexOf(needle)
+      if (there >= 0 && (at < 0 || there < at)) at = there
+    }
     // The key is worth searching as well as the name: someone who half
     // remembers the letter should be able to type it and see what it does.
     // Tested before the substring, or a command whose name happens to contain
@@ -1207,9 +1222,9 @@ function matchCommands(query, scope, group) {
 }
 
 // What a family is called, for the line the list shows it under.
-function groupTitle(group) {
+function groupTitle(group, say) {
   for (var i = 0; i < COMMANDS.length; i++)
-    if (COMMANDS[i].opens === group) return COMMANDS[i].name.replace(/…$/, "")
+    if (COMMANDS[i].opens === group) return String((say || asWritten)(COMMANDS[i].name)).replace(/…$/, "")
   return ""
 }
 
@@ -1253,16 +1268,23 @@ function twoDigits(n) { return (n < 10 ? "0" : "") + n }
 
 // When a version is from, the way a person says it: the day by name while it
 // is near, by date once it is not, and the year only when it is another one.
-function versionLabel(at, now) {
+//
+// The four shapes are catalog entries like any other, so a language orders a
+// date its own way: a weekday, day, month and time; or a day, month, year and
+// time, which in English takes a comma the other does not.
+var VERSION_SHAPES = { today: "Today %1", yesterday: "Yesterday %1", near: "%1 %2 %3 %4", far: "%1 %2 %3, %4" }
+function versionLabel(at, now, say) {
+  say = say || asWritten
   var then = new Date(at), today = new Date(now)
   var clock = twoDigits(then.getHours()) + ":" + twoDigits(then.getMinutes())
   var days = Math.round((new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()
     - new Date(then.getFullYear(), then.getMonth(), then.getDate()).getTime()) / 86400000)
-  if (days === 0) return "Today " + clock
-  if (days === 1) return "Yesterday " + clock
-  var date = then.getDate() + " " + MONTHS[then.getMonth()]
-  if (then.getFullYear() !== today.getFullYear()) return date + " " + then.getFullYear() + " " + clock
-  return WEEKDAYS[then.getDay()] + " " + date + " " + clock
+  if (days === 0) return fillText(say(VERSION_SHAPES.today), [clock])
+  if (days === 1) return fillText(say(VERSION_SHAPES.yesterday), [clock])
+  var month = say(MONTHS[then.getMonth()])
+  if (then.getFullYear() !== today.getFullYear())
+    return fillText(say(VERSION_SHAPES.far), [then.getDate(), month, then.getFullYear(), clock])
+  return fillText(say(VERSION_SHAPES.near), [say(WEEKDAYS[then.getDay()]), then.getDate(), month, clock])
 }
 
 // A board's versions as the rows the command list draws: shaped like the
@@ -1270,16 +1292,192 @@ function versionLabel(at, now) {
 // part of when they are from. A row is its date and nothing beside it: how
 // long ago that was, where a command has its key, took the room the date
 // needed in a narrow panel.
-function versionChoices(rows, query, now) {
+function versionChoices(rows, query, now, say) {
   var needle = String(query === undefined ? "" : query).toLowerCase().trim()
   var found = []
   for (var i = 0; rows && i < rows.length; i++) {
-    var label = versionLabel(rows[i].at, now)
+    var label = versionLabel(rows[i].at, now, say)
     if (needle !== "" && label.toLowerCase().indexOf(needle) < 0) continue
     found.push({ name: label, key: "", run: "restoreVersion", arg: rows[i].name,
                  needs: "edit", group: "versions" })
   }
   return found
+}
+
+// ------------------------------------------------------------- languages
+// The board speaks the language Omarchy is set to. A catalog is one JSON
+// object for a language, from the English text to its translation, with %1,
+// %2 where something is put in; a counted string is an object of the forms
+// its language has ("one", "few", "other"…), found under its English plural.
+// English is the text in the source and has no catalog to load: whatever a
+// catalog does not have is said in English, string by string.
+
+// The language a line of ~/.config/omarchy/language names, or English.
+function languageCode(raw) {
+  var code = String(raw === undefined || raw === null ? "" : raw).trim()
+  return /^[a-z]{2,3}(-[A-Za-z]{2})?$/.test(code) ? code : "en"
+}
+
+// The catalogs to try for a language, most particular first: pt-BR, then pt.
+function languageChain(code) {
+  if (code === "en") return []
+  var dash = code.indexOf("-")
+  return dash > 0 ? [code, code.slice(0, dash)] : [code]
+}
+
+// CLDR's plural category for a whole count, by Omarchy language code: the
+// rules the shell's own Commons/Plural.js has, so a count here takes the
+// form it takes in the menu beside it.
+function pluralCategory(code, count) {
+  var n = Math.abs(Math.trunc(Number(count) || 0))
+  var n10 = n % 10
+  var n100 = n % 100
+  var millions = n !== 0 && n % 1000000 === 0
+  function within(value, low, high) { return value >= low && value <= high }
+  switch (String(code || "")) {
+  case "ja": case "ko": case "zh-CN": case "zh-TW": case "th": case "vi": case "id": case "ms":
+    return "other"
+  case "hi": case "bn": case "fa": case "si":
+    return n <= 1 ? "one" : "other"
+  case "fr": case "pt-BR":
+    return n <= 1 ? "one" : millions ? "many" : "other"
+  case "ca": case "es-MX": case "it": case "pt":
+    return n === 1 ? "one" : millions ? "many" : "other"
+  case "fil":
+    return (n10 === 4 || n10 === 6 || n10 === 9) ? "other" : "one"
+  case "is":
+    return n10 === 1 && n100 !== 11 ? "one" : "other"
+  case "cs": case "sk":
+    return n === 1 ? "one" : within(n, 2, 4) ? "few" : "other"
+  case "pl":
+    if (n === 1) return "one"
+    return within(n10, 2, 4) && !within(n100, 12, 14) ? "few" : "many"
+  case "ru": case "uk":
+    if (n10 === 1 && n100 !== 11) return "one"
+    return within(n10, 2, 4) && !within(n100, 12, 14) ? "few" : "many"
+  case "hr": case "sr":
+    if (n10 === 1 && n100 !== 11) return "one"
+    return within(n10, 2, 4) && !within(n100, 12, 14) ? "few" : "other"
+  case "sl":
+    if (n100 === 1) return "one"
+    if (n100 === 2) return "two"
+    return within(n100, 3, 4) ? "few" : "other"
+  case "lt":
+    if (within(n100, 11, 19)) return "other"
+    return n10 === 1 ? "one" : n10 >= 2 ? "few" : "other"
+  case "lv":
+    if (n10 === 0 || within(n100, 11, 19)) return "zero"
+    return n10 === 1 ? "one" : "other"
+  case "ro":
+    if (n === 1) return "one"
+    return n === 0 || within(n100, 1, 19) ? "few" : "other"
+  case "ar":
+    if (n <= 2) return ["zero", "one", "two"][n]
+    return within(n100, 3, 10) ? "few" : within(n100, 11, 99) ? "many" : "other"
+  case "he":
+    return n === 1 ? "one" : n === 2 ? "two" : "other"
+  case "ga":
+    if (n <= 2) return n === 0 ? "other" : n === 1 ? "one" : "two"
+    return within(n, 3, 6) ? "few" : within(n, 7, 10) ? "many" : "other"
+  default:
+    return n === 1 ? "one" : "other"
+  }
+}
+
+// %1, %2… put in. In one pass, so something put in that itself reads "%2"
+// is left as it is; a hole with nothing for it stays a hole.
+function fillText(template, args) {
+  return String(template).replace(/%([1-9])/g, function (hole, digit) {
+    var value = args ? args[Number(digit) - 1] : undefined
+    return value === undefined || value === null ? hole : String(value)
+  })
+}
+
+// A catalog's own entry for `text`, or undefined: only a property of the
+// catalog itself, so "constructor" is a word like any other.
+function catalogEntry(catalog, text) {
+  return catalog && Object.prototype.hasOwnProperty.call(catalog, text) ? catalog[text] : undefined
+}
+
+// `text` in the catalog's language, with `args` put in; English when the
+// catalog does not have it.
+function translated(catalog, text, args) {
+  var found = catalogEntry(catalog, text)
+  return fillText(typeof found === "string" && found !== "" ? found : text, args)
+}
+
+// A counted string: `one` and `other` are the English forms, the catalog has
+// the language's under the English plural, and %1 is the count.
+function translatedCount(catalog, language, one, other, count, args) {
+  var found = catalogEntry(catalog, other)
+  var form = ""
+  if (found && typeof found === "object") {
+    var category = found[pluralCategory(language, count)]
+    form = typeof category === "string" && category !== "" ? category
+      : typeof found.other === "string" ? found.other : ""
+  }
+  if (form === "") form = Number(count) === 1 ? one : other
+  return fillText(form, [count].concat(args || []))
+}
+
+// Every string that reaches the screen out of a table here rather than out
+// of a t("…") written where it is shown: what a controller's tv is handed.
+// tests/i18n.js holds the English catalog to these and to the t() calls, so
+// a string added to a table has a catalog entry before it is ever shown.
+function displayStrings() {
+  var found = []
+  function add(text) { if (typeof text === "string" && text !== "" && found.indexOf(text) < 0) found.push(text) }
+  function hints(table) { for (var i = 0; i < table.length; i++) add(table[i][1]) }
+  var i, j
+  for (i = 0; i < COMMANDS.length; i++) add(COMMANDS[i].name)
+  for (i = 0; i < MENU_COMMANDS.length; i++) add(MENU_COMMANDS[i].label)
+  add(ZOOM_COMMANDS[0].label)
+  var tables = [BOARD_HINTS, ctrlHints(false), ctrlHints(true), FIND_HINTS, ARRANGE_HINTS, PINNED_HINTS, BROWSER_HINTS,
+                TRASH_HINTS, PALETTE_HINTS, CONFLICT_HINTS, PROMPT_HINTS, EMPTY_HINTS, START_HINTS]
+  for (i = 0; i < tables.length; i++) hints(tables[i])
+  for (var outcome in LINK_HINTS) add(LINK_HINTS[outcome])
+  // The help list: what each key does, and the keys themselves where they
+  // are said in words rather than as keys.
+  for (i = 0; i < KEY_HELP_SECTIONS.length; i++) {
+    add(KEY_HELP_SECTIONS[i].title)
+    for (j = 0; j < KEY_HELP_SECTIONS[i].rows.length; j++) {
+      var row = KEY_HELP_SECTIONS[i].rows[j]
+      if (keysInWords(row[0])) add(row[0])
+      add(row[1])
+    }
+  }
+  for (var shape in VERSION_SHAPES) add(VERSION_SHAPES[shape])
+  for (i = 0; i < WEEKDAYS.length; i++) add(WEEKDAYS[i])
+  for (i = 0; i < MONTHS.length; i++) add(MONTHS[i])
+  for (i = 0; i < EXPORT_PALETTE_NAMES.length; i++) {
+    add(exportNote(EXPORT_PALETTE_NAMES[i], false))
+    add(exportNote(EXPORT_PALETTE_NAMES[i], true))
+  }
+  for (i = 0; i < CANVAS_PATTERNS.length; i++) add(CANVAS_PATTERNS[i])
+  add("Plain")
+  for (i = 0; i < CANVAS_COLOURS.length; i++) add(CANVAS_COLOURS[i])
+  for (i = 0; i < TEXTURES.length; i++) add(TEXTURES[i])
+  for (var refusal in PICTURE_REFUSALS) add(PICTURE_REFUSALS[refusal])
+  add(UNCHECKED_PICTURE)
+  add(FULL_ITEMS)
+  add(FULL_LINKS)
+  add(TOO_LARGE)
+  add(TOO_LONG_LIST)
+  add("has a note longer than 1 MB")
+  add(tooManyRows({ items: { length: MAX_ITEMS + 1 } }))
+  add(tooManyRows({ links: { length: MAX_LINKS + 1 } }))
+  add(DAMAGE_SYMLINK)
+  add(DAMAGE_LARGE)
+  return found
+}
+
+// Whether a help row's key column says something in words: "drag on canvas",
+// "hold ctrl", as against "ctrl+d" or "h j k l", which read the same anywhere.
+var KEY_WORDS = /^(ctrl|shift|super|alt|tab|esc|del|enter|space|backspace|wheel|png|hjkl|HJKL|[a-z]|[A-Z]|F[0-9]+)$/
+function keysInWords(keys) {
+  var parts = String(keys).split(/[^A-Za-z0-9]+/)
+  for (var i = 0; i < parts.length; i++) if (parts[i] !== "" && !/^[0-9]+$/.test(parts[i]) && !KEY_WORDS.test(parts[i])) return true
+  return false
 }
 
 function commandByName(name) {
@@ -1747,6 +1945,12 @@ var FULL_ITEMS = "A board holds at most " + thousands(MAX_ITEMS) + " items"
 var FULL_LINKS = "A board holds at most " + thousands(MAX_LINKS) + " connectors"
 // What a board past MAX_BOARD_BYTES is, wherever it is turned away.
 var TOO_LARGE = "larger than " + MAX_BOARD_BYTES / 1048576 + " MB"
+// Why a board is read-only when its file was never read: said after the
+// board's name, as boardLimit's reasons are.
+var DAMAGE_SYMLINK = "goes through a symlink"
+var DAMAGE_LARGE = "is " + TOO_LARGE
+// What a picture the helper gave no answer about is said to be.
+var UNCHECKED_PICTURE = "could not be checked"
 
 // Qt's JSON.parse keeps every element of an array it is still reading on the
 // engine's own stack, and nothing checks that stack as it grows: past about

@@ -52,6 +52,10 @@ ShellRoot {
     function backupPathFor(relative) { return test.dir + "/backups/" + relative + ".bak" }
     function lockPathFor(relative) { return test.dir + "/lock__" + relative + ".lock" }
     function fileCommand(action, args) { return ["bash", test.dir + "/BoardFiles.sh", action].concat(args) }
+    // What it says, as written: these suites read English.
+    function t(text, a, b, c) { return Store.translated(null, text, [a, b, c]) }
+    function tn(one, other, count, a, b) { return Store.translatedCount(null, "en", one, other, count, [a, b]) }
+    function tv(text) { return text }
     function writeState() {}
     function panesViewing(doc) { return [] }
     function recheckPictures(names) {}

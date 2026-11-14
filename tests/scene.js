@@ -63,7 +63,7 @@ function measure(size) {
     const display = process.env.WAYLAND_DISPLAY || ''
     const result = spawnSync('qs', ['--no-color', '-p', path.join(dir, 'shell.qml')], {
       encoding: 'utf8', timeout: 180000,
-      env: { ...process.env, HOME: home, QT_QPA_PLATFORM: 'wayland',
+      env: { ...process.env, HOME: home, OMARCHY_LANGUAGE_FILE: path.join(home, 'no-language'), QT_QPA_PLATFORM: 'wayland',
         QT_QPA_PLATFORMTHEME: '', QT_QUICK_CONTROLS_STYLE: 'Basic',
         XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR,
         WAYLAND_DISPLAY: path.isAbsolute(display) ? display

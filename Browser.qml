@@ -21,7 +21,7 @@ FocusScope {
 
   // The path line, in the shape a shell would print it.
   readonly property string here: browser.library.inTrash
-    ? "~/trash/   " + browser.rows.length + (browser.rows.length === 1 ? " item" : " items")
+    ? "~/trash/   " + browser.ctl.tn("%1 item", "%1 items", browser.rows.length)
     : "~/boards/" + (browser.library.dir ? browser.library.dir + "/" : "")
 
   // Whether this one is the browser on screen. With two panes there are two
@@ -119,7 +119,7 @@ FocusScope {
             font.family: browser.theme.menuFontFamily
             font.pixelSize: browser.theme.fontHeading
             Accessible.role: Accessible.EditableText
-            Accessible.name: browser.prompting ? browser.library.promptLabel : "Search the boards"
+            Accessible.name: browser.prompting ? browser.library.promptLabel : browser.ctl.t("Search the boards")
 
             // Which field this is standing in for. Renaming opens it with the
             // current name in it and everything selected, so one keystroke
@@ -261,13 +261,13 @@ FocusScope {
                 ? Store.baseName(parent.modelData.path).replace(/\.json$/, "")
                   + (parent.modelData.dir ? "/" : "")
                   + (Store.parentOf(parent.modelData.path)
-                     ? "   from " + Store.parentOf(parent.modelData.path) + "/" : "")
+                     ? "   " + browser.ctl.t("from %1", Store.parentOf(parent.modelData.path) + "/") : "")
                 : (parent.modelData.dir ? Store.displayName(parent.modelData) + "/"
                                         : Store.displayName(parent.modelData))
                     + (browser.searching && Store.parentOf(parent.modelData.path)
                        ? "   " + Store.parentOf(parent.modelData.path) + "/" : "")
                     + (!browser.library.inTrash && parent.modelData.path === browser.library.currentBoard
-                       ? "   ·open" : "")
+                       ? "   ·" + browser.ctl.t("open now") : "")
             }
 
             MouseArea {
@@ -287,9 +287,9 @@ FocusScope {
             font.family: browser.theme.menuFontFamily
             font.pixelSize: browser.theme.fontBody
             textFormat: Text.StyledText
-            text: browser.library.inTrash ? "the trash is empty"
-              : browser.searching ? "nothing matches"
-              : "empty — " + Store.hintLine(Store.EMPTY_HINTS, browser.ctl.accentMarkup)
+            text: browser.library.inTrash ? Store.escapeMarkup(browser.ctl.t("the trash is empty"))
+              : browser.searching ? Store.escapeMarkup(browser.ctl.t("nothing matches"))
+              : Store.escapeMarkup(browser.ctl.t("empty")) + " — " + Store.hintLine(Store.EMPTY_HINTS, browser.ctl.accentMarkup, null, browser.ctl.tv)
           }
         }
 
@@ -320,7 +320,7 @@ FocusScope {
     textFormat: Text.StyledText
     text: Store.hintLine(browser.prompting ? Store.PROMPT_HINTS
                          : browser.library.inTrash ? Store.TRASH_HINTS : Store.BROWSER_HINTS,
-                         browser.ctl.accentMarkup, "  ·  ")
+                         browser.ctl.accentMarkup, "  ·  ", browser.ctl.tv)
   }
 
   Keys.onPressed: function (event) {

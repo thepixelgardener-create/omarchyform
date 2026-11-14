@@ -26,7 +26,7 @@ FocusScope {
 
   function exportPng(path) {
     if (board.ctl.imageBusy) return
-    if (board.ctl.items.count === 0) { board.ctl.flash("Add a note before exporting an image"); return }
+    if (board.ctl.items.count === 0) { board.ctl.flash(board.ctl.t("Add a note before exporting an image")); return }
     board.ctl.imageBusy = true
     exportDestination = path
     picture.exportColors = board.ctl.pngPalette
@@ -40,9 +40,9 @@ FocusScope {
     ctl: board.ctl
     onFinished: function(success, reason) {
       if (success) board.ctl.finishPng(board.exportDestination)
-      else { board.ctl.imageBusy = false; board.ctl.flash(reason !== "" ? reason : "Could not render PNG") }
+      else { board.ctl.imageBusy = false; board.ctl.flash(reason !== "" ? reason : board.ctl.t("Could not render PNG")) }
     }
-    onStillLoading: board.ctl.flash("Waiting for pictures to load…")
+    onStillLoading: board.ctl.flash(board.ctl.t("Waiting for pictures to load…"))
   }
 
   function repaintGrid() { grid.requestPaint() }
@@ -599,16 +599,21 @@ FocusScope {
     // the PNG export and the screenshot harness both go through (Node.qml).
     // The text is cut short; a note may hold a megabyte of it.
     Accessible.role: Accessible.Pane
-    Accessible.name: "Board " + board.ctl.boardTitle
+    Accessible.name: board.ctl.t("Board %1", board.ctl.boardTitle)
     Accessible.description: keys.describeSelection()
     function describeSelection() {
       var at = board.ctl.selectedIndex, count = board.ctl.items.count
-      if (at < 0 || at >= count) return count === 0 ? "Empty" : count + " items, none selected"
+      if (at < 0 || at >= count)
+        return count === 0 ? board.ctl.t("Empty") : board.ctl.tn("%1 item, none selected", "%1 items, none selected", count)
       var item = board.ctl.items.get(at)
-      var kind = ({ note: "Note", rect: "Box", ellipse: "Ellipse", diamond: "Diamond", image: "Picture", line: "Line", arrow: "Arrow", "double-arrow": "Double-headed arrow", "dashed-line": "Dashed line" })[item.kind] || "Item"
+      var kind = item.kind === "note" ? board.ctl.t("Note") : item.kind === "rect" ? board.ctl.t("Box")
+        : item.kind === "ellipse" ? board.ctl.t("Ellipse") : item.kind === "diamond" ? board.ctl.t("Diamond")
+        : item.kind === "image" ? board.ctl.t("Picture") : item.kind === "line" ? board.ctl.t("Line")
+        : item.kind === "arrow" ? board.ctl.t("Arrow") : item.kind === "double-arrow" ? board.ctl.t("Double-headed arrow")
+        : item.kind === "dashed-line" ? board.ctl.t("Dashed line") : board.ctl.t("Item")
       var text = item.itext.length > 200 ? item.itext.slice(0, 200) + "…" : item.itext
-      return kind + " " + (at + 1) + " of " + count + (item.ipinned ? ", in the background" : "")
-        + (board.ctl.linkingFrom >= 0 ? ", connecting" : "") + (text !== "" ? ": " + text : "")
+      return board.ctl.t("%1 %2 of %3", kind, at + 1, count) + (item.ipinned ? board.ctl.t(", in the background") : "")
+        + (board.ctl.linkingFrom >= 0 ? board.ctl.t(", connecting") : "") + (text !== "" ? ": " + text : "")
     }
 
     // Printable keys are a table rather than a ladder of else-ifs: adding a
@@ -893,7 +898,7 @@ FocusScope {
     Text {
       textFormat: Text.PlainText
       anchors.horizontalCenter: parent.horizontalCenter
-      text: "Start with a thought."
+      text: board.ctl.t("Start with a thought.")
       color: board.theme.foreground
       font.family: board.theme.fontFamily
       font.pixelSize: board.theme.fontHeading
@@ -901,7 +906,7 @@ FocusScope {
     Text {
       anchors.horizontalCenter: parent.horizontalCenter
       textFormat: Text.StyledText
-      text: Store.hintLine(Store.START_HINTS, board.ctl.accentMarkup)
+      text: Store.hintLine(Store.START_HINTS, board.ctl.accentMarkup, null, board.ctl.tv)
       width: parent.width
       wrapMode: Text.Wrap
       horizontalAlignment: Text.AlignHCenter
@@ -1021,7 +1026,7 @@ FocusScope {
     Text {
       textFormat: Text.PlainText
       id: findLabel
-      text: "find: "
+      text: board.ctl.t("find: ")
       color: board.ctl.theme.barForeground
       opacity: 0.85
       font.family: board.theme.fontFamily
@@ -1051,8 +1056,8 @@ FocusScope {
         // so the two cannot show different things. Both sides check before
         // writing, so neither can chase the other.
         Accessible.role: Accessible.EditableText
-        Accessible.name: "Find on this board"
-        Accessible.description: board.ctl.findCount + " matches"
+        Accessible.name: board.ctl.t("Find on this board")
+        Accessible.description: board.ctl.tn("%1 match", "%1 matches", board.ctl.findCount)
 
         onTextChanged: board.ctl.setFindQuery(text)
         readonly property string query: board.ctl.findQuery
@@ -1096,9 +1101,9 @@ FocusScope {
       font.family: board.theme.fontFamily
       font.pixelSize: board.theme.fontBody
       text: (board.ctl.findQuery === "" ? ""
-             : " · " + (board.ctl.findCount === 0 ? "no match"
-                        : board.ctl.findCount === 1 ? "1 match" : board.ctl.findCount + " matches"))
-            + " · " + Store.hintLine(Store.FIND_HINTS, board.ctl.accentMarkup)
+             : " · " + Store.escapeMarkup(board.ctl.findCount === 0 ? board.ctl.t("no match")
+                        : board.ctl.tn("%1 match", "%1 matches", board.ctl.findCount)))
+            + " · " + Store.hintLine(Store.FIND_HINTS, board.ctl.accentMarkup, null, board.ctl.tv)
     }
   }
 
@@ -1127,7 +1132,7 @@ FocusScope {
     textFormat: Text.StyledText
     // The hints are icons on screen; a screen reader gets their words.
     Accessible.role: Accessible.StaticText
-    Accessible.name: status.tier === "hints" ? Store.hintWords(status.hints) : status.text
+    Accessible.name: status.tier === "hints" ? Store.hintWords(status.hints, board.ctl.tv) : status.text
     // The bar's hints, or ctrl's while it is held.
     readonly property var hints: keys.ctrlHeld
       ? Store.ctrlHints(keys.ctrlHeld && board.ctl.lineInHand() >= 0) : Store.BOARD_HINTS
@@ -1138,41 +1143,41 @@ FocusScope {
     // Asked to close with either of the first and third unresolved, the line
     // says the next ask closes all the same.
     readonly property string closeAnyway: board.ctl.leaveWarned
-      ? " · " + Store.hintMarkup("esc", "close anyway", board.ctl.accentMarkup) : ""
+      ? " · " + Store.hintMarkup("esc", board.ctl.t("close anyway"), board.ctl.accentMarkup) : ""
     text:
       status.tier === "saveError" ? Store.escapeMarkup(board.ctl.saveError) + status.closeAnyway
       : status.tier === "trashIndexError" ? Store.escapeMarkup(board.ctl.library.trashIndexError)
       : status.tier === "conflict"
-      ? Store.escapeMarkup(board.ctl.boardTitle) + " changed on disk · "
-        + Store.hintMarkup("ctrl+s", "choose which version to keep", board.ctl.accentMarkup)
+      ? Store.escapeMarkup(board.ctl.t("%1 changed on disk", board.ctl.boardTitle)) + " · "
+        + Store.hintMarkup("ctrl+s", board.ctl.t("choose which version to keep"), board.ctl.accentMarkup)
         + status.closeAnyway
       : status.tier === "damaged"
       ? Store.escapeMarkup(board.ctl.damageReason !== ""
-          ? board.ctl.boardTitle + " " + board.ctl.damageReason + " — not opening it"
-          : board.ctl.boardTitle + " could not be read — not saving over it")
+          ? board.ctl.t("%1 %2 — not opening it", board.ctl.boardTitle, board.ctl.tv(board.ctl.damageReason))
+          : board.ctl.t("%1 could not be read — not saving over it", board.ctl.boardTitle))
       // Escaped like any other text that has been through a file name or a
       // helper's output: this is the one place on the board that renders tags.
       : status.tier === "failure" ? Store.escapeMarkup(board.ctl.failureText)
       : status.tier === "palette"
-      ? "commands · " + Store.hintLine(Store.PALETTE_HINTS, board.ctl.accentMarkup)
+      ? Store.escapeMarkup(board.ctl.t("commands")) + " · " + Store.hintLine(Store.PALETTE_HINTS, board.ctl.accentMarkup, null, board.ctl.tv)
       : status.tier === "arrange"
-      ? "arrange · " + Store.hintLine(Store.ARRANGE_HINTS, board.ctl.accentMarkup)
+      ? Store.escapeMarkup(board.ctl.t("arrange")) + " · " + Store.hintLine(Store.ARRANGE_HINTS, board.ctl.accentMarkup, null, board.ctl.tv)
       : status.tier === "backgrounds"
-      ? "backgrounds · " + Store.hintLine(Store.PINNED_HINTS, board.ctl.accentMarkup)
+      ? Store.escapeMarkup(board.ctl.t("backgrounds")) + " · " + Store.hintLine(Store.PINNED_HINTS, board.ctl.accentMarkup, null, board.ctl.tv)
       : status.tier === "editing"
-      ? Store.hintMarkup("esc", "done typing", board.ctl.accentMarkup)
+      ? Store.hintMarkup("esc", board.ctl.t("done typing"), board.ctl.accentMarkup)
       // While the far end is being chosen, the line says what x will do to
       // this pair rather than what x is for: connect them, turn the one that
       // is already there round, or take it away. The controller works that out
       // from the same table addLink changes, so the line cannot promise one
       // thing and the board do another.
       : status.tier === "linking"
-      ? Store.linkHint(board.ctl.linkOutcome, board.ctl.accentMarkup)
+      ? Store.linkHint(board.ctl.linkOutcome, board.ctl.accentMarkup, board.ctl.tv)
       : status.tier === "flash" ? Store.escapeMarkup(board.ctl.statusText)
-      : status.tier === "switching" ? "saving before switching boards…"
+      : status.tier === "switching" ? Store.escapeMarkup(board.ctl.t("saving before switching boards…"))
       // The other pane is still there when the window is too small to show
       // it, and the line says how to reach it rather than leave it forgotten.
-      : (board.ctl.squeezed ? Store.hintMarkup("o", "the other pane", board.ctl.accentMarkup) + " \u00b7 " : "")
+      : (board.ctl.squeezed ? Store.hintMarkup("o", board.ctl.t("the other pane"), board.ctl.accentMarkup) + " \u00b7 " : "")
         + (keys.ctrlHeld ? Store.keyMarkup("ctrl", board.ctl.accentMarkup) + "&nbsp;+&nbsp;&nbsp;" : "")
         + Store.iconHintLine(status.hints, board.ctl.accentMarkup)
   }

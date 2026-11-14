@@ -66,7 +66,7 @@ Item {
         Text {
           textFormat: Text.PlainText
           required property var modelData
-          text: modelData[0]
+          text: help.ctl.tv(modelData[0])
           font.family: help.theme.fontFamily
           font.pixelSize: help.theme.fontBody
         }
@@ -79,7 +79,7 @@ Item {
       spacing: help.theme.sp(10)
       Text {
         textFormat: Text.PlainText
-        text: "Keyboard shortcuts"
+        text: help.ctl.t("Keyboard shortcuts")
         color: help.theme.panelText
         font.family: help.theme.fontFamily
         font.pixelSize: help.theme.fontHeading
@@ -105,7 +105,7 @@ Item {
           }
           // The shell's section label: caption size, bold, a shade off the text.
           Text {
-            text: section.modelData.title
+            text: help.ctl.tv(section.modelData.title)
             textFormat: Text.PlainText
             font.capitalization: Font.AllUppercase
             font.bold: true
@@ -133,7 +133,7 @@ Item {
                 width: row.keyColumn
                 horizontalAlignment: Text.AlignRight
                 wrapMode: Text.Wrap
-                text: row.modelData[0]
+                text: help.ctl.tv(row.modelData[0])
                 color: help.theme.accent
                 font.family: help.theme.fontFamily
                 font.pixelSize: help.theme.fontBody
@@ -145,7 +145,7 @@ Item {
                 anchors.leftMargin: row.keyColumn + help.theme.sp(18)
                 anchors.right: parent.right
                 wrapMode: Text.Wrap
-                text: row.modelData[1]
+                text: help.ctl.tv(row.modelData[1])
                 color: help.theme.panelText
                 font.family: help.theme.fontFamily
                 font.pixelSize: help.theme.fontBody

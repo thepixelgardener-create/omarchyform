@@ -16,6 +16,10 @@ Item {
   // Where boards' earlier versions are kept, so they follow a board that is
   // renamed, moved, deleted, put back or destroyed. "" keeps none in step.
   property string versionsDir: ""
+  // Whoever says things in the person's language: the library holds no
+  // controller, and a test runs it without one.
+  property var translator: null
+  function t(text, a, b) { return library.translator ? library.translator.t(text, a, b) : Store.fillText(text, [a, b]) }
   function versionsOf(path) { return library.versionsDir === "" ? "" : library.versionsDir + "/v1/" + path }
   function versionsInTrash(file) { return library.versionsDir === "" ? "" : library.versionsDir + "/trash/" + file }
   required property string trashIndexPath
@@ -89,7 +93,7 @@ Item {
     var listed = Store.trashEntriesOf(parsed)
     if (!parsed || (parsed.version !== undefined && parsed.version !== 1) || !Array.isArray(parsed.entries) || listed.length !== parsed.entries.length) {
       library.trashIndexNeedsRead = true
-      library.trashIndexError = "trash index is invalid — repair index.json, then ctrl+s to reload"
+      library.trashIndexError = library.t("trash index is invalid — repair index.json, then ctrl+s to reload")
       return
     }
     library.trashEntries = listed
@@ -98,7 +102,7 @@ Item {
   }
 
   function ready() {
-    if (library.busy) { library.message = "finishing the previous operation…"; return false }
+    if (library.busy) { library.message = library.t("finishing the previous operation…"); return false }
     if (library.trashIndexError !== "") { library.message = library.trashIndexError; return false }
     return true
   }
@@ -150,7 +154,7 @@ Item {
   function enter() {
     // Opening a board or folder does not touch the trash, so a broken trash
     // index must not block it; restoreCurrent() checks the index itself.
-    if (library.busy) { library.message = "finishing the previous operation…"; return }
+    if (library.busy) { library.message = library.t("finishing the previous operation…"); return }
     var e = library.current()
     if (!e) return
     if (library.inTrash) { library.restoreCurrent(); return }
@@ -194,7 +198,7 @@ Item {
     library.promptLabel = ""
     library.input = ""
     library.action = ""
-    if (!Store.nameIsValid(name)) { library.message = "use a name without slashes or control characters"; return }
+    if (!Store.nameIsValid(name)) { library.message = library.t("use a name without slashes or control characters"); return }
 
     if (action === "board") {
       var path = Store.uniquePath(library.entries, library.dir, name, false)
@@ -205,12 +209,12 @@ Item {
       mkdirProc.running = true
     } else if (action === "rename" || action === "rename-current") {
       if (library.boardConflicted) {
-        library.message = "two versions of this board exist — esc, then ctrl+s to choose"
+        library.message = library.t("two versions of this board exist — esc, then ctrl+s to choose")
         return
       }
       library.aboutToRename()
       if (!library.boardSettled) {
-        library.message = "finish saving before renaming; try again"
+        library.message = library.t("finish saving before renaming; try again")
         return
       }
       var e = action === "rename-current" ? {path: library.currentBoard, dir: false} : library.current()
@@ -252,7 +256,7 @@ Item {
       // one really does destroy it.
       if (library.pendingDelete !== e.file) {
         library.pendingDelete = e.file
-        library.message = "press x again to destroy " + Store.baseName(e.path) + " for good"
+        library.message = library.t("press x again to destroy %1 for good", Store.baseName(e.path))
         return
       }
       library.pendingDelete = ""
@@ -265,13 +269,13 @@ Item {
 
     // Refuse to delete the open board, or the folder it lives in.
     if (library.holdsOpenBoard(e)) {
-      library.message = "that is a board you have open — switch away first"
+      library.message = library.t("that is a board you have open — switch away first")
       return
     }
     if (library.pendingDelete !== e.path) {
       library.pendingDelete = e.path
-      library.message = "press x again to move " + Store.displayName(e)
-                            + (e.dir ? "/ and everything in it" : "") + " to the trash"
+      library.message = e.dir ? library.t("press x again to move %1/ and everything in it to the trash", Store.displayName(e))
+                              : library.t("press x again to move %1 to the trash", Store.displayName(e))
       return
     }
     library.pendingDelete = ""
@@ -368,12 +372,12 @@ Item {
       } else library.up()
     }
     else if (text === "/") { library.searching = true; library.query = ""; library.index = 0 }
-    else if (library.inTrash && ["a", "A", "r"].indexOf(text) >= 0) library.message = "enter: restore this item · t: return to boards"
-    else if (text === "a") library.ask("board", "new board:", "")
-    else if (text === "A") library.ask("folder", "new folder:", "")
+    else if (library.inTrash && ["a", "A", "r"].indexOf(text) >= 0) library.message = library.t("enter: restore this item · t: return to boards")
+    else if (text === "a") library.ask("board", library.t("new board:"), "")
+    else if (text === "A") library.ask("folder", library.t("new folder:"), "")
     else if (text === "r") {
       var e = library.current()
-      if (e) library.ask("rename", "rename to:", Store.displayName(e))
+      if (e) library.ask("rename", library.t("rename to:"), Store.displayName(e))
     }
     else if (text === "x") library.deleteCurrent()
     else if (text === "t") library.toggleTrash()
@@ -417,7 +421,7 @@ Item {
   BoardFileProcess {
     id: mkdirProc
     onExited: function(code) {
-      if (code !== 0) library.message = "could not create that folder"
+      if (code !== 0) library.message = library.t("could not create that folder")
       library.rescan()
     }
   }
@@ -441,7 +445,7 @@ Item {
             library.openBoardMoved(open[i], moveProc.renamedTo + open[i].slice(from.length))
         }
       }
-      if (code !== 0) library.message = "could not rename that; destination exists or path is unavailable"
+      if (code !== 0) library.message = library.t("could not rename that; destination exists or path is unavailable")
       library.rescan()
     }
   }
@@ -454,9 +458,9 @@ Item {
         var next = library.trashEntries.slice()
         next.push(trashProc.pending)
         library.saveTrashIndex(next)
-        library.notice("moved to the trash · t in the browser to get it back")
+        library.notice(library.t("moved to the trash · t in the browser to get it back"))
       } else if (code !== 0) {
-        library.message = "could not move that to the trash"
+        library.message = library.t("could not move that to the trash")
       }
       trashProc.pending = null
       library.rescan()
@@ -469,9 +473,9 @@ Item {
     onExited: function (code) {
       if (code === 0) {
         library.saveTrashIndex(Store.withoutTrash(library.trashEntries, restoreProc.entryFile))
-        library.message = "restored"
+        library.message = library.t("restored")
       } else {
-        library.message = "could not restore that; something is in its place"
+        library.message = library.t("could not restore that; something is in its place")
       }
       restoreProc.entryFile = ""
       library.rescan()
@@ -483,7 +487,7 @@ Item {
     property string entryFile: ""
     onExited: function (code) {
       if (code === 0) library.saveTrashIndex(Store.withoutTrash(library.trashEntries, purgeProc.entryFile))
-      else library.message = "could not remove that trash entry"
+      else library.message = library.t("could not remove that trash entry")
       purgeProc.entryFile = ""
     }
   }
@@ -502,12 +506,12 @@ Item {
         library.trashEntries = []
         library.trashIndexNeedsRead = false
         library.trashIndexError = ""
-      } else library.trashIndexError = "trash index could not be read — ctrl+s to retry"
+      } else library.trashIndexError = library.t("trash index could not be read — ctrl+s to retry")
     }
     onSaved: { library.trashIndexSaving = false; library.trashIndexError = "" }
     onSaveFailed: {
       library.trashIndexSaving = false
-      library.trashIndexError = "trash index could not be saved — ctrl+s to retry; keep the board open"
+      library.trashIndexError = library.t("trash index could not be saved — ctrl+s to retry; keep the board open")
       library.message = library.trashIndexError
     }
   }

@@ -20,6 +20,19 @@ Item {
   property var manifest: null
   property bool opened: false
 
+  // ----------------------------------------------------------------- language
+  // What everything on screen says goes through these, in the language
+  // Omarchy is set to (BoardLanguage.qml). `t` takes the English text and what
+  // goes in its %1, %2; `tn` a counted string's two English forms and the
+  // count, which is its %1.
+  readonly property var language: boardLanguage
+  function t(text, a, b, c) { return boardLanguage.t(text, a, b, c) }
+  function tn(one, other, count, a, b) { return boardLanguage.tn(one, other, count, a, b) }
+  // A string out of one of BoardStore's tables, rather than one written out
+  // where it is asked for: a command's name, a reason a picture is not drawn.
+  function tv(text) { return boardLanguage.t(text) }
+  BoardLanguage { id: boardLanguage }
+
   // --------------------------------------------------------------- appearance
   // What the board looks like is in Theme.qml: one object to pass around and
   // one object for a test to hold, rather than twenty properties here that a
@@ -79,7 +92,7 @@ Item {
 
   function focusOther() {
     var other = root.otherOf(root.activePane)
-    if (!other) { root.activePane.flash("one pane · v or V splits it"); return }
+    if (!other) { root.activePane.flash(root.t("one pane · v or V splits it")); return }
     root.activate(other)
   }
 
@@ -107,7 +120,8 @@ Item {
     root.layout = layout
     root.activePane = fresh
     root.writeState()
-    fresh.flash((layout === "stacked" ? "Stacked" : "Side by side") + " · b opens another board here · o switches")
+    fresh.flash(layout === "stacked" ? root.t("Stacked · b opens another board here · o switches")
+                                     : root.t("Side by side · b opens another board here · o switches"))
   }
 
   // Back to one pane, the one the keyboard is in. The other one's board is
@@ -231,7 +245,7 @@ Item {
     var doc = pane.doc
     if (doc.diskChanged) {
       root.activate(pane)
-      pane.flash("Two versions of this board exist · ctrl+s to choose which to keep")
+      pane.flash(root.t("Two versions of this board exist · ctrl+s to choose which to keep"))
       pane.decideConflict()
       return false
     }
@@ -309,7 +323,7 @@ Item {
       if (editFirst) pane.pendingFirstNote = path
       pane.openBoard(path, false)
       root.library.rescan()
-      pane.flash(editFirst ? "New board · F2 to name it" : "Board imported" + boardExchange.createdNote, "board")
+      pane.flash(editFirst ? root.t("New board · F2 to name it") : root.t("Board imported") + boardExchange.createdNote, "board")
     }
     onFinished: function(message, kind) { root.exchangePane.flash(message, kind) }
     onFailed: function(message, kind) { root.exchangePane.report(message, kind) }
@@ -358,13 +372,13 @@ Item {
   property string storageNotice: ""
   function storageChecked(code) {
     if (code === 4) {
-      root.storageNotice = "Something in ~/.local/share/omarchyform belongs to another user; your boards are still private"
+      root.storageNotice = root.t("Something in ~/.local/share/omarchyform belongs to another user; your boards are still private")
       code = 0
     }
     if (code !== 0) {
       root.startupError = code === 127
-        ? "Python 3 could not start. Install Python 3, then retry."
-        : "Could not make the board folders private. Check ownership and write permissions in ~/.local/share/omarchyform, then retry."
+        ? root.t("Python 3 could not start. Install Python 3, then retry.")
+        : root.t("Could not make the board folders private. Check ownership and write permissions in ~/.local/share/omarchyform, then retry.")
       return
     }
     root.storageReady = true
@@ -380,7 +394,7 @@ Item {
 
   function toggleWindowMode() {
     // The surface owns the PNG renderer and its completion callback.
-    if (root.imageBusy) { root.activePane.flash("Finishing image export…"); return }
+    if (root.imageBusy) { root.activePane.flash(root.t("Finishing image export…")); return }
     root.windowMode = !root.windowMode
     root.writeState()
   }
@@ -412,6 +426,7 @@ Item {
     boardsDir: root.boardsDir
     trashDir: root.trashDir
     versionsDir: root.versionsDir
+    translator: boardLanguage
     trashIndexPath: root.storageReady ? root.trashIndexPath : ""
     helperScript: root.helperScript
     currentBoard: root.activePane.currentBoard
@@ -581,7 +596,7 @@ Item {
   // warn on. False when it stays open.
   function close(force) {
     for (var p = 0; p < root.panes.length; p++)
-      if (root.panes[p].imageBusy) { root.panes[p].flash("Finishing image export…"); return false }
+      if (root.panes[p].imageBusy) { root.panes[p].flash(root.t("Finishing image export…")); return false }
     var unsaved = force === true || !root.opened ? null : root.unsavedPane()
     if (unsaved && !root.leaveWarned) {
       root.leaveWarned = true
@@ -726,7 +741,7 @@ Item {
     for (var i = 0; i < asked.length; i++) {
       var found = answers.hasOwnProperty(asked[i]) ? answers[asked[i]] : null
       next[asked[i]] = found ? { refused: found.refused, revision: found.revision, checking: false }
-                             : { refused: "could not be checked", revision: "", checking: false }
+                             : { refused: Store.UNCHECKED_PICTURE, revision: "", checking: false }
     }
     root.pictures = next
     root.checkPictures()
@@ -810,7 +825,7 @@ Item {
         spacing: root.theme.sp(20)
         Text {
           width: parent.width
-          text: root.startupError === "" ? "Opening boards…" : "Cannot open boards"
+          text: root.startupError === "" ? root.t("Opening boards…") : root.t("Cannot open boards")
           textFormat: Text.PlainText
           color: root.theme.foreground
           font.family: root.theme.fontFamily
@@ -829,13 +844,13 @@ Item {
         }
         Text {
           visible: root.startupError !== ""
-          text: "Retry · R"
+          text: root.t("Retry · R")
           textFormat: Text.PlainText
           color: root.theme.accent
           font.family: root.theme.fontFamily
           font.pixelSize: root.theme.fontSubtitle
           Accessible.role: Accessible.Button
-          Accessible.name: "Retry opening boards"
+          Accessible.name: root.t("Retry opening boards")
           Accessible.onPressAction: root.retryStartup()
           MouseArea { anchors.fill: parent; onClicked: root.retryStartup() }
         }

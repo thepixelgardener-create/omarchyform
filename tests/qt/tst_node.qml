@@ -26,6 +26,10 @@ TestCase {
     // between this and the real one. tests/contract.js checks that every token
     // a node reads is declared in both.
     readonly property QtObject sceneTheme: ctl.theme
+    // What it says, as written: these suites read English.
+    function t(text, a, b, c) { return Store.translated(null, text, [a, b, c]) }
+    function tn(one, other, count, a, b) { return Store.translatedCount(null, "en", one, other, count, [a, b]) }
+    function tv(text) { return text }
     property QtObject theme: QtObject {
       property int cornerRadius: 0
       property int borderWidth: 1

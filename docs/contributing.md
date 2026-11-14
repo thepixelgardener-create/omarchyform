@@ -132,6 +132,28 @@ the CLI to create boards and is not a contribution guide.
   at the limit with `FULL_ITEMS` or `FULL_LINKS`, and anything that reads a
   board asks `boardLimit` before building it.
 
+## Words on screen
+
+- Nothing the board shows is written into a view as bare text. A string said
+  where it is shown goes through the controller's `t("…")`, with `%1`, `%2`
+  for what goes in it, never English glued together; a counted one through
+  `tn("one", "other", count)`, whose `%1` is the count. A string kept in one
+  of BoardStore's tables is said through `tv(…)`, and `Store.displayStrings()`
+  lists every table it comes from.
+- `node tests/i18n.js` holds `i18n/en.json` to exactly what the source says;
+  after adding or changing a string, run it with `--write-english` and commit
+  the result. A string used two ways in English with two meanings in another
+  language (`open`, the verb, and `open now`, the state) gets two keys.
+- A translation goes in `i18n/<code>.json`, translating only what `en.json`
+  has, with the same holes, the plural forms its language counts in, and no
+  markup. `--pending` lists what each catalog still lacks.
+- Drawn as markup, a translated string is escaped like any other text
+  (`Store.escapeMarkup`, or `hintMarkup`, which escapes its word).
+- Test stand-ins carry `t`, `tn` and `tv` saying English as written, and every
+  runner that starts the whole plugin points `OMARCHY_LANGUAGE_FILE` at a file
+  of its own, so a machine set to another language does not change what the
+  suites read.
+
 ## Regression checks
 
 For these paths, run `npm test` and `npm run test:qml`. Changes to QML interaction

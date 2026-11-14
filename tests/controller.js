@@ -1915,6 +1915,7 @@ console.log('ok — controller: the canvas colour is a remembered setting, not p
   assert.ok(body, 'the commit handler is found')
   const said = []
   const persistence = { busy: true, target: '/boards/a.json', contents: 'x',
+    t: (text, a) => loadStore().fillText(text, [a]),
     fail(message) { this.busy = false; said.push(['failed', message]) },
     stale() { said.push(['stale']) }, completed() { said.push(['completed']) } }
   const exited = vm.runInContext(`(function(code) {${body[1]}})`,

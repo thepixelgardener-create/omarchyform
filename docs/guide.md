@@ -462,6 +462,21 @@ its versions and cannot go back to one.
 This is not the timeline 0.4.7 to 0.4.10 had: nothing is recorded inside the
 board's file, and a version is a whole board rather than a step.
 
+## In your language
+
+The board speaks the language Omarchy is set to under **Setup > Language**,
+and follows a change while it is open. Its words come from `i18n/` in the
+plugin's folder, one file for each language; whatever a language's file does
+not have yet is said in English. English and German are complete. Keys are
+still written as keys (`ctrl+s`, `esc`), and a hint lights the letter of its
+key only where the word in your language starts with it, and says `a: …`
+otherwise. Right-to-left languages are shown left to right for now. What is
+on your boards is never translated.
+
+The command list answers to a command's English name as well as its name in
+your language, so a command named in a guide or by someone else can still be
+found by typing it.
+
 ## Boards with an old history
 
 Omarchyform 0.4.7 to 0.4.10 kept a timeline of every board's edits in the

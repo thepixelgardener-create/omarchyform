@@ -55,6 +55,11 @@ ShellRoot {
     function backupPathFor(relative) { return test.dir + "/bak__" + relative + ".bak" }
     function lockPathFor(relative) { return test.dir + "/lock__" + relative + ".lock" }
     function fileCommand(action, args) { return ["bash", test.dir + "/BoardFiles.sh", action].concat(args) }
+    // What it says, as written. Without the store: this scene is staged in a
+    // folder of its own, with only the files a document needs beside it.
+    function t(text, a, b, c) { return String(text).replace("%1", a).replace("%2", b).replace("%3", c) }
+    function tn(one, other, count, a, b) { return String(count === 1 ? one : other).replace("%1", count).replace("%2", a) }
+    function tv(text) { return text }
     function writeState() {}
     function panesViewing(doc) { return [] }
     function recheckPictures(names) {}

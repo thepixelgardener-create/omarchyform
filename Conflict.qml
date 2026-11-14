@@ -15,11 +15,11 @@ Item {
   visible: decision.ctl.conflictVisible
   width: Math.min(parent.width - decision.theme.sp(64), decision.theme.sp(640))
 
-  readonly property string question: decision.ctl.boardTitle + " changed on disk while you had it open."
+  readonly property string question: decision.ctl.t("%1 changed on disk while you had it open.", decision.ctl.boardTitle)
   readonly property var choices: [
-    { name: "Keep the version from disk", cost: "what is on screen is lost" },
-    { name: "Save my changes as a copy", cost: "both versions survive" },
-    { name: "Replace the version on disk", cost: "the one it replaces goes to backups" }
+    { name: decision.ctl.t("Keep the version from disk"), cost: decision.ctl.t("what is on screen is lost") },
+    { name: decision.ctl.t("Save my changes as a copy"), cost: decision.ctl.t("both versions survive") },
+    { name: decision.ctl.t("Replace the version on disk"), cost: decision.ctl.t("the one it replaces goes to backups") }
   ]
 
   Text {
@@ -178,7 +178,7 @@ Item {
       opacity: 0.55
       font.family: decision.theme.fontFamily
       font.pixelSize: decision.theme.fontBody
-      text: Store.hintLine(Store.CONFLICT_HINTS, decision.ctl.accentMarkup)
+      text: Store.hintLine(Store.CONFLICT_HINTS, decision.ctl.accentMarkup, null, decision.ctl.tv)
     }
   }
 }

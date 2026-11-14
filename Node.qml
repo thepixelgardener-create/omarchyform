@@ -186,8 +186,8 @@ Item {
     anchors.centerIn: parent
     width: parent.width - node.theme.sp(16)
     visible: node.isImage && (picture.status === Image.Error || (node.pictureState !== "" && node.pictureState !== "waiting"))
-    text: node.pictureState === "" || node.pictureState === "missing" ? "missing image\n" + node.isrc
-        : "picture not shown\n" + node.isrc + "\n" + node.pictureState
+    text: node.pictureState === "" || node.pictureState === "missing" ? node.ctl.t("missing image") + "\n" + node.isrc
+        : node.ctl.t("picture not shown") + "\n" + node.isrc + "\n" + node.ctl.tv(node.pictureState)
     horizontalAlignment: Text.AlignHCenter
     wrapMode: Text.Wrap
     elide: Text.ElideMiddle
@@ -368,7 +368,7 @@ Item {
           var at = Math.min(body.cursorPosition, node.itext.length)
           body.text = node.itext
           body.cursorPosition = at
-          node.ctl.flash("A note holds up to 1 MB of text")
+          node.ctl.flash(node.ctl.t("A note holds up to 1 MB of text"))
         }
         onActiveFocusChanged: if (!activeFocus) node.ctl.flushSave()
         // Editing can end without the caret leaving first: another item selected,
