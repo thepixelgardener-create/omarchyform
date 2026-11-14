@@ -7,6 +7,13 @@ since older boards are migrated on load rather than rejected.
 
 ### Added
 
+- **Earlier versions…** in the command list takes a board back to how it
+  stood before an earlier save. The file a save replaces is set aside first,
+  at most one every ten minutes, forty for a board and no more than 64 MB, in
+  `~/.local/share/omarchyform/versions/`; nothing is recorded inside the
+  board's file. Going back keeps the board as it was as a version too, and a
+  board's versions follow it when it is renamed, moved, deleted or put back.
+  The command line keeps them for library boards it writes.
 - `bin/omarchyform render <board> <picture.png>` draws a board to a PNG with
   no display and without the board being open: on white, on black
   (`--colors dark`) or in one ink (`mono`), the whole board or `--only` the

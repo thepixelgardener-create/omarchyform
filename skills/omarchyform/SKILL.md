@@ -127,7 +127,8 @@ It cannot draw a board in the desktop theme's colours: `render` uses one of
 three fixed palettes, and `ctrl+e` on an open board is the way to the theme's
 own. It does not touch the trash or the pictures beside a board. Every write keeps
 the version it replaced: in the library's `backups/` for a board in the
-library, and as `<file>.bak` beside one anywhere else.
+library, and as `<file>.bak` beside one anywhere else. A library board also
+keeps earlier versions the person can go back to from the board itself.
 
 It has no idea which board is open in the shell right now. Nothing is lost if
 you change one that is: an open board with nothing unsaved reloads and shows

@@ -812,8 +812,16 @@ Item {
   // A family of commands the list is showing by itself, or "" for all of them.
   property string paletteGroup: ""
 
-  readonly property var paletteMatches: root.paletteVisible
-    ? Store.matchCommands(root.paletteQuery, root.paletteScope, root.paletteGroup) : []
+  // The versions family is not in the table: its members are the versions
+  // this board has, asked for when the family is opened.
+  readonly property var paletteMatches: !root.paletteVisible ? []
+    : root.paletteGroup === "versions" ? Store.versionChoices(root.doc.versions, root.paletteQuery, Date.now())
+    : Store.matchCommands(root.paletteQuery, root.paletteScope, root.paletteGroup)
+  // What the list says when it is empty: nothing answers what was typed, or,
+  // for versions, why there are none to show.
+  readonly property string paletteEmpty: root.paletteGroup !== "versions" || root.paletteQuery !== "" ? "nothing goes by that"
+    : root.doc.versionsLoading ? "looking…"
+    : "none yet · one is kept as the board is saved, at most every ten minutes"
   // How many rows the panel draws. The rest are still there to be typed at.
   readonly property int paletteRows: 9
 
@@ -854,10 +862,14 @@ Item {
     if (Store.groupTitle(group) === "") return
     if (!root.paletteVisible) root.beginPalette("all")
     if (!root.paletteVisible) return
+    if (group === "versions") root.doc.listVersions()
     root.paletteGroup = group
     root.paletteQuery = ""
     root.paletteIndex = 0
   }
+  // Going back to an earlier version. The document does it, since two panes
+  // on one board are going back together.
+  function restoreVersion(name) { root.doc.restoreVersion(name) }
   function leaveGroup() {
     root.paletteGroup = ""
     root.paletteQuery = ""
@@ -911,6 +923,12 @@ Item {
     // still waits for a second key, and the list names the answers instead.
     if (choice.opens) { root.openGroup(choice.opens); return }
     root.endPalette()
+    // A version is not a command in the table: it is run as what it is.
+    if (choice.run === "restoreVersion") {
+      if (root.commandReady(choice.needs)) root.restoreVersion(choice.arg)
+      else root.flash("Earlier versions · " + root.commandExcuse(choice.needs))
+      return
+    }
     root.runCommand(choice.name)
   }
 

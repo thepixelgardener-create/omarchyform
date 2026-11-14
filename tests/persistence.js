@@ -3,7 +3,7 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const { spawnSync } = require('child_process')
-for (const scenario of ['processfailure', 'persistence', 'session', 'timeout', 'exchange', 'imagebudget', 'clipboard', 'fieldpaste', 'legacy', 'ids', 'opening']) {
+for (const scenario of ['processfailure', 'persistence', 'session', 'timeout', 'exchange', 'imagebudget', 'clipboard', 'fieldpaste', 'legacy', 'ids', 'opening', 'versions']) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'omarchyform-persistence-'))
   try {
     fs.writeFileSync(path.join(dir, 'blocked.json'), 'original')
@@ -119,6 +119,12 @@ for (const scenario of ['processfailure', 'persistence', 'session', 'timeout', '
       const unversioned = Object.assign({}, board)
       delete unversioned.version
       fs.writeFileSync(path.join(dir, 'sameline.json'), old(history, ', "version": 9', unversioned))
+    }
+    if (scenario === 'versions') {
+      // The folders the plugin makes private as it starts, and one board.
+      for (const folder of ['boards', 'backups', 'versions']) fs.mkdirSync(path.join(dir, folder), { mode: 0o700 })
+      fs.writeFileSync(path.join(dir, 'boards/plan.json'), JSON.stringify({ kind: 'omarchyform.board', version: 5, nextId: 2, links: [],
+        items: [{ id: 1, kind: 'note', x: 0, y: 0, w: 220, h: 160, tint: 'foreground', text: 'first', pinned: false, src: '' }] }, null, 2) + '\n')
     }
     if (scenario === 'ids') {
       // A board that came with an item at the largest id there is, and a

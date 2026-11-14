@@ -112,7 +112,16 @@ TestCase {
     property string paletteGroup: ""
     property int paletteIndex: 0
     property int paletteRows: 9
-    readonly property var paletteMatches: Store.matchCommands(ctl.paletteQuery, ctl.paletteScope, ctl.paletteGroup)
+    // As BoardPane.qml binds them: the versions family is the versions a
+    // board has, and an empty list says why it is empty.
+    property var versions: []
+    property bool versionsLoading: false
+    readonly property string paletteEmpty: ctl.paletteGroup !== "versions" || ctl.paletteQuery !== "" ? "nothing goes by that"
+      : ctl.versionsLoading ? "looking…"
+      : "none yet · one is kept as the board is saved, at most every ten minutes"
+    readonly property var paletteMatches: ctl.paletteGroup === "versions"
+      ? Store.versionChoices(ctl.versions, ctl.paletteQuery, Date.now())
+      : Store.matchCommands(ctl.paletteQuery, ctl.paletteScope, ctl.paletteGroup)
     function commandReady(needs) { return needs !== "target" }
     function commandExcuse(needs) { return "nothing is selected" }
     function setPaletteQuery(text) { ctl.paletteQuery = text }
@@ -135,7 +144,7 @@ TestCase {
   QtObject { id: keyboardless; function paletteKey(event) {} }
   Commands { id: commandList; ctl: ctl; board: keyboardless; y: 40; anchors.horizontalCenter: parent.horizontalCenter }
   Conflict { id: decision; ctl: ctl; y: 40; anchors.horizontalCenter: parent.horizontalCenter }
-  function cleanup() { ctl.paletteQuery = ""; ctl.paletteGroup = "" }
+  function cleanup() { ctl.paletteQuery = ""; ctl.paletteGroup = ""; ctl.versions = []; ctl.versionsLoading = false }
 
   function test_untrustedTitleIsPlainText() {
     const oldTitle = ctl.boardTitle
@@ -205,6 +214,69 @@ TestCase {
     verify(prompt.text.indexOf("Canvas background") === 0)
     verify(prompt.width > 0)
     verify(prompt.x + prompt.width <= prompt.parent.width)
+  }
+
+  // A board's earlier versions are rows of the same list: when each is from,
+  // readable in a narrow panel at a large size, and the family's name on the
+  // line above them.
+  function test_earlierVersionsAreRowsOfTheList() {
+    var now = Date.now()
+    ctl.versions = [{ name: "20261113-133205.json", bytes: 120, at: now - 30 * 60000 },
+                    { name: "20261112-090000.json", bytes: 99, at: now - 26 * 3600000 },
+                    { name: "20250105-235959.json", bytes: 7, at: now - 400 * 86400000 }]
+    ctl.paletteGroup = "versions"
+    verify(waitForRendering(commandList))
+    compare(commandList.visibleRows, 3)
+    verify(findChild(commandList, "command-prompt").text.indexOf("Earlier versions") === 0)
+    verify(!findChild(commandList, "command-empty").visible)
+    var day = Store.versionLabel(now - 26 * 3600000, now)
+    var shown = false
+    for (var i = 0; i < 3 && !shown; i++) {
+      var texts = []
+      test.textsUnder(commandList, texts)
+      shown = texts.some(function (t) { return t.text === day && !t.truncated && t.width > 0 })
+    }
+    verify(shown, "the date is drawn whole: " + day)
+    ctl.paletteQuery = "yesterday"
+    verify(waitForRendering(commandList))
+    compare(ctl.paletteMatches.length, 1)
+    compare(commandList.visibleRows, 1)
+  }
+
+  function textsUnder(item, found) {
+    for (var i = 0; i < item.children.length; i++) {
+      var child = item.children[i]
+      if (child.text !== undefined && child.truncated !== undefined) found.push(child)
+      test.textsUnder(child, found)
+    }
+    // A ListView's rows are children of its content item.
+    if (item.contentItem) test.textsUnder(item.contentItem, found)
+  }
+
+  // A board with none says why, in the list's own place and within its width.
+  function test_noEarlierVersionsSaysWhy_data() {
+    return [{ tag: "at its usual width", width: 800 }, { tag: "in a narrow window", width: 320 }]
+  }
+  function test_noEarlierVersionsSaysWhy(row) {
+    var was = test.width
+    test.width = row.width
+    try {
+      ctl.paletteGroup = "versions"
+      ctl.versionsLoading = true
+      verify(waitForRendering(commandList))
+      var empty = findChild(commandList, "command-empty")
+      verify(empty.visible)
+      compare(empty.text, "looking…")
+      ctl.versionsLoading = false
+      verify(waitForRendering(commandList))
+      verify(empty.text.indexOf("none yet") === 0)
+      var at = empty.mapToItem(commandList, 0, 0)
+      verify(at.x >= 0 && at.x + empty.width <= commandList.width, "the sentence stays inside the panel")
+      verify(at.y >= 0 && at.y + empty.height <= commandList.height, "and inside its one row: " + empty.height + " in " + commandList.height)
+      ctl.paletteQuery = "x"
+      verify(waitForRendering(commandList))
+      compare(empty.text, "nothing goes by that")
+    } finally { test.width = was }
   }
 
   function test_paletteShrinksToWhatMatches() {

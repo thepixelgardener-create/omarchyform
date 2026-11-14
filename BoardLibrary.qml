@@ -13,6 +13,11 @@ Item {
   // ---------------------------------------------------------- what it is told
   required property string boardsDir
   required property string trashDir
+  // Where boards' earlier versions are kept, so they follow a board that is
+  // renamed, moved, deleted, put back or destroyed. "" keeps none in step.
+  property string versionsDir: ""
+  function versionsOf(path) { return library.versionsDir === "" ? "" : library.versionsDir + "/v1/" + path }
+  function versionsInTrash(file) { return library.versionsDir === "" ? "" : library.versionsDir + "/trash/" + file }
   required property string trashIndexPath
   // BoardFiles.sh, as a path: every change to the library goes through it.
   required property string helperScript
@@ -212,7 +217,8 @@ Item {
       if (!e) return
       if (name === Store.displayName(e)) { library.hide(); return }
       var target = Store.uniquePath(library.entries, Store.parentOf(e.path), name, e.dir)
-      moveProc.command = library.fileCommand("move", [library.boardsDir, e.path, library.boardsDir, target])
+      moveProc.command = library.fileCommand("move", [library.boardsDir, e.path, library.boardsDir, target,
+                                                      library.versionsOf(e.path), library.versionsOf(target), library.versionsDir])
       moveProc.renamedFrom = e.path
       moveProc.renamedTo = target
       moveProc.running = true
@@ -252,7 +258,7 @@ Item {
       library.pendingDelete = ""
       library.message = ""
       purgeProc.entryFile = e.file
-      purgeProc.command = library.fileCommand("purge", [library.trashDir, e.file])
+      purgeProc.command = library.fileCommand("purge", [library.trashDir, e.file, library.versionsInTrash(e.file), library.versionsDir])
       purgeProc.running = true
       return
     }
@@ -274,7 +280,8 @@ Item {
     var stamp = Qt.formatDateTime(new Date(), "yyyyMMdd-hhmmss")
     var file = Store.trashFile(library.trashEntries, e.path, stamp)
     trashProc.pending = { file: file, path: e.path, dir: e.dir, at: stamp }
-    trashProc.command = library.fileCommand("move", [library.boardsDir, e.path, library.trashDir, file])
+    trashProc.command = library.fileCommand("move", [library.boardsDir, e.path, library.trashDir, file,
+                                                     library.versionsOf(e.path), library.versionsInTrash(file), library.versionsDir])
     trashProc.running = true
   }
 
@@ -283,7 +290,8 @@ Item {
     var e = library.current()
     if (!e || !library.inTrash) return
     restoreProc.entryFile = e.file
-    restoreProc.command = library.fileCommand("move", [library.trashDir, e.file, library.boardsDir, e.path])
+    restoreProc.command = library.fileCommand("move", [library.trashDir, e.file, library.boardsDir, e.path,
+                                                       library.versionsInTrash(e.file), library.versionsOf(e.path), library.versionsDir])
     restoreProc.running = true
   }
 

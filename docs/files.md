@@ -19,6 +19,11 @@
 │   └── v2/
 │       ├── board.json.bak
 │       └── work/project-a.json.bak
+├── versions/
+│   └── v1/
+│       └── work/project-a.json/
+│           ├── 20261113-093205.json
+│           └── 20261113-141950.json
 └── state.json
 ```
 
@@ -38,6 +43,17 @@ open read-only; no edits or saves are allowed over them. So does a board past
 read safely; `validate` below says which. Back it up, sync it,
 edit it by hand, put it in git — it is your file, and a board that changes while
 it is open is noticed rather than overwritten.
+
+Further back than that is `versions/`: a folder for each board, mirroring the
+boards tree, holding the board as it stood before earlier saves. Each is a
+whole board file, named by when it was set aside, in UTC, and can be opened,
+copied out or deleted like any other. One is kept at most every ten minutes,
+forty for a board and no more than 64 MB, the oldest making way.
+**Earlier versions…** in the command list puts one back; the
+[guide](guide.md#earlier-versions) has the rest. A board's versions move with
+it when it is renamed, moved or deleted from the board browser; moved by hand,
+they stay behind under the old name, and a new board made under that name
+starts without them.
 
 Every write to a board goes through one coordinated step: the file is replaced
 under a lock, and only if it is still the version the writer last read. The

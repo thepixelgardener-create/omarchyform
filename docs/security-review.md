@@ -81,6 +81,7 @@ The trace's third rule is for it.
 | Numbers in a board | Board file, import, CLI → lookups, layout, the ids handed out | No value decides an array's length or a loop's count, each range fits every type it passes through, and positions and sizes are held within the board; see [Board values](#board-values). `security.js` refuses an array written at an id; `tests/editing.js` and `tests/cli.js` take a board at the largest id through new items, copies and connectors and open it again, and `tst_ids.qml` does it through Qt's own document and `int`. |
 | CLI operations | stdin/file → model → helper | Parse as data, no evaluation. Invalid JSON must not echo content. CLI/security tests. |
 | Old board history | Board file → `readFile` → dropped | The edit history Omarchyform 0.4.7 to 0.4.10 kept after a board is parsed with the rest of the file, as any JSON reader parses it, through `parseJson`, and then dropped; it is never evaluated. A key after it counts on any line, so a newer version named there keeps the board read-only and the canvas after it is the canvas. A history that is not JSON, or holds more at once than `parseJson` allows, makes the file unreadable rather than half read. A full one costs about 0.2 s once, until the next save writes the board without it. `tests/suite.js`, `tests/editing.js`, `tests/cli.js`, `tst_legacy.qml`. |
+| A board's earlier versions | Save → helper `commit` → `versions/v1/<board>/` → `versions`, `restore` → board file | The file a save replaces is copied by the helper, under the board's lock, at most every ten minutes, 40 a board and 64 MiB, oldest first; a copy that cannot be made never fails the save. Names and paths travel on stdin; folders are 0700 and versions 0600. A version is listed by name and size only, and only a name of the helper's own form (`YYYYMMDD-HHMMSS.json`, checked on both sides) is ever sent back. Going back is the helper replacing the board file under the lock, onto the revision the session holds, after keeping the board as it is; the board then reads it through the path every change on disk takes, so it is bounded and filled in as any board is, and unsaved edits become a conflict rather than being overwritten. Links are never followed, and nothing outside the versions folder is moved or removed. `tests/versions-files.py`, `tests/controller.js`, `tests/qml/tst_versions.qml`. |
 | A board drawn from the command line | `render` → loader → staging → Quickshell offscreen → chosen PNG | The board is read and bounded by the loader before anything starts (`boardLimit`, the byte limit), and its pictures go through `checkimages` first; the scene opens only what was cleared. The scene is handed a private staging folder inside the library by its environment: no path or name on a command line. It logs nothing and writes only `out.png` there; the stage is removed whether the run succeeds, is refused or times out, and a killed run's is cleared by the next. `tests/render.js`, `security.js`. |
 | Desktop install/open | Opt-in launcher files and summon payload | No automatic install hook; ownership/conflict checks, correct path encoding, no shell interpretation. Desktop tests and manual review. |
 
@@ -898,3 +899,40 @@ Measured on 2026-11-13 (Qt 6.12, offscreen, software), every board in
 in 0.4 s, 5,000 items in 5 to 8 s, and the slowest, 5,000 notes with long
 previews at 32 MB, in 24 s. `npm run test:hostile` now draws or refuses each
 of them and fails on a stage left behind (`tests/render.js --hostile`).
+
+## Earlier versions: cost trace — 2026-11-13
+
+The helper sets aside the file a save replaces, and the board can put one
+back. Nothing is added to a board's file or its format, and no board field is
+read in a new way: a version is a board file, read only by the reader that
+reads every board.
+
+- **Bytes.** A version is copied with the same bounded copy a snapshot uses,
+  and one larger than a board may be is neither kept nor put back. A board's
+  versions hold at most 64 MiB together.
+- **Count.** At most 40 a board, and at most one every ten minutes however
+  often the board is saved. The listing is one `listdir` of the board's own
+  folder; the board reads at most 64 lines of it.
+- **Repetition.** Keeping a version costs one copy of the board, in the
+  helper's process, at most every ten minutes: nothing on the shell's thread.
+  Going back costs one more copy and then what reading a changed board costs,
+  once, and only when asked.
+- **Value.** A version's name is its time. Only a name matching
+  `YYYYMMDD-HHMMSS.json` that reads back as a real time is listed or sent to
+  the helper, which checks the form again; no name is used as a path part
+  without it. A clock put back cannot file a newer version behind an older
+  one.
+- **Who reads first.** The helper, in Python, copying bytes. Qt reads a
+  version only after it has become the board's file, through `snapshot` and
+  `readFile`, with `boardLimit` asked before anything is built.
+- **What cannot be lost.** Going back refuses while a write has failed or two
+  versions are waiting for a choice, writes what is on screen first, and
+  replaces the file only if it is still the revision the session holds. Edits
+  made while the helper works are a conflict. The board as it was is kept as a
+  version before it is replaced, and the version gone back to is read before
+  that can push it out.
+
+The fixtures are in `tests/versions-files.py`: a version at each bound and one
+past it (41 versions, 72 MiB of them), a link named like a version, a name
+that climbs out of the folder, a versions folder that is a file, a link, or
+outside where versions go, and a stale folder under a new board's name.

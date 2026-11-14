@@ -972,7 +972,12 @@ function tests(S) {
       ok(S.groupTitle(group) !== "", group + " has a title")
       ok(names("", "all", group).length >= 2, group + " has members")
     }
-    for (const c of S.COMMANDS.filter(c => c.opens)) ok(groups.has(c.opens), c.name + " opens a family")
+    // One family's members are not in the table: the versions a board has,
+    // listed when the family is opened (versionChoices).
+    for (const c of S.COMMANDS.filter(c => c.opens && !c.dynamic)) ok(groups.has(c.opens), c.name + " opens a family")
+    eq(S.COMMANDS.filter(c => c.dynamic).map(c => c.opens).join(","), "versions")
+    ok(S.groupTitle("versions") === "Earlier versions", "and has a title all the same")
+    eq(names("", "all", "versions").length, 0, "nothing in the table stands in for a version")
     // A family's members all need the same thing, so opening the family from
     // its entry can never show a member the entry's scope would hide.
     for (const group of groups) {
@@ -2300,6 +2305,53 @@ function tests(S) {
       ok((S.texturePath(kind, texture, 100000, 100000, 0).match(/M /g) || []).length <= 1000)
     }
     eq(S.texturePath("image", "grid", 200, 200, 0), "")
+  })
+
+  // The helper lists a board's earlier versions as lines of a name and a
+  // size; the name is when the version was kept, in UTC.
+  test("earlier versions are read off the helper's listing, newest first, and nothing else is", () => {
+    const rows = S.versionRows(["20261113-133205.json\t120", "20261112-090000.json\t99", "",
+      "notes.txt\t4", "20261301-000000.json\t5", "20260230-000000.json\t5", "20261113-250000.json\t5",
+      "20261113-133205.json", "20261113-133205.json\tmany", "../20261113-133205.json\t1", "20250105-235959.json\t7"].join("\n"))
+    eq(rows.map(r => r.name).join(","), "20261113-133205.json,20261112-090000.json,20250105-235959.json")
+    eq(rows[0].bytes, 120)
+    eq(rows[0].at, Date.UTC(2026, 10, 13, 13, 32, 5))
+    ok(isNaN(S.versionTime("20261301-000000.json")) && isNaN(S.versionTime("x")) && isNaN(S.versionTime(undefined)))
+    // However many lines arrive, the list is bounded on this side too.
+    const many = []
+    for (let i = 0; i < 500; i++) many.push("2026" + String(101 + i % 12).slice(1) + "01-0000" + String(100 + i % 60).slice(1) + ".json\t1")
+    eq(S.versionRows(many.join("\n")).length, S.MAX_VERSIONS_LISTED)
+    eq(S.versionRows("").length, 0)
+    eq(S.versionRows(undefined).length, 0)
+  })
+
+  test("a version is named by when it is from, as a person would say it", () => {
+    // Local time, whatever zone the suite runs in: built from local parts.
+    const at = (y, m, d, h, min) => new Date(y, m - 1, d, h, min, 0).getTime()
+    const now = at(2026, 11, 13, 15, 0)
+    eq(S.versionLabel(at(2026, 11, 13, 14, 32), now), "Today 14:32")
+    eq(S.versionLabel(at(2026, 11, 13, 0, 5), now), "Today 00:05")
+    eq(S.versionLabel(at(2026, 11, 12, 23, 59), now), "Yesterday 23:59")
+    eq(S.versionLabel(at(2026, 11, 3, 9, 7), now), "Tue 3 Nov 09:07")
+    eq(S.versionLabel(at(2025, 12, 31, 18, 0), now), "31 Dec 2025 18:00")
+  })
+
+  test("versions are rows the command list can draw, found by typing when they are from", () => {
+    const at = (y, m, d, h, min) => new Date(y, m - 1, d, h, min, 0).getTime()
+    const now = at(2026, 11, 13, 15, 0)
+    const rows = [{ name: "20261113-133205.json", bytes: 1, at: at(2026, 11, 13, 14, 32) },
+                  { name: "20261112-090000.json", bytes: 1, at: at(2026, 11, 12, 10, 0) }]
+    const all = S.versionChoices(rows, "", now)
+    eq(all.map(c => c.name).join(","), "Today 14:32,Yesterday 10:00")
+    eq(all[0].run, "restoreVersion")
+    eq(all[0].arg, "20261113-133205.json")
+    eq(all[0].needs, "edit")
+    eq(all[0].key, "", "the date has the row to itself")
+    ok(S.commandIcon(all[0]) !== "", "and has a glyph, as every row does")
+    eq(S.versionChoices(rows, " YEST ", now).map(c => c.arg).join(","), "20261112-090000.json")
+    eq(S.versionChoices(rows, "last week", now).length, 0)
+    eq(S.versionChoices(null, "", now).length, 0)
+    eq(S.versionChoices(undefined, undefined, now).length, 0)
   })
 
   return t

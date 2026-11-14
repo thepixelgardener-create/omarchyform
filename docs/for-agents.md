@@ -63,7 +63,10 @@ look at what you made. See §7.
 It does not know which board is open right now, and does not touch the
 trash or the pictures beside a board. It does keep backups: every write saves
 the version it replaced, in `backups/` for a board in the library and as
-`<file>.bak` beside one anywhere else.
+`<file>.bak` beside one anywhere else. A board in the library also keeps
+earlier versions, at most one every ten minutes, which the person can go back
+to from the board (**Earlier versions…** in the command list), so a change you
+make to a board they care about is one they can take back.
 
 ---
 

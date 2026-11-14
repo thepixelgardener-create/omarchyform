@@ -411,6 +411,7 @@ Item {
     id: boardLibrary
     boardsDir: root.boardsDir
     trashDir: root.trashDir
+    versionsDir: root.versionsDir
     trashIndexPath: root.storageReady ? root.trashIndexPath : ""
     helperScript: root.helperScript
     currentBoard: root.activePane.currentBoard
@@ -631,6 +632,13 @@ Item {
   // Deleting moves a board aside rather than destroying it. The index records
   // where each one came from, so putting it back is exact.
   readonly property string trashDir: root.dataDir + "/trash"
+  // Earlier versions of each board: the file a save replaced, kept at most
+  // every ten minutes (BoardFiles.py, keep_version). Outside the boards tree
+  // for the reason backups are, in a folder for each board that mirrors where
+  // the board is; one in the trash keeps its versions under the trash's name
+  // for it, so they come back with it and go with it.
+  readonly property string versionsDir: root.dataDir + "/versions"
+  function versionsPathFor(relative) { return root.versionsDir + "/v1/" + relative }
   readonly property string trashIndexPath: root.trashDir + "/index.json"
   // Pasted pictures are shared by every board, and nothing deletes them: a
   // board in the trash still points at its images, and so does a copy someone
@@ -756,7 +764,7 @@ Item {
   BoardFileProcess {
     id: initProc
     running: true
-    command: root.fileCommand("private", [root.dataDir, root.boardsDir, root.backupsDir, root.trashDir, root.imagesDir, root.locksDir])
+    command: root.fileCommand("private", [root.dataDir, root.boardsDir, root.backupsDir, root.trashDir, root.imagesDir, root.locksDir, root.versionsDir])
     onExited: function(code) { root.storageChecked(code) }
   }
 

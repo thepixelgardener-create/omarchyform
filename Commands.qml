@@ -39,7 +39,13 @@ Item {
   readonly property int fits: Math.max(1, Math.floor((panel.room - panel.chrome) / panel.rowHeight))
   readonly property int visibleRows: Math.max(1, Math.min(panel.ctl.paletteMatches.length,
                                                           panel.ctl.paletteRows, panel.fits))
-  height: panel.chrome + panel.rowHeight * panel.visibleRows
+  // What an empty list says can be a sentence, and at a theme's large type in
+  // a narrow panel a sentence is taller than a row: the list is then as tall
+  // as what it says, up to the room there is.
+  readonly property int emptyHeight: list.count === 0
+    ? Math.min(Math.ceil(empty.implicitHeight) + panel.theme.sp(16), Math.max(panel.rowHeight, panel.room - panel.chrome)) : 0
+  readonly property int listHeight: Math.max(panel.rowHeight * panel.visibleRows, panel.emptyHeight)
+  height: panel.chrome + panel.listHeight
 
   // Solid, as the shell's menu is. It was the canvas at 0.92, which let the
   // board's own text read faintly through the rows of the list over it.
@@ -157,7 +163,7 @@ Item {
 
     Item {
       width: parent.width
-      height: panel.rowHeight * panel.visibleRows
+      height: panel.listHeight
 
       ListView {
         id: list
@@ -265,6 +271,10 @@ Item {
             anchors.right: shortcut.left
             anchors.rightMargin: panel.theme.sp(10)
             visible: !row.ready
+            // No room kept for it while it is not shown: a hidden excuse was
+            // still as wide as its words, and the name beside it had only
+            // what was left, which in a narrow panel was nothing.
+            width: excuse.visible ? excuse.implicitWidth : 0
             text: panel.ctl.commandExcuse(row.modelData.needs)
             color: panel.theme.panelText
             opacity: 0.45
@@ -300,15 +310,22 @@ Item {
           }
         }
 
+        // Why the list is empty. Wrapped and held to the list's width: one
+        // of the things it says is a sentence, and a narrow panel is narrow.
         Text {
           textFormat: Text.PlainText
+          id: empty
+          objectName: "command-empty"
           anchors.centerIn: parent
+          width: parent.width - panel.theme.sp(16)
+          horizontalAlignment: Text.AlignHCenter
+          wrapMode: Text.WordWrap
           visible: list.count === 0
           color: panel.theme.panelText
           opacity: 0.5
           font.family: panel.theme.menuFontFamily
           font.pixelSize: panel.theme.fontBody
-          text: "nothing goes by that"
+          text: panel.ctl.paletteEmpty
         }
       }
 

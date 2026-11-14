@@ -150,6 +150,7 @@ Item {
   property string paletteGroup: ""
   property int paletteIndex: 0
   property int paletteRows: 9
+  readonly property string paletteEmpty: "nothing goes by that"
   readonly property var paletteMatches: Store.matchCommands(ctl.paletteQuery, ctl.paletteScope, ctl.paletteGroup)
   function commandReady(needs) { return true }
   function commandExcuse(needs) { return "" }

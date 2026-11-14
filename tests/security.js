@@ -299,18 +299,22 @@ const reviewedArguments = [
   'BoardExchange.qml: "importimage", [next.pane.imagesDir, "drop-" + Date.now() + "-" + exchange.dropSeq, next.path]',
   'BoardExchange.qml: "cliptext", [exchange.ctl.dataDir]',
   'BoardLibrary.qml: "mkdir", [library.boardsDir, dir]',
-  'BoardLibrary.qml: "move", [library.boardsDir, e.path, library.boardsDir, target]',
-  'BoardLibrary.qml: "purge", [library.trashDir, e.file]',
-  'BoardLibrary.qml: "move", [library.boardsDir, e.path, library.trashDir, file]',
-  'BoardLibrary.qml: "move", [library.trashDir, e.file, library.boardsDir, e.path]',
+  // A board's earlier versions follow it: where they are and where they go
+  // ride with the move, on stdin like the names they are made from.
+  'BoardLibrary.qml: "move", [library.boardsDir, e.path, library.boardsDir, target, library.versionsOf(e.path), library.versionsOf(target), library.versionsDir]',
+  'BoardLibrary.qml: "purge", [library.trashDir, e.file, library.versionsInTrash(e.file), library.versionsDir]',
+  'BoardLibrary.qml: "move", [library.boardsDir, e.path, library.trashDir, file, library.versionsOf(e.path), library.versionsInTrash(file), library.versionsDir]',
+  'BoardLibrary.qml: "move", [library.trashDir, e.file, library.boardsDir, e.path, library.versionsInTrash(e.file), library.versionsOf(e.path), library.versionsDir]',
+  'BoardSession.qml: "versions", [session.ctl.versionsPathFor(session.ctl.currentBoard), session.ctl.versionsDir]',
+  'BoardSession.qml: "restore", [session.ctl.boardPath, session.ctl.versionsPathFor(session.ctl.currentBoard), name, session.ctl.backupPathFor(session.ctl.currentBoard), session.ctl.lockPathFor(session.ctl.currentBoard), session.revision, session.ctl.boardsDir, session.ctl.backupsDir, session.ctl.versionsDir]',
   'BoardPane.qml: "export", [root.dataDir + "/.image-export.png", path, root.dataDir]',
   'BoardSession.qml: "snapshot", [session.ctl.boardPath, session.ctl.lockPathFor(session.ctl.currentBoard), session.ctl.boardsDir]',
   'BoardSession.qml: "filesize", [session.ctl.boardPath]',
   'BoardSession.qml: "check", [session.ctl.boardsDir, session.ctl.currentBoard]',
   'Omarchyform.qml: "checkimages", [root.imagesDir]',
-  'Omarchyform.qml: "private", [root.dataDir, root.boardsDir, root.backupsDir, root.trashDir, root.imagesDir, root.locksDir]',
+  'Omarchyform.qml: "private", [root.dataDir, root.boardsDir, root.backupsDir, root.trashDir, root.imagesDir, root.locksDir, root.versionsDir]',
   'bin/omarchyform: "revision", [path.resolve(file)]',
-  'bin/omarchyform: "commit", [target, aside(target, "backup"), aside(target, "lock"), expected === undefined ? "-" : expected], text',
+  'bin/omarchyform: "commit", [target, aside(target, "backup"), aside(target, "lock"), expected === undefined ? "-" : expected, "", "", aside(target, "versions"), "", "spaced"], text',
   'bin/omarchyform: "private", [LIBRARY, staging]',
   // The two programs a picture starts. Neither is handed a board's path or
   // name: the helper gets the pictures folder, with the names on stdin, and
@@ -357,7 +361,7 @@ const privateProcess = fs.readFileSync(path.join(root, 'BoardFileProcess.qml'), 
 assert.match(privateProcess, /\["python3", request\.activeCommand\[1\]\.replace/, 'native arguments contain only the helper path')
 assert.match(privateProcess, /worker\.write\(request\.activeCommand\[2\]/, 'operation and names travel on stdin')
 for (const [file, ids] of Object.entries({
-  'BoardPersistence.qml': ['commit'], 'BoardSession.qml': ['diskRead', 'diskSize', 'pathCheck'],
+  'BoardPersistence.qml': ['commit'], 'BoardSession.qml': ['diskRead', 'diskSize', 'pathCheck', 'versionList', 'versionSwap'],
   'BoardLibrary.qml': ['mkdirProc', 'moveProc', 'trashProc', 'restoreProc', 'purgeProc'],
   'BoardExchange.qml': ['reading', 'publish'], 'BoardPane.qml': ['imagePublish'],
   'Omarchyform.qml': ['initProc']
@@ -369,6 +373,10 @@ for (const [file, ids] of Object.entries({
 const privateTest = spawnSync('python3', [path.join(root, 'tests/private-files.py')], {encoding: 'utf8', timeout: 15000})
 assert.equal(privateTest.status, 0, privateTest.stderr || String(privateTest.error))
 process.stdout.write(privateTest.stdout)
+// And the versions it keeps of a board: which saves, how many, going back.
+const versionsTest = spawnSync('python3', [path.join(root, 'tests/versions-files.py')], {encoding: 'utf8', timeout: 60000})
+assert.equal(versionsTest.status, 0, versionsTest.stderr || String(versionsTest.error))
+process.stdout.write(versionsTest.stdout)
 
 
 for (const file of runtimeQml) {
@@ -383,7 +391,7 @@ for (const file of runtimeQml) {
   }
 }
 assert.match(fs.readFileSync(path.join(root, 'Omarchyform.qml'), 'utf8'),
-  /command: root\.fileCommand\("private", \[root\.dataDir, root\.boardsDir, root\.backupsDir, root\.trashDir, root\.imagesDir, root\.locksDir\]\)/,
+  /command: root\.fileCommand\("private", \[root\.dataDir, root\.boardsDir, root\.backupsDir, root\.trashDir, root\.imagesDir, root\.locksDir, root\.versionsDir\]\)/,
   'every folder of the plugin\'s is made private as the shell starts, the data folder first')
 
 // Nothing is staged in the shared /tmp: every temporary file is made inside a

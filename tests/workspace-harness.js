@@ -51,7 +51,8 @@ function makeDocument(workspace, board, Store) {
     // property reads as undefined, which is not what a string property does.
     conflict: false, resolving: '', createWhenLoaded: false,
     revision: '', forceNextSave: false, diskReading: false, waitingSince: 0,
-    filling: null, openedShare: 0, changedWhileOpening: false }
+    filling: null, openedShare: 0, changedWhileOpening: false,
+    versions: [], pendingRestore: '', restoredTo: '' }
   Object.defineProperty(session, 'opening', { get: () => session.filling !== null })
   // The binding BoardSession.qml declares, term for term.
   Object.defineProperty(session, 'canEdit', {
@@ -59,11 +60,16 @@ function makeDocument(workspace, board, Store) {
   })
   const writes = []
   const persistence = { busy: false, contents: '',
-    save(path, text, backup, root, backupRoot, lock, expected) {
+    save(path, text, backup, root, backupRoot, lock, expected, versions, versionsRoot, keepAlways) {
       this.busy = true
       this.contents = text
-      writes.push({ path, text, expected })
+      writes.push({ path, text, expected, versions, versionsRoot, keepAlways })
     } }
+  // The two helper processes behind a board's earlier versions. A test
+  // answers one by calling its onExited the way the QML's handler does.
+  const versionList = { running: false, again: false, board: '', command: null }
+  const versionSwap = { running: false, board: '', label: '', command: null }
+  Object.defineProperty(session, 'versionsLoading', { get: () => versionList.running })
   // The session's binding of the same name.
   Object.defineProperty(session, 'busy', { get: () => persistence.busy || session.diskReading })
   // What the document reads off its session, and off the workspace for it.
@@ -76,8 +82,9 @@ function makeDocument(workspace, board, Store) {
   Object.defineProperty(doc, 'waiting', { get: () => session.waitingSince !== 0 })
   Object.defineProperty(doc, 'boardPath', { get: () => '/boards/' + doc.currentBoard })
   Object.defineProperty(doc, 'boardTitle', { get: () => Store.displayName({ path: doc.currentBoard, dir: false }) })
-  forward(doc, () => workspace, ['autosaveMs', 'stateReady', 'boardsDir', 'backupsDir', 'library'])
-  const context = vm.createContext({ doc, session, persistence, Store,
+  forward(doc, () => workspace, ['autosaveMs', 'stateReady', 'boardsDir', 'backupsDir', 'versionsDir', 'library'])
+  forward(doc, () => session, ['versions', 'versionsLoading'])
+  const context = vm.createContext({ doc, session, persistence, Store, versionList, versionSwap,
     itemModel: items, linkModel: links, Date, Qt: { callLater(f) { f() } },
     saveTimer: { running: false, stop() {}, restart() {} },
     // A slice left over waits here until a test runs it (session.fillMore).
@@ -98,7 +105,7 @@ function makeDocument(workspace, board, Store) {
   session.requestDisk = resolve => session.acceptDisk(doc.currentBoard,
     doc.fileText(), resolve, 'rev-fresh\n' + session.diskText)
   let revisions = 0
-  return { doc, session, persistence, items, links, writes,
+  return { doc, session, persistence, items, links, writes, versionList, versionSwap,
     complete() {
       const write = writes[writes.length - 1]
       persistence.busy = false
@@ -163,8 +170,9 @@ function makePane(workspace, exchange, Store) {
   // bindings, so a derived property has to be declared here.
   Object.defineProperty(root, 'findDimming', { get: () => root.finding && root.findQuery !== '' })
   Object.defineProperty(root, 'findNeedle', { get: () => root.findQuery.toLowerCase() })
-  Object.defineProperty(root, 'paletteMatches', { get: () =>
-    root.paletteVisible ? Store.matchCommands(root.paletteQuery, root.paletteScope, root.paletteGroup) : [] })
+  Object.defineProperty(root, 'paletteMatches', { get: () => !root.paletteVisible ? []
+    : root.paletteGroup === 'versions' ? Store.versionChoices(root.doc.versions, root.paletteQuery, Date.now())
+    : Store.matchCommands(root.paletteQuery, root.paletteScope, root.paletteGroup) })
   Object.defineProperty(root, 'exchangeBusy', { get: () => !!exchange.busy })
   // The binding the failure timer runs on, which the QML declares and this
   // harness would otherwise not have. Same shape as the original, so a change
@@ -202,7 +210,7 @@ function controller() {
   const Store = loadStore()
   const workspace = { opened: true, stateReady: true, storageReady: true, storageNotice: '', startupError: '', windowMode: true, autosaveMs: 700, step: 40,
     showGrid: true, canvasPattern: 'Dots', canvasBackgroundChosen: false, canvasColour: 'Theme', startWindowed: true,
-    boardsDir: '/boards', backupsDir: '/backups', dataDir: '/data', imagesDir: '/data/images',
+    boardsDir: '/boards', backupsDir: '/backups', versionsDir: '/versions', dataDir: '/data', imagesDir: '/data/images',
     locksDir: '/data/locks', helperScript: '/BoardFiles.sh', launchNewBoard: false, launchOpenPath: '',
     copyingFor: null, documents: [], panes: [], layout: 'single', splitRatio: 0.5, pendingLeave: null,
     // The picture checks' properties, as Omarchyform.qml declares them.
@@ -261,7 +269,7 @@ function controller() {
   workspace.documents = [opened.doc]
   // The library, run from BoardLibrary.qml and wired to the workspace the way
   // Omarchyform.qml wires it. What it is told and its bindings are mirrored.
-  const library = { boardsDir: '/boards', trashDir: '/trash', trashIndexPath: '/trash/index.json',
+  const library = { boardsDir: '/boards', trashDir: '/trash', versionsDir: '/versions', trashIndexPath: '/trash/index.json',
     helperScript: '/BoardFiles.sh', showing: false, dir: '', query: '', index: 0, entries: [],
     searching: false, promptLabel: '', input: '', action: '', pendingDelete: '', message: '', inTrash: false,
     trashEntries: [], trashIndexSaving: false, trashIndexLoading: true, trashIndexNeedsRead: true, trashIndexError: '' }
@@ -294,7 +302,10 @@ function controller() {
   }
   workspace.library = library
   loadFunctions(library, sources.library, vm.createContext({ library, Store, trashIndexFile,
-    scanProc, mkdirProc, moveProc, trashProc, restoreProc, purgeProc }))
+    scanProc, mkdirProc, moveProc, trashProc, restoreProc, purgeProc,
+    // The one thing the library asks of Qt: the stamp a deleted board is
+    // filed under, here always the same moment.
+    Qt: { formatDateTime: () => '20261113-120000' } }))
   // The picture check runs when the test says: what Qt.callLater was handed
   // waits in `later`, and the helper's answer is played back through the
   // workspace's own onExited.
@@ -310,6 +321,8 @@ function controller() {
   const checked = sources.workspace.match(/id: pictureCheck\n[\s\S]*?onExited: function \(code\) \{ (.*) \}$/m)
   const pictureExited = vm.runInContext(`(function(code) {${checked[1]}})`, workspaceContext)
   return { root: first, second, doc: opened.doc, workspace, session: opened.session, library,
+    // The library's helper processes, for what it asks of them.
+    libraryProcs: { moveProc, trashProc, restoreProc, purgeProc },
     items: opened.items, links: opened.links, writes: opened.writes, states, persistence: opened.persistence,
     exchange, store: Store, complete: opened.complete, refuse: opened.refuse,
     // The helper finishing the dropped file it is copying: its exit code, and

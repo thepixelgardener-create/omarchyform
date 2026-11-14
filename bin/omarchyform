@@ -65,6 +65,10 @@ function aside(file, kind) {
   if (kind === "backup")
     return inLibrary ? path.join(LIBRARY, "backups", "v2", target.slice(boards.length + 1) + ".bak")
                      : target + ".bak"
+  // Earlier versions are kept for a board in the library, where the board
+  // itself lists them; one anywhere else has its .bak and nothing more.
+  if (kind === "versions")
+    return inLibrary ? path.join(LIBRARY, "versions", "v1", target.slice(boards.length + 1)) : ""
   return path.join(LIBRARY, "locks",
     S.lockKey(inLibrary ? target.slice(boards.length + 1) : target) + ".lock")
 }
@@ -175,8 +179,11 @@ function readBoard(file) {
 function writeBoard(board, file, expected) {
   const text = S.writeFile(board.items, board.links, board.nextId)
   const target = path.resolve(file)
+  // What this replaces is kept as an earlier version when the last one kept
+  // is ten minutes old or more, as it is when the board saves itself.
   const written = helper("commit",
-    [target, aside(target, "backup"), aside(target, "lock"), expected === undefined ? "-" : expected], text)
+    [target, aside(target, "backup"), aside(target, "lock"), expected === undefined ? "-" : expected,
+     "", "", aside(target, "versions"), "", "spaced"], text)
   if (written.status === 7)
     die(file + " changed since it was read", "another writer got there first; read it again, or pass --force")
   if (written.status === 5)

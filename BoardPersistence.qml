@@ -30,11 +30,20 @@ Item {
   // expects. The app passes a path outside the boards tree, so a directory
   // people are invited to hand-edit and commit stays free of .bak files.
   property string backupTarget: ""
+  // Where the board's earlier versions are kept, and the folder that has to
+  // be inside. Without one none is kept. `keepAlways` keeps the version this
+  // write replaces whatever the time since the last one.
+  property string versionsTarget: ""
+  property string versionsRoot: ""
+  property string versionMode: "spaced"
 
-  function save(path, text, backupPath, allowedRoot, allowedBackupRoot, lock, expectedRevision) {
+  function save(path, text, backupPath, allowedRoot, allowedBackupRoot, lock, expectedRevision, versionsPath, allowedVersionsRoot, keepAlways) {
     if (busy) return false
     boardRoot = allowedRoot || ""
     backupRoot = allowedBackupRoot || ""
+    versionsTarget = versionsPath || ""
+    versionsRoot = allowedVersionsRoot || ""
+    versionMode = keepAlways === true ? "always" : "spaced"
     target = path
     contents = text
     backupTarget = backupPath ? backupPath : path + ".bak"
@@ -73,7 +82,8 @@ Item {
     // has no controller, and its tests run it without one.
     command: ["bash", decodeURIComponent(Qt.resolvedUrl("BoardFiles.sh").toString().replace(/^file:\/\//, "")),
       "commit", persistence.target, persistence.backupTarget,
-      persistence.lockPath, persistence.expected, persistence.boardRoot, persistence.backupRoot]
+      persistence.lockPath, persistence.expected, persistence.boardRoot, persistence.backupRoot,
+      persistence.versionsTarget, persistence.versionsRoot, persistence.versionMode]
     stdinEnabled: true
     stdout: StdioCollector { id: committed; waitForEnd: true }
     // Written once the pipe is actually there, and closed straight after, or

@@ -54,6 +54,8 @@ ShellRoot {
     property var redoStack: []
     readonly property string boardsDir: test.dir
     readonly property string backupsDir: test.dir
+    readonly property string versionsDir: test.dir + "/versions"
+    function versionsPathFor(relative) { return test.dir + "/versions/v1/" + relative }
     // What was selected is the panes'; the document only says when to forget it.
     function resetSelection(endModes) {}
     function fileText() { return Store.writeFile(items, links, ctl.nextId) }

@@ -681,6 +681,32 @@ try {
   }
 
   {
+    // A board in the library keeps earlier versions when the command line
+    // writes it, where the board itself lists them: what a write replaced,
+    // and not one for every write. A board anywhere else has its .bak only.
+    const library = path.join(dir, '.local/share/omarchyform')
+    const inside = path.join(library, 'boards', 'kept.json')
+    fs.mkdirSync(path.dirname(inside), { recursive: true })
+    assert.equal(run('new', inside, '--note', 'one').status, 0)
+    const add = text => pipe(JSON.stringify([{ op: 'add', args: ['note', 0, 300, 220, 160, text] }]), 'apply', inside, '-')
+    assert.equal(add('two').status, 0)
+    assert.equal(add('three').status, 0)
+    const kept = path.join(library, 'versions/v1/kept.json')
+    const versions = fs.readdirSync(kept)
+    assert.equal(versions.length, 1, 'one version, not one a write: ' + versions)
+    assert.match(versions[0], /^\d{8}-\d{6}\.json$/)
+    assert.deepEqual(asThePluginWouldLoad(path.join(kept, versions[0])).rows.map(r => r.text), ['one'], 'the board the first write replaced')
+    assert.equal(fs.statSync(kept).mode & 0o777, 0o700)
+    assert.equal(fs.statSync(path.join(kept, versions[0])).mode & 0o777, 0o600)
+    const outside = path.join(dir, 'unkept.json')
+    run('new', outside, '--note', 'one')
+    pipe(JSON.stringify([{ op: 'add', args: ['note', 0, 300] }]), 'apply', outside, '-')
+    assert.equal(fs.existsSync(outside + '.bak'), true)
+    assert.deepEqual(fs.readdirSync(path.join(library, 'versions/v1')), ['kept.json'], 'and none for a board outside the library')
+    console.log('ok — command line: a library board it writes keeps the version each first write replaced')
+  }
+
+  {
     // The skill is linked the way Omarchy links its own: into ~/.agents/skills
     // and into the folder of each agent that has one, and nowhere else.
     const home = fs.mkdtempSync(path.join(dir, 'skill-home-'))

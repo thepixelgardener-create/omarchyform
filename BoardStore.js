@@ -1129,6 +1129,11 @@ var COMMANDS = [
   { name: "Export a PNG in black and white", key: "", run: "choosePng", arg: "mono", needs: "", group: "png",
     also: ["png mono", "monochrome", "greyscale", "grayscale", "print"] },
   { name: "Save now", key: "ctrl+s", run: "flushSave", needs: "" },
+  // The board as it stood at earlier saves. A family whose members are not in
+  // this table: they are the versions the board has, listed when it is opened
+  // (versionChoices).
+  { name: "Earlier versions…", key: "", run: "openGroup", arg: "versions", needs: "", opens: "versions", dynamic: true,
+    also: ["history", "restore", "go back", "backup", "revert"] },
   // Only offered while two versions of the open board exist. They have no keys
   // of their own: the panel that appears with the conflict numbers them, and
   // this is how they are found by name.
@@ -1208,6 +1213,75 @@ function groupTitle(group) {
   return ""
 }
 
+// ------------------------------------------------------- earlier versions
+// The helper keeps the file a save replaces, at most one every ten minutes,
+// in a folder of the board's own, and names each by when it was kept, in UTC
+// (BoardFiles.py, keep_version). What it lists comes back as lines of a name
+// and a size.
+var VERSION_NAME = /^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})\.json$/
+// More than the helper keeps, so the list is bounded by this side as well.
+var MAX_VERSIONS_LISTED = 64
+
+// When a version was kept, in milliseconds, or NaN for a name that is not one.
+function versionTime(name) {
+  var m = VERSION_NAME.exec(String(name))
+  if (!m) return NaN
+  var at = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]), Number(m[6]))
+  // Date.UTC rolls a thirteenth month over into the next year; a name that
+  // does not read back as itself was never a time.
+  var back = new Date(at)
+  return back.getUTCMonth() === Number(m[2]) - 1 && back.getUTCDate() === Number(m[3])
+    && back.getUTCHours() === Number(m[4]) ? at : NaN
+}
+
+// The helper's listing as rows, newest first, as it lists them.
+function versionRows(text) {
+  var rows = []
+  var lines = String(text).split("\n")
+  for (var i = 0; i < lines.length && rows.length < MAX_VERSIONS_LISTED; i++) {
+    var parts = lines[i].split("\t")
+    var at = parts.length === 2 ? versionTime(parts[0]) : NaN
+    if (isNaN(at) || !/^[0-9]{1,12}$/.test(parts[1])) continue
+    rows.push({ name: parts[0], bytes: Number(parts[1]), at: at })
+  }
+  return rows
+}
+
+var WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+function twoDigits(n) { return (n < 10 ? "0" : "") + n }
+
+// When a version is from, the way a person says it: the day by name while it
+// is near, by date once it is not, and the year only when it is another one.
+function versionLabel(at, now) {
+  var then = new Date(at), today = new Date(now)
+  var clock = twoDigits(then.getHours()) + ":" + twoDigits(then.getMinutes())
+  var days = Math.round((new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()
+    - new Date(then.getFullYear(), then.getMonth(), then.getDate()).getTime()) / 86400000)
+  if (days === 0) return "Today " + clock
+  if (days === 1) return "Yesterday " + clock
+  var date = then.getDate() + " " + MONTHS[then.getMonth()]
+  if (then.getFullYear() !== today.getFullYear()) return date + " " + then.getFullYear() + " " + clock
+  return WEEKDAYS[then.getDay()] + " " + date + " " + clock
+}
+
+// A board's versions as the rows the command list draws: shaped like the
+// commands in the table, so the one panel lists them, and found by typing
+// part of when they are from. A row is its date and nothing beside it: how
+// long ago that was, where a command has its key, took the room the date
+// needed in a narrow panel.
+function versionChoices(rows, query, now) {
+  var needle = String(query === undefined ? "" : query).toLowerCase().trim()
+  var found = []
+  for (var i = 0; rows && i < rows.length; i++) {
+    var label = versionLabel(rows[i].at, now)
+    if (needle !== "" && label.toLowerCase().indexOf(needle) < 0) continue
+    found.push({ name: label, key: "", run: "restoreVersion", arg: rows[i].name,
+                 needs: "edit", group: "versions" })
+  }
+  return found
+}
+
 function commandByName(name) {
   for (var i = 0; i < COMMANDS.length; i++) if (COMMANDS[i].name === name) return COMMANDS[i]
   return null
@@ -1247,7 +1321,8 @@ var COMMAND_ICONS = {
   setCanvasBackground: "\uf03e",
   setCanvasColour: "\uf042",
   // A family's entry wears the glyph its members do.
-  openGroup: { texture: "\uf00a", layer: "\uf0dc", canvas: "\uf03e", png: "\uf03e", conflict: "\uf0a0" },
+  openGroup: { texture: "\uf00a", layer: "\uf0dc", canvas: "\uf03e", png: "\uf03e", conflict: "\uf0a0", versions: "\uf1da" },
+  restoreVersion: "\uf1da",
   toggleWindowMode: "\uf2d0",
   // Columns for side by side, a stack of boxes for stacked.
   toggleSplit: { "side-by-side": "\uf0db", stacked: "\uf233" },

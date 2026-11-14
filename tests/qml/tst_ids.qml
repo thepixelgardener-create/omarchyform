@@ -29,6 +29,8 @@ ShellRoot {
     id: stubWorkspace
     readonly property string boardsDir: test.dir
     readonly property string backupsDir: test.dir
+    readonly property string versionsDir: test.dir + "/versions"
+    function versionsPathFor(relative) { return test.dir + "/versions/v1/" + relative }
     property int autosaveMs: 50
     property bool stateReady: true
     property QtObject library: QtObject {

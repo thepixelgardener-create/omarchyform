@@ -62,6 +62,12 @@ Item {
   function scheduleSave() { session.scheduleSave() }
   function flushSave() { session.flushSave() }
   function openBoard(path, fresh) { session.openBoard(path, fresh) }
+  // The board as it stood at earlier saves, newest first, once asked for:
+  // rows of a name, a size and a time (Store.versionRows).
+  readonly property var versions: session.versions
+  readonly property bool versionsLoading: session.versionsLoading
+  function listVersions() { session.listVersions() }
+  function restoreVersion(name) { session.restoreVersion(name) }
   function useDisk() { session.useDisk() }
   function replaceDisk() { session.replaceDisk() }
   function keptAsCopy(name) { session.keptAsCopy(name) }
@@ -77,6 +83,8 @@ Item {
   readonly property bool stateReady: doc.workspace.stateReady
   readonly property string boardsDir: doc.workspace.boardsDir
   readonly property string backupsDir: doc.workspace.backupsDir
+  readonly property string versionsDir: doc.workspace.versionsDir
+  function versionsPathFor(relative) { return doc.workspace.versionsPathFor(relative) }
   readonly property var library: doc.workspace.library
   function backupPathFor(relative) { return doc.workspace.backupPathFor(relative) }
   function recheckPictures(names) { doc.workspace.recheckPictures(names) }

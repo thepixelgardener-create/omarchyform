@@ -438,6 +438,30 @@ leaves the current board editable so you can switch again.
 
 Which board you had open is remembered in `state.json` and reopened next time.
 
+## Earlier versions
+
+A board can be taken back to how it stood earlier. Open the command list (`:`),
+choose **Earlier versions…**, and pick one: they are named by when they are
+from, newest first, and typing part of a day or a time narrows the list. The
+board becomes that version, and the board as it was a moment before is added
+to the list, so going back can itself be gone back on. `u` does not undo it:
+the board is read again from its file, as it is after any change on disk.
+
+A version is the file a save was about to replace, set aside before it was
+replaced. A board is saved every time typing pauses, so not every save keeps
+one: at most one every ten minutes, forty for each board, and no more than
+64 MB, with the oldest making way. The first save after a board has been left
+alone for a while therefore keeps it as you left it. They live in
+`~/.local/share/omarchyform/versions/`, outside the boards folder, and follow
+a board that is renamed, moved, deleted or put back; destroying a board in the
+trash destroys them with it. Whatever is on screen and not yet written is
+written first, and a board with a failed save or two versions waiting for a
+choice has to be settled before it can be taken back. A read-only board lists
+its versions and cannot go back to one.
+
+This is not the timeline 0.4.7 to 0.4.10 had: nothing is recorded inside the
+board's file, and a version is a whole board rather than a step.
+
 ## Boards with an old history
 
 Omarchyform 0.4.7 to 0.4.10 kept a timeline of every board's edits in the
