@@ -45,7 +45,7 @@ Item {
   property int saveCount: 0
   property var pointerEdit: null
   function beginPointerEdit() { pointerEdit = {}; pushUndo() }
-  function finishPointerEdit(cancel) { if (pointerEdit && !cancel) save(); pointerEdit = null }
+  function finishPointerEdit(cancel) { guides = []; if (pointerEdit && !cancel) save(); pointerEdit = null }
   property int removeCount: 0
   property int minItemSize: 60
   property bool culling: false

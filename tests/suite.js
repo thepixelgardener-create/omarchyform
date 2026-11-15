@@ -74,6 +74,25 @@ function tests(S) {
     eq(S.glueAt(pinned, 10, 10, -1, 8), null, "never to a background")
   })
 
+  test("a dragged end goes onto the shape it is near before it is lined up with another", () => {
+    // Note 1's right side is at 180; note 2's left side, lower down, at 194.
+    const m = new FakeModel([
+      item({ iid: 1, kind: "note", ix: 0, iy: 0, iw: 180, ih: 140 }),
+      item({ iid: 2, kind: "note", ix: 194, iy: 400, iw: 180, ih: 140 }),
+      item({ iid: 3, kind: "arrow", ix: 400, iy: 38, iw: 200, ih: 24, lax: 0, lay: 0.5, lbx: 1, lby: 0.5 })])
+    // Five past note 1's side: lining it up with note 2 would take it to 194,
+    // fourteen past, too far to be glued.
+    const d = S.draggedLineEnd(m, 2, 0, 185, 70, 10, false)
+    eq([d.placed.glued, d.placed.onto, d.placed.values.aon], [true, 0, 1], "glued to the note it was dropped by")
+    eq(d.guides.length, 1, "one guide")
+    eq([d.guides[0].glue, d.guides[0].x1, d.guides[0].y1, d.guides[0].x2, d.guides[0].y2], [true, 0, 0, 180, 140],
+      "and it rings the note")
+    const off = S.draggedLineEnd(m, 2, 0, 190, 300, 10, false)
+    eq([off.placed.glued, off.guides.some(g => g.glue)], [false, false], "away from both: lined up, not glued")
+    eq(off.placed.values.aon, 0)
+    const free = S.draggedLineEnd(m, 2, 0, 170, 70, 10, true)
+    eq([free.placed.glued, free.guides.length, free.placed.values.aon], [false, 0, 0], "free: on the note and not glued")
+  })
   test("a glued line follows its item, and lets go of what it moved away from", () => {
     const m = new FakeModel([
       item({ iid: 1, kind: "rect", ix: 300, iy: 0, iw: 100, ih: 100 }),

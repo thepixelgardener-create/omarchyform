@@ -291,7 +291,8 @@ function outlineReach(kind, dx, dy, hw, hh) {
 // arrow stops at the edge rather than in the middle: a box's nearest side, or
 // out from an ellipse's or a diamond's middle onto its curve or slant.
 // `toward` is the line's other end, the way out from a point dropped dead
-// centre. Returns { id, x, y, px, py } (fractions and the point) or null.
+// centre. Returns { id, at, x, y, px, py } (its index, the fractions and the
+// point) or null.
 function glueAt(items, x, y, self, tolerance, toward) {
   var t = Math.max(0, num(tolerance, 0))
   for (var i = items.count - 1; i >= 0; i--) {
@@ -323,7 +324,7 @@ function glueAt(items, x, y, self, tolerance, toward) {
     }
     // Outside the shape (a corner of an ellipse's box) and not near its edge.
     if (reach > 1 && Math.sqrt((px - x) * (px - x) + (py - y) * (py - y)) > t) continue
-    return { id: n.iid, x: lineUnit((px - n.ix) / n.iw, 0.5), y: lineUnit((py - n.iy) / n.ih, 0.5), px: px, py: py }
+    return { id: n.iid, at: i, x: lineUnit((px - n.ix) / n.iw, 0.5), y: lineUnit((py - n.iy) / n.ih, 0.5), px: px, py: py }
   }
   return null
 }
@@ -331,7 +332,7 @@ function glueAt(items, x, y, self, tolerance, toward) {
 // The roles that put end `end` of the line at `index` down at (x, y), by the
 // mouse or by a key. On or within `pull` of another item, the end glues to its
 // outline (glueAt) and lands there; a null `pull` puts it down free. Answers
-// { values, glued }.
+// { values, glued, onto }: onto is the index of the item it is glued to, or -1.
 function placeLineEnd(items, index, end, x, y, pull) {
   var n = items.get(index)
   var glue = pull === null ? null : glueAt(items, x, y, index, pull, lineEndPoint(n, end === 0 ? 1 : 0))
@@ -339,7 +340,29 @@ function placeLineEnd(items, index, end, x, y, pull) {
   var on = end === 0 ? "aon" : "bon"
   values[on] = glue ? glue.id : 0
   if (glue) { values[on + "x"] = glue.x; values[on + "y"] = glue.y }
-  return { values: values, glued: glue !== null }
+  return { values: values, glued: glue !== null, onto: glue ? glue.at : -1 }
+}
+
+// Where a dragged end goes: onto an item when it is on or near one, and
+// otherwise lined up as snappedLineEnd would. The item comes first, so being
+// lined up with a third item's side never pulls an end off the shape it was
+// dropped on. `free` puts it down where it is, glued to nothing. Answers
+// placeLineEnd's answer and the guides to draw: around the item it will be
+// glued to, marked `glue`, or the alignment hairlines.
+function draggedLineEnd(items, index, end, x, y, pull, free) {
+  if (free) return { placed: placeLineEnd(items, index, end, x, y, null), guides: [] }
+  var placed = placeLineEnd(items, index, end, x, y, pull)
+  var guides = []
+  if (!placed.glued) {
+    var at = snappedLineEnd(items.get(index), end, x, y, pull, items, index)
+    placed = placeLineEnd(items, index, end, at.x, at.y, pull)
+    guides = at.guides
+  }
+  if (placed.glued) {
+    var n = items.get(placed.onto)
+    guides = [{ glue: true, x1: n.ix, y1: n.iy, x2: n.ix + n.iw, y2: n.iy + n.ih }]
+  }
+  return { placed: placed, guides: guides }
 }
 
 // Where a glued end is now: on its item, or null when it is not glued or its

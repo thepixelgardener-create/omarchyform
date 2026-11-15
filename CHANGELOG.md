@@ -50,6 +50,10 @@ since older boards are migrated on load rather than rejected.
 
 ### Changed
 
+- While an arrow's or line's end is dragged, the item it would glue to is
+  ringed, and an end near an item goes onto it instead of being lined up
+  with a third item's side, which could pull it just off the item it was
+  dropped on and leave it unglued.
 - Making things moved to the top letter row, left to right: `q` note, `w` box,
   `e` ellipse, `r` diamond, `t` line, `z` arrow. `n` no longer makes a note.
   Fullscreen moved from `w` to `F11`.

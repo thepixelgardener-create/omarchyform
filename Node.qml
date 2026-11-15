@@ -585,15 +585,16 @@ Item {
         if (!endpoint.moving || !node.ctl.pointerEdit || !node.ctl.canEdit) return
         var point = endpoint.mapToItem(node.parent, hx, hy)
         var items = node.ctl.items
-        var at = { x: point.x + endpoint.grabX, y: point.y + endpoint.grabY, guides: [] }
-        // Level or upright when it is nearly so, and in line with the sides
-        // and middles of other items; shift lets it lie anywhere.
-        var pull = 10 / Math.max(0.01, node.ctl.zoom)
-        if (!free) at = Store.snappedLineEnd(items.get(node.index), endpoint.index, at.x, at.y, pull, items, node.index)
         // Put down on or near another item, the end is glued to its outline
-        // and goes where the item goes from then on; there it needs no guide.
-        var placed = Store.placeLineEnd(items, node.index, endpoint.index, at.x, at.y, free ? null : pull)
-        node.ctl.guides = placed.glued ? [] : at.guides
+        // and goes where the item goes from then on, and the item is ringed
+        // while the end is over it, so the drop is not a guess. Elsewhere it
+        // is level or upright when it is nearly so, and in line with the
+        // sides and middles of other items; shift lets it lie anywhere.
+        var pull = 10 / Math.max(0.01, node.ctl.zoom)
+        var drag = Store.draggedLineEnd(items, node.index, endpoint.index,
+                                        point.x + endpoint.grabX, point.y + endpoint.grabY, pull, free)
+        node.ctl.guides = drag.guides
+        var placed = drag.placed
         for (var role in placed.values) node.set(role, placed.values[role])
         node.ctl.repaintLinks()
       }

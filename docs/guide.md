@@ -37,7 +37,10 @@ while dragging to set any angle or place.
 
 Drop an end on a note, box, ellipse, diamond or picture and it is glued to that
 item's edge: from then on it follows the item as it moves or is resized, so an
-arrow drawn from one box to another stays joined to both. Stepping an end onto
+arrow drawn from one box to another stays joined to both. While you drag an
+end, the item it would glue to is ringed, so you can see it will hold before
+you let go; near an item, the end goes onto it rather than lining up with
+something else. Stepping an end onto
 an item with `ctrl+hjkl` glues it too. Moving the line on its own, or deleting
 the item, lets go; `shift` while dragging an end puts it down unglued. From the keyboard, `ctrl+hjkl` moves the head (where an arrow
 points) and `ctrl+shift+hjkl` the tail; the other end stays put. `c` changes its colour. Selection, duplication, deletion,

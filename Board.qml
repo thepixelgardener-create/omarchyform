@@ -490,21 +490,27 @@ FocusScope {
   }
 
   // Alignment guides while a drag is lined up with another item: hairlines
-  // in screen space, so they stay one pixel wide at any zoom.
+  // in screen space, so they stay one pixel wide at any zoom. A guide marked
+  // `glue` is the item a dragged line end will be glued to, ringed a few
+  // pixels outside its box.
   Repeater {
     objectName: "align-guides"
     model: board.ctl.guides
     delegate: Rectangle {
       required property var modelData
+      readonly property bool ring: modelData.glue === true
+      readonly property real pad: ring ? 4 : 0
       readonly property real sx1: modelData.x1 * board.ctl.zoom + board.ctl.camX
       readonly property real sy1: modelData.y1 * board.ctl.zoom + board.ctl.camY
       readonly property real sx2: modelData.x2 * board.ctl.zoom + board.ctl.camX
       readonly property real sy2: modelData.y2 * board.ctl.zoom + board.ctl.camY
-      x: Math.round(Math.min(sx1, sx2))
-      y: Math.round(Math.min(sy1, sy2))
-      width: Math.max(1, Math.abs(sx2 - sx1))
-      height: Math.max(1, Math.abs(sy2 - sy1))
-      color: board.theme.accent
+      x: Math.round(Math.min(sx1, sx2) - pad)
+      y: Math.round(Math.min(sy1, sy2) - pad)
+      width: Math.max(1, Math.abs(sx2 - sx1) + 2 * pad)
+      height: Math.max(1, Math.abs(sy2 - sy1) + 2 * pad)
+      color: ring ? "transparent" : board.theme.accent
+      border.color: board.theme.accent
+      border.width: ring ? 2 : 0
       opacity: 0.8
     }
   }
