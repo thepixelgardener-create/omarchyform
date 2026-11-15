@@ -1028,7 +1028,7 @@ Item {
   function alignTargets(edge) {
     root.arranging = false
     if (!root.canEdit) return
-    var moves = Store.alignMoves(root.items, root.targets(), edge)
+    var moves = Store.alignMoves(root.items, Store.placedByHand(root.items, root.targets()), edge)
     if (moves.length === 0) { root.flash(root.t("already aligned")); return }
     root.applyMoves(moves)
     root.flash(root.tn("aligned %1 item", "aligned %1 items", moves.length))
@@ -1037,7 +1037,7 @@ Item {
   function spreadTargets(axis) {
     root.arranging = false
     if (!root.canEdit) return
-    var t = root.targets()
+    var t = Store.placedByHand(root.items, root.targets())
     if (t.length < 3) { root.flash(root.t("mark three or more items to spread them")); return }
     var moves = Store.spreadMoves(root.items, t, axis)
     if (moves.length === 0) { root.flash(root.t("already evenly spaced")); return }

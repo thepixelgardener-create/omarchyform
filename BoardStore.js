@@ -455,6 +455,21 @@ function releaseGlue(items, i, release) {
   if (n.bon && release(n.bon)) items.setProperty(i, "bon", 0)
 }
 
+// The indices among `indices` whose place is their own to change: all but a
+// line glued at either end, which goes where what it is glued to goes. Lined
+// up or spread with the boxes it joins, such a line would be counted as one
+// more item to place and then pulled back onto them, leaving the boxes
+// unevenly spaced.
+function placedByHand(items, indices) {
+  var out = []
+  for (var i = 0; i < indices.length; i++) {
+    var n = items.get(indices[i])
+    if (isLine(n.kind) && (n.aon || n.bon)) continue
+    out.push(indices[i])
+  }
+  return out
+}
+
 // Lets go of whatever the lines among `indices` are glued to, unless that is
 // moving with them too: a line dragged on its own comes away from its items.
 // `together`, when given, is the indices of everything moved as one, some of

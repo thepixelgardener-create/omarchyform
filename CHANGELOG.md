@@ -78,6 +78,9 @@ since older boards are migrated on load rather than rejected.
   pointer within a few pixels of its stroke.
 - Aligning or spreading boxes together with the arrow that joins them no
   longer lets go of the arrow when one of the boxes was in line already.
+- An arrow glued to what it joins is left out when they are aligned or spread
+  together: it was counted as one more item to space out and then pulled
+  back onto them, so `a` then `g shift+l` left the boxes unevenly spaced.
 - Switching between tiled and fullscreen waits while a PNG export finishes,
   preserving the surface that owns the export and its completion callback.
 - A delayed paste is refused if its board was reloaded while the clipboard
