@@ -45,7 +45,13 @@ with tempfile.TemporaryDirectory(prefix='omarchyform-versions-') as directory:
     # A stale folder under a new board's name is another board's, and goes.
     kept.mkdir(parents=True)
     (kept / '20200101-000000.json').write_bytes(b'somebody else')
-    assert commit(b'one').returncode == 0
+    # Written over whatever is there, as an open board is once its file went
+    # missing under it, it is the same board, and its versions stay.
+    assert commit(b'one', expected='-').returncode == 0
+    assert names(kept) == ['20200101-000000.json'], 'a board written back after it went missing keeps its versions'
+    board.unlink()
+    # Expected to be new, it is.
+    assert commit(b'one', expected='').returncode == 0
     assert not kept.exists(), 'a new board does not inherit versions left under its name'
 
     # The first save over a board keeps what it replaced.

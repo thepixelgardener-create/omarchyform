@@ -164,7 +164,7 @@ def same_bytes(one, other):
         return False
 
 
-def keep_version(board, folder, root, always):
+def keep_version(board, folder, root, always, fresh=False):
     # Called with the board's lock held, before the board is replaced. A
     # version that cannot be kept never stops the save it rides on: whatever
     # goes wrong here, the board is still written.
@@ -176,10 +176,14 @@ def keep_version(board, folder, root, always):
         if os.path.islink(folder):
             return
         if not os.path.isfile(board) or os.path.islink(board):
-            # Nothing is being replaced: the board is new. Versions already
-            # under its name were another board's, since moved or deleted by
-            # hand, and are not this one's to go back to.
-            if os.path.isdir(folder):
+            # Nothing is being replaced. When the writer expected nothing to
+            # be there (`fresh`), the board is new, and versions already under
+            # its name were another board's, since moved or deleted by hand,
+            # and are not this one's to go back to. A board written over
+            # whatever is there, as an open board is when its file went
+            # missing under it, is the same board: its versions stay, and the
+            # caps prune them as usual.
+            if fresh and os.path.isdir(folder):
                 shutil.rmtree(folder)
             return
         if os.stat(board).st_size > MAX_BOARD_BYTES:
@@ -349,7 +353,7 @@ def run(op, args, source):
                 if expected != '-' and expected != current:
                     sys.stdout.write(current)
                     refuse(7)
-                keep_version(board, versions, versions_root, version_mode == 'always')
+                keep_version(board, versions, versions_root, version_mode == 'always', expected == '')
                 keep_backup(board, backup)
                 os.replace(staged, board)
                 sys.stdout.write(revision(board))

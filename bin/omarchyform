@@ -181,9 +181,14 @@ function writeBoard(board, file, expected) {
   const target = path.resolve(file)
   // What this replaces is kept as an earlier version when the last one kept
   // is ten minutes old or more, as it is when the board saves itself.
+  // The versions are confined to the library's versions folder, as the
+  // shell's are: none of the folders on the way may be a link.
+  const versions = aside(target, "versions")
+  const versionsRoot = versions ? path.join(LIBRARY, "versions") : ""
+  if (versionsRoot) fs.mkdirSync(versionsRoot, { recursive: true, mode: 0o700 })
   const written = helper("commit",
     [target, aside(target, "backup"), aside(target, "lock"), expected === undefined ? "-" : expected,
-     "", "", aside(target, "versions"), "", "spaced"], text)
+     "", "", versions, versionsRoot, "spaced"], text)
   if (written.status === 7)
     die(file + " changed since it was read", "another writer got there first; read it again, or pass --force")
   if (written.status === 5)
@@ -566,7 +571,13 @@ function verbRender(args) {
   if (!out.toLowerCase().endsWith(".png")) die("the picture is a PNG", "name it something.png")
   const target = path.resolve(out)
   if (target === path.resolve(file)) die("the picture cannot be written over the board")
-  if (fs.existsSync(target) && !rest.includes("--force")) die(out + " exists", "pass --force to write over it")
+  // Looked at, not through: a link at the picture's place is never written
+  // through, --force or not, since it could lead to the board or anything else.
+  let there = null
+  try { there = fs.lstatSync(target) } catch { /* nothing there */ }
+  if (there && !there.isFile()) die(out + " is not a plain file", "the picture is written only as a file of its own")
+  if (there && there.nlink > 1) die(out + " has other names", "it may be the board, or something else; nothing was written")
+  if (there && !rest.includes("--force")) die(out + " exists", "pass --force to write over it")
   let colors = "light"
   if (rest.includes("--colors")) colors = valueAfter(rest, rest.indexOf("--colors"), "--colors needs a palette")
   if (!S.exportPalette(colors)) die(`there is no palette ${colors}`, Object.keys(S.EXPORT_PALETTES))
@@ -628,7 +639,24 @@ function verbRender(args) {
       failed = ["the picture could not be drawn",
                 (run.stderr || run.stdout || "").trim().split("\n").slice(-3).join("\n") || "exit " + run.status]
     else {
-      try { fs.copyFileSync(drawn, target) } catch (error) { failed = ["cannot write " + out, error.message] }
+      // Put in place in one step that never follows a link. Without --force
+      // it is made only if nothing is there, even something that appeared
+      // while the picture was drawn; with it, a copy beside the target is
+      // renamed over it, which replaces a name rather than writing into
+      // whatever the name leads to.
+      try {
+        if (!rest.includes("--force")) fs.copyFileSync(drawn, target, fs.constants.COPYFILE_EXCL)
+        else {
+          const beside = path.join(path.dirname(target), "." + path.basename(target) + ".omarchyform-" + process.pid)
+          try {
+            fs.copyFileSync(drawn, beside, fs.constants.COPYFILE_EXCL)
+            fs.renameSync(beside, target)
+          } finally { fs.rmSync(beside, { force: true }) }
+        }
+      } catch (error) {
+        failed = error.code === "EEXIST" ? [out + " exists", "it appeared while the picture was drawn; pass --force to write over it"]
+                                         : ["cannot write " + out, error.message]
+      }
     }
   } finally {
     fs.rmSync(stage, { recursive: true, force: true })

@@ -116,6 +116,19 @@ try {
     refused('a picture already there', ['render', two, picture], /exists/)
     assert.equal(fs.readFileSync(picture, 'utf8'), 'mine', 'and it is left as it was')
     fs.rmSync(picture)
+    // Never through a link, even with --force: it could lead to the board.
+    const board = fs.readFileSync(two, 'utf8')
+    fs.symlinkSync(two, picture)
+    refused('a link to the board', ['render', two, picture, '--force'], /not a plain file/)
+    fs.rmSync(picture)
+    fs.symlinkSync(path.join(dir, 'nowhere.png'), picture)
+    refused('a link to nowhere', ['render', two, picture, '--force'], /not a plain file/)
+    fs.rmSync(picture)
+    fs.linkSync(two, picture)
+    refused('another name for the board', ['render', two, picture, '--force'], /has other names/)
+    fs.rmSync(picture)
+    assert.equal(fs.readFileSync(two, 'utf8'), board, 'and the board is as it was')
+    assert.equal(fs.existsSync(path.join(dir, 'nowhere.png')), false, 'and nothing was made where a link led')
     assert.equal(fs.existsSync(path.join(library, 'render')), false, 'a refusal stages nothing')
 
     // Without Quickshell the answer is still JSON and says what is missing.

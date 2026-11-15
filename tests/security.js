@@ -314,7 +314,7 @@ const reviewedArguments = [
   'Omarchyform.qml: "checkimages", [root.imagesDir]',
   'Omarchyform.qml: "private", [root.dataDir, root.boardsDir, root.backupsDir, root.trashDir, root.imagesDir, root.locksDir, root.versionsDir]',
   'bin/omarchyform: "revision", [path.resolve(file)]',
-  'bin/omarchyform: "commit", [target, aside(target, "backup"), aside(target, "lock"), expected === undefined ? "-" : expected, "", "", aside(target, "versions"), "", "spaced"], text',
+  'bin/omarchyform: "commit", [target, aside(target, "backup"), aside(target, "lock"), expected === undefined ? "-" : expected, "", "", versions, versionsRoot, "spaced"], text',
   'bin/omarchyform: "private", [LIBRARY, staging]',
   // The two programs a picture starts. Neither is handed a board's path or
   // name: the helper gets the pictures folder, with the names on stdin, and

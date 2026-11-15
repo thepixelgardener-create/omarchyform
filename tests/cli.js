@@ -703,6 +703,20 @@ try {
     pipe(JSON.stringify([{ op: 'add', args: ['note', 0, 300] }]), 'apply', outside, '-')
     assert.equal(fs.existsSync(outside + '.bak'), true)
     assert.deepEqual(fs.readdirSync(path.join(library, 'versions/v1')), ['kept.json'], 'and none for a board outside the library')
+    // A link anywhere on the way to a board's versions is never followed: not
+    // to keep one, and not to clear "stale" ones that are someone else's.
+    const v1 = path.join(library, 'versions/v1'), held = path.join(library, 'versions/v1-held')
+    const elsewhere = path.join(dir, 'elsewhere')
+    fs.mkdirSync(path.join(elsewhere, 'fresh.json'), { recursive: true })
+    fs.writeFileSync(path.join(elsewhere, 'fresh.json', 'precious'), 'not a version')
+    fs.renameSync(v1, held)
+    fs.symlinkSync(elsewhere, v1)
+    assert.equal(run('new', path.join(library, 'boards', 'fresh.json'), '--note', 'x').status, 0, 'the board is still written')
+    assert.equal(add('four').status, 0)
+    assert.equal(fs.readFileSync(path.join(elsewhere, 'fresh.json', 'precious'), 'utf8'), 'not a version', 'nothing outside is cleared')
+    assert.deepEqual(fs.readdirSync(elsewhere), ['fresh.json'], 'or kept there')
+    fs.unlinkSync(v1)
+    fs.renameSync(held, v1)
     console.log('ok — command line: a library board it writes keeps the version each first write replaced')
   }
 
