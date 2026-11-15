@@ -1297,6 +1297,23 @@ Item {
     root.repaintLinks()
   }
 
+  // Z lets go: what is marked, or the item the keyboard is on. An arrow lets
+  // go of both its ends and stays where it is; a shape lets go of every arrow
+  // glued to it, whose other ends hold on.
+  function unglueTargets() {
+    if (!root.canEdit) return
+    var t = root.targets()
+    if (t.length === 0) return
+    var ends = Store.unglueAll(root.items, t, false)
+    if (ends === 0) { root.flash(root.t("nothing glued here")); return }
+    root.pushUndo()
+    Store.unglueAll(root.items, t, true)
+    root.gluingFrom = -1
+    root.save()
+    root.repaintLinks()
+    root.flash(root.tn("let go of %1 end · u to undo", "let go of %1 ends · u to undo", ends))
+  }
+
   // Connectors point somewhere: an arrow carries a meaning a plain line
   // cannot. Only one runs between any pair, so drawing the same pair again
   // either turns it round or takes it away.

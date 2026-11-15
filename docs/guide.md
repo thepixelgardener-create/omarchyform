@@ -40,6 +40,11 @@ While the second item is being chosen, the first is drawn heavier and the line
 under the board's name says what `z` will do; `esc` cancels. The keyboard stays
 on the second item, so `z` again carries on from there.
 
+`Z` (shift+z) unglues: on an arrow, both its ends let go and it stays where it
+is; on a shape, every arrow glued to it lets go of it, and their other ends
+hold on. With items marked, all of them let go. To let go of one end only,
+step it off the shape with `ctrl+hjkl` (head) or `ctrl+shift+hjkl` (tail).
+
 Lines are objects of
 their own: they do not need shapes at either end. Select one and press `s`
 to cycle **line → arrow → double-headed arrow → dashed line**.
@@ -104,6 +109,7 @@ breaks, and the middle button does not paste the primary selection.
 | `w` `e` `r` | New box / ellipse / diamond |
 | `t` | New line |
 | `z`, move, `z` | Join two shapes with a glued arrow, or glue an arrow to a shape; `z z` on one shape puts a glued arrow beside it |
+| `Z` | Unglue: an arrow lets go of both ends, a shape of every arrow on it |
 | `p` / `Shift+P` | Pin as background / select backgrounds to unpin |
 | `s` | Cycle the shape, or the selected line’s style |
 | `x` | Connect: `x` on one, `tab` or `hjkl` to the other, `x` again |

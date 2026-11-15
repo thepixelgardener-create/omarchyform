@@ -544,6 +544,27 @@ function unglueMoved(items, indices, together) {
   for (var i = 0; i < indices.length; i++) releaseGlue(items, indices[i], staying)
 }
 
+// What Z lets go of for the items at `indices`: every end of a line among
+// them, and every end glued to a shape among them. The lines stay where they
+// are. Answers how many ends would be let go of, and with `apply` lets go.
+function unglueAll(items, indices, apply) {
+  var shapes = {}, lines = {}, ends = 0
+  for (var k = 0; k < indices.length; k++) {
+    var m = items.get(indices[k])
+    if (isLine(m.kind)) lines[indices[k]] = true
+    else shapes[m.iid] = true
+  }
+  for (var i = 0; i < items.count; i++) {
+    var n = items.get(i)
+    if (!isLine(n.kind)) continue
+    var whole = lines[i] === true
+    var a = n.aon && (whole || shapes[n.aon] === true), b = n.bon && (whole || shapes[n.bon] === true)
+    if (a) { ends++; if (apply) items.setProperty(i, "aon", 0) }
+    if (b) { ends++; if (apply) items.setProperty(i, "bon", 0) }
+  }
+  return ends
+}
+
 // Lets go of the items at `indices`: they are being removed.
 function unglueFrom(items, indices) {
   var gone = idsAt(items, indices)
@@ -1210,6 +1231,7 @@ var COMMANDS = [
   { name: "Texture: Hatch", key: "", run: "setTexture", arg: "hatch", needs: "texture", group: "texture", also: ["background", "fill"] },
   { name: "Connect to another", key: "x", run: "toggleLinking", needs: "target", also: ["link"] },
   { name: "Remove its connectors", key: "X", run: "unlinkSelected", needs: "target", also: ["disconnect", "unlink"] },
+  { name: "Unglue", key: "Z", run: "unglueTargets", needs: "target", also: ["detach", "let go"] },
   { name: "Duplicate", key: "ctrl+d", run: "duplicateTargets", needs: "target" },
   { name: "Delete", key: "del", run: "removeTargets", needs: "target" },
   // The chord's own entry is its family's: in the list it opens the six
@@ -1662,6 +1684,7 @@ var COMMAND_ICONS = {
   recolorItem: "\uf1fc",
   toggleLinking: "\uf0c1",
   unlinkSelected: "\uf127",
+  unglueTargets: "\uf127",
   duplicateTargets: "\uf24d",
   removeTargets: "\uf1f8",
   beginArrange: "\uf037",
@@ -1724,6 +1747,7 @@ var KEY_HELP_SECTIONS = [
     ["q w e r t", "new note, box, ellipse, diamond, line"],
     ["z, move, z", "join two shapes with a glued arrow, or glue an arrow to a shape"],
     ["z z", "a glued arrow beside the shape; with nothing selected, a new arrow"],
+    ["Z", "unglue: an arrow lets go of both ends, a shape of every arrow on it"],
     ["s", "cycle shape or line style"],
     ["end dropped on a shape", "a line's end glues to its edge and follows it"],
     ["enter / i", "write in it, as plain text"],

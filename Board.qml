@@ -638,6 +638,7 @@ FocusScope {
       // z glues rather than only making: on a shape, then on another shape
       // or an arrow, it joins or attaches them (BoardPane.glueKey).
       "z": function () { board.ctl.glueKey() },
+      "Z": function () { board.ctl.unglueTargets() },
       "p": function () { board.ctl.togglePin() },
       "P": function () { board.ctl.togglePinnedSelection() },
       "s": function () { board.ctl.cycleKind() },

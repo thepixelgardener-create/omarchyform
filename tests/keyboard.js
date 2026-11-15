@@ -262,4 +262,48 @@ const presses = []
   assert.deepEqual([c.root.gluingFrom, c.root.linkingFrom], [1, -1], 'z after x: gluing, not connecting')
 }
 
+// Z, unglue: an arrow lets go of both its ends where it is; a shape lets go
+// of every arrow glued to it, and their other ends hold on.
+{
+  const c = opened([note(1, 0, 0), note(2, 700, 0), note(3, 0, 600)])
+  const glued = i => [c.items.get(i).aon, c.items.get(i).bon]
+  // Two arrows from note one: to note two (index 3), to note three (index 4).
+  c.press('Tab'); c.press('z'); c.press('Tab'); c.press('z')
+  c.root.selectedIndex = 0
+  c.press('z'); c.root.selectedIndex = 2; c.press('z')
+  assert.deepEqual([glued(3), glued(4)], [[1, 2], [1, 3]], 'two arrows out of note one')
+
+  // Z on an arrow: both ends let go, and it stays where it was.
+  c.root.selectedIndex = 3
+  const where = [c.items.get(3).ix, c.items.get(3).iy, c.items.get(3).iw, c.items.get(3).ih]
+  c.press('Z')
+  assert.deepEqual(glued(3), [0, 0], 'Z on an arrow: both ends let go')
+  assert.deepEqual([c.items.get(3).ix, c.items.get(3).iy, c.items.get(3).iw, c.items.get(3).ih], where, 'and it has not moved')
+  assert.match(c.root.statusText, /let go of 2 ends/)
+  // Moving note two now leaves it behind.
+  c.root.selectedIndex = 1; c.press('shift+l')
+  assert.deepEqual([c.items.get(3).ix, c.items.get(3).iy], where.slice(0, 2), 'note two moved without it')
+  c.press('u'); c.press('u')
+  assert.deepEqual(glued(3), [1, 2], 'u: glued again')
+
+  // Z on a shape: every arrow on it lets go of it; their other ends hold.
+  c.root.selectedIndex = 0
+  c.press('Z')
+  assert.deepEqual([glued(3), glued(4)], [[0, 2], [0, 3]], 'Z on note one: both arrows let go of it, and only of it')
+  // Nothing glued: said, and nothing to undo.
+  const depth = c.doc.undoStack.length
+  c.press('Z')
+  assert.equal(c.doc.undoStack.length, depth, 'Z again: nothing to let go of, nothing to undo')
+  assert.match(c.root.statusText, /nothing glued here/)
+
+  // Marked together: everything marked lets go.
+  c.press('u')
+  c.press('Escape')
+  c.root.selectedIndex = 3; c.press('space')
+  c.root.selectedIndex = 4; c.press('space')
+  c.press('Z')
+  assert.deepEqual([glued(3), glued(4)], [[0, 0], [0, 0]], 'Z on two marked arrows: all four ends let go')
+  presses.push('unglued: Z')
+}
+
 console.log('ok — keyboard: an arrow is glued, followed, let go of and lined up without the pointer (' + presses.join('; ') + ')')

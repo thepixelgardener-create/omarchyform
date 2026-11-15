@@ -260,6 +260,7 @@ Item {
   function toggleWindowMode() {}
   function undo() {}
   function unlinkSelected() {}
+  function unglueTargets() {}
   function zoomCentre(factor) {}
 
   // The board draws in its own palette and the panels in the theme; one

@@ -57,6 +57,8 @@ since older boards are migrated on load rather than rejected.
   free arrow. The line under the board's name says what the second `z` will
   do, and `esc` cancels. The command list finds a command by its key ahead of
   names that only start with that letter.
+- `Z` unglues: an arrow lets go of both ends where it is, and a shape lets go
+  of every arrow glued to it, whose other ends hold on.
 - While an arrow's or line's end is dragged, the item it would glue to is
   ringed, and an end near an item goes onto it instead of being lined up
   with a third item's side, which could pull it just off the item it was
