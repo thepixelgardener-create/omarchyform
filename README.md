@@ -39,7 +39,8 @@ Updating, the optional desktop entry and removing it are in the
 | Key | Does |
 |-----|------|
 | `q` | New note, ready to type |
-| `w` `e` `r` `t` `z` | New box, ellipse, diamond, line, arrow |
+| `w` `e` `r` `t` | New box, ellipse, diamond, line |
+| `z`, move, `z` | Glue: join two shapes with an arrow, or glue an arrow to a shape |
 | `esc` | Stop typing; press again to close the board |
 | `h` `j` `k` `l` | Move to the nearest note that way |
 | `x`, move, `x` | Connect two items |

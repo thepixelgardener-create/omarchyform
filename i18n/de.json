@@ -15,6 +15,7 @@
     "one": "gelöscht · u macht es rückgängig",
     "other": "%1 gelöscht · u macht es rückgängig"
   },
+  "%1 glues the arrow to this": "%1 klebt den Pfeil hier an",
   "%1 items": {
     "one": "%1 Element",
     "other": "%1 Elemente"
@@ -23,6 +24,7 @@
     "one": "%1 Element, keines ausgewählt",
     "other": "%1 Elemente, keines ausgewählt"
   },
+  "%1 joins these two with an arrow": "%1 verbindet die beiden mit einem Pfeil",
   "%1 marked": {
     "one": "%1 markiert",
     "other": "%1 markiert"
@@ -39,6 +41,7 @@
     "one": "%1 Bild, das dieses Board nennt, fehlt in deiner Bibliothek · speichere stattdessen eine Kopie ohne Bilder",
     "other": "%1 Bilder, die dieses Board nennt, fehlen in deiner Bibliothek · speichere stattdessen eine Kopie ohne Bilder"
   },
+  "%1 puts a glued arrow beside it": "%1 setzt einen angeklebten Pfeil daneben",
   "%1 removes this connector": "%1 entfernt diese Verbindung",
   "%1 turns this connector round": "%1 dreht diese Verbindung um",
   "%1 · %2": "%1 · %2",
@@ -174,6 +177,7 @@
   "Fit the board on screen": "Board in den Bildschirm einpassen",
   "Fri": "Fr.",
   "Fullscreen or windowed": "Vollbild oder Fenster",
+  "Glue with an arrow": "Mit einem Pfeil verkleben",
   "Grid": "Raster",
   "Help": "Hilfe",
   "Image added": "Bild hinzugefügt",
@@ -202,7 +206,6 @@
   "Move and arrange": "Bewegen und anordnen",
   "Name this board": "Dieses Board benennen",
   "New": "Neu",
-  "New arrow": "Neuer Pfeil",
   "New board": "Neues Board",
   "New board · F2 to name it": "Neues Board · F2 zum Benennen",
   "New box": "Neues Rechteck",
@@ -319,6 +322,7 @@
   "Zoom in": "Vergrößern",
   "Zoom out": "Verkleinern",
   "a PNG of just what is marked, backgrounds included": "ein PNG nur vom Markierten, Hintergründe eingeschlossen",
+  "a glued arrow beside the shape; with nothing selected, a new arrow": "ein angeklebter Pfeil neben der Form; ohne Auswahl ein neuer Pfeil",
   "a line's end glues to its edge and follows it": "das Ende einer Linie haftet an ihrer Kante und folgt ihr",
   "add a board": "Board anlegen",
   "add board": "Board anlegen",
@@ -336,6 +340,7 @@
   "an image keeps its shape": "ein Bild behält seine Form",
   "arrange": "anordnen",
   "arrow": "Pfeil",
+  "arrow glued": "Pfeil angeklebt",
   "back out, then close the board": "zurück, dann das Board schließen",
   "back to the boards": "zurück zu den Boards",
   "backgrounds": "Hintergründe",
@@ -420,6 +425,8 @@
   "is a link, which a board does not follow": "ist ein Link, dem ein Board nicht folgt",
   "is larger than 32 MB": "ist größer als 32 MB",
   "is not a picture a board can show": "ist kein Bild, das ein Board zeigen kann",
+  "join two shapes with a glued arrow, or glue an arrow to a shape": "zwei Formen mit einem angeklebten Pfeil verbinden oder einen Pfeil an eine Form kleben",
+  "joined with an arrow": "mit einem Pfeil verbunden",
   "keys": "Tasten",
   "larger than 32 MB": "größer als 32 MB",
   "line": "Linie",
@@ -444,7 +451,7 @@
   "new board / name the current board": "neues Board / das aktuelle Board benennen",
   "new board:": "neues Board:",
   "new folder:": "neuer Ordner:",
-  "new note, box, ellipse, diamond, line, arrow": "neue Notiz, Rechteck, Ellipse, Raute, Linie, Pfeil",
+  "new note, box, ellipse, diamond, line": "neue Notiz, Box, Ellipse, Raute, Linie",
   "next": "weiter",
   "no command goes by that": "kein Befehl heißt so",
   "no commands": "keine Befehle",
@@ -469,6 +476,7 @@
   "pan the canvas": "die Leinwand verschieben",
   "paste": "einfügen",
   "paste a picture or text (also ctrl+v)": "ein Bild oder Text einfügen (auch Strg+V)",
+  "pick a shape or an arrow, then %1": "eine Form oder einen Pfeil wählen, dann %1",
   "pick the other end, then %1": "wähle das andere Ende, dann %1",
   "picture not shown": "Bild nicht angezeigt",
   "pin as background / select backgrounds": "als Hintergrund anheften / Hintergründe auswählen",
@@ -526,6 +534,7 @@
   "the same picture on white, on black, or in black and white": "dasselbe Bild auf Weiß, auf Schwarz oder in Schwarzweiß",
   "the trash": "der Papierkorb",
   "the trash is empty": "der Papierkorb ist leer",
+  "this arrow is glued here already": "dieser Pfeil klebt hier schon",
   "this board has not changed underneath you": "dieses Board wurde nicht hinter deinem Rücken geändert",
   "this board is read-only": "dieses Board ist schreibgeschützt",
   "this list": "diese Liste",
@@ -551,6 +560,8 @@
   "what was marked, without controls, on white": "das Markierte, ohne Bedienelemente, auf Weiß",
   "write in it, as plain text": "hineinschreiben, als einfacher Text",
   "x on a connected pair": "x auf einem verbundenen Paar",
+  "z glues an arrow to a shape, or joins two shapes": "z klebt einen Pfeil an eine Form oder verbindet zwei Formen",
+  "z, move, z": "z, wechseln, z",
   "zoom": "zoomen",
   "zoom at the pointer": "am Zeiger zoomen"
 }

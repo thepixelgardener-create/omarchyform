@@ -619,7 +619,7 @@ FocusScope {
         : item.kind === "dashed-line" ? board.ctl.t("Dashed line") : board.ctl.t("Item")
       var text = item.itext.length > 200 ? item.itext.slice(0, 200) + "…" : item.itext
       return board.ctl.t("%1 %2 of %3", kind, at + 1, count) + (item.ipinned ? board.ctl.t(", in the background") : "")
-        + (board.ctl.linkingFrom >= 0 ? board.ctl.t(", connecting") : "") + (text !== "" ? ": " + text : "")
+        + (board.ctl.linkingFrom >= 0 || board.ctl.gluingFrom >= 0 ? board.ctl.t(", connecting") : "") + (text !== "" ? ": " + text : "")
     }
 
     // Printable keys are a table rather than a ladder of else-ifs: adding a
@@ -635,7 +635,9 @@ FocusScope {
       "e": function () { board.ctl.addRelative("ellipse") },
       "r": function () { board.ctl.addRelative("diamond") },
       "t": function () { board.ctl.addRelative("line") },
-      "z": function () { board.ctl.addRelative("arrow") },
+      // z glues rather than only making: on a shape, then on another shape
+      // or an arrow, it joins or attaches them (BoardPane.glueKey).
+      "z": function () { board.ctl.glueKey() },
       "p": function () { board.ctl.togglePin() },
       "P": function () { board.ctl.togglePinnedSelection() },
       "s": function () { board.ctl.cycleKind() },
@@ -1179,6 +1181,9 @@ FocusScope {
       // thing and the board do another.
       : status.tier === "linking"
       ? Store.linkHint(board.ctl.linkOutcome, board.ctl.accentMarkup, board.ctl.tv)
+      // The same for z: join, attach, or what to pick first.
+      : status.tier === "gluing"
+      ? Store.glueHint(board.ctl.glueOutcome, board.ctl.accentMarkup, board.ctl.tv)
       : status.tier === "flash" ? Store.escapeMarkup(board.ctl.statusText)
       : status.tier === "switching" ? Store.escapeMarkup(board.ctl.t("saving before switching boards…"))
       // The other pane is still there when the window is too small to show

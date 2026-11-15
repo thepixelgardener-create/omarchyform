@@ -77,6 +77,14 @@ Item {
   }
   property int editIndex: -1      // -1 means normal mode: every key is a command
   property int linkingFrom: -1    // id of the first end while connecting
+  property int gluingFrom: -1     // id of what z started on, while gluing
+  // What pressing z again would do with what it started on and the item the
+  // keyboard is on now, said on the line before it happens (Store.gluePlan,
+  // which glueKey carries out).
+  readonly property string glueOutcome: {
+    if (root.gluingFrom < 0 || !root.canEdit) return "none"
+    return Store.gluePlan(root.items, Store.indexOfId(root.items, root.gluingFrom), root.selectedIndex).outcome
+  }
   // What pressing x again would do to the two ends chosen so far, so the line
   // in the header can say it before it happens. addLink asks the same
   // question of the same table when it carries it out, so the promise and the
@@ -346,7 +354,7 @@ Item {
       failureText: root.failureText,
       paletteVisible: root.paletteVisible, arranging: root.arranging,
       showPinned: root.showPinned, editing: root.editIndex >= 0,
-      linking: root.linkingFrom >= 0, statusText: root.statusText,
+      linking: root.linkingFrom >= 0, gluing: root.gluingFrom >= 0, statusText: root.statusText,
       switching: root.pendingBoard !== null || root.leaving
     }
   }
@@ -521,7 +529,7 @@ Item {
     else if (root.selectedIndex < 0 || !root.isMarked(root.items.get(root.selectedIndex).iid))
       root.selectedIndex = Store.indexOfId(root.items, m[m.length - 1])
     root.editIndex = -1
-    root.linkingFrom = -1
+    root.linkingFrom = -1; root.gluingFrom = -1
     root.repaintLinks()
     root.flash(m.length === 0 ? root.t("nothing marked") : root.tn("%1 marked", "%1 marked", m.length))
     root.focusKeys()
@@ -544,7 +552,7 @@ Item {
     for (var i = 0; i < t.length; i++) root.items.setProperty(t[i], "ipinned", !unpin)
     root.markedIds = []
     root.editIndex = -1
-    root.linkingFrom = -1
+    root.linkingFrom = -1; root.gluingFrom = -1
     root.showPinned = false
     if (!unpin) root.selectedIndex = -1
     root.save()
@@ -557,7 +565,7 @@ Item {
     root.markedIds = []
     root.selectedIndex = -1
     root.editIndex = -1
-    root.linkingFrom = -1
+    root.linkingFrom = -1; root.gluingFrom = -1
     root.selectNext(1)
     root.focusKeys()
   }
@@ -639,7 +647,7 @@ Item {
     root.doc.nextId = snap.nextId
     if (root.selectedIndex >= root.items.count) root.selectedIndex = root.items.count - 1
     root.editIndex = -1
-    root.linkingFrom = -1
+    root.linkingFrom = -1; root.gluingFrom = -1
     root.repaintLinks()
     // Rebuilding the model tears down every delegate, which drops keyboard
     // focus; without this a second undo never reaches the key handler.
@@ -1218,6 +1226,7 @@ Item {
     var n = root.selected()
     if (!n) return
     if (root.linkingFrom < 0) {
+      root.gluingFrom = -1
       root.linkingFrom = n.iid
       // Whatever the line was saying is about the last thing that finished,
       // not about the one starting now. The order below the header already
@@ -1228,7 +1237,63 @@ Item {
       return
     }
     if (n.iid !== root.linkingFrom) root.addLink(root.linkingFrom, n.iid)
-    root.linkingFrom = -1
+    root.linkingFrom = -1; root.gluingFrom = -1
+    root.repaintLinks()
+  }
+
+  // z glues, the way x connects: on a shape or a line it holds that as the
+  // first item, and pressed again on the item the keyboard has moved to it
+  // does what gluePlan says for the pair. Two shapes get an arrow joining
+  // them; a shape and a line, either way round, get one end of the line glued
+  // to the shape; a shape and itself get an arrow beside it, glued at the
+  // tail. With nothing selected it makes a free arrow, as it always has. The
+  // keyboard stays on the second item, so z again carries on from there.
+  function glueKey() {
+    var n = root.selected()
+    if (!n) { root.gluingFrom = -1; root.addRelative("arrow"); return }
+    if (!root.canEdit || n.ipinned) return
+    if (root.gluingFrom < 0) {
+      root.linkingFrom = -1
+      root.gluingFrom = n.iid
+      root.statusText = ""
+      root.repaintLinks()
+      return
+    }
+    var from = Store.indexOfId(root.items, root.gluingFrom), to = root.selectedIndex
+    root.gluingFrom = -1
+    var plan = Store.gluePlan(root.items, from, to)
+    if (plan.outcome === "join") {
+      var keep = root.items.get(to).iid
+      var joined = Store.joiningLine(root.items, plan.a, plan.b)
+      root.addItem("arrow", 0, 0)
+      var at = root.items.count - 1
+      if (root.items.get(at).kind !== "arrow") return
+      for (var role in joined) root.items.setProperty(at, role, joined[role])
+      root.selectedIndex = Store.indexOfId(root.items, keep)
+      root.flash(root.t("joined with an arrow"))
+    } else if (plan.outcome === "attach") {
+      root.pushUndo()
+      var values = Store.attachedLineEnd(root.items, plan.line, plan.end, plan.shape)
+      for (var key in values) root.items.setProperty(plan.line, key, values[key])
+      root.flash(root.t("arrow glued"))
+    } else if (plan.outcome === "beside") {
+      var shape = root.items.get(plan.shape)
+      root.addItem("arrow", shape.ix + shape.iw + 120, shape.iy + shape.ih / 2)
+      var made = root.items.count - 1
+      if (root.items.get(made).kind !== "arrow") return
+      var tail = Store.attachedLineEnd(root.items, made, 0, plan.shape)
+      for (var r in tail) root.items.setProperty(made, r, tail[r])
+      root.centerOnSelected()
+    } else if (plan.outcome === "already") {
+      root.flash(root.t("this arrow is glued here already"))
+      root.repaintLinks()
+      return
+    } else {
+      root.flash(root.t("z glues an arrow to a shape, or joins two shapes"))
+      root.repaintLinks()
+      return
+    }
+    root.save()
     root.repaintLinks()
   }
 
@@ -1359,7 +1424,7 @@ Item {
     root.markedIds = []
     root.selectedIndex = index
     root.editIndex = -1
-    root.linkingFrom = -1
+    root.linkingFrom = -1; root.gluingFrom = -1
     root.repaintLinks()
   }
 
@@ -1549,7 +1614,8 @@ Item {
     else if (root.arranging) root.arranging = false
     else if (root.showPinned) { root.showPinned = false; root.selectedIndex = -1 }
     else if (root.clearMarks()) root.flash(root.t("marks cleared"))
-    else if (root.linkingFrom >= 0) { root.linkingFrom = -1; root.repaintLinks() }
+    else if (root.linkingFrom >= 0) { root.linkingFrom = -1; root.gluingFrom = -1; root.repaintLinks() }
+    else if (root.gluingFrom >= 0) root.gluingFrom = -1
     // Last, so escape never has to choose between dismissing a failure and
     // leaving a mode — and before closing, so the keystroke that takes an
     // answer down is not also the one that closes the board.
@@ -1618,6 +1684,7 @@ Item {
       if (kept.length !== root.markedIds.length) root.markedIds = kept
     }
     if (root.linkingFrom >= 0 && Store.indexOfId(root.items, root.linkingFrom) < 0) root.linkingFrom = -1
+    if (root.gluingFrom >= 0 && Store.indexOfId(root.items, root.gluingFrom) < 0) root.gluingFrom = -1
     root.repaintLinks()
   }
 
@@ -1639,7 +1706,7 @@ Item {
     root.arranging = false
     root.conflictVisible = false
     root.helpVisible = false
-    if (root.linkingFrom >= 0) { root.linkingFrom = -1; root.repaintLinks() }
+    if (root.linkingFrom >= 0) { root.linkingFrom = -1; root.gluingFrom = -1; root.repaintLinks() }
   }
 
   function activate() { root.workspace.activate(root) }
@@ -1659,7 +1726,7 @@ Item {
     root.selectedIndex = -1
     if (!endModes) return
     root.editIndex = -1
-    root.linkingFrom = -1
+    root.linkingFrom = -1; root.gluingFrom = -1
   }
 
   // The surface is going away. What was half done on it ends; the board and
@@ -1670,7 +1737,7 @@ Item {
     root.showPinned = false
     root.selectedIndex = -1
     root.editIndex = -1
-    root.linkingFrom = -1
+    root.linkingFrom = -1; root.gluingFrom = -1
     root.helpVisible = false
   }
 

@@ -123,7 +123,7 @@ function makeDocument(workspace, board, Store) {
 
 // One view, with the camera, selection and modes the QML pane starts with.
 function makePane(workspace, exchange, Store) {
-  const root = { workspace, doc: null, selectedIndex: -1, editIndex: -1, linkingFrom: -1, cursorId: -1,
+  const root = { workspace, doc: null, selectedIndex: -1, editIndex: -1, linkingFrom: -1, gluingFrom: -1, cursorId: -1,
     camX: 0, camY: 0, zoom: 1, activeBoard: null, markedIds: [], guides: [], showPinned: false, arranging: false,
     finding: false, findQuery: '', findCount: 0, imageQueue: [], leaving: false,
     menuVisible: false, zoomMenuVisible: false, menuIndex: 0, helpVisible: false,
@@ -180,6 +180,11 @@ function makePane(workspace, exchange, Store) {
   Object.defineProperty(root, 'failureVisible', { get: () =>
     Store.statusTier(root.statusState()) === 'failure' })
   // The binding the status line reads while a connector is being drawn.
+  // The binding BoardPane.qml declares for glueOutcome, term for term.
+  Object.defineProperty(root, 'glueOutcome', { get: () => {
+    if (root.gluingFrom < 0 || !root.canEdit) return 'none'
+    return Store.gluePlan(root.items, Store.indexOfId(root.items, root.gluingFrom), root.selectedIndex).outcome
+  } })
   Object.defineProperty(root, 'linkOutcome', { get: () => {
     if (root.linkingFrom < 0 || !root.canEdit) return 'none'
     if (root.selectedIndex < 0 || root.selectedIndex >= root.items.count) return 'none'

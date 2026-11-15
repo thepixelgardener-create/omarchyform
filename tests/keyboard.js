@@ -78,21 +78,20 @@ const presses = []
   const c = opened([note(1, 0, 0), note(2, 700, 360)])
   const one = () => c.items.get(0), two = () => c.items.get(1)
 
-  // Tab to note one, z for an arrow beside it.
+  // Tab to note one, z z for an arrow beside it, its tail glued to it.
   c.press('Tab')
   assert.equal(c.root.selectedIndex, 0, 'tab: note one')
   c.press('z')
-  assert.equal(c.items.count, 3, 'z: an arrow')
+  assert.equal(c.root.gluingFrom, 1, 'z: note one is held')
+  assert.equal(c.root.glueOutcome, 'beside', 'and z again would put an arrow beside it')
+  c.press('z')
+  assert.equal(c.items.count, 3, 'z z: an arrow')
   assert.equal(c.items.get(2).kind, 'arrow')
   assert.equal(c.root.selectedIndex, 2, 'and it is the one in hand')
-  if (c.root.editIndex >= 0) c.root.stopEditing()
+  assert.equal(c.items.get(2).aon, 1, 'its tail glued to note one')
+  assert.equal(end(c, 2, 0)[0], one().ix + one().iw, 'on note one\'s right side')
 
-  // ctrl+shift+h steps the tail back onto note one, where it is glued.
-  const tailSteps = until(c, 'ctrl+shift+h', () => c.items.get(2).aon === 1, 10)
-  presses.push(`tail onto the note beside it: ${tailSteps}× ctrl+shift+h`)
-  assert.equal(end(c, 2, 0)[0], one().ix + one().iw, 'the tail sits on note one\'s right side')
-
-  // ctrl+j then ctrl+l carry the head to note two, where it is glued.
+  // By hand: ctrl+j then ctrl+l carry the head to note two, where it is glued.
   let headSteps = 0
   while (!c.items.get(2).bon && headSteps < 40) {
     const head = S.lineEndPoint(c.items.get(2), 1)
@@ -100,7 +99,7 @@ const presses = []
     headSteps++
   }
   assert.equal(c.items.get(2).bon, 2, 'the head is glued to note two')
-  presses.push(`head across to the other note: ${headSteps}× ctrl+j / ctrl+l`)
+  presses.push(`head stepped across to the other note by hand: ${headSteps}× ctrl+j / ctrl+l`)
   const head = end(c, 2, 1)
   const onTwo = head[0] === two().ix || head[1] === two().iy
   assert.ok(onTwo, 'on the side of note two it reached, not inside it: ' + head)
@@ -165,10 +164,8 @@ const presses = []
 // ends; three notes spread evenly with g then shift+l.
 {
   const c = opened([note(1, 0, 0), note(2, 500, 40), note(3, 1300, 70)])
-  c.press('Tab'); c.press('z')
-  if (c.root.editIndex >= 0) c.root.stopEditing()
-  until(c, 'ctrl+shift+h', () => c.items.get(3).aon === 1, 10)
-  until(c, 'ctrl+l', () => c.items.get(3).bon === 2, 20)
+  c.press('Tab'); c.press('z'); c.press('Tab'); c.press('z')
+  assert.deepEqual([c.items.get(3).aon, c.items.get(3).bon], [1, 2], 'z tab z: notes one and two joined')
   c.press('a')
   c.press('g'); c.press('j')
   assert.deepEqual([c.items.get(3).aon, c.items.get(3).bon], [1, 2], 'aligned with everything marked, the arrow keeps both ends')
@@ -177,6 +174,92 @@ const presses = []
   const gaps = [at[1].ix - (at[0].ix + at[0].iw), at[2].ix - (at[1].ix + at[1].iw)]
   assert.ok(Math.abs(gaps[0] - gaps[1]) < 1e-9, 'g shift+l: evenly spaced, ' + gaps)
   assert.deepEqual([c.items.get(3).aon, c.items.get(3).bon], [1, 2], 'and the arrow is still glued')
+}
+
+// z, the glue key: on a shape, then on another shape or an arrow, either way
+// round.
+{
+  const c = opened([note(1, 0, 0), note(2, 700, 360), note(3, 0, 600)])
+  const arrow = () => c.items.get(3)
+  const sideOf = (p, n) => p[0] === n.ix || p[0] === n.ix + n.iw || p[1] === n.iy || p[1] === n.iy + n.ih
+
+  // note z note: a new arrow joining them, glued at both ends on the sides
+  // that face each other; the keyboard stays on the second note.
+  c.press('Tab')
+  c.press('z')
+  until(c, 'Tab', () => c.root.selectedIndex === 1, 5)
+  assert.equal(c.root.glueOutcome, 'join', 'on a second note, z would join them')
+  c.press('z')
+  assert.equal(c.items.count, 4, 'note z note: one arrow')
+  assert.equal(arrow().kind, 'arrow')
+  assert.deepEqual([arrow().aon, arrow().bon], [1, 2], 'glued to both, tail on the first')
+  const tail = end(c, 3, 0), head = end(c, 3, 1)
+  assert.ok(sideOf(tail, c.items.get(0)) && sideOf(head, c.items.get(1)), 'each end on its note\'s outline')
+  assert.ok(tail[0] >= 110 && tail[1] >= 80, 'the tail on note one\'s side facing note two: ' + tail)
+  assert.ok(head[0] <= 810 && head[1] <= 440, 'the head on note two\'s side facing note one: ' + head)
+  assert.equal(c.root.selectedIndex, 1, 'the keyboard stays on note two')
+  assert.equal(c.root.gluingFrom, -1, 'and z is ready to start again')
+  presses.push('two notes joined: z, tab, z')
+  // One undo takes the whole join back.
+  c.press('u')
+  assert.equal(c.items.count, 3, 'u: the arrow is gone again')
+  c.press('ctrl+r')
+  assert.deepEqual([arrow().aon, arrow().bon], [1, 2], 'ctrl+r: back, glued')
+
+  // Let go of the head (the arrow moved on its own), then glue it to note
+  // three: note z arrow attaches the free end.
+  until(c, 'Tab', () => c.root.selectedIndex === 3, 5)
+  c.press(end(c, 3, 1)[0] === c.items.get(1).ix ? 'ctrl+h' : 'ctrl+k')
+  assert.equal(arrow().bon, 0, 'the head stepped off note two')
+  until(c, 'Tab', () => c.root.selectedIndex === 2, 5)
+  c.press('z')
+  until(c, 'Tab', () => c.root.selectedIndex === 3, 5)
+  assert.equal(c.root.glueOutcome, 'attach', 'on the arrow, z would glue it')
+  c.press('z')
+  assert.deepEqual([arrow().aon, arrow().bon], [1, 3], 'note z arrow: the free end, the head, glued to note three')
+  assert.ok(sideOf(end(c, 3, 1), c.items.get(2)), 'on note three\'s outline')
+
+  // arrow z note: the same the other way round. Both ends glued, the nearer
+  // one moves: the tail, on note one, is nearer note two than the head on
+  // note three is.
+  const nearer = (p, n) => Math.hypot(p[0] - (n.ix + n.iw / 2), p[1] - (n.iy + n.ih / 2))
+  assert.ok(nearer(end(c, 3, 0), c.items.get(1)) < nearer(end(c, 3, 1), c.items.get(1)), 'the tail is the nearer')
+  c.press('z')
+  until(c, 'Tab', () => c.root.selectedIndex === 1, 5)
+  c.press('z')
+  assert.deepEqual([arrow().aon, arrow().bon], [2, 3], 'arrow z note: the nearer end, the tail, goes to note two')
+  // Again onto a note it is glued to already: said, and nothing changes.
+  until(c, 'Tab', () => c.root.selectedIndex === 3, 5)
+  c.press('z')
+  until(c, 'Tab', () => c.root.selectedIndex === 1, 5)
+  assert.equal(c.root.glueOutcome, 'already')
+  const count = c.doc.undoStack.length
+  c.press('z')
+  assert.equal(c.doc.undoStack.length, count, 'glued there already: nothing to undo')
+  assert.match(c.root.statusText, /glued here already/)
+
+  // An arrow and an arrow, or a held item and escape: nothing happens.
+  c.press('z'); c.press('Escape')
+  assert.equal(c.root.gluingFrom, -1, 'escape lets go of what z held')
+  const t = c.items.count
+  c.press('Escape')
+  c.root.selectedIndex = -1
+  c.press('z')
+  assert.equal(c.items.count, t + 1, 'z with nothing selected: a free arrow, as before')
+  const free = c.items.count - 1
+  assert.deepEqual([c.items.get(free).aon, c.items.get(free).bon], [0, 0])
+  c.press('z')
+  until(c, 'Tab', () => c.root.selectedIndex === 3, 8)
+  assert.equal(c.root.glueOutcome, 'none', 'an arrow then an arrow: nothing to glue')
+  c.press('z')
+  assert.equal(c.items.count, t + 1, 'and nothing is made')
+  assert.match(c.root.statusText, /z glues/)
+  // x and z do not both hold an item.
+  c.root.selectedIndex = 0
+  c.press('z'); c.press('x')
+  assert.deepEqual([c.root.gluingFrom, c.root.linkingFrom], [-1, 1], 'x after z: connecting, not gluing')
+  c.press('z')
+  assert.deepEqual([c.root.gluingFrom, c.root.linkingFrom], [1, -1], 'z after x: gluing, not connecting')
 }
 
 console.log('ok — keyboard: an arrow is glued, followed, let go of and lined up without the pointer (' + presses.join('; ') + ')')

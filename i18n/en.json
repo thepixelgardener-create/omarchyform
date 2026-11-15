@@ -15,6 +15,7 @@
     "one": "deleted · u to undo",
     "other": "%1 deleted · u to undo"
   },
+  "%1 glues the arrow to this": "%1 glues the arrow to this",
   "%1 items": {
     "one": "%1 item",
     "other": "%1 items"
@@ -23,6 +24,7 @@
     "one": "%1 item, none selected",
     "other": "%1 items, none selected"
   },
+  "%1 joins these two with an arrow": "%1 joins these two with an arrow",
   "%1 marked": {
     "one": "%1 marked",
     "other": "%1 marked"
@@ -39,6 +41,7 @@
     "one": "%1 picture this board names is missing from your library · save a copy without its pictures instead",
     "other": "%1 pictures this board names are missing from your library · save a copy without its pictures instead"
   },
+  "%1 puts a glued arrow beside it": "%1 puts a glued arrow beside it",
   "%1 removes this connector": "%1 removes this connector",
   "%1 turns this connector round": "%1 turns this connector round",
   "%1 · %2": "%1 · %2",
@@ -174,6 +177,7 @@
   "Fit the board on screen": "Fit the board on screen",
   "Fri": "Fri",
   "Fullscreen or windowed": "Fullscreen or windowed",
+  "Glue with an arrow": "Glue with an arrow",
   "Grid": "Grid",
   "Help": "Help",
   "Image added": "Image added",
@@ -202,7 +206,6 @@
   "Move and arrange": "Move and arrange",
   "Name this board": "Name this board",
   "New": "New",
-  "New arrow": "New arrow",
   "New board": "New board",
   "New board · F2 to name it": "New board · F2 to name it",
   "New box": "New box",
@@ -319,6 +322,7 @@
   "Zoom in": "Zoom in",
   "Zoom out": "Zoom out",
   "a PNG of just what is marked, backgrounds included": "a PNG of just what is marked, backgrounds included",
+  "a glued arrow beside the shape; with nothing selected, a new arrow": "a glued arrow beside the shape; with nothing selected, a new arrow",
   "a line's end glues to its edge and follows it": "a line's end glues to its edge and follows it",
   "add a board": "add a board",
   "add board": "add board",
@@ -336,6 +340,7 @@
   "an image keeps its shape": "an image keeps its shape",
   "arrange": "arrange",
   "arrow": "arrow",
+  "arrow glued": "arrow glued",
   "back out, then close the board": "back out, then close the board",
   "back to the boards": "back to the boards",
   "backgrounds": "backgrounds",
@@ -420,6 +425,8 @@
   "is a link, which a board does not follow": "is a link, which a board does not follow",
   "is larger than 32 MB": "is larger than 32 MB",
   "is not a picture a board can show": "is not a picture a board can show",
+  "join two shapes with a glued arrow, or glue an arrow to a shape": "join two shapes with a glued arrow, or glue an arrow to a shape",
+  "joined with an arrow": "joined with an arrow",
   "keys": "keys",
   "larger than 32 MB": "larger than 32 MB",
   "line": "line",
@@ -444,7 +451,7 @@
   "new board / name the current board": "new board / name the current board",
   "new board:": "new board:",
   "new folder:": "new folder:",
-  "new note, box, ellipse, diamond, line, arrow": "new note, box, ellipse, diamond, line, arrow",
+  "new note, box, ellipse, diamond, line": "new note, box, ellipse, diamond, line",
   "next": "next",
   "no command goes by that": "no command goes by that",
   "no commands": "no commands",
@@ -469,6 +476,7 @@
   "pan the canvas": "pan the canvas",
   "paste": "paste",
   "paste a picture or text (also ctrl+v)": "paste a picture or text (also ctrl+v)",
+  "pick a shape or an arrow, then %1": "pick a shape or an arrow, then %1",
   "pick the other end, then %1": "pick the other end, then %1",
   "picture not shown": "picture not shown",
   "pin as background / select backgrounds": "pin as background / select backgrounds",
@@ -526,6 +534,7 @@
   "the same picture on white, on black, or in black and white": "the same picture on white, on black, or in black and white",
   "the trash": "the trash",
   "the trash is empty": "the trash is empty",
+  "this arrow is glued here already": "this arrow is glued here already",
   "this board has not changed underneath you": "this board has not changed underneath you",
   "this board is read-only": "this board is read-only",
   "this list": "this list",
@@ -551,6 +560,8 @@
   "what was marked, without controls, on white": "what was marked, without controls, on white",
   "write in it, as plain text": "write in it, as plain text",
   "x on a connected pair": "x on a connected pair",
+  "z glues an arrow to a shape, or joins two shapes": "z glues an arrow to a shape, or joins two shapes",
+  "z, move, z": "z, move, z",
   "zoom": "zoom",
   "zoom at the pointer": "zoom at the pointer"
 }

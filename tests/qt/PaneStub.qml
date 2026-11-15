@@ -38,8 +38,10 @@ Item {
   property int selectedIndex: -1
   property int editIndex: -1
   property int linkingFrom: -1
+  property int gluingFrom: -1
   property var guides: []
   property string linkOutcome: "none"
+  property string glueOutcome: "none"
   property var markedRect: null
   property int undoCount: 0
   property int saveCount: 0
@@ -67,7 +69,7 @@ Item {
       diskChanged: ctl.diskChanged, damaged: ctl.damaged, failureText: ctl.failureText,
       paletteVisible: ctl.paletteVisible, arranging: ctl.arranging,
       showPinned: ctl.showPinned, editing: ctl.editIndex >= 0,
-      linking: ctl.linkingFrom >= 0, statusText: ctl.statusText,
+      linking: ctl.linkingFrom >= 0, gluing: ctl.gluingFrom >= 0, statusText: ctl.statusText,
       switching: ctl.pendingBoard !== null
     }
   }
@@ -195,6 +197,7 @@ Item {
   // about the pointer, and a missing one is a TypeError rather than a
   // failure that says so.
   function addRelative(kind) {}
+  function glueKey() {}
   function alignTargets(edge) {}
   function spreadTargets(axis) {}
   function beginArrange() {}

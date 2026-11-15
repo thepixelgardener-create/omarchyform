@@ -433,6 +433,27 @@ TestCase {
     verify(plain.indexOf("esc") >= 0, "and how to get out of it")
   }
 
+  function test_theLineSaysWhatZWillDo_data() {
+    return [
+      { tag: "nothing chosen yet", outcome: "none", says: "pick a shape or an arrow" },
+      { tag: "two shapes", outcome: "join", says: "joins these two with an arrow" },
+      { tag: "a shape and an arrow", outcome: "attach", says: "glues the arrow to this" },
+      { tag: "the same shape", outcome: "beside", says: "puts a glued arrow beside it" },
+      { tag: "glued there already", outcome: "already", says: "glued here already" }
+    ]
+  }
+
+  function test_theLineSaysWhatZWillDo(row) {
+    ctl.gluingFrom = 1
+    ctl.glueOutcome = row.outcome
+    wait(0)
+    var plain = findChild(surface, "board-status").text.replace(/<[^>]*>/g, "")
+    verify(plain.indexOf(row.says) >= 0, "it says '" + row.says + "', not: " + plain)
+    verify(plain.indexOf("esc") >= 0, "and how to get out of it")
+    ctl.gluingFrom = -1
+    ctl.glueOutcome = "none"
+  }
+
   // Holding ctrl puts ctrl's chords in the bar, and letting go puts the
   // board's own keys back. (A chord while it is held cannot be tested here:
   // QtTest presses and lets go of the modifier itself around the key.)

@@ -72,7 +72,8 @@ Item {
   // The cursor and a mark both read as selected; the cursor keeps the heavier
   // outline so you can still tell where the keyboard is.
   readonly property bool selected: node.cursor || node.marked
-  readonly property bool linkSource: node.ctl.linkingFrom === node.iid
+  // What x or z started on, drawn heavier until the second item is chosen.
+  readonly property bool linkSource: node.ctl.linkingFrom === node.iid || node.ctl.gluingFrom === node.iid
   readonly property bool editing: node.index >= 0 && node.ctl.editIndex === node.index
   // What the note is actually drawing, so a test can read it back rather than
   // photograph it.

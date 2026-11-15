@@ -1177,7 +1177,7 @@ function tests(S) {
       opened: true, helpVisible: false, browserVisible: false, finding: false,
       saveError: "", trashIndexError: "", diskChanged: false, damaged: false,
       failureText: "", paletteVisible: false, arranging: false, showPinned: false,
-      editing: false, linking: false, statusText: "", switching: false
+      editing: false, linking: false, gluing: false, statusText: "", switching: false
     }
     const on = over => S.statusTier(Object.assign({}, quiet, over))
 
@@ -1197,6 +1197,7 @@ function tests(S) {
       ["backgrounds", { showPinned: true }],
       ["editing", { editing: true }],
       ["linking", { linking: true }],
+      ["gluing", { gluing: true }],
       ["flash", { statusText: "Copied" }],
       ["switching", { switching: true }]
     ]

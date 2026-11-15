@@ -50,6 +50,13 @@ since older boards are migrated on load rather than rejected.
 
 ### Changed
 
+- `z` is the glue key. Pressed on one item and again on another, it joins two
+  shapes with an arrow glued to both, or glues an arrow to a shape, either way
+  round: a free end first, otherwise the nearer. `z z` on one shape puts an
+  arrow beside it, glued at the tail; with nothing selected `z` still makes a
+  free arrow. The line under the board's name says what the second `z` will
+  do, and `esc` cancels. The command list finds a command by its key ahead of
+  names that only start with that letter.
 - While an arrow's or line's end is dragged, the item it would glue to is
   ringed, and an end near an item goes onto it instead of being lined up
   with a third item's side, which could pull it just off the item it was

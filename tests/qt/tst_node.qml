@@ -18,6 +18,7 @@ TestCase {
     property int selectedIndex: -1
     property int editIndex: -1
     property int linkingFrom: -1
+    property int gluingFrom: -1
     property var guides: []
     property int minItemSize: 60
     property color itemFill: "#222222"

@@ -299,6 +299,62 @@ function outlineReach(kind, dx, dy, hw, hh) {
   return Math.max(u, v)
 }
 
+// What z does to the item it started on, `from`, and the one it ends on,
+// `to` (indices). Two shapes are joined by a new arrow; a shape and a line,
+// whichever came first, have one end of the line glued to the shape; a shape
+// and itself get an arrow beside it, glued at the tail. Answers { outcome }
+// with what it needs: "join" { a, b }, "attach" { line, shape, end },
+// "beside" { shape }, "already" (that line has an end on that shape), or
+// "none" (two lines, a background, something not there).
+function gluePlan(items, from, to) {
+  if (from < 0 || to < 0 || from >= items.count || to >= items.count) return { outcome: "none" }
+  var f = items.get(from), g = items.get(to)
+  if (f.ipinned === true || g.ipinned === true) return { outcome: "none" }
+  var fLine = isLine(f.kind), gLine = isLine(g.kind)
+  if (from === to) return fLine ? { outcome: "none" } : { outcome: "beside", shape: from }
+  if (fLine && gLine) return { outcome: "none" }
+  if (!fLine && !gLine) return { outcome: "join", a: from, b: to }
+  var line = fLine ? from : to, shape = fLine ? to : from
+  var n = items.get(line), s = items.get(shape)
+  if (n.aon === s.iid || n.bon === s.iid) return { outcome: "already", line: line, shape: shape }
+  // A free end before one glued elsewhere; between two alike, the nearer.
+  var cx = s.ix + s.iw / 2, cy = s.iy + s.ih / 2
+  var a = lineEndPoint(n, 0), b = lineEndPoint(n, 1)
+  var da = (a.x - cx) * (a.x - cx) + (a.y - cy) * (a.y - cy), db = (b.x - cx) * (b.x - cx) + (b.y - cy) * (b.y - cy)
+  var end = !n.aon && n.bon ? 0 : n.aon && !n.bon ? 1 : da <= db ? 0 : 1
+  return { outcome: "attach", line: line, shape: shape, end: end }
+}
+
+// Where an end glued to the item at `index` goes when it comes from (x, y):
+// the point on its outline facing that way.
+function glueFacing(items, index, x, y) {
+  var n = items.get(index)
+  return glueOnto(n, index, n.ix + n.iw / 2, n.iy + n.ih / 2, 0, { x: x, y: y })
+}
+
+// The roles that glue end `end` of the line at `line` to the item at `shape`,
+// on the side facing the line's other end.
+function attachedLineEnd(items, line, end, shape) {
+  var n = items.get(line), other = lineEndPoint(n, end === 0 ? 1 : 0)
+  var glue = glueFacing(items, shape, other.x, other.y)
+  var values = movedLineEnd(n, end, glue.px, glue.py)
+  var on = end === 0 ? "aon" : "bon"
+  values[on] = glue.id; values[on + "x"] = glue.x; values[on + "y"] = glue.y
+  return values
+}
+
+// The roles of an arrow joining the items at `a` and `b`, glued to each on
+// the side facing the other.
+function joiningLine(items, a, b) {
+  var na = items.get(a), nb = items.get(b)
+  var tail = glueFacing(items, a, nb.ix + nb.iw / 2, nb.iy + nb.ih / 2)
+  var head = glueFacing(items, b, na.ix + na.iw / 2, na.iy + na.ih / 2)
+  var values = lineFromPoints(tail.px, tail.py, head.px, head.py)
+  values.aon = tail.id; values.aonx = tail.x; values.aony = tail.y
+  values.bon = head.id; values.bonx = head.x; values.bony = head.y
+  return values
+}
+
 // Where the line from (ox, oy), outside a shape, to (ix, iy), inside it,
 // crosses the shape's outline; all relative to the shape's middle. Null when
 // the first is not outside or the second not inside. The shapes are convex,
@@ -335,43 +391,50 @@ function glueAt(items, x, y, self, tolerance, toward) {
     if (i === self) continue
     var n = items.get(i)
     if (!canHoldGlue(n)) continue
-    if (x < n.ix - t || x > n.ix + n.iw + t || y < n.iy - t || y > n.iy + n.ih + t) continue
-    var hw = n.iw / 2, hh = n.ih / 2, cx = n.ix + hw, cy = n.iy + hh
-    var dx = x - cx, dy = y - cy
-    // Dropped inside, with the other end outside: the end stops where the
-    // line from the other end first meets the outline, so an arrow ends at
-    // the side it arrives at rather than crossing the item to the side
-    // nearest where it was let go.
-    var entry = toward ? outlineEntry(n.kind, toward.x - cx, toward.y - cy, dx, dy, hw, hh) : null
-    if (entry) {
-      var ex = cx + entry.x, ey = cy + entry.y
-      return { id: n.iid, at: i, x: lineUnit((ex - n.ix) / n.iw, 0.5), y: lineUnit((ey - n.iy) / n.ih, 0.5), px: ex, py: ey }
-    }
-    if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01 && toward) { dx = toward.x - cx; dy = toward.y - cy }
-    if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) { dx = 1; dy = 0 }
-    var px, py, reach
-    if (n.kind === "ellipse" || n.kind === "diamond") {
-      // Out from the middle onto the curve or the slant.
-      reach = outlineReach(n.kind, dx, dy, hw, hh)
-      px = cx + dx / reach; py = cy + dy / reach
-    } else {
-      // A box's nearest side, keeping the place along it where it was put.
-      px = Math.max(n.ix, Math.min(n.ix + n.iw, x)); py = Math.max(n.iy, Math.min(n.iy + n.ih, y))
-      reach = (px === x && py === y) ? 0 : 2
-      if (reach === 0) {
-        var sides = [x - n.ix, n.ix + n.iw - x, y - n.iy, n.iy + n.ih - y]
-        var near = sides.indexOf(Math.min.apply(null, sides))
-        if (near === 0) px = n.ix
-        else if (near === 1) px = n.ix + n.iw
-        else if (near === 2) py = n.iy
-        else py = n.iy + n.ih
-      }
-    }
-    // Outside the shape (a corner of an ellipse's box) and not near its edge.
-    if (reach > 1 && Math.sqrt((px - x) * (px - x) + (py - y) * (py - y)) > t) continue
-    return { id: n.iid, at: i, x: lineUnit((px - n.ix) / n.iw, 0.5), y: lineUnit((py - n.iy) / n.ih, 0.5), px: px, py: py }
+    var glue = glueOnto(n, i, x, y, t, toward)
+    if (glue) return glue
   }
   return null
+}
+
+// glueAt for one item, `n` at index `i`: where on its outline an end put down
+// at (x, y) would be glued, or null when that is not on it or within `t`.
+function glueOnto(n, i, x, y, t, toward) {
+  if (x < n.ix - t || x > n.ix + n.iw + t || y < n.iy - t || y > n.iy + n.ih + t) return null
+  var hw = n.iw / 2, hh = n.ih / 2, cx = n.ix + hw, cy = n.iy + hh
+  var dx = x - cx, dy = y - cy
+  // Dropped inside, with the other end outside: the end stops where the
+  // line from the other end first meets the outline, so an arrow ends at
+  // the side it arrives at rather than crossing the item to the side
+  // nearest where it was let go.
+  var entry = toward ? outlineEntry(n.kind, toward.x - cx, toward.y - cy, dx, dy, hw, hh) : null
+  if (entry) {
+    var ex = cx + entry.x, ey = cy + entry.y
+    return { id: n.iid, at: i, x: lineUnit((ex - n.ix) / n.iw, 0.5), y: lineUnit((ey - n.iy) / n.ih, 0.5), px: ex, py: ey }
+  }
+  if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01 && toward) { dx = toward.x - cx; dy = toward.y - cy }
+  if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) { dx = 1; dy = 0 }
+  var px, py, reach
+  if (n.kind === "ellipse" || n.kind === "diamond") {
+    // Out from the middle onto the curve or the slant.
+    reach = outlineReach(n.kind, dx, dy, hw, hh)
+    px = cx + dx / reach; py = cy + dy / reach
+  } else {
+    // A box's nearest side, keeping the place along it where it was put.
+    px = Math.max(n.ix, Math.min(n.ix + n.iw, x)); py = Math.max(n.iy, Math.min(n.iy + n.ih, y))
+    reach = (px === x && py === y) ? 0 : 2
+    if (reach === 0) {
+      var sides = [x - n.ix, n.ix + n.iw - x, y - n.iy, n.iy + n.ih - y]
+      var near = sides.indexOf(Math.min.apply(null, sides))
+      if (near === 0) px = n.ix
+      else if (near === 1) px = n.ix + n.iw
+      else if (near === 2) py = n.iy
+      else py = n.iy + n.ih
+    }
+  }
+  // Outside the shape (a corner of an ellipse's box) and not near its edge.
+  if (reach > 1 && Math.sqrt((px - x) * (px - x) + (py - y) * (py - y)) > t) return null
+  return { id: n.iid, at: i, x: lineUnit((px - n.ix) / n.iw, 0.5), y: lineUnit((py - n.iy) / n.ih, 0.5), px: px, py: py }
 }
 
 // The roles that put end `end` of the line at `index` down at (x, y), by the
@@ -998,7 +1061,8 @@ function paletteTint(palette, group, tint) {
 //   arrange         Typing comes before connecting because both can be true at
 //   backgrounds     once — x holds a source, i starts a caret — and while there
 //   editing         is a caret in a note, x is the letter x.
-//   linking
+//   linking         x and z hold a first end the same way, and cannot both.
+//   gluing
 //   flash           what just happened, and goes away by itself.
 //   switching       what it is busy with.
 //   hints           nothing in particular: the keys.
@@ -1007,7 +1071,7 @@ function paletteTint(palette, group, tint) {
 // The line said "saving…" for the moment each write took, and every edit made
 // the keys blink out of the header and back.
 var STATUS_TIERS = ["none", "saveError", "trashIndexError", "conflict", "damaged", "failure",
-                    "palette", "arrange", "backgrounds", "editing", "linking",
+                    "palette", "arrange", "backgrounds", "editing", "linking", "gluing",
                     "flash", "switching", "hints"]
 
 function statusTier(s) {
@@ -1025,6 +1089,7 @@ function statusTier(s) {
   if (s.showPinned) return "backgrounds"
   if (s.editing) return "editing"
   if (s.linking) return "linking"
+  if (s.gluing) return "gluing"
   if (s.statusText !== "") return "flash"
   if (s.switching) return "switching"
   // The keys are for the pane the keyboard is in. Beside it, a pane that is
@@ -1080,6 +1145,14 @@ function linkAt(links, a, b) {
 // Every string in it is ours, so there is nothing here to escape.
 var LINK_HINTS = { remove: "%1 removes this connector", reverse: "%1 turns this connector round",
                    create: "%1 connects these two", none: "pick the other end, then %1" }
+// What z will do while its second item is being chosen (gluePlan).
+var GLUE_HINTS = { join: "%1 joins these two with an arrow", attach: "%1 glues the arrow to this",
+                   beside: "%1 puts a glued arrow beside it", already: "this arrow is glued here already",
+                   none: "pick a shape or an arrow, then %1" }
+function glueHint(outcome, color, say) {
+  var words = (say || asWritten)(GLUE_HINTS.hasOwnProperty(outcome) ? GLUE_HINTS[outcome] : GLUE_HINTS.none)
+  return fillText(escapeMarkup(words), [keyMarkup("z", color)]) + " \u00b7 " + hintMarkup("esc", "cancel", color, say)
+}
 function linkHint(outcome, color, say) {
   var words = (say || asWritten)(LINK_HINTS.hasOwnProperty(outcome) ? LINK_HINTS[outcome] : LINK_HINTS.none)
   // The words are a catalog's, the key is ours: the one is escaped, and the
@@ -1125,7 +1198,7 @@ var COMMANDS = [
   { name: "New ellipse", key: "e", run: "addRelative", arg: "ellipse", needs: "edit" },
   { name: "New diamond", key: "r", run: "addRelative", arg: "diamond", needs: "edit", also: ["rhombus"] },
   { name: "New line", key: "t", run: "addRelative", arg: "line", needs: "edit" },
-  { name: "New arrow", key: "z", run: "addRelative", arg: "arrow", needs: "edit" },
+  { name: "Glue with an arrow", key: "z", run: "glueKey", needs: "edit", also: ["new arrow", "connect", "attach"] },
   { name: "Type in it", key: "i", run: "editSelected", needs: "target", also: ["edit", "edit text"] },
   { name: "Change shape", key: "s", run: "cycleKind", needs: "target", also: ["line style", "arrow style"] },
   { name: "Change colour", key: "c", run: "recolorItem", needs: "target" },
@@ -1270,6 +1343,7 @@ function aliasLeads(command, needle) {
 // other machine calls it.
 function matchCommands(query, scope, group, say) {
   var needle = String(query === undefined ? "" : query).toLowerCase().trim()
+  var keyed = []
   var leading = []
   var rest = []
   // What only an alias found. Behind the names, because a command whose own
@@ -1300,11 +1374,13 @@ function matchCommands(query, scope, group, say) {
     //
     // One bucket each, so a command that matches by name and by alias both is
     // still offered once.
-    if (at === 0 || COMMANDS[i].key.toLowerCase() === needle) leading.push(COMMANDS[i])
+    // The key's own command first, then the names that start with it.
+    if (COMMANDS[i].key.toLowerCase() === needle) keyed.push(COMMANDS[i])
+    else if (at === 0) leading.push(COMMANDS[i])
     else if (at > 0) rest.push(COMMANDS[i])
     else if (aliasLeads(COMMANDS[i], needle)) aliased.push(COMMANDS[i])
   }
-  return leading.concat(rest, aliased)
+  return keyed.concat(leading, rest, aliased)
 }
 
 // What a family is called, for the line the list shows it under.
@@ -1522,6 +1598,7 @@ function displayStrings() {
                 TRASH_HINTS, PALETTE_HINTS, CONFLICT_HINTS, PROMPT_HINTS, EMPTY_HINTS, START_HINTS]
   for (i = 0; i < tables.length; i++) hints(tables[i])
   for (var outcome in LINK_HINTS) add(LINK_HINTS[outcome])
+  for (var glueOutcome in GLUE_HINTS) add(GLUE_HINTS[glueOutcome])
   // The help list: what each key does, and the keys themselves where they
   // are said in words rather than as keys.
   for (i = 0; i < KEY_HELP_SECTIONS.length; i++) {
@@ -1578,6 +1655,7 @@ function commandByName(name) {
 // argument, so a new command in a family already here has one already.
 var COMMAND_ICONS = {
   addRelative: { line: "\uf068", arrow: "\uf178", note: "\uf249", rect: "\uf096", ellipse: "\uf10c", diamond: "\uf29f" },
+  glueKey: "\uf178",
   setTexture: "\uf00a",
   editSelected: "\uf040",
   cycleKind: "\uf1b2",
@@ -1643,7 +1721,9 @@ function commandIcon(command) {
 // forty rows with nothing between them read as a wall.
 var KEY_HELP_SECTIONS = [
   { title: "Make and change", rows: [
-    ["q w e r t z", "new note, box, ellipse, diamond, line, arrow"],
+    ["q w e r t", "new note, box, ellipse, diamond, line"],
+    ["z, move, z", "join two shapes with a glued arrow, or glue an arrow to a shape"],
+    ["z z", "a glued arrow beside the shape; with nothing selected, a new arrow"],
     ["s", "cycle shape or line style"],
     ["end dropped on a shape", "a line's end glues to its edge and follows it"],
     ["enter / i", "write in it, as plain text"],

@@ -81,6 +81,7 @@ Item {
     property int selectedIndex: -1
     property int editIndex: -1
     property int linkingFrom: -1
+    property int gluingFrom: -1
     // Nothing is dragged in a picture; a node only writes this while one is.
     property var guides: []
     property bool canEdit: false

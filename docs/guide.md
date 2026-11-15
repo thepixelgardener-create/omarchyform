@@ -26,7 +26,21 @@ a board last used that way.
 
 ## Standalone lines and arrows
 
-Press `t` for a new line or `z` for an arrow. Lines are objects of
+Press `t` for a new line. `z` is the glue key, and works the way `x` does for
+connectors: press it on one item, move to another, and press it again.
+
+- On two shapes, `z` joins them with an arrow glued to both, each end on the
+  side facing the other.
+- On a shape and an arrow, either way round, it glues one end of the arrow to
+  the shape: a free end if it has one, otherwise the end nearer the shape.
+- Twice on the same shape, it puts an arrow beside it with the tail glued.
+- With nothing selected, it makes a free arrow.
+
+While the second item is being chosen, the first is drawn heavier and the line
+under the board's name says what `z` will do; `esc` cancels. The keyboard stays
+on the second item, so `z` again carries on from there.
+
+Lines are objects of
 their own: they do not need shapes at either end. Select one and press `s`
 to cycle **line → arrow → double-headed arrow → dashed line**.
 
@@ -88,7 +102,8 @@ breaks, and the middle button does not paste the primary selection.
 |-----|------|
 | `q` | New note beside the selected one, ready to type |
 | `w` `e` `r` | New box / ellipse / diamond |
-| `t` / `z` | New line / arrow |
+| `t` | New line |
+| `z`, move, `z` | Join two shapes with a glued arrow, or glue an arrow to a shape; `z z` on one shape puts a glued arrow beside it |
 | `p` / `Shift+P` | Pin as background / select backgrounds to unpin |
 | `s` | Cycle the shape, or the selected line’s style |
 | `x` | Connect: `x` on one, `tab` or `hjkl` to the other, `x` again |
