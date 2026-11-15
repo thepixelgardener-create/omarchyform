@@ -54,6 +54,9 @@ since older boards are migrated on load rather than rejected.
   ringed, and an end near an item goes onto it instead of being lined up
   with a third item's side, which could pull it just off the item it was
   dropped on and leave it unglued.
+- An end dropped inside an item stops at the side the line arrives at,
+  rather than at the side nearest where it was let go, which could take the
+  arrow across the item.
 - Making things moved to the top letter row, left to right: `q` note, `w` box,
   `e` ellipse, `r` diamond, `t` line, `z` arrow. `n` no longer makes a note.
   Fullscreen moved from `w` to `F11`.
@@ -69,6 +72,12 @@ since older boards are migrated on load rather than rejected.
 
 ### Fixed
 
+- A line took the pointer anywhere in its box, so a note under a slanting
+  arrow could not be picked up: the press took the arrow, and dragging it
+  pulled the arrow off both the things it joined. A line now takes the
+  pointer within a few pixels of its stroke.
+- Aligning or spreading boxes together with the arrow that joins them no
+  longer lets go of the arrow when one of the boxes was in line already.
 - Switching between tiled and fullscreen waits while a PNG export finishes,
   preserving the surface that owns the export and its completion callback.
 - A delayed paste is refused if its board was reloaded while the clipboard

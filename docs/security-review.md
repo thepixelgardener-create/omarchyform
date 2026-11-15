@@ -849,7 +849,10 @@ pinned and not the line itself, or the glue is dropped; fractions clamp to
 after a move, resize, align or spread, so a pointer move costs O(items) as
 moving already did; it never chains, because a line can only be glued to
 something that is not a line. Finding where a dropped end glues is one pass
-over the items from the top.
+over the items from the top; an end dropped inside an item is put where the
+line from its other end meets the outline, found by forty halvings, a constant.
+A line takes the pointer near its stroke only: one distance to a segment per
+pointer event over its box.
 
 Each line makes one vector path with one shaft and at most two heads; geometry
 construction is constant work. An arrow is one closed outline of at most ten

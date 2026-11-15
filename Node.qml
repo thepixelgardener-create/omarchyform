@@ -457,6 +457,15 @@ Item {
     anchors.fill: parent
     enabled: node.ctl.editIndex !== node.index && (node.ipinned ? node.ctl.showPinned : !node.ctl.showPinned)
     acceptedButtons: Qt.LeftButton
+    // A line is taken near its stroke only, a few screen pixels either side;
+    // the rest of its box passes the press to what is under it.
+    containmentMask: node.isLine ? lineReach : null
+    QtObject {
+      id: lineReach
+      function contains(point: point): bool {
+        return Store.nearLine(node.lineEnds, node.width, node.height, point.x, point.y, 8 / Math.max(0.01, node.ctl.zoom))
+      }
+    }
     // While the far end of a connector is chosen, a click picks; it does not
     // drag, resize or start typing.
     cursorShape: node.ipinned || node.ctl.linkingFrom >= 0 ? Qt.PointingHandCursor : dragging ? Qt.ClosedHandCursor : Qt.OpenHandCursor

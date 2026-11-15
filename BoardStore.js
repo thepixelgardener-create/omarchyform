@@ -87,6 +87,19 @@ function arrowHead(strokeWidth) {
 // and heads together. Drawn as separate strokes, the GPU blended a translucent
 // colour twice where they overlapped, which showed as a bright knot at the
 // tip, and the chevron ended in a blunt join when zoomed in.
+// Whether (x, y), in a line's own box of w by h, is within `reach` of the
+// line itself. A line takes the pointer there and nowhere else in its box: a
+// slanting arrow's box covers whatever it joins, and taking presses across all
+// of it meant a note under it could not be dragged, and the drag took the
+// arrow instead and pulled it off both ends.
+function nearLine(ends, w, h, x, y, reach) {
+  var ax = ends.ax * w, ay = ends.ay * h, bx = ends.bx * w, by = ends.by * h
+  var dx = bx - ax, dy = by - ay, length2 = dx * dx + dy * dy
+  var t = length2 < 1e-6 ? 0 : Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / length2))
+  var px = ax + t * dx - x, py = ay + t * dy - y
+  return px * px + py * py <= reach * reach
+}
+
 function linePath(kind, w, h, ends, strokeWidth) {
   var ax = ends.ax * w, ay = ends.ay * h, bx = ends.bx * w, by = ends.by * h
   var dx = bx - ax, dy = by - ay, length = Math.sqrt(dx * dx + dy * dy)
@@ -286,6 +299,29 @@ function outlineReach(kind, dx, dy, hw, hh) {
   return Math.max(u, v)
 }
 
+// Where the line from (ox, oy), outside a shape, to (ix, iy), inside it,
+// crosses the shape's outline; all relative to the shape's middle. Null when
+// the first is not outside or the second not inside. The shapes are convex,
+// so there is one crossing, found by halving.
+function outlineEntry(kind, ox, oy, ix, iy, hw, hh) {
+  if (outlineReach(kind, ix, iy, hw, hh) > 1 || outlineReach(kind, ox, oy, hw, hh) <= 1) return null
+  var lo = 0, hi = 1
+  for (var k = 0; k < 40; k++) {
+    var mid = (lo + hi) / 2
+    if (outlineReach(kind, ox + (ix - ox) * mid, oy + (iy - oy) * mid, hw, hh) > 1) lo = mid
+    else hi = mid
+  }
+  var x = ox + (ix - ox) * hi, y = oy + (iy - oy) * hi
+  // Exactly on the outline: on a box's side, or scaled onto the curve or slant.
+  if (kind === "ellipse" || kind === "diamond") {
+    var reach = outlineReach(kind, x, y, hw, hh)
+    return { x: x / reach, y: y / reach }
+  }
+  if (Math.abs(x) / Math.max(hw, 0.01) >= Math.abs(y) / Math.max(hh, 0.01)) x = x < 0 ? -hw : hw
+  else y = y < 0 ? -hh : hh
+  return { x: x, y: y }
+}
+
 // Where an end put down at (x, y) would be glued: the topmost item it is on or
 // within `tolerance` of, and the nearest point on that item's outline, so an
 // arrow stops at the edge rather than in the middle: a box's nearest side, or
@@ -302,6 +338,15 @@ function glueAt(items, x, y, self, tolerance, toward) {
     if (x < n.ix - t || x > n.ix + n.iw + t || y < n.iy - t || y > n.iy + n.ih + t) continue
     var hw = n.iw / 2, hh = n.ih / 2, cx = n.ix + hw, cy = n.iy + hh
     var dx = x - cx, dy = y - cy
+    // Dropped inside, with the other end outside: the end stops where the
+    // line from the other end first meets the outline, so an arrow ends at
+    // the side it arrives at rather than crossing the item to the side
+    // nearest where it was let go.
+    var entry = toward ? outlineEntry(n.kind, toward.x - cx, toward.y - cy, dx, dy, hw, hh) : null
+    if (entry) {
+      var ex = cx + entry.x, ey = cy + entry.y
+      return { id: n.iid, at: i, x: lineUnit((ex - n.ix) / n.iw, 0.5), y: lineUnit((ey - n.iy) / n.ih, 0.5), px: ex, py: ey }
+    }
     if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01 && toward) { dx = toward.x - cx; dy = toward.y - cy }
     if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) { dx = 1; dy = 0 }
     var px, py, reach
@@ -412,8 +457,11 @@ function releaseGlue(items, i, release) {
 
 // Lets go of whatever the lines among `indices` are glued to, unless that is
 // moving with them too: a line dragged on its own comes away from its items.
-function unglueMoved(items, indices) {
-  var moving = idsAt(items, indices)
+// `together`, when given, is the indices of everything moved as one, some of
+// which may not have had to move: aligned with the two boxes it joins, a line
+// keeps both ends even when one box was in line already.
+function unglueMoved(items, indices, together) {
+  var moving = idsAt(items, together || indices)
   function staying(id) { return !moving[id] }
   for (var i = 0; i < indices.length; i++) releaseGlue(items, indices[i], staying)
 }

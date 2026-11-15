@@ -93,6 +93,26 @@ function tests(S) {
     const free = S.draggedLineEnd(m, 2, 0, 170, 70, 10, true)
     eq([free.placed.glued, free.guides.length, free.placed.values.aon], [false, 0, 0], "free: on the note and not glued")
   })
+  test("an end dropped inside a shape stops at the side the line arrives at", () => {
+    for (const kind of ["rect", "ellipse", "diamond"]) {
+      const m = new FakeModel([item({ iid: 1, kind, ix: 100, iy: 100, iw: 200, ih: 100 })])
+      // From the upper left, dropped in the lower right of the shape: it
+      // stops on the near outline, not on the far side it was let go by.
+      const g = S.glueAt(m, 240, 165, -1, 8, { x: -100, y: 0 })
+      eq(g.id, 1, kind)
+      const u = (g.px - 200) / 100, v = (g.py - 150) / 50
+      const reach = kind === "ellipse" ? Math.sqrt(u * u + v * v) : kind === "diamond" ? Math.abs(u) + Math.abs(v) : Math.max(Math.abs(u), Math.abs(v))
+      near(reach, 1, kind + ": on the outline", 1e-6)
+      ok(g.px < 200 && g.py < 150, kind + ": on the side facing where the line comes from, not " + [g.px, g.py])
+      // On the line from the other end to where it was dropped.
+      const cross = (g.px + 100) * 165 - g.py * (240 + 100)
+      ok(Math.abs(cross) < 1e-3, kind + ": in line with the arrow")
+    }
+    const m = new FakeModel([item({ iid: 1, kind: "rect", ix: 100, iy: 100, iw: 200, ih: 100 })])
+    const both = S.glueAt(m, 260, 180, -1, 8, { x: 150, y: 120 })
+    eq([both.px, both.py], [260, 200], "with the other end inside too: the nearest side, as before")
+  })
+
   test("a glued line follows its item, and lets go of what it moved away from", () => {
     const m = new FakeModel([
       item({ iid: 1, kind: "rect", ix: 300, iy: 0, iw: 100, ih: 100 }),

@@ -700,6 +700,47 @@ console.log('ok — controller: duplicating items, their connectors and their pi
 }
 console.log('ok — controller: the arrange mode, aligning and spreading')
 {
+  // Each alignment lands every marked item exactly on the edge or middle it
+  // names, and an arrow glued between them goes with them, still glued.
+  const box = (id, x, y, w, h) => ({ id, kind: 'rect', x, y, w, h, tint: 'foreground', text: '', pinned: false, src: '' })
+  const board = JSON.stringify({ kind: 'omarchyform.board', version: 8, nextId: 5, links: [], items: [
+    box(1, 0, 0, 200, 100), box(2, 330, 170, 120, 60), box(3, 610, 40, 160, 140),
+    { id: 4, kind: 'arrow', x: 200, y: 50, w: 130, h: 150, ax: 0, ay: 0, bx: 1, by: 1, tint: 'foreground', text: '',
+      pinned: false, src: '', from: { id: 1, x: 1, y: 0.5 }, to: { id: 2, x: 0, y: 0.5 } }] })
+  const want = {
+    left: b => b.ix, right: b => b.ix + b.iw, top: b => b.iy, bottom: b => b.iy + b.ih,
+    centreX: b => b.ix + b.iw / 2, centreY: b => b.iy + b.ih / 2 }
+  for (const edge of Object.keys(want)) {
+    const c = controller()
+    c.session.loadBoard(board, false)
+    c.root.markedIds = [1, 2, 3]
+    c.root.alignTargets(edge)
+    const at = [0, 1, 2].map(i => want[edge](c.items.get(i)))
+    assert.ok(at.every(v => Math.abs(v - at[0]) < 1e-9), edge + ': all on one line, not ' + at)
+    const arrow = c.items.get(3), S = loadStore()
+    assert.deepEqual([arrow.aon, arrow.bon], [1, 2], edge + ': the arrow is still glued to both')
+    const tail = S.lineEndPoint(arrow, 0), head = S.lineEndPoint(arrow, 1)
+    const one = c.items.get(0), two = c.items.get(1)
+    assert.ok(Math.abs(tail.x - (one.ix + one.iw)) < 1e-6 && Math.abs(tail.y - (one.iy + one.ih / 2)) < 1e-6, edge + ': its tail went with box one')
+    assert.ok(Math.abs(head.x - two.ix) < 1e-6 && Math.abs(head.y - (two.iy + two.ih / 2)) < 1e-6, edge + ': its head went with box two')
+  }
+  // The arrow marked along with what it joins moves with them and keeps both.
+  const c = controller()
+  c.session.loadBoard(board, false)
+  c.root.markedIds = [1, 2, 4]
+  c.root.alignTargets('top')
+  assert.deepEqual([c.items.get(3).aon, c.items.get(3).bon], [1, 2], 'aligned with its boxes, the arrow keeps both ends')
+  // Nudged from the keyboard, a box moves by exactly the step, and its arrow
+  // follows; nothing pulls it onto a neighbour.
+  c.root.markedIds = []
+  c.root.selectOnly(1)
+  const x0 = c.items.get(1).ix
+  c.root.nudgeSelected(1, 0)
+  assert.equal(c.items.get(1).ix, x0 + c.root.worldStep, 'one step, exactly')
+  assert.equal(c.items.get(3).bon, 2, 'and the arrow is still glued')
+}
+console.log('ok — controller: every alignment lands on its line, and glued arrows go with it')
+{
   // Finding: navigation that works on a board you cannot write to.
   const c = controller()
   c.session.loadBoard(JSON.stringify({ version: 5, items: [

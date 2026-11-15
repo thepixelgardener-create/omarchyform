@@ -1053,7 +1053,9 @@ Item {
       root.items.setProperty(moves[i].index, "iy", moves[i].y)
       moved.push(moves[i].index)
     }
-    Store.unglueMoved(root.items, moved)
+    // Lined up or spread as one, what was marked together stays glued
+    // together, whichever of it had to move.
+    Store.unglueMoved(root.items, moved, root.targets())
     Store.followGlue(root.items)
     root.save()
     root.repaintLinks()
