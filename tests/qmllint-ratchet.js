@@ -57,9 +57,23 @@ function lint(dir) {
   const r = spawnSync(qmllint, files, { cwd: dir, encoding: 'utf8', maxBuffer: 64 << 20 })
   if (r.error) throw new Error('cannot run ' + qmllint + ': ' + r.error.message)
   const counts = new Map(), lines = []
+  const sources = new Map()
+  function sourceLine(file, n) {
+    if (!sources.has(file)) {
+      try { sources.set(file, fs.readFileSync(path.join(dir, file), 'utf8').split('\n')) } catch { sources.set(file, []) }
+    }
+    return sources.get(file)[n - 1] || ''
+  }
   for (const text of (r.stdout + '\n' + r.stderr).split('\n')) {
     const m = LINE.exec(text)
     if (!m || m[1] === 'Info') continue
+    // The Omarchy UI kit (kit/) groups its tokens in nested QtObjects
+    // (Style.spacing.md, Color.menu.text), whose members qmllint cannot see:
+    // every read of one is "not found on type QObject". Those are the kit's
+    // shape, not a fault here, and counting them would fail every panel built
+    // on it. Only a read through the kit's own namespace is let off.
+    if (/missing-property/.test(text) && /not found on type "QObject"/.test(text)
+        && /\bKit\.[\w.]*$/.test(sourceLine(path.basename(m[2]), +m[3]).slice(0, +m[4] - 1))) continue
     const key = path.basename(m[2]) + ' · ' + kindOf(m)
     counts.set(key, (counts.get(key) || 0) + 1)
     lines.push({ key, text })

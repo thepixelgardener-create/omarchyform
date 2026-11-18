@@ -2190,6 +2190,26 @@ function tests(S) {
     eq(new Set(S.KEY_HELP.map(r => r[0])).size, S.KEY_HELP.length, "no key is listed twice")
   })
 
+  test("a help label splits into the keys to press and the words between", () => {
+    const show = label => S.keyLabelParts(label).map(p => p.key !== undefined ? "[" + p.key + "]" : p.text).join(" ")
+    eq(show("g then h j k l"), "[g] then [h] [j] [k] [l]")
+    eq(show("z, move, z"), "[z] , move, [z]")
+    eq(show("p / shift+p"), "[p] / [shift] [p]")
+    eq(show("/"), "[/]")
+    eq(show("+ / -"), "[+] / [-]")
+    eq(show("ctrl / ctrl+shift + hjkl"), "[ctrl] / [ctrl] [shift] + [hjkl]")
+    eq(show("x on a connected pair"), "[x] on a connected pair")
+    eq(show("shift+click"), "[shift] +click")
+    eq(show("Strg halten"), "[Strg] halten")
+    eq(show("mark, then ctrl+e"), "mark, then [ctrl] [e]")
+    eq(show("? / F1"), "[?] / [F1]")
+    eq(show("Z"), "[Z]")
+    eq(show("drag the line between panes"), "drag the line between panes")
+    // Case is the key: h and H do different things, so neither is rewritten.
+    eq(show("H J K L"), "[H] [J] [K] [L]")
+    for (const [label] of S.KEY_HELP) ok(S.keyLabelParts(label).length > 0, `${label} shows something`)
+  })
+
   test("every command in the list wears an icon", () => {
     for (const command of S.COMMANDS) {
       if (command.listed === false) continue

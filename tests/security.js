@@ -15,7 +15,8 @@ function qmlPolicy(source) {
   const lines = source.split('\n')
   for (let i = 0; i < lines.length; i++) {
     if (!/\bText\s*\{/.test(lines[i]) || /^\s*\/\//.test(lines[i])) continue
-    const start = /^( *)Text \{$/.exec(lines[i])
+    // A Text on its own line, or assigned to a property (`contentItem: Text {`).
+    const start = /^( *)(?:\w+: )?Text \{$/.exec(lines[i])
     if (!start) { errors.push(`line ${i+1}: unsupported Text layout`); continue }
     const pad = start[1]
     const end = lines.findIndex((line, n) => n > i && line === pad + '}')
@@ -36,6 +37,8 @@ function qmlPolicy(source) {
 assert.ok(qmlPolicy('Text {\n  text: userText\n}').length)
 assert.ok(qmlPolicy('Text {\n  textFormat: Text.AutoText\n}').length)
 assert.ok(qmlPolicy('Text { text: userText }').length)
+assert.ok(qmlPolicy('contentItem: Text {\n  text: userText\n}').length)
+assert.deepEqual(qmlPolicy('contentItem: Text {\n  textFormat: Text.PlainText\n}'), [])
 assert.ok(qmlPolicy('console.log(note)').length)
 assert.ok(qmlPolicy('new XMLHttpRequest()').length)
 assert.ok(qmlPolicy('command: ["bash", "-c", note]').length)
@@ -87,6 +90,32 @@ for (const file of fs.readdirSync(root).filter(f => f.endsWith('.qml'))) {
   assert.equal((source.match(/textFormat: Text\.StyledText/g)||[]).length,
     styledCounts[file] || 0, `${file}: new styled renderer requires data-flow review`)
 }
+// The Omarchy UI kit (kit/, copied by tools/vendor-kit.js) runs in the shell
+// as the plugin's own code does, so it is held to the same rules: plain text
+// only, nothing that types (fields are LineFields, below), nothing that runs a
+// process or reaches the network, and imports only of Qt Quick and of itself.
+// A new copy of the kit that breaks one of these is reviewed before it ships.
+const kitFiles = []
+for (const dir of ['kit/Ui', 'kit/Theme'])
+  for (const file of fs.readdirSync(path.join(root, dir)).filter(f => /\.(qml|js)$/.test(f)))
+    kitFiles.push(dir + '/' + file)
+assert.ok(kitFiles.length > 0, 'the kit is where tools/vendor-kit.js puts it')
+assert.ok(fs.existsSync(path.join(root, 'kit/LICENSE')) && fs.existsSync(path.join(root, 'kit/KIT_REV')),
+  'the kit carries its licence and the revision it was copied from')
+for (const file of kitFiles) {
+  const source = fs.readFileSync(path.join(root, file), 'utf8')
+  if (file.endsWith('.qml')) assert.deepEqual(qmlPolicy(source), [], file)
+  assert.equal((source.match(/textFormat: Text\.(StyledText|RichText|MarkdownText)/g) || []).length, 0,
+    `${file}: the kit draws plain text only`)
+  assert.ok(!/\b(TextInput|TextEdit)\s*\{/.test(source), `${file}: typing goes through LineField`)
+  // Code only: the kit's comments say what it left out, by name.
+  const code = source.split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n')
+  assert.ok(!newBoundary(code), `${file}: reaches the network`)
+  assert.ok(!/\b(Process|execDetached|Quickshell\.exec)\b/.test(code), `${file}: runs a process`)
+  for (const line of source.split('\n').filter(l => /^\s*import\s/.test(l)))
+    assert.ok(/^\s*import\s+(QtQuick[\w.]*|"[^"]*")(\s+as\s+\w+)?\s*$/.test(line), `${file}: imports ${line.trim()}`)
+}
+
 // Qt's own paste reads everything a clipboard's owner sends before anything
 // here can count it, so an owner that never stops sending takes the shell's
 // memory. Every field that takes typing hands its paste keys to pasteInto,

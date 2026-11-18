@@ -2,6 +2,7 @@ import QtQuick
 import QtTest
 import "../.."
 import "../../BoardStore.js" as Store
+import "../../kit/Theme" as Kit
 
 TestCase {
   id: test
@@ -10,6 +11,14 @@ TestCase {
   visible: true
   width: 480
   height: 360
+  // The kit's panels take their sizes from the kit's theme, so it gets the
+  // same pressure the stub's palette does: the stub's 24px text in a small window.
+  readonly property string bigType: "[font]\nbase-size = 24\n"
+  function initTestCase() {
+    Kit.ThemeSource.apply({ colorsText: 'mode = "dark"\nbackground = "#101315"\nforeground = "#cacccc"\naccent = "#e68e0d"\n',
+                            shellText: test.bigType, userShellText: "", rounding: 0, animations: false })
+  }
+
   Item {
     id: ctl
     // What it says, as written: these suites read English.
@@ -344,11 +353,15 @@ TestCase {
   }
 
   function test_panelsAreSolidCardsInTheShellsColours() {
-    const cards = [cardOf(commandList), cardOf(decision), cardOf(help), findChild(browser, "browser-panel")]
+    const cards = [cardOf(commandList), cardOf(decision), findChild(browser, "browser-panel")]
     for (const card of cards) {
       compare(card.color, ctl.theme.panelBackground, "the menu's colour")
       compare(card.color.a, 1, "and nothing shows through it")
     }
+    // Help is the kit's card on the menu surface, in the kit's resolution of it.
+    const helpCard = findChild(help, "help-card")
+    compare(helpCard.color, Kit.Color.menu.background, "the kit's menu colour")
+    compare(helpCard.color.a, 1, "and nothing shows through it")
     // This stub's border is a gradient, which a Rectangle cannot draw: the card
     // paints a ring over itself instead of using its own border.
     const card = cardOf(commandList)
@@ -372,7 +385,7 @@ TestCase {
     const stack = [content]
     while (stack.length) {
       const item = stack.pop()
-      if (item.font !== undefined && item.font.capitalization === Font.AllUppercase) labels.push(item.text)
+      if (item.objectName === "help-section") labels.push(item.text)
       for (let i = 0; i < item.children.length; i++) stack.push(item.children[i])
     }
     compare(labels.length, Store.KEY_HELP_SECTIONS.length, "one label per section")
@@ -467,6 +480,8 @@ TestCase {
       height: 1200
       property int fs: 24
       property alias help: inner
+      Component.onCompleted: Kit.ThemeSource.apply({ shellText: "[font]\nbase-size = " + rig.fs + "\n" })
+      Component.onDestruction: Kit.ThemeSource.apply({ shellText: test.bigType })
       Item {
         id: c
         property bool helpVisible: true
@@ -501,9 +516,7 @@ TestCase {
   // swallower among its children as well, and which of them comes first is
   // none of this test's business.
   function scroller(help) {
-    for (let i = 0; i < help.children.length; i++)
-      if (help.children[i].contentHeight !== undefined) return help.children[i]
-    return null
+    return help.flickable
   }
 
   function keyRows(help) {
@@ -532,8 +545,9 @@ TestCase {
         const key = row.children[0]
         verify(row.keyColumn < row.width * 0.5,
           `at ${size}px the key column is not clamped, so nothing need wrap`)
-        compare(key.lineCount, 1,
-          `'${key.text}' fits its column on one line at ${size}px`)
+        for (let i = 0; i < key.children.length; i++)
+          if (key.children[i].modelData !== undefined)
+            compare(key.children[i].y, 0, `'${key.label}' fits its column on one line at ${size}px`)
       }
       rig.destroy()
     }
@@ -549,9 +563,9 @@ TestCase {
       const description = row.children[1]
       verify(description.width > 0, "the description has somewhere to go")
       verify(description.width >= key.width,
-        `'${key.text}': the description is not the narrower column`)
-      verify(row.height >= Math.max(key.contentHeight, description.contentHeight) - 0.5,
-        `'${key.text}': the row is tall enough for whichever side wrapped`)
+        `'${key.label}': the description is not the narrower column`)
+      verify(row.height >= Math.max(key.height, description.contentHeight) - 0.5,
+        `'${key.label}': the row is tall enough for whichever side wrapped`)
     }
   }
 

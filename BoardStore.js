@@ -1870,6 +1870,68 @@ var KEY_HELP = (function () {
   return rows
 })()
 
+// A help label as the keys to press and the words between them, so the keys
+// can be drawn as key caps: "g then h j k l" is g, "then", h, j, k, l. It reads
+// the label as shown, translated or not, because a translation moves the words
+// and keeps the keys ("Strg halten").
+//
+// A key is a single character, a function key, a named key, or a run of the
+// letters hjkl standing for all four; a token holding a + is a chord, its keys
+// drawn and anything else in it kept as words ("shift+click"). A slash or a
+// comma between keys is a word, so "p / shift+p" reads as two choices; the
+// slash alone is the find key. The one single letter that is a word is "a"
+// after a word, as in "x on a connected pair".
+var KEY_NAMES = ["ctrl", "shift", "alt", "super", "tab", "esc", "enter", "del", "backspace",
+  "space", "strg", "umschalt", "entf", "eingabe", "leertaste", "rücktaste"]
+function isKeyName(word) {
+  if (word.length === 1) return true
+  if (/^F\d{1,2}$/.test(word)) return true
+  if (/^[hjklHJKL]{4}$/.test(word)) return true
+  return KEY_NAMES.indexOf(word.toLowerCase()) >= 0
+}
+function keyLabelParts(label) {
+  var text = String(label === undefined || label === null ? "" : label)
+  var tokens = text.split(/\s+/).filter(function (t) { return t !== "" })
+  var out = []
+  function word(w) {
+    var last = out.length ? out[out.length - 1] : null
+    if (last && last.text !== undefined) last.text += (/^[,]/.test(w) ? "" : " ") + w
+    else out.push({ text: w })
+  }
+  function key(k) { out.push({ key: k }) }
+  var lastWasWord = false
+  for (var i = 0; i < tokens.length; i++) {
+    var t = tokens[i]
+    if (tokens.length === 1 && t.length === 1) { key(t); break }
+    if (t === "/" && i > 0 && i < tokens.length - 1) { word("/"); lastWasWord = false; continue }
+    // A + standing between two chords joins them; at the start it is the key.
+    if (t === "+" && i > 0 && tokens[i - 1] !== "/") { word("+"); lastWasWord = false; continue }
+    var trail = ""
+    if (t.length > 1 && /,$/.test(t)) { trail = ","; t = t.slice(0, -1) }
+    if (t === "a" && lastWasWord) { word(t + trail); continue }
+    if (t.length > 1 && t.indexOf("+") > 0 && t.indexOf("+") < t.length - 1) {
+      var parts = t.split("+")
+      var anyKey = false
+      for (var p = 0; p < parts.length; p++) {
+        if (isKeyName(parts[p])) { key(parts[p]); anyKey = true }
+        else word((p > 0 ? "+" : "") + parts[p])
+      }
+      if (trail) word(trail)
+      lastWasWord = !anyKey
+      continue
+    }
+    if (isKeyName(t)) {
+      key(t)
+      if (trail) word(trail)
+      lastWasWord = false
+    } else {
+      word(t + trail)
+      lastWasWord = true
+    }
+  }
+  return out
+}
+
 // ---------------------------------------------------------------- marshalling
 // One shape in, one shape out. The file, the undo stack and the models all
 // speak this, so there is a single definition of what an item is.

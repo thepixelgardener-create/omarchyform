@@ -48,6 +48,8 @@ function measure(size) {
     fs.mkdirSync(home)
     for (const file of fs.readdirSync(repo).filter(f => /\.(qml|js|sh|py)$/.test(f)))
       fs.copyFileSync(path.join(repo, file), path.join(dir, file))
+    // The Omarchy UI kit the panels are built from, as the plugin carries it.
+    fs.cpSync(path.join(repo, 'kit'), path.join(dir, 'kit'), { recursive: true })
     for (const module of ['Commons', 'Ui'])
       fs.cpSync(path.join(omarchy, 'shell', module), path.join(dir, module), { recursive: true })
     fs.mkdirSync(path.join(dir, 'services'))
