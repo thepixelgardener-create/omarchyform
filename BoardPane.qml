@@ -699,7 +699,7 @@ Item {
       ix: Store.clampCoord(wx - w / 2), iy: Store.clampCoord(wy - h / 2), iw: w, ih: h,
       itint: Store.TINTS[root.doc.nextColor % Store.TINTS.length],
       itext: initial.text || "", ipinned: false, isrc: initial.src || "", itexture: "plain"
-    }, Store.noGlue()))
+    }, Store.noGlue(), initial.roles || {}))
     root.doc.nextId = taken.next
     root.doc.nextColor += 1
     root.selectedIndex = root.items.count - 1
@@ -1252,6 +1252,8 @@ Item {
     var n = root.selected()
     if (!n) { root.gluingFrom = -1; root.addRelative("arrow"); return }
     if (!root.canEdit || n.ipinned) return
+    // What it held was deleted since: this press starts afresh.
+    if (root.gluingFrom >= 0 && Store.indexOfId(root.items, root.gluingFrom) < 0) root.gluingFrom = -1
     if (root.gluingFrom < 0) {
       root.linkingFrom = -1
       root.gluingFrom = n.iid
@@ -1262,30 +1264,29 @@ Item {
     var from = Store.indexOfId(root.items, root.gluingFrom), to = root.selectedIndex
     root.gluingFrom = -1
     var plan = Store.gluePlan(root.items, from, to)
-    if (plan.outcome === "join") {
-      var keep = root.items.get(to).iid
-      var joined = Store.joiningLine(root.items, plan.a, plan.b)
-      root.addItem("arrow", 0, 0)
-      var at = root.items.count - 1
-      if (root.items.get(at).kind !== "arrow") return
-      for (var role in joined) root.items.setProperty(at, role, joined[role])
-      root.selectedIndex = Store.indexOfId(root.items, keep)
-      root.flash(root.t("joined with an arrow"))
+    // A new arrow goes in whole, glued, in the one step that adds it: the
+    // save addItem asks for must not find it half made.
+    if (plan.outcome === "join" || plan.outcome === "beside") {
+      var keep = root.items.get(to).iid, before = root.items.count
+      root.addItem("arrow", 0, 0, { roles: Store.planRoles(plan) })
+      if (root.items.count === before) return
+      if (plan.outcome === "join") {
+        root.selectedIndex = Store.indexOfId(root.items, keep)
+        root.flash(root.t("joined with an arrow"))
+      } else root.centerOnSelected()
+      root.repaintLinks()
+      return
     } else if (plan.outcome === "attach") {
       root.pushUndo()
-      var values = Store.attachedLineEnd(root.items, plan.line, plan.end, plan.shape)
+      var values = Store.planRoles(plan)
       for (var key in values) root.items.setProperty(plan.line, key, values[key])
       root.flash(root.t("arrow glued"))
-    } else if (plan.outcome === "beside") {
-      var shape = root.items.get(plan.shape)
-      root.addItem("arrow", shape.ix + shape.iw + 120, shape.iy + shape.ih / 2)
-      var made = root.items.count - 1
-      if (root.items.get(made).kind !== "arrow") return
-      var tail = Store.attachedLineEnd(root.items, made, 0, plan.shape)
-      for (var r in tail) root.items.setProperty(made, r, tail[r])
-      root.centerOnSelected()
     } else if (plan.outcome === "already") {
       root.flash(root.t("this arrow is glued here already"))
+      root.repaintLinks()
+      return
+    } else if (plan.outcome === "far" || plan.outcome === "touching") {
+      root.flash(root.tv(Store.GLUE_HINTS[plan.outcome]))
       root.repaintLinks()
       return
     } else {
@@ -1370,8 +1371,8 @@ Item {
     // Choosing the far end of a connector by clicking it: the near end is
     // held, as moving to it with the keys holds it, until x joins them or
     // escape lets go. A background is not something to join.
-    var source = root.linkingFrom
-    if (source >= 0 && root.items.get(index).ipinned) return
+    var source = root.linkingFrom, glueSource = root.gluingFrom
+    if ((source >= 0 || glueSource >= 0) && root.items.get(index).ipinned) return
     if (additive && !root.items.get(index).ipinned) {
       if (root.markedIds.length === 0 && root.selectedIndex >= 0 && root.selectedIndex !== index
           && !root.items.get(root.selectedIndex).ipinned) root.markedIds = [root.items.get(root.selectedIndex).iid]
@@ -1382,6 +1383,7 @@ Item {
     } else root.selectOnly(index)
     root.editIndex = -1
     root.linkingFrom = source
+    root.gluingFrom = glueSource
     root.repaintLinks()
     root.focusKeys()
   }
@@ -1723,7 +1725,7 @@ Item {
     root.arranging = false
     root.conflictVisible = false
     root.helpVisible = false
-    if (root.linkingFrom >= 0) { root.linkingFrom = -1; root.gluingFrom = -1; root.repaintLinks() }
+    if (root.linkingFrom >= 0 || root.gluingFrom >= 0) { root.linkingFrom = -1; root.gluingFrom = -1; root.repaintLinks() }
   }
 
   function activate() { root.workspace.activate(root) }
@@ -1741,6 +1743,9 @@ Item {
     root.markedIds = []
     root.showPinned = false
     root.selectedIndex = -1
+    // What z holds is an id, and a board read again can give that id to
+    // something else: it never outlives the board it was taken on.
+    root.gluingFrom = -1
     if (!endModes) return
     root.editIndex = -1
     root.linkingFrom = -1; root.gluingFrom = -1

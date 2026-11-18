@@ -463,7 +463,11 @@ Item {
     containmentMask: node.isLine ? lineReach : null
     QtObject {
       id: lineReach
+      // Qt asks this for every line when it looks for the cursor to show, not
+      // only for those under the pointer: the box test first keeps that to
+      // four comparisons for each line elsewhere.
       function contains(point: point): bool {
+        if (point.x < 0 || point.y < 0 || point.x > node.width || point.y > node.height) return false
         return Store.nearLine(node.lineEnds, node.width, node.height, point.x, point.y, 8 / Math.max(0.01, node.ctl.zoom))
       }
     }

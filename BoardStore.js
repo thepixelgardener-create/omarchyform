@@ -311,9 +311,9 @@ function gluePlan(items, from, to) {
   var f = items.get(from), g = items.get(to)
   if (f.ipinned === true || g.ipinned === true) return { outcome: "none" }
   var fLine = isLine(f.kind), gLine = isLine(g.kind)
-  if (from === to) return fLine ? { outcome: "none" } : { outcome: "beside", shape: from }
+  if (from === to) return fLine ? { outcome: "none" } : drawable({ outcome: "beside", shape: from, values: besideLine(items, from) })
   if (fLine && gLine) return { outcome: "none" }
-  if (!fLine && !gLine) return { outcome: "join", a: from, b: to }
+  if (!fLine && !gLine) return drawable({ outcome: "join", a: from, b: to, values: joiningLine(items, from, to) })
   var line = fLine ? from : to, shape = fLine ? to : from
   var n = items.get(line), s = items.get(shape)
   if (n.aon === s.iid || n.bon === s.iid) return { outcome: "already", line: line, shape: shape }
@@ -322,7 +322,23 @@ function gluePlan(items, from, to) {
   var a = lineEndPoint(n, 0), b = lineEndPoint(n, 1)
   var da = (a.x - cx) * (a.x - cx) + (a.y - cy) * (a.y - cy), db = (b.x - cx) * (b.x - cx) + (b.y - cy) * (b.y - cy)
   var end = !n.aon && n.bon ? 0 : n.aon && !n.bon ? 1 : da <= db ? 0 : 1
-  return { outcome: "attach", line: line, shape: shape, end: end }
+  var values = attachedLineEnd(items, line, end, shape)
+  var moved = {}, roles = ["ix", "iy", "iw", "ih", "lax", "lay", "lbx", "lby"]
+  for (var r = 0; r < roles.length; r++) moved[roles[r]] = values[roles[r]] !== undefined ? values[roles[r]] : n[roles[r]]
+  return drawable({ outcome: "attach", line: line, shape: shape, end: end, values: values, row: moved })
+}
+
+// A plan whose arrow can be drawn as it says: both ends where the glue puts
+// them, which a line longer than an item may be cannot reach ("far"), and
+// apart, which two shapes that touch are not ("touching").
+function drawable(plan) {
+  var v = plan.row || plan.values
+  var a = lineEndPoint(v, 0), b = lineEndPoint(v, 1)
+  if (Math.abs(b.x - a.x) + Math.abs(b.y - a.y) < 8) return { outcome: "touching" }
+  var wantA = plan.values.tailAt, wantB = plan.values.headAt
+  if ((wantA && Math.abs(wantA.x - a.x) + Math.abs(wantA.y - a.y) > 0.5)
+      || (wantB && Math.abs(wantB.x - b.x) + Math.abs(wantB.y - b.y) > 0.5)) return { outcome: "far" }
+  return plan
 }
 
 // Where an end glued to the item at `index` goes when it comes from (x, y):
@@ -340,7 +356,27 @@ function attachedLineEnd(items, line, end, shape) {
   var values = movedLineEnd(n, end, glue.px, glue.py)
   var on = end === 0 ? "aon" : "bon"
   values[on] = glue.id; values[on + "x"] = glue.x; values[on + "y"] = glue.y
+  values[end === 0 ? "tailAt" : "headAt"] = { x: glue.px, y: glue.py }
   return values
+}
+
+// The roles of an arrow beside the item at `index`, its tail glued to the
+// item's side facing the head, the head 200 out to its right.
+function besideLine(items, index) {
+  var n = items.get(index)
+  var hx = n.ix + n.iw + 200, hy = n.iy + n.ih / 2
+  var tail = glueFacing(items, index, hx, hy)
+  var values = lineFromPoints(tail.px, tail.py, hx, hy)
+  values.aon = tail.id; values.aonx = tail.x; values.aony = tail.y
+  values.tailAt = { x: tail.px, y: tail.py }
+  return values
+}
+
+// A plan's roles as the model takes them, without what it was checked by.
+function planRoles(plan) {
+  var out = {}
+  for (var role in plan.values) if (role !== "tailAt" && role !== "headAt") out[role] = plan.values[role]
+  return out
 }
 
 // The roles of an arrow joining the items at `a` and `b`, glued to each on
@@ -352,6 +388,7 @@ function joiningLine(items, a, b) {
   var values = lineFromPoints(tail.px, tail.py, head.px, head.py)
   values.aon = tail.id; values.aonx = tail.x; values.aony = tail.y
   values.bon = head.id; values.bonx = head.x; values.bony = head.y
+  values.tailAt = { x: tail.px, y: tail.py }; values.headAt = { x: head.px, y: head.py }
   return values
 }
 
@@ -1169,6 +1206,7 @@ var LINK_HINTS = { remove: "%1 removes this connector", reverse: "%1 turns this 
 // What z will do while its second item is being chosen (gluePlan).
 var GLUE_HINTS = { join: "%1 joins these two with an arrow", attach: "%1 glues the arrow to this",
                    beside: "%1 puts a glued arrow beside it", already: "this arrow is glued here already",
+                   far: "too far apart for one arrow", touching: "these two touch: there is no room for an arrow",
                    none: "pick a shape or an arrow, then %1" }
 function glueHint(outcome, color, say) {
   var words = (say || asWritten)(GLUE_HINTS.hasOwnProperty(outcome) ? GLUE_HINTS[outcome] : GLUE_HINTS.none)
@@ -1364,7 +1402,8 @@ function aliasLeads(command, needle) {
 // its English name and aliases as well, which is what every guide and every
 // other machine calls it.
 function matchCommands(query, scope, group, say) {
-  var needle = String(query === undefined ? "" : query).toLowerCase().trim()
+  var typed = String(query === undefined ? "" : query).trim()
+  var needle = typed.toLowerCase()
   var keyed = []
   var leading = []
   var rest = []
@@ -1397,8 +1436,9 @@ function matchCommands(query, scope, group, say) {
     // One bucket each, so a command that matches by name and by alias both is
     // still offered once.
     // The key's own command first, then the names that start with it.
-    if (COMMANDS[i].key.toLowerCase() === needle) keyed.push(COMMANDS[i])
-    else if (at === 0) leading.push(COMMANDS[i])
+    // Case counts there: z and Z are two keys.
+    if (COMMANDS[i].key === typed) keyed.push(COMMANDS[i])
+    else if (at === 0 || COMMANDS[i].key.toLowerCase() === needle) leading.push(COMMANDS[i])
     else if (at > 0) rest.push(COMMANDS[i])
     else if (aliasLeads(COMMANDS[i], needle)) aliased.push(COMMANDS[i])
   }
@@ -1477,7 +1517,8 @@ function versionLabel(at, now, say) {
 // long ago that was, where a command has its key, took the room the date
 // needed in a narrow panel.
 function versionChoices(rows, query, now, say) {
-  var needle = String(query === undefined ? "" : query).toLowerCase().trim()
+  var typed = String(query === undefined ? "" : query).trim()
+  var needle = typed.toLowerCase()
   var found = []
   for (var i = 0; rows && i < rows.length; i++) {
     var label = versionLabel(rows[i].at, now, say)

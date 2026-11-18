@@ -995,6 +995,8 @@ function tests(S) {
 
     // Half-remembering the letter should work too: type it and see what it does.
     eq(S.matchCommands("g")[0].name, "Align and spread")
+    eq(S.matchCommands("z")[0].name, "Glue with an arrow", "z is the glue key")
+    eq(S.matchCommands("Z")[0].name, "Unglue", "and Z, a key of its own, is unglue")
     eq(S.matchCommands("zzz").length, 0)
   })
 

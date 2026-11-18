@@ -306,4 +306,69 @@ const presses = []
   presses.push('unglued: Z')
 }
 
+// What the review of z found: a write never holds a half-made arrow, a full
+// board is refused, a held item does not outlive a reload, a pane change or
+// its own deletion, a click is as good as the keys for the second item, and
+// an arrow that could not reach both shapes is not made.
+{
+  const c = opened([note(1, 0, 0), note(2, 700, 360)])
+  c.press('Tab'); c.press('z'); c.press('Tab')
+  const before = c.writes.length
+  c.press('z')
+  while (c.persistence.busy) c.complete()
+  const after = c.writes.slice(before).map(w => JSON.parse(w.text).items.find(r => r.kind === 'arrow'))
+  assert.ok(after.length > 0, 'the join was written')
+  for (const arrow of after) assert.deepEqual([arrow.from && arrow.from.id, arrow.to && arrow.to.id], [1, 2],
+    'every write after z holds the arrow glued at both ends, never a free one')
+  c.root.selectedIndex = 0; c.press('z'); c.press('z')
+  while (c.persistence.busy) c.complete()
+  const beside = JSON.parse(c.writes[c.writes.length - 1].text).items.filter(r => r.kind === 'arrow').pop()
+  assert.equal(beside.from && beside.from.id, 1, 'z z: written glued at the tail')
+}
+{
+  // 4,999 notes and an arrow last: the board is full.
+  const items = Array.from({ length: 4999 }, (_, i) => note(i + 1, (i % 70) * 300, Math.floor(i / 70) * 200))
+  items.push({ id: 5000, kind: 'arrow', x: 0, y: -400, w: 200, h: 60, tint: 'foreground', text: '', pinned: false, src: '' })
+  const c = opened(items)
+  const last = JSON.stringify(c.items.get(4999))
+  c.root.selectedIndex = 0; c.press('z'); c.root.selectedIndex = 1; c.press('z')
+  assert.equal(c.items.count, 5000, 'a full board: no arrow added')
+  assert.equal(JSON.stringify(c.items.get(4999)), last, 'and the arrow that was last is untouched')
+  c.root.selectedIndex = 0; c.press('z'); c.press('z')
+  assert.equal(JSON.stringify(c.items.get(4999)), last, 'z z neither')
+}
+{
+  const c = opened([note(1, 0, 0), note(2, 700, 360), note(3, 0, 600)])
+  c.root.selectedIndex = 0; c.press('z')
+  c.root.deactivate()
+  assert.equal(c.root.gluingFrom, -1, 'the pane losing the keyboard lets go of what z held')
+  c.press('z'); c.root.resetSelection(false)
+  assert.equal(c.root.gluingFrom, -1, 'so does the board being read again')
+  // The held item deleted: the next z starts from where the keyboard is.
+  c.root.selectedIndex = 0; c.press('z'); c.press('Delete')
+  c.root.selectedIndex = 0
+  c.press('z')
+  assert.equal(c.root.gluingFrom, c.items.get(0).iid, 'held item gone: z holds the one the keyboard is on')
+  c.press('Escape')
+  // A click chooses the second item as well as the keys do.
+  c.root.selectedIndex = 0; c.press('z')
+  c.root.pointerSelect(1, false)
+  assert.equal(c.root.gluingFrom, c.items.get(0).iid, 'a click keeps what z holds')
+  c.press('z')
+  assert.equal(c.items.get(c.items.count - 1).kind, 'arrow', 'and z then joins the two')
+}
+{
+  // Too far apart for one arrow, and touching: said, and nothing made.
+  const far = opened([note(1, 0, 0), note(2, 200000, 0)])
+  far.root.selectedIndex = 0; far.press('z'); far.root.selectedIndex = 1
+  assert.equal(far.root.glueOutcome, 'far')
+  far.press('z')
+  assert.equal(far.items.count, 2, 'too far: no arrow')
+  assert.match(far.root.statusText, /too far apart/)
+  const touch = opened([note(1, 0, 0), note(2, 220, 0)])
+  touch.root.selectedIndex = 0; touch.press('z'); touch.root.selectedIndex = 1; touch.press('z')
+  assert.equal(touch.items.count, 2, 'touching: no arrow')
+  assert.match(touch.root.statusText, /touch/)
+}
+
 console.log('ok — keyboard: an arrow is glued, followed, let go of and lined up without the pointer (' + presses.join('; ') + ')')
