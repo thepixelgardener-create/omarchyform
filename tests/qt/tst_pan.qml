@@ -1,5 +1,6 @@
 import QtQuick
 import QtTest
+import "../../kit/Theme" as Kit
 import "../.."
 import "../../BoardStore.js" as Store
 
@@ -727,9 +728,9 @@ TestCase {
     compare(mark.text, Store.SAVE_GLYPHS.saved)
     ctl.saveMark = "unsaved"
     compare(mark.text, Store.SAVE_GLYPHS.unsaved)
-    compare(mark.color, ctl.theme.accent)
+    compare(mark.color, Kit.Color.accent)
     ctl.saveMark = "failed"
-    compare(mark.color, ctl.theme.urgent)
+    compare(mark.color, Kit.Color.urgent)
 
     var line = findChild(surface, "board-status")
     ctl.saveError = "notes.json could not be written — ctrl+s to retry"

@@ -178,10 +178,11 @@ TestCase {
   // that from happening is the name check in tests/contract.js, which does not
   // depend on which Qt is doing the reading.
   function test_toolbarTakesTheBarColours() {
-    compare(toolbar.color, Qt.rgba(ctl.theme.barBackground.r, ctl.theme.barBackground.g, ctl.theme.barBackground.b, 1),
-            "the header takes the bar colour, solid, so nothing under it reads through")
-    verify(toolbar.color !== ctl.theme.canvasBackground, "which is its own colour, not the canvas")
-    verify(toolbar.border.color !== ctl.theme.canvasBackground, "and its edge is drawn against it")
+    const bar = Kit.Color.bar.background
+    compare(toolbar.color, Qt.rgba(bar.r, bar.g, bar.b, 1),
+            "the header takes the kit's bar colour, solid, so nothing under it reads through")
+    compare(toolbar.border.color, Kit.Color.track, "and its edge is the kit's rule")
+    compare(findChild(toolbar, "board-title").color, Kit.Color.bar.text, "its name is in the bar's text colour")
   }
 
   function test_toolbarFitsLargeFonts() {
@@ -195,7 +196,7 @@ TestCase {
     verify(waitForRendering(toolbar))
     const closed = toolbar.implicitHeight
     // One line of chrome at a body font this large, long board name and all.
-    verify(closed < ctl.theme.fontSubtitle * 3)
+    verify(closed < Kit.Style.font.title * 3, closed + " is one row of chrome")
 
     ctl.menuVisible = true
     verify(waitForRendering(toolbar))
