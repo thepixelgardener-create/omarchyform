@@ -89,4 +89,6 @@ other people find it.
 ## License
 
 MIT. Clipboard support invokes `wl-clipboard` (GPL-2.0-or-later) as a separate
-process; it is not redistributed here.
+process; it is not redistributed here. The panels are drawn with the
+[Omarchy UI kit](https://github.com/omacom/omarchy-ui) (MIT), copied into
+`kit/` with [its licence](kit/LICENSE).

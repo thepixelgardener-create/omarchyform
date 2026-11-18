@@ -943,3 +943,35 @@ The fixtures are in `tests/versions-files.py`: a version at each bound and one
 past it (41 versions, 72 MiB of them), a link named like a version, a name
 that climbs out of the folder, a versions folder that is a file, a link, or
 outside where versions go, and a stale folder under a new board's name.
+
+## The Omarchy UI kit in `kit/` — 2026-11-18
+
+The panels and the header are drawn with the Omarchy UI kit
+([omacom/omarchy-ui](https://github.com/omacom/omarchy-ui), MIT), copied into
+`kit/` at the revision in `kit/KIT_REV` by `tools/vendor-kit.js`: 29 Qt Quick
+components and the kit's theme resolver, about 4,400 lines, all of it runtime
+code a reviewer reads. What it is held to:
+
+- **It reads nothing and runs nothing.** The kit's C++ `ThemeSource`, which
+  reads the theme files and asks Hyprland, is not copied; a plugin cannot load
+  C++. `kit/Theme/ThemeSource.qml` is a plain object of strings and numbers
+  that `Theme.qml` fills from files the shell already reads (the current
+  theme's `colors.toml` and `shell.toml`, `~/.config/omarchy/shell.toml`, the
+  language file), through the same `FileView`s the board uses. The kit parses
+  that text with its own resolver: string splitting and number parsing, no
+  `eval`, no dynamic QML, no network, no process. `tests/security.js` refuses
+  a kit file that imports anything but Qt Quick and itself, runs a process,
+  reaches the network, or draws anything but plain text.
+- **It types nothing.** The kit's `TextField`, `FilterInput` and `SearchList`
+  are `TextInput`s, which in Qt 6.12 read the whole clipboard each time it
+  changes. None of them is copied: `tools/vendor-kit.js` refuses a component
+  that types, every field is still a `LineField` with bounded paste, and the
+  `TextInput` ban in `tests/security.js` covers `kit/` too.
+- **Its cost is the panel's, not the board's.** Kit rows draw the command list,
+  the browser and the two-versions question, in `ListView`s as before, so a
+  large library is still drawn a screenful at a time. Help is at most the
+  shortcut table, a fixed size. Nothing in the kit is driven by a board's
+  contents.
+- **It stays the kit.** A fix belongs upstream, not in `kit/`, where the next
+  copy would undo it; `node tools/vendor-kit.js <checkout> --check` shows what
+  a newer kit changes before it is taken.

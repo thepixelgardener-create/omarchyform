@@ -132,6 +132,28 @@ the CLI to create boards and is not a contribution guide.
   at the limit with `FULL_ITEMS` or `FULL_LINKS`, and anything that reads a
   board asks `boardLimit` before building it.
 
+## The Omarchy UI kit
+
+- The panels and the header are built from the Omarchy UI kit's Qt Quick
+  components ([omacom/omarchy-ui](https://github.com/omacom/omarchy-ui)),
+  copied into `kit/` by `node tools/vendor-kit.js /path/to/omarchy-ui`. The
+  copy is verbatim but for its imports; `kit/KIT_REV` names the revision and
+  `--check` says what a newer kit would change. Fix a kit file upstream, never
+  in `kit/`: the next copy would undo it.
+- A shell plugin cannot load the kit's C++ theme reader, so
+  `kit/Theme/ThemeSource.qml` stands in for it and `Theme.qml` (`feedKit`)
+  fills it from the files the shell reads. A test fills it from a fixture.
+- Chrome reads the kit (`import "kit/Theme" as Kit`, `import "kit/Ui" as O`);
+  the board and its items read `Theme.qml` through `BoardPalette`. Don't
+  hard-code a colour, size or radius a kit token covers.
+- Nothing that types comes from the kit: its fields are `TextInput`s, and
+  every field here is a `LineField`. `tools/vendor-kit.js` refuses to copy a
+  component that types, and `tests/security.js` holds `kit/` to the plugin's
+  rules. `tests/contract.js` checks every kit token a panel names.
+- A kit row in a delegate must not declare a property the kit already has
+  (`current` on a `ListRow`): the shell refuses the file. `npm run lint:qml`
+  fails on it.
+
 ## Words on screen
 
 - Nothing the board shows is written into a view as bare text. A string said

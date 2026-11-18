@@ -50,6 +50,16 @@ since older boards are migrated on load rather than rejected.
 
 ### Changed
 
+- The board's panels and its header are drawn with the Omarchy UI kit
+  ([omacom/omarchy-ui](https://github.com/omacom/omarchy-ui), MIT), the
+  shell's own QML kit made into a library, so they look and behave like the
+  rest of Omarchy and follow its theme the same way. The command list and the
+  board browser are its list rows under its keyboard cursor; help draws every
+  key as a key cap, keeping a letter's case, since `h` and `H` do different
+  things; the two-versions question, the header's buttons and their tooltips,
+  the scroll rule and the dimming behind a panel are the kit's. The keys, the
+  fields you type into and the board itself are unchanged. The kit is copied
+  into `kit/` at a pinned revision by `tools/vendor-kit.js`.
 - `z` is the glue key. Pressed on one item and again on another, it joins two
   shapes with an arrow glued to both, or glues an arrow to a shape, either way
   round: a free end first, otherwise the nearer. `z z` on one shape puts an
