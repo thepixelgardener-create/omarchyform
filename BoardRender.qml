@@ -91,7 +91,6 @@ ShellRoot {
       readonly property color muted: "#707880"
       readonly property bool isLight: false
       readonly property color dotColor: "#14CACCCC"
-      readonly property color panelScrim: "#80101315"
       readonly property var markupColors: ({ foreground: "#CACCCC", accent: "#CACCCC", urgent: "#A55555", muted: "#707880" })
       readonly property string fontFamily: "monospace"
       readonly property int fontBody: 12

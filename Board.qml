@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import "BoardStore.js" as Store
+import "kit/Theme" as Kit
 
 // The canvas surface. Hosted by either the fullscreen overlay or the windowed
 // toplevel; both share one controller, so switching never loses your place.
@@ -884,7 +885,8 @@ FocusScope {
     objectName: "panel-scrim"
     anchors.fill: parent
     visible: board.ctl.paletteVisible || board.ctl.conflictVisible || board.ctl.helpVisible
-    color: board.theme.panelScrim
+    // The kit's scrim behind the menu, as the browser's is.
+    color: Kit.Color.menu.scrim
   }
 
   BoardToolbar {
@@ -1036,10 +1038,10 @@ FocusScope {
       textFormat: Text.PlainText
       id: findLabel
       text: board.ctl.t("find: ")
-      color: board.ctl.theme.barForeground
+      color: Kit.Color.bar.text
       opacity: 0.85
-      font.family: board.theme.fontFamily
-      font.pixelSize: board.theme.fontBody
+      font.family: Kit.Style.font.family
+      font.pixelSize: Kit.Style.font.body
     }
 
     // Wide enough to see the caret in an empty query, and it grows with what
@@ -1054,11 +1056,11 @@ FocusScope {
       LineField {
         id: findField
         objectName: "find-field"
-        color: board.ctl.theme.barForeground
-        selectionColor: board.ctl.theme.accent
-        selectedTextColor: board.ctl.theme.barBackground
-        font.family: board.theme.fontFamily
-        font.pixelSize: board.theme.fontBody
+        color: Kit.Color.bar.text
+        selectionColor: Kit.Color.accent
+        selectedTextColor: Kit.Color.bar.background
+        font.family: Kit.Style.font.family
+        font.pixelSize: Kit.Style.font.body
 
         // Typed into, it is the query. Set from anywhere else — a test, the
         // screenshot harness, a find reopened on the query it had — it follows,
@@ -1105,10 +1107,10 @@ FocusScope {
       width: Math.min(implicitWidth,
                       Math.max(0, toolbar.width - board.theme.sp(16) - findLabel.width - findView.width))
       wrapMode: Text.Wrap
-      color: board.ctl.theme.barForeground
+      color: Kit.Color.bar.text
       opacity: 0.85
-      font.family: board.theme.fontFamily
-      font.pixelSize: board.theme.fontBody
+      font.family: Kit.Style.font.family
+      font.pixelSize: Kit.Style.font.body
       text: (board.ctl.findQuery === "" ? ""
              : " · " + Store.escapeMarkup(board.ctl.findCount === 0 ? board.ctl.t("no match")
                         : board.ctl.tn("%1 match", "%1 matches", board.ctl.findCount)))
@@ -1129,10 +1131,10 @@ FocusScope {
     horizontalAlignment: Text.AlignHCenter
     wrapMode: Text.Wrap
     // The bar's text, held back as its other secondary text is.
-    color: board.ctl.theme.barForeground
+    color: Kit.Color.bar.text
     opacity: 0.85
-    font.family: board.theme.fontFamily
-    font.pixelSize: board.theme.fontBody
+    font.family: Kit.Style.font.family
+    font.pixelSize: Kit.Style.font.body
     visible: status.tier !== "none"
     // Markup, so a key can be a different colour from the word it sits in.
     // Everything reaching this line from a board file, a file name or the

@@ -42,7 +42,6 @@ TestCase {
       property bool isLight: false
       property color dotColor: "#202020"
       property int fontHeading: 16
-      property color panelScrim: "#80000000"
       readonly property var markupColors: ({ foreground: "#cccccc", accent: "#00ffff",
                                              urgent: "#ff5555", muted: "#888888" })
       function sp(n) { return n }

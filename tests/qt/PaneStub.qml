@@ -277,28 +277,12 @@ Item {
     property color foreground: "#cccccc"
     property color connector: "#cccccc"
     property real connectorAlpha: 0.55
-    property color barBackground: "#161b22"
-    property color barForeground: "#e6e6e6"
     property color accent: "cyan"
     property color urgent: "red"
     property color muted: "gray"
     property color dotColor: "#202020"
-    property color panelBackground: "#101315"
-    property color panelText: "#cccccc"
-    property color panelScrim: "#80101315"
-    property color cursorFill: "#14cccccc"
-    property color cursorText: "cyan"
-    property var panelBorder: ({ color: "#cccccc", widths: { top: 2, right: 2, bottom: 2, left: 2 },
-                                 gradient: { colors: [], angle: 0, enabled: false } })
-    property var cursorBorder: ({ color: "transparent", widths: { top: 0, right: 0, bottom: 0, left: 0 },
-                                  gradient: { colors: [], angle: 0, enabled: false } })
     // The shell's button fills, its section label and glyph sizes, and the
     // menu's family.
-    property color controlFill: "#0acccccc"
-    property color hoverFill: "#14cccccc"
-    property string menuFontFamily: "monospace"
-    property int fontCaption: 10
-    property int fontIcon: 18
     property string fontFamily: "monospace"
     // Not readonly: one test below turns the text up to what a theme with
     // large type does in a small window, which is where a hint that does

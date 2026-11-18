@@ -48,8 +48,6 @@ TestCase {
       // The header is a bar and takes the theme's bar colours. Distinct from
       // the canvas here on purpose: these stand for tokens a theme may set to
       // something of their own.
-      property color barBackground: "#161b22"
-      property color barForeground: "#e6e6e6"
       property color accent: "cyan"
       property color urgent: "red"
       property color muted: "gray"
@@ -63,22 +61,8 @@ TestCase {
       property color dotColor: "#202020"
       // The shell's summoned-surface tokens. A gradient border on purpose, so
       // the ring Surface paints for one is drawn under the Qt CI runs too.
-      property color panelBackground: "#0d1117"
-      property color panelText: "#dddddd"
-      property color panelScrim: "#80101315"
-      property color cursorFill: "#14cccccc"
-      property color cursorText: "cyan"
-      property var panelBorder: ({ color: "#ffaa00", widths: { top: 2, right: 2, bottom: 2, left: 2 },
-                                   gradient: { colors: ["#ffaa00", "#ff4466"], angle: 45, enabled: true } })
-      property var cursorBorder: ({ color: "transparent", widths: { top: 0, right: 0, bottom: 0, left: 0 },
-                                    gradient: { colors: [], angle: 0, enabled: false } })
       // The shell's button fills, its section label and glyph sizes, and the
       // menu's family.
-      property color controlFill: "#0acccccc"
-      property color hoverFill: "#14cccccc"
-      property string menuFontFamily: "monospace"
-      property int fontCaption: 10
-      property int fontIcon: 18
       readonly property var markupColors: ({ foreground: "#cccccc", accent: "#00ffff",
                                              urgent: "#ff5555", muted: "#888888" })
       function sp(n) { return n }
@@ -177,14 +161,9 @@ TestCase {
     } finally { ctl.boardTitle = oldTitle }
   }
 
-  // The header is a bar, so it is painted in the theme's bar colours rather
-  // than the canvas ones.
-  //
-  // Reading them here is worth little as a guard against a stub missing one:
-  // a stub short of `barForeground` still passes this on Qt 6.11, with no
-  // warning, while the same tree fails on the 6.4 that CI runs. What keeps
-  // that from happening is the name check in tests/contract.js, which does not
-  // depend on which Qt is doing the reading.
+  // The header is a bar, so it is painted in the kit's bar colours rather
+  // than the canvas ones. That every kit token a panel names exists is checked
+  // by tests/contract.js, which does not depend on which Qt is reading.
   function test_toolbarTakesTheBarColours() {
     const bar = Kit.Color.bar.background
     compare(toolbar.color, Qt.rgba(bar.r, bar.g, bar.b, 1),
@@ -500,16 +479,12 @@ TestCase {
           property color canvasBackground: ctl.theme.canvasBackground
           property color foreground: ctl.theme.foreground
           property color accent: ctl.theme.accent
-          property color panelBackground: ctl.theme.panelBackground
-          property color panelText: ctl.theme.panelText
-          property var panelBorder: ctl.theme.panelBorder
           property int borderWidth: ctl.theme.borderWidth
           property int cornerRadius: ctl.theme.cornerRadius
           property string fontFamily: ctl.theme.fontFamily
           property int fontBody: rig.fs
           property int fontSubtitle: rig.fs
           property int fontHeading: rig.fs + 4
-          property int fontCaption: rig.fs - 2
           // Spacing scales with the text, the way a theme's Style.space does.
           function sp(n) { return Math.round(n * rig.fs / 12) }
         }

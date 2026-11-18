@@ -49,7 +49,6 @@ QtObject {
   readonly property int fontHeading: colours.base.fontHeading
   readonly property int borderWidth: colours.base.borderWidth
   readonly property int cornerRadius: colours.base.cornerRadius
-  readonly property color panelScrim: colours.base.panelScrim
   function sp(n) { return colours.base.sp(n) }
 
   function shaded(c, shade, light) {

@@ -95,6 +95,8 @@ TestCase {
     ctl.leaveWarned = false
     ctl.saveMark = "saved"
     ctl.theme.fontBody = 12
+    // The header and its line are the kit's, so they take their size from it.
+    Kit.ThemeSource.apply({ shellText: "" })
     surface.width = test.width
     surface.height = test.height
     wait(0)
@@ -666,6 +668,7 @@ TestCase {
     surface.width = 380
     surface.height = 320
     ctl.theme.fontBody = 24
+    Kit.ThemeSource.apply({ shellText: "[font]\nbase-size = 24\n" })
     const line = findChild(surface, "board-status")
     for (const [flag, name] of [["conflictVisible", "conflict-panel"], ["paletteVisible", "command-palette"]]) {
       ctl[flag] = true
@@ -685,7 +688,7 @@ TestCase {
     for (const flag of ["paletteVisible", "conflictVisible", "helpVisible"]) {
       ctl[flag] = true
       verify(scrim.visible, flag + " dims the board")
-      compare(scrim.color, ctl.theme.panelScrim)
+      compare(scrim.color, Kit.Color.menu.scrim)
       ctl[flag] = false
     }
     verify(!scrim.visible, "and it comes back")
@@ -750,6 +753,7 @@ TestCase {
     surface.width = 380
     surface.height = 320
     ctl.theme.fontBody = 24
+    Kit.ThemeSource.apply({ shellText: "[font]\nbase-size = 24\n" })
     ctl.linkingFrom = 1
     ctl.linkOutcome = row.outcome
     wait(0)
