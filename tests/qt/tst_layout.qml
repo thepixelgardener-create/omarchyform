@@ -14,6 +14,14 @@ TestCase {
   // The kit's panels take their sizes from the kit's theme, so it gets the
   // same pressure the stub's palette does: the stub's 24px text in a small window.
   readonly property string bigType: "[font]\nbase-size = 24\n"
+  // For the tests about what a panel says rather than whether it fits: the
+  // kit scales its spacing with its text, and at the pressure size a small
+  // window has room for two rows, whatever they are.
+  function atOrdinarySize(run) {
+    Kit.ThemeSource.apply({ shellText: "" })
+    try { run() } finally { Kit.ThemeSource.apply({ shellText: test.bigType }) }
+  }
+
   function initTestCase() {
     Kit.ThemeSource.apply({ colorsText: 'mode = "dark"\nbackground = "#101315"\nforeground = "#cacccc"\naccent = "#e68e0d"\n',
                             shellText: test.bigType, userShellText: "", rounding: 0, animations: false })
@@ -233,7 +241,8 @@ TestCase {
   // A board's earlier versions are rows of the same list: when each is from,
   // readable in a narrow panel at a large size, and the family's name on the
   // line above them.
-  function test_earlierVersionsAreRowsOfTheList() {
+  function test_earlierVersionsAreRowsOfTheList() { atOrdinarySize(earlierVersionsAreRowsOfTheList) }
+  function earlierVersionsAreRowsOfTheList() {
     var now = Date.now()
     ctl.versions = [{ name: "20261113-133205.json", bytes: 120, at: now - 30 * 60000 },
                     { name: "20261112-090000.json", bytes: 99, at: now - 26 * 3600000 },
@@ -280,20 +289,22 @@ TestCase {
       verify(waitForRendering(commandList))
       var empty = findChild(commandList, "command-empty")
       verify(empty.visible)
-      compare(empty.text, "looking…")
+      compare(empty.title, "looking…")
       ctl.versionsLoading = false
       verify(waitForRendering(commandList))
-      verify(empty.text.indexOf("none yet") === 0)
+      verify(empty.title.indexOf("none yet") === 0)
       var at = empty.mapToItem(commandList, 0, 0)
       verify(at.x >= 0 && at.x + empty.width <= commandList.width, "the sentence stays inside the panel")
       verify(at.y >= 0 && at.y + empty.height <= commandList.height, "and inside its one row: " + empty.height + " in " + commandList.height)
       ctl.paletteQuery = "x"
       verify(waitForRendering(commandList))
-      compare(empty.text, "nothing goes by that")
+      compare(empty.title, "nothing goes by that")
     } finally { test.width = was }
   }
 
-  function test_paletteShrinksToWhatMatches() {
+  function test_paletteShrinksToWhatMatches() { atOrdinarySize(paletteShrinksToWhatMatches) }
+  function paletteShrinksToWhatMatches() {
+    verify(waitForRendering(commandList))
     const many = commandList.height
     ctl.paletteQuery = "Change colour"
     verify(waitForRendering(commandList))
@@ -354,18 +365,23 @@ TestCase {
   }
 
   function test_panelsAreSolidCardsInTheShellsColours() {
-    const cards = [cardOf(commandList), cardOf(decision), findChild(browser, "browser-panel")]
+    const cards = [cardOf(decision), findChild(browser, "browser-panel")]
     for (const card of cards) {
       compare(card.color, ctl.theme.panelBackground, "the menu's colour")
       compare(card.color.a, 1, "and nothing shows through it")
     }
-    // Help is the kit's card on the menu surface, in the kit's resolution of it.
-    const helpCard = findChild(help, "help-card")
-    compare(helpCard.color, Kit.Color.menu.background, "the kit's menu colour")
-    compare(helpCard.color.a, 1, "and nothing shows through it")
+    // Help and the command list are the kit's card on the menu surface, in the
+    // kit's resolution of it, edged as the kit edges the menu.
+    for (const kitCard of [findChild(help, "help-card"), findChild(commandList, "command-card")]) {
+      compare(kitCard.color, Kit.Color.menu.background, "the kit's menu colour")
+      compare(kitCard.color.a, 1, "and nothing shows through it")
+      compare(JSON.stringify(kitCard.borderSpec),
+              JSON.stringify(Kit.Border.surfaceSpec("menu", "border", Kit.Color.menu.border, Math.max(1, Kit.Style.space(2)))),
+              "inside the menu's border")
+    }
     // This stub's border is a gradient, which a Rectangle cannot draw: the card
     // paints a ring over itself instead of using its own border.
-    const card = cardOf(commandList)
+    const card = cardOf(decision)
     verify(!card.flat, "a gradient is not a flat border")
     compare(card.border.width, 0, "so the Rectangle's own is off")
     verify(card.children[0].visible, "and the ring is drawn")
@@ -404,10 +420,10 @@ TestCase {
            "starting after the caret, not under it")
   }
 
-  // The command list's rows are the shell menu's: tall enough to read a name at
-  // a glance, however small the theme sets its text.
-  function test_commandRowsAreTheMenusSize() {
-    verify(commandList.rowHeight >= ctl.theme.sp(50), "at least the menu's fifty")
+  // The command list's rows are the kit's list rows: tall enough to read a
+  // name at a glance, at whatever size the theme sets its text.
+  function test_commandRowsAreTheKitsSize() {
+    verify(commandList.rowHeight >= Kit.Style.font.title * 1.5, "room to read a name: " + commandList.rowHeight)
   }
 
   function test_helpFitsAndScrolls() {
