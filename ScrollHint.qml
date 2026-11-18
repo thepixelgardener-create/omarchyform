@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import "kit/Theme" as Kit
 
 // There is more than fits. A slim rule down the inside edge of a panel: as long
 // a fraction of the track as what you can see is of the whole, and as far down
@@ -10,10 +11,10 @@ import QtQuick
 // Deliberately not a scrollbar you can drag. These panels are driven from the
 // keyboard, and a thumb that invites a grab it does not answer is worse than no
 // thumb at all. The wheel and a drag on the panel itself still work, as before.
+// It wears the kit's scrollbar all the same: its track, its thumb colour, its
+// thickness and its corners, so it reads as the one beside a kit ScrollArea.
 Item {
   id: hint
-  required property var ctl
-  readonly property var theme: hint.ctl.theme
   required property Flickable view
 
   // How much is out of sight. One pixel of slack, so a rounding error in a
@@ -24,29 +25,29 @@ Item {
     : 0
 
   visible: hint.hidden > 1
-  width: hint.theme.sp(3)
+  width: Kit.Style.spacing.scrollbarThickness
 
   // Square by default, like everything else here: Omarchy rounds nothing
-  // unless the theme says to.
-  readonly property int rounding: hint.theme.cornerRadius > 0 ? Math.ceil(hint.width / 2) : 0
+  // unless the theme says to, and a small part at most min(4, radius).
+  readonly property int rounding: Math.min(4, Kit.Style.cornerRadius)
 
   Rectangle {
     anchors.fill: parent
     radius: hint.rounding
-    color: Qt.rgba(hint.theme.panelText.r, hint.theme.panelText.g, hint.theme.panelText.b, 0.12)
+    color: Kit.Color.track
   }
 
   Rectangle {
     width: parent.width
     // Never shorter than a thumb the eye can find: a very long list would
     // otherwise wear a dot, which says there is more but not how much more.
-    height: Math.max(hint.theme.sp(20),
+    height: Math.max(Kit.Style.space(24),
                      hint.height * Math.min(1, hint.view.height / Math.max(1, hint.view.contentHeight)))
     y: (hint.height - height) * hint.progress
     radius: hint.rounding
-    // The panel's own text colour rather than the accent, which the shell keeps
-    // for the row the cursor is on. A mark that says how much more there is
-    // does not need to compete with the thing being chosen.
-    color: Qt.rgba(hint.theme.panelText.r, hint.theme.panelText.g, hint.theme.panelText.b, 0.55)
+    // The kit's thumb, not the accent, which is kept for the row the cursor
+    // is on. A mark that says how much more there is does not need to compete
+    // with the thing being chosen.
+    color: Kit.Style.normalBorderColor
   }
 }

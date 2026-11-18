@@ -269,7 +269,6 @@ FocusScope {
         }
 
         ScrollHint {
-          ctl: browser.ctl
           view: list
           anchors { top: parent.top; bottom: parent.bottom; right: parent.right }
         }

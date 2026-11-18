@@ -365,33 +365,21 @@ TestCase {
   }
 
   function test_panelsAreSolidCardsInTheShellsColours() {
-    const cards = [cardOf(decision)]
-    for (const card of cards) {
-      compare(card.color, ctl.theme.panelBackground, "the menu's colour")
-      compare(card.color.a, 1, "and nothing shows through it")
-    }
-    // Help and the command list are the kit's card on the menu surface, in the
-    // kit's resolution of it, edged as the kit edges the menu.
+    // Every summoned panel is the kit's card on the menu surface, in the kit's
+    // resolution of it, edged as the kit edges the menu.
     for (const kitCard of [findChild(help, "help-card"), findChild(commandList, "command-card"),
-                           findChild(browser, "browser-panel")]) {
+                           findChild(browser, "browser-panel"), findChild(decision, "conflict-card")]) {
       compare(kitCard.color, Kit.Color.menu.background, "the kit's menu colour")
       compare(kitCard.color.a, 1, "and nothing shows through it")
       compare(JSON.stringify(kitCard.borderSpec),
               JSON.stringify(Kit.Border.surfaceSpec("menu", "border", Kit.Color.menu.border, Math.max(1, Kit.Style.space(2)))),
               "inside the menu's border")
     }
-    // This stub's border is a gradient, which a Rectangle cannot draw: the card
-    // paints a ring over itself instead of using its own border.
-    const card = cardOf(decision)
-    verify(!card.flat, "a gradient is not a flat border")
-    compare(card.border.width, 0, "so the Rectangle's own is off")
-    verify(card.children[0].visible, "and the ring is drawn")
     // The two-versions question has the ordinary edge, as the shell's own
     // confirmation dialog does; its heading carries the urgency instead, in the
-    // theme's colour for it and behind a mark that is not only a colour.
-    compare(cardOf(decision).spec, ctl.theme.panelBorder, "the ordinary panel edge")
+    // kit's colour for it and behind a mark that is not only a colour.
     const heading = findChild(decision, "conflict-body").children[0]
-    compare(heading.color, ctl.theme.urgent, "the heading is in the urgent colour")
+    compare(heading.color, Kit.Color.urgent, "the heading is in the urgent colour")
     compare(heading.text.charAt(0), "\uf071", "behind a warning mark")
   }
 
