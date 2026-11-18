@@ -365,14 +365,15 @@ TestCase {
   }
 
   function test_panelsAreSolidCardsInTheShellsColours() {
-    const cards = [cardOf(decision), findChild(browser, "browser-panel")]
+    const cards = [cardOf(decision)]
     for (const card of cards) {
       compare(card.color, ctl.theme.panelBackground, "the menu's colour")
       compare(card.color.a, 1, "and nothing shows through it")
     }
     // Help and the command list are the kit's card on the menu surface, in the
     // kit's resolution of it, edged as the kit edges the menu.
-    for (const kitCard of [findChild(help, "help-card"), findChild(commandList, "command-card")]) {
+    for (const kitCard of [findChild(help, "help-card"), findChild(commandList, "command-card"),
+                           findChild(browser, "browser-panel")]) {
       compare(kitCard.color, Kit.Color.menu.background, "the kit's menu colour")
       compare(kitCard.color.a, 1, "and nothing shows through it")
       compare(JSON.stringify(kitCard.borderSpec),
@@ -598,7 +599,7 @@ TestCase {
     const panel = findChild(browser, "browser-panel")
     verify(footer !== undefined)
     verify(footer.width <= test.width - 32)
-    verify(footer.implicitHeight > ctl.theme.fontBody)
+    verify(footer.implicitHeight > Kit.Style.font.body)
     verify(panel.y + panel.height < footer.y)
   }
 }

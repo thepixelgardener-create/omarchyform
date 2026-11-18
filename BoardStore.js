@@ -1174,6 +1174,8 @@ var SAVE_GLYPHS = {
   failed: String.fromCodePoint(0xF0F42), readonly: String.fromCodePoint(0xF033E)
 }
 var FIT_GLYPH = String.fromCodePoint(0xF18F4)
+// What a row of the board browser is, at a glance: a folder, or a board.
+var BROWSER_GLYPHS = { folder: String.fromCodePoint(0xF024B), board: String.fromCodePoint(0xF0219) }
 var MENU_GLYPH = String.fromCodePoint(0xF035C)
 
 // ------------------------------------------------------------ connectors

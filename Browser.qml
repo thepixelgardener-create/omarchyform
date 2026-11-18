@@ -2,17 +2,23 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import "BoardStore.js" as Store
+import "kit/Ui" as O
+import "kit/Theme" as Kit
 
 // The board browser: a shell-like walk through the boards directory.
 // j/k to move, l or Enter to descend or open, h to go up, / to search the
 // whole tree, a/A to make a board or a folder, r to rename, x to delete.
+//
+// Drawn with the Omarchy UI kit: its card on the menu surface over the menu's
+// scrim, its list rows under the keyboard cursor, the open board marked as the
+// kit marks the current one. The keys and the fields stay the browser's own.
 FocusScope {
   id: browser
 
   required property var ctl
-  // What it draws. The controller is here for the theme and the accent only.
+  // What it draws. The controller is here for the words and the accent only.
   required property var library
-  readonly property var theme: browser.ctl.theme
+  function sp(n) { return Kit.Style.space(n) }
 
   readonly property var rows: browser.library.rows
   readonly property bool searching: browser.library.searching
@@ -38,7 +44,7 @@ FocusScope {
   // dims the desktop behind its own menu.
   Rectangle {
     anchors.fill: parent
-    color: browser.theme.panelScrim
+    color: Kit.Color.menu.scrim
   }
 
   // The dismiss layer, and it takes every button: the board's pan surface is
@@ -50,14 +56,18 @@ FocusScope {
     onClicked: function (mouse) { if (mouse.button === Qt.LeftButton) browser.library.hide() }
   }
 
-  Surface {
+  O.BorderSurface {
     id: panel
     objectName: "browser-panel"
-    theme: browser.theme
+    color: Kit.Color.menu.background
+    borderSpec: Kit.Border.surfaceSpec("menu", "border", Kit.Color.menu.border, Math.max(1, Kit.Style.space(2)))
+    radius: Kit.Style.cornerRadius
     anchors.horizontalCenter: parent.horizontalCenter
-    y: Math.max(browser.theme.sp(16), (parent.height - browserFooter.height - browser.theme.sp(32) - height) / 2)
-    width: Math.min(parent.width - browser.theme.sp(80), browser.theme.sp(720))
-    height: Math.max(0, Math.min(parent.height - browserFooter.height - browser.theme.sp(48), browser.theme.sp(560)))
+    y: Math.max(Kit.Style.spacing.md, (parent.height - browserFooter.height - browser.sp(32) - height) / 2)
+    width: Math.min(parent.width - Kit.Style.spacing.panelPadding * 2, browser.sp(720))
+    height: Math.max(0, Math.min(parent.height - browserFooter.height - browser.sp(48), browser.sp(560)))
+    // The kit's panel padding, giving way where the panel is cramped.
+    readonly property real pad: Math.min(Kit.Style.spacing.panelPadding, Math.round(panel.width * 0.05))
 
     // Swallow clicks so they do not reach the dismiss layer behind, whichever
     // button they are.
@@ -65,8 +75,8 @@ FocusScope {
 
     Column {
       anchors.fill: parent
-      anchors.margins: browser.theme.sp(18)
-      spacing: browser.theme.sp(10)
+      anchors.margins: panel.pad
+      spacing: Kit.Style.spacing.md
 
       // A name being typed, or a query, is a real text field: a drawn cursor
       // after a string that only ever grew at the end could not be moved
@@ -83,9 +93,9 @@ FocusScope {
           width: parent.width
           visible: !browser.typing
           elide: Text.ElideMiddle
-          color: browser.theme.panelText
-          font.family: browser.theme.menuFontFamily
-          font.pixelSize: browser.theme.fontHeading
+          color: Kit.Color.menu.text
+          font.family: Kit.Style.font.family
+          font.pixelSize: Kit.Style.font.heading
           text: browser.library.trashIndexError !== "" ? browser.library.trashIndexError
             : browser.library.message !== "" ? browser.library.message
             : browser.here
@@ -96,9 +106,9 @@ FocusScope {
           id: promptLabel
           visible: browser.typing
           text: browser.prompting ? browser.library.promptLabel + " " : "/"
-          color: browser.theme.panelText
-          font.family: browser.theme.menuFontFamily
-          font.pixelSize: browser.theme.fontHeading
+          color: Kit.Color.textDim
+          font.family: Kit.Style.font.family
+          font.pixelSize: Kit.Style.font.heading
         }
 
         // The field scrolls inside this once a name is wider than the panel.
@@ -113,11 +123,11 @@ FocusScope {
             id: typed
             objectName: "browser-field"
             enabled: browser.typing
-            color: browser.theme.panelText
-            selectionColor: browser.theme.accent
-            selectedTextColor: browser.theme.panelBackground
-            font.family: browser.theme.menuFontFamily
-            font.pixelSize: browser.theme.fontHeading
+            color: Kit.Color.menu.text
+            selectionColor: Kit.Color.accent
+            selectedTextColor: Kit.Color.menu.background
+            font.family: Kit.Style.font.family
+            font.pixelSize: Kit.Style.font.heading
             Accessible.role: Accessible.EditableText
             Accessible.name: browser.prompting ? browser.library.promptLabel : browser.ctl.t("Search the boards")
 
@@ -178,11 +188,11 @@ FocusScope {
         }
       }
 
+      // The kit's rule under a search line: one pixel of track.
       Rectangle {
         width: parent.width
-        height: browser.theme.borderWidth
-        color: Qt.rgba(browser.theme.panelText.r, browser.theme.panelText.g,
-                       browser.theme.panelText.b, 0.25)
+        height: 1
+        color: Kit.Color.track
       }
 
       // The list, and the rule that says how much of it you are looking at.
@@ -196,7 +206,7 @@ FocusScope {
         ListView {
           id: list
           anchors.fill: parent
-          anchors.rightMargin: browser.theme.sp(10)
+          anchors.rightMargin: browser.sp(10)
           clip: true
           model: browser.rows
           currentIndex: browser.library.index
@@ -204,88 +214,53 @@ FocusScope {
           // Keep the cursor in view when it walks off the end of the list.
           onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
 
-          delegate: Item {
+          delegate: O.ListRow {
+            id: row
             required property var modelData
             required property int index
 
             width: list.width
-            // The shell's menu rows, as the command list's are.
-            height: Math.max(browser.theme.sp(50), label.implicitHeight + browser.theme.sp(24))
+            height: browser.rowHeight
 
-            readonly property bool current: index === browser.library.index
+            readonly property bool atCursor: index === browser.library.index
+            readonly property string folder: Store.parentOf(row.modelData.path)
+            // The kit's keyboard cursor, the one highlight; the board that is
+            // open now is the kit's current row, as the connected network is.
+            hasCursor: row.atCursor
+            current: !browser.library.inTrash && row.modelData.path === browser.library.currentBoard
+            glyph: row.modelData.dir ? Store.BROWSER_GLYPHS.folder : Store.BROWSER_GLYPHS.board
+            // A folder wears a trailing slash. In the trash an entry carries
+            // where it came from, since that is what restoring it puts back;
+            // a search says where each one it found lives.
+            title: browser.library.inTrash
+              ? Store.baseName(row.modelData.path).replace(/\.json$/, "") + (row.modelData.dir ? "/" : "")
+              : Store.displayName(row.modelData) + (row.modelData.dir ? "/" : "")
+            value: browser.library.inTrash ? (row.folder ? browser.ctl.t("from %1", row.folder + "/") : "")
+              : row.current ? browser.ctl.t("open now")
+              : browser.searching && row.folder ? row.folder + "/" : ""
+            trailingGlyph: row.modelData.dir && !browser.library.inTrash ? "›" : ""
 
             Accessible.role: Accessible.ListItem
-            Accessible.name: label.text
-            Accessible.focused: current
+            Accessible.name: row.title + (row.value !== "" ? ", " + row.value : "")
+            Accessible.focused: row.atCursor
 
-            // The shell's keyboard cursor, as its menu draws one.
-            Surface {
-              anchors.fill: parent
-              visible: parent.current
-              theme: browser.theme
-              color: browser.theme.cursorFill
-              spec: browser.theme.cursorBorder
-            }
-
-            // The cursor is a mark as well as a tint, so which row it is on
-            // does not depend on seeing the tint.
-            Text {
-              textFormat: Text.PlainText
-              id: cursor
-              anchors.verticalCenter: parent.verticalCenter
-              anchors.left: parent.left
-              anchors.leftMargin: browser.theme.sp(8)
-              text: parent.current ? "›" : " "
-              color: browser.theme.cursorText
-              font.family: browser.theme.menuFontFamily
-              font.pixelSize: browser.theme.fontHeading
-            }
-
-            Text {
-              textFormat: Text.PlainText
-              id: label
-              anchors.verticalCenter: parent.verticalCenter
-              anchors.left: cursor.right
-              anchors.right: parent.right
-              anchors.leftMargin: browser.theme.sp(6)
-              anchors.rightMargin: browser.theme.sp(8)
-              elide: Text.ElideMiddle
-              color: parent.current ? browser.theme.cursorText : browser.theme.panelText
-              font.family: browser.theme.menuFontFamily
-              font.pixelSize: browser.theme.fontHeading
-              font.weight: Font.Medium
-              // A folder wears a trailing slash; the open board is marked.
-              // In the trash an entry carries where it came from, since that is
-              // what restoring it will put back.
-              text: browser.library.inTrash
-                ? Store.baseName(parent.modelData.path).replace(/\.json$/, "")
-                  + (parent.modelData.dir ? "/" : "")
-                  + (Store.parentOf(parent.modelData.path)
-                     ? "   " + browser.ctl.t("from %1", Store.parentOf(parent.modelData.path) + "/") : "")
-                : (parent.modelData.dir ? Store.displayName(parent.modelData) + "/"
-                                        : Store.displayName(parent.modelData))
-                    + (browser.searching && Store.parentOf(parent.modelData.path)
-                       ? "   " + Store.parentOf(parent.modelData.path) + "/" : "")
-                    + (!browser.library.inTrash && parent.modelData.path === browser.library.currentBoard
-                       ? "   ·" + browser.ctl.t("open now") : "")
-            }
-
-            MouseArea {
-              anchors.fill: parent
-              onClicked: {
-                browser.library.index = parent.index
-                browser.library.enter()
-              }
+            onClicked: {
+              browser.library.index = row.index
+              browser.library.enter()
             }
           }
 
+          // Why the list is empty, in the kit's empty-state voice; the keys in
+          // it are the accent's, so it stays a line of markup.
           Text {
             anchors.centerIn: parent
+            width: parent.width - browser.sp(16)
+            horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.Wrap
             visible: list.count === 0
-            color: browser.theme.panelText
-            opacity: 0.5
-            font.family: browser.theme.menuFontFamily
-            font.pixelSize: browser.theme.fontBody
+            color: Kit.Color.textDim
+            font.family: Kit.Style.font.family
+            font.pixelSize: Kit.Style.font.body
             textFormat: Text.StyledText
             text: browser.library.inTrash ? Store.escapeMarkup(browser.ctl.t("the trash is empty"))
               : browser.searching ? Store.escapeMarkup(browser.ctl.t("nothing matches"))
@@ -307,21 +282,30 @@ FocusScope {
     objectName: "browser-footer"
     anchors.left: parent.left
     anchors.right: parent.right
-    anchors.leftMargin: browser.theme.sp(16)
-    anchors.rightMargin: browser.theme.sp(16)
+    anchors.leftMargin: Kit.Style.spacing.panelPadding
+    anchors.rightMargin: Kit.Style.spacing.panelPadding
     horizontalAlignment: Text.AlignHCenter
     wrapMode: Text.Wrap
     anchors.bottom: parent.bottom
-    anchors.bottomMargin: browser.theme.sp(16)
-    color: browser.theme.foreground
-    opacity: 0.55
-    font.family: browser.theme.menuFontFamily
-    font.pixelSize: browser.theme.fontBody
+    anchors.bottomMargin: Kit.Style.spacing.panelPadding
+    color: Kit.Color.textDim
+    font.family: Kit.Style.font.family
+    font.pixelSize: Kit.Style.font.body
     textFormat: Text.StyledText
     text: Store.hintLine(browser.prompting ? Store.PROMPT_HINTS
                          : browser.library.inTrash ? Store.TRASH_HINTS : Store.BROWSER_HINTS,
                          browser.ctl.accentMarkup, "  ·  ", browser.ctl.tv)
   }
+
+  // A row is as tall as the kit's list row, measured off one.
+  O.ListRow {
+    id: ruler
+    visible: false
+    glyph: Store.BROWSER_GLYPHS.folder
+    title: "Ag"
+    value: "Ag"
+  }
+  readonly property int rowHeight: Math.ceil(ruler.implicitHeight)
 
   Keys.onPressed: function (event) {
     browser.library.key(event)
