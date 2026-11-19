@@ -34,7 +34,7 @@ TestCase {
     function tn(one, other, count, a, b) { return Store.translatedCount(null, "en", one, other, count, [a, b]) }
     function tv(text) { return text }
     property bool helpVisible: true
-    property string pluginVersion: "0.5.5"
+    property string pluginVersion: "0.6.0"
     // The accent the hint lines name their keys in, as markup wants it.
     property string accentMarkup: "#00ffff"
     // What Theme.qml is, at the sizes this suite exists to push against: a
@@ -486,7 +486,7 @@ TestCase {
       Item {
         id: c
         property bool helpVisible: true
-        property string pluginVersion: "0.5.5"
+        property string pluginVersion: "0.6.0"
         function t(text, a, b, c) { return Store.translated(null, text, [a, b, c]) }
         function tv(text) { return text }
         // The suite's own palette at this rig's text size. Only the sizes are
