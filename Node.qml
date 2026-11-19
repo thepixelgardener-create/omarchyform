@@ -72,11 +72,14 @@ Item {
   // The cursor and a mark both read as selected; the cursor keeps the heavier
   // outline so you can still tell where the keyboard is.
   readonly property bool selected: node.cursor || node.marked
-  readonly property bool linkSource: node.ctl.linkingFrom === node.iid
+  // What x or z started on, drawn heavier until the second item is chosen.
+  readonly property bool linkSource: node.ctl.linkingFrom === node.iid || node.ctl.gluingFrom === node.iid
   readonly property bool editing: node.index >= 0 && node.ctl.editIndex === node.index
   // What the note is actually drawing, so a test can read it back rather than
   // photograph it.
   readonly property string previewText: shown.text
+  readonly property bool isLine: Store.isLine(node.kind)
+  readonly property var lineEnds: node.isLine ? Store.lineEnds(node.ctl.items.get(node.index)) : ({ax: 0, ay: 0, bx: 1, by: 1})
   readonly property bool isNote: node.kind === "note"
   // Text with a long unbroken stretch in it is wrapped anywhere, by the note
   // and by its editor: looking for word boundaries in it would hold the whole
@@ -100,8 +103,12 @@ Item {
   // sitting idle looked more selected than the cursor did on a muted one. The
   // ring below carries selection instead, in one colour at one width, whatever
   // the item is tinted.
+  // A line is nothing but its outline, a stroke a box's border is drawn with,
+  // so at a border's strength a plain one all but vanished on the board. It
+  // is drawn nearly at full strength; a box's border stays quiet.
   readonly property color outline: node.linkSource || node.foundMatch
     ? node.theme.accent
+    : node.isLine ? node.theme.tintBorder(node.itint, true)
     : node.theme.tintBorder(node.itint, false)
 
   // Both modes narrow the board the same way: what you are not working on
@@ -118,7 +125,7 @@ Item {
   Rectangle {
     anchors.fill: parent
     anchors.margins: -node.theme.sp(4)
-    visible: node.selected && !node.ctl.showPinned
+    visible: node.selected && !node.ctl.showPinned && !node.isLine
     color: "transparent"
     radius: node.theme.cornerRadius > 0 ? node.theme.cornerRadius + node.theme.sp(4) : 0
     border.width: node.cursor ? node.theme.borderWidth * 2 : node.theme.borderWidth
@@ -146,7 +153,7 @@ Item {
   // Notes and boxes are plain Rectangles; ellipses and diamonds need a path.
   Rectangle {
     anchors.fill: parent
-    visible: !node.painted
+    visible: !node.painted && !node.isLine
     color: node.fill
     radius: node.theme.cornerRadius
     antialiasing: true
@@ -180,8 +187,8 @@ Item {
     anchors.centerIn: parent
     width: parent.width - node.theme.sp(16)
     visible: node.isImage && (picture.status === Image.Error || (node.pictureState !== "" && node.pictureState !== "waiting"))
-    text: node.pictureState === "" || node.pictureState === "missing" ? "missing image\n" + node.isrc
-        : "picture not shown\n" + node.isrc + "\n" + node.pictureState
+    text: node.pictureState === "" || node.pictureState === "missing" ? node.ctl.t("missing image") + "\n" + node.isrc
+        : node.ctl.t("picture not shown") + "\n" + node.isrc + "\n" + node.ctl.tv(node.pictureState)
     horizontalAlignment: Text.AlignHCenter
     wrapMode: Text.Wrap
     elide: Text.ElideMiddle
@@ -227,11 +234,38 @@ Item {
     }
   }
 
+  // qmllint disable unqualified
+  // This file stays unbound for Qt 6.4's Loader (see the header), so the
+  // component below reads `node` from outside its own scope, as intended.
+  Loader {
+    objectName: "line-shape"
+    anchors.fill: parent
+    active: node.isLine
+    sourceComponent: Component {
+      Shape {
+        antialiasing: true
+        ShapePath {
+          // An arrow is a filled outline (Store.linePath); a plain line is a stroke.
+          readonly property bool filled: node.kind === "arrow" || node.kind === "double-arrow"
+          fillColor: filled ? node.outline : "transparent"
+          strokeColor: filled ? "transparent" : node.outline
+          strokeWidth: filled ? 0 : Store.arrowHead(node.theme.borderWidth).stroke
+          capStyle: ShapePath.RoundCap
+          joinStyle: ShapePath.RoundJoin
+          strokeStyle: node.kind === "dashed-line" ? ShapePath.DashLine : ShapePath.SolidLine
+          dashPattern: [4, 3]
+          PathSvg { path: Store.linePath(node.kind, node.width, node.height, node.lineEnds, node.theme.borderWidth) }
+        }
+      }
+    }
+  }
+  // qmllint enable unqualified
+
   // Plain and offscreen items allocate no texture geometry.
   Loader {
     objectName: "item-texture"
     anchors.fill: parent
-    active: node.live && !node.isImage && node.textureStyle !== "plain"
+    active: node.live && !node.isImage && !node.isLine && node.textureStyle !== "plain"
     sourceComponent: Component {
       Shape {
         antialiasing: true
@@ -261,7 +295,7 @@ Item {
 
   Flickable {
     id: textViewport
-    visible: !node.isImage
+    visible: !node.isImage && !node.isLine
     anchors.fill: parent
     anchors.margins: node.theme.sp(14)
     anchors.topMargin: node.isNote ? header.height + node.theme.sp(14) : node.theme.sp(14)
@@ -335,7 +369,7 @@ Item {
           var at = Math.min(body.cursorPosition, node.itext.length)
           body.text = node.itext
           body.cursorPosition = at
-          node.ctl.flash("A note holds up to 1 MB of text")
+          node.ctl.flash(node.ctl.t("A note holds up to 1 MB of text"))
         }
         onActiveFocusChanged: if (!activeFocus) node.ctl.flushSave()
         // Editing can end without the caret leaving first: another item selected,
@@ -396,7 +430,7 @@ Item {
     anchors.margins: node.theme.borderWidth
     width: node.theme.sp(22)
     height: node.theme.sp(14)
-    visible: shown.contentHeight > textViewport.height && !node.editing
+    visible: !node.isLine && shown.contentHeight > textViewport.height && !node.editing
     color: node.theme.tintBorder(node.itint, true)
     radius: node.theme.cornerRadius > 0 ? node.theme.sp(3) : 0
     Text {
@@ -424,6 +458,19 @@ Item {
     anchors.fill: parent
     enabled: node.ctl.editIndex !== node.index && (node.ipinned ? node.ctl.showPinned : !node.ctl.showPinned)
     acceptedButtons: Qt.LeftButton
+    // A line is taken near its stroke only, a few screen pixels either side;
+    // the rest of its box passes the press to what is under it.
+    containmentMask: node.isLine ? lineReach : null
+    QtObject {
+      id: lineReach
+      // Qt asks this for every line when it looks for the cursor to show, not
+      // only for those under the pointer: the box test first keeps that to
+      // four comparisons for each line elsewhere.
+      function contains(point: point): bool {
+        if (point.x < 0 || point.y < 0 || point.x > node.width || point.y > node.height) return false
+        return Store.nearLine(node.lineEnds, node.width, node.height, point.x, point.y, 8 / Math.max(0.01, node.ctl.zoom))
+      }
+    }
     // While the far end of a connector is chosen, a click picks; it does not
     // drag, resize or start typing.
     cursorShape: node.ipinned || node.ctl.linkingFrom >= 0 ? Qt.PointingHandCursor : dragging ? Qt.ClosedHandCursor : Qt.OpenHandCursor
@@ -439,15 +486,23 @@ Item {
       node.ctl.pointerSelect(node.index, (mouse.modifiers & Qt.ShiftModifier) !== 0)
     }
     onPositionChanged: function (mouse) {
-      if (node.ipinned || !node.ctl.canEdit || node.ctl.linkingFrom >= 0 || !pressed || mouse.buttons !== Qt.LeftButton) return
+      if (mouse.buttons !== Qt.LeftButton) return
+      drag(mouse.x, mouse.y, (mouse.modifiers & Qt.ShiftModifier) !== 0)
+    }
+    // The drag, apart from the event it came in: x, y in the item, and free
+    // when shift is held. Qt 6.4's test events cannot hold shift through a
+    // move, so its test hands that in here, as it does to a line end's aim.
+    function drag(mx, my, free) {
+      if (node.ipinned || !node.ctl.canEdit || node.ctl.linkingFrom >= 0 || !pressed) return
       if (dragging && !node.ctl.pointerEdit) return
-      var dx = mouse.x - pressX
-      var dy = mouse.y - pressY
+      var dx = mx - pressX
+      var dy = my - pressY
       // A few pixels of slack so a click to select never nudges it.
       if (!dragging && Math.abs(dx) + Math.abs(dy) < 3) return
       if (!dragging) node.ctl.beginPointerEdit()
       dragging = true
-      node.ctl.moveTargets(dx, dy)
+      // Magnetic unless shift is held: it lines up with the items it nears.
+      node.ctl.moveTargets(dx, dy, !free)
     }
     onReleased: {
       if (dragging) node.ctl.finishPointerEdit(false)
@@ -455,7 +510,7 @@ Item {
     }
     onCanceled: { if (dragging) node.ctl.finishPointerEdit(true); dragging = false }
     onDoubleClicked: {
-      if (node.ipinned || !node.ctl.canEdit || node.ctl.linkingFrom >= 0) return
+      if (node.isLine || node.ipinned || !node.ctl.canEdit || node.ctl.linkingFrom >= 0) return
       node.ctl.pushUndo()
       node.ctl.editIndex = node.index
     }
@@ -492,7 +547,7 @@ Item {
     }
     onCanceled: { if (sizing) node.ctl.finishPointerEdit(true); sizing = false }
 
-    visible: !node.ipinned && node.ctl.linkingFrom < 0 && (node.selected || hover.hovered)
+    visible: !node.isLine && !node.ipinned && node.ctl.linkingFrom < 0 && (node.selected || hover.hovered)
     Rectangle {
       anchors.centerIn: parent
       width: 8
@@ -502,4 +557,81 @@ Item {
       opacity: 0.35
     }
   }
+  // qmllint disable unqualified
+  // Unbound on purpose, as the line shape above: the handles read `node`.
+  Repeater {
+    // A line's selection is these two handles and nothing else: a box or a
+    // band around a line hid the line it was meant to point out. A marked
+    // line wears them fainter, the way a marked item's ring is lighter.
+    model: node.isLine && node.selected && !node.ipinned && !node.ctl.showPinned && node.ctl.canEdit && node.ctl.linkingFrom < 0 ? 2 : 0
+    delegate: MouseArea {
+      id: endpoint
+      required property int index
+      objectName: "line-end-" + index
+      // The end it moves, and the way out of the line there.
+      readonly property real ex: (endpoint.index === 0 ? node.lineEnds.ax : node.lineEnds.bx) * node.width
+      readonly property real ey: (endpoint.index === 0 ? node.lineEnds.ay : node.lineEnds.by) * node.height
+      readonly property real ox: (endpoint.index === 0 ? node.lineEnds.bx : node.lineEnds.ax) * node.width
+      readonly property real oy: (endpoint.index === 0 ? node.lineEnds.by : node.lineEnds.ay) * node.height
+      readonly property real span: Math.max(0.01, Math.sqrt((endpoint.ex - endpoint.ox) * (endpoint.ex - endpoint.ox) + (endpoint.ey - endpoint.oy) * (endpoint.ey - endpoint.oy)))
+      // Just past the end rather than on it, so an arrow's tip is not drawn
+      // over: the handle sits where the line would go on.
+      readonly property real clear: 7
+      width: 18; height: 18
+      opacity: node.cursor ? 1 : 0.55
+      x: endpoint.ex + (endpoint.ex - endpoint.ox) / endpoint.span * endpoint.clear - width / 2
+      y: endpoint.ey + (endpoint.ey - endpoint.oy) / endpoint.span * endpoint.clear - height / 2
+      cursorShape: Qt.CrossCursor
+      acceptedButtons: Qt.LeftButton
+      property bool moving: false
+      // Where the end is from the pointer, held for the drag, so the end
+      // does not jump onto the pointer when the handle is taken.
+      property real grabX: 0
+      property real grabY: 0
+      onPressed: function(mouse) {
+        var point = endpoint.mapToItem(node.parent, mouse.x, mouse.y)
+        endpoint.grabX = node.x + endpoint.ex - point.x
+        endpoint.grabY = node.y + endpoint.ey - point.y
+        endpoint.moving = true
+        node.ctl.beginPointerEdit()
+      }
+      onPositionChanged: function(mouse) {
+        if (!endpoint.pressed) return
+        endpoint.aim(mouse.x, mouse.y, (mouse.modifiers & Qt.ShiftModifier) !== 0)
+      }
+      // The drag, apart from the event it came in: x, y in the handle, and
+      // free when shift is held. Qt 6.4's test events cannot hold shift
+      // through a move, so its test hands that in here.
+      function aim(hx, hy, free) {
+        if (!endpoint.moving || !node.ctl.pointerEdit || !node.ctl.canEdit) return
+        var point = endpoint.mapToItem(node.parent, hx, hy)
+        var items = node.ctl.items
+        // Put down on or near another item, the end is glued to its outline
+        // and goes where the item goes from then on, and the item is ringed
+        // while the end is over it, so the drop is not a guess. Elsewhere it
+        // is level or upright when it is nearly so, and in line with the
+        // sides and middles of other items; shift lets it lie anywhere.
+        var pull = 10 / Math.max(0.01, node.ctl.zoom)
+        var drag = Store.draggedLineEnd(items, node.index, endpoint.index,
+                                        point.x + endpoint.grabX, point.y + endpoint.grabY, pull, free)
+        node.ctl.guides = drag.guides
+        var placed = drag.placed
+        for (var role in placed.values) node.set(role, placed.values[role])
+        node.ctl.repaintLinks()
+      }
+      onReleased: { if (endpoint.moving) node.ctl.finishPointerEdit(false); endpoint.moving = false }
+      onCanceled: { if (endpoint.moving) node.ctl.finishPointerEdit(true); endpoint.moving = false }
+      // Hollow, and beside the end rather than on it, so the end stays in
+      // sight while it moves.
+      Rectangle {
+        anchors.centerIn: parent
+        width: 9; height: 9; radius: 5
+        color: "transparent"
+        border.color: node.theme.accent
+        border.width: 2
+      }
+    }
+  }
+
+  // qmllint enable unqualified
 }

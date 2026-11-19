@@ -3,6 +3,7 @@ const fs = require('fs')
 const path = require('path')
 const { spawnSync } = require('child_process')
 const { write } = require('./png')
+const { unexpectedWarnings } = require('./qt-warnings')
 const runner = process.env.QMLTESTRUNNER || '/usr/lib/qt6/bin/qmltestrunner'
 // What tst_export.qml photographs: a picture big enough that a board of them
 // takes longer to decode than an export used to wait. Made here and thrown away
@@ -22,4 +23,6 @@ try {
 const output = (result.stdout || '') + (result.stderr || '')
 process.stdout.write(output)
 if (result.error) console.error(result.error.message)
-process.exit(result.status === 0 && !result.error && !/TypeError|ReferenceError|Binding loop/.test(output) ? 0 : 1)
+const unexpected = unexpectedWarnings(output)
+if (unexpected.length) console.error(`\n${unexpected.length} warning${unexpected.length === 1 ? '' : 's'} nobody expected (tests/qt-warnings.js lists the ones that are):\n` + unexpected.join('\n'))
+process.exit(result.status === 0 && !result.error && !unexpected.length && !/TypeError|ReferenceError|Binding loop/.test(output) ? 0 : 1)

@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import "../.."
+import "../../BoardStore.js" as Store
 
 // Pasting into a field being typed in, through the real exchange and the real
 // clipboard helper, with `wl-paste` replaced by a stub that serves whatever
@@ -33,6 +34,10 @@ ShellRoot {
     property var reports: []
     property int notesMade: 0
     function report(message, kind) { reports = reports.concat([kind + ": " + message]) }
+    // What it says, as written: this suite reads English.
+    function t(text, a, b, c) { return Store.translated(null, text, [a, b, c]) }
+    function tn(one, other, count, a, b) { return Store.translatedCount(null, "en", one, other, count, [a, b]) }
+    function tv(text) { return text }
     function pasteText(text) { notesMade++ }
     function fileCommand(action, args) { return ["bash", test.dir + "/BoardFiles.sh", action].concat(args) }
   }

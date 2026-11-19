@@ -12,7 +12,7 @@ process — no webview, no Electron, and no separate application service.
 The controller stays loaded between opens; canvas surfaces exist only while
 open, and pending saves can finish after closing.
 
-It opens as a tiled window by default, and `w` switches between two surfaces:
+It opens as a tiled window by default, and `F11` switches between two surfaces:
 
 - **Windowed** — an ordinary toplevel, so Hyprland tiles it beside your editor
   and browser like any other app.
@@ -24,7 +24,55 @@ your place. The mode is remembered between sessions. Before 0.4.10 the board
 opened fullscreen; the [changelog](../CHANGELOG.md) says what updating does to
 a board last used that way.
 
+## Standalone lines and arrows
+
+Press `t` for a new line. `z` is the glue key, and works the way `x` does for
+connectors: press it on one item, move to another, and press it again.
+
+- On two shapes, `z` joins them with an arrow glued to both, each end on the
+  side facing the other.
+- On a shape and an arrow, either way round, it glues one end of the arrow to
+  the shape: a free end if it has one, otherwise the end nearer the shape.
+- Twice on the same shape, it puts an arrow beside it with the tail glued.
+- With nothing selected, it makes a free arrow.
+
+While the second item is being chosen, the first is drawn heavier and the line
+under the board's name says what `z` will do; `esc` cancels. The keyboard stays
+on the second item, so `z` again carries on from there.
+
+`Z` (shift+z) unglues: on an arrow, both its ends let go and it stays where it
+is; on a shape, every arrow glued to it lets go of it, and their other ends
+hold on. With items marked, all of them let go. To let go of one end only,
+step it off the shape with `ctrl+hjkl` (head) or `ctrl+shift+hjkl` (tail).
+
+Lines are objects of
+their own: they do not need shapes at either end. Select one and press `s`
+to cycle **line → arrow → double-headed arrow → dashed line**.
+
+Drag the line to move it, or drag either round endpoint to change its length
+and direction. Nearly level or nearly upright, it snaps straight, and an end
+brought near another item's side or middle lands on it exactly; hold `shift`
+while dragging to set any angle or place.
+
+Drop an end on a note, box, ellipse, diamond or picture and it is glued to that
+item's edge: from then on it follows the item as it moves or is resized, so an
+arrow drawn from one box to another stays joined to both. While you drag an
+end, the item it would glue to is ringed, so you can see it will hold before
+you let go; near an item, the end goes onto it rather than lining up with
+something else. Dropped anywhere inside, the end stops at the side the line
+arrives at. A line is picked up by its stroke only, so a note under a slanting
+arrow can still be dragged. Stepping an end onto
+an item with `ctrl+hjkl` glues it too. Moving the line on its own, or deleting
+the item, lets go; `shift` while dragging an end puts it down unglued. From the keyboard, `ctrl+hjkl` moves the head (where an arrow
+points) and `ctrl+shift+hjkl` the tail; the other end stays put. `c` changes its colour. Selection, duplication, deletion,
+undo, saving and PNG export work as for other objects. Shape cycling stays
+within notes, boxes, ellipses and diamonds; line cycling stays within line
+styles. Lines have no text editor or fill texture.
+
 ## Keys
+
+Hold `ctrl` and the bar swaps its hints for the ctrl shortcuts; let go and
+they change back.
 
 Press `?` or `F1` on the board for this list. The board's name, the menu and
 whatever it is currently telling you all sit together in the header, on one
@@ -57,10 +105,13 @@ breaks, and the middle button does not paste the primary selection.
 
 | Key | Does |
 |-----|------|
-| `n` | New note beside the selected one, ready to type |
-| `r` / `e` | New box / ellipse |
+| `q` | New note beside the selected one, ready to type |
+| `w` `e` `r` | New box / ellipse / diamond |
+| `t` | New line |
+| `z`, move, `z` | Join two shapes with a glued arrow, or glue an arrow to a shape; `z z` on one shape puts a glued arrow beside it |
+| `Z` | Unglue: an arrow lets go of both ends, a shape of every arrow on it |
 | `p` / `Shift+P` | Pin as background / select backgrounds to unpin |
-| `s` | Cycle the shape: note, box, ellipse, diamond |
+| `s` | Cycle the shape, or the selected line’s style |
 | `x` | Connect: `x` on one, `tab` or `hjkl` to the other, `x` again |
 | `x` on a connected pair | Turn that connector round, or remove it — the line in the header says which |
 | `X` | Remove every connector on this item at once |
@@ -90,7 +141,7 @@ breaks, and the middle button does not paste the primary selection.
 | `g` then `H` `J` `K` `L` | Spread them evenly; the outermost two stay put |
 | `c` | Cycle its theme role: foreground, accent, urgent, muted |
 | `b` | Boards: browse, open, create |
-| `w` | Switch between fullscreen and windowed |
+| `F11` | Switch between fullscreen and windowed |
 | `v` / `V` | Split side by side / stacked; the same key again goes back to one pane |
 | `o` | Move to the other pane |
 | `f` | Fit the whole board on screen |
@@ -412,6 +463,45 @@ conflict while switching boards, that switch is cancelled; resolving the conflic
 leaves the current board editable so you can switch again.
 
 Which board you had open is remembered in `state.json` and reopened next time.
+
+## Earlier versions
+
+A board can be taken back to how it stood earlier. Open the command list (`:`),
+choose **Earlier versions…**, and pick one: they are named by when they are
+from, newest first, and typing part of a day or a time narrows the list. The
+board becomes that version, and the board as it was a moment before is added
+to the list, so going back can itself be gone back on. `u` does not undo it:
+the board is read again from its file, as it is after any change on disk.
+
+A version is the file a save was about to replace, set aside before it was
+replaced. A board is saved every time typing pauses, so not every save keeps
+one: at most one every ten minutes, forty for each board, and no more than
+64 MB, with the oldest making way. The first save after a board has been left
+alone for a while therefore keeps it as you left it. They live in
+`~/.local/share/omarchyform/versions/`, outside the boards folder, and follow
+a board that is renamed, moved, deleted or put back; destroying a board in the
+trash destroys them with it. Whatever is on screen and not yet written is
+written first, and a board with a failed save or two versions waiting for a
+choice has to be settled before it can be taken back. A read-only board lists
+its versions and cannot go back to one.
+
+This is not the timeline 0.4.7 to 0.4.10 had: nothing is recorded inside the
+board's file, and a version is a whole board rather than a step.
+
+## In your language
+
+The board speaks the language Omarchy is set to under **Setup > Language**,
+and follows a change while it is open. Its words come from `i18n/` in the
+plugin's folder, one file for each language; whatever a language's file does
+not have yet is said in English. English and German are complete. Keys are
+still written as keys (`ctrl+s`, `esc`), and a hint lights the letter of its
+key only where the word in your language starts with it, and says `a: …`
+otherwise. Right-to-left languages are shown left to right for now. What is
+on your boards is never translated.
+
+The command list answers to a command's English name as well as its name in
+your language, so a command named in a guide or by someone else can still be
+found by typing it.
 
 ## Boards with an old history
 

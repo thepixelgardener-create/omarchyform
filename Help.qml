@@ -2,117 +2,120 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import "BoardStore.js" as Store
+import "kit/Ui" as O
+import "kit/Theme" as Kit
 
-// The same shortcut list remains readable on small windows and large fonts.
+// The shortcut list, drawn with the Omarchy UI kit's parts: its card on the
+// menu surface, a section header and a track rule between groups, keys as key
+// caps, and its scroll area. Laid out here rather than by the kit's
+// ShortcutSheet, which sets each description on one line: this list has to
+// stay readable in a small window at a large text size, so a description
+// wraps, and a key column never takes more than half the room.
 Item {
   id: help
   required property var ctl
-  readonly property var theme: help.ctl.theme
+  readonly property real pad: Kit.Style.spacing.panelPadding
   visible: ctl.helpVisible
-  width: Math.min(parent.width - theme.sp(32), theme.sp(700))
-  height: Math.min(parent.height - theme.sp(32), helpColumn.height + theme.sp(48))
+  width: Math.min(parent.width - Kit.Style.space(32), Kit.Style.space(700))
+  height: Math.min(parent.height - Kit.Style.space(32), sheet.implicitHeight + help.pad * 2)
 
-  // The card the shell's own summoned panels are drawn on.
-  Surface { anchors.fill: parent; theme: help.theme }
+  // The scroller the keys move and a test reads.
+  readonly property alias flickable: scroller.flickable
+
+  O.BorderSurface {
+    id: card
+    objectName: "help-card"
+    anchors.fill: parent
+    color: Kit.Color.menu.background
+    borderSpec: Kit.Border.surfaceSpec("menu", "border", Kit.Color.menu.border, Math.max(1, Kit.Style.space(2)))
+    radius: Kit.Style.cornerRadius
+  }
 
   function scroll(delta) {
-    content.contentY = Math.max(0, Math.min(content.contentHeight - content.height, content.contentY + delta))
+    var f = scroller.flickable
+    f.contentY = Math.max(0, Math.min(f.contentHeight - f.height, f.contentY + delta))
   }
 
   // Swallow clicks so they do not reach the dismiss layer behind. Beneath the
-  // Flickable rather than over it, so the panel keeps its drag to scroll and
-  // this catches only the margin ring, where a click used to fall through the
-  // panel and close it.
+  // scroller rather than over it, so the list keeps its drag to scroll and the
+  // thumb its grab, and this catches only the margin ring.
   MouseArea { anchors.fill: parent; acceptedButtons: Qt.AllButtons }
 
-  // In the margin ring rather than beside the text: the list is already
-  // measured to the panel, and taking a gutter out of it for a rule three
-  // pixels wide would wrap a description to save one.
-  ScrollHint {
-    ctl: help.ctl
-    view: content
-    anchors.top: content.top
-    anchors.bottom: content.bottom
-    anchors.right: parent.right
-    anchors.rightMargin: help.theme.sp(10)
-  }
-
-  Flickable {
-    id: content
-    anchors.fill: parent
-    anchors.margins: help.theme.sp(24)
-    contentWidth: width
-    contentHeight: helpColumn.height
-    clip: true
-    boundsBehavior: Flickable.StopAtBounds
-
-    // The key column is measured, not guessed: the widest label decides it, and
-    // the rest right-align against the descriptions so the two columns meet in
-    // the middle and the eye can run down either one.
-    //
-    // It is measured by the same Text that draws a row, and every label is
-    // measured rather than the longest string being picked out. Font metrics
-    // alone come out a pixel or two under what a Text of the same string needs,
-    // by a margin that grows with the size, so the label the column was sized
-    // from was the one that wrapped once the theme's text got large; and the
-    // theme chooses the font, which need not be monospace, so the longest
-    // string is not reliably the widest. An invisible Column is as wide as its
-    // widest child, which is the number wanted.
-    Column {
-      id: keyRuler
-      visible: false
-      Repeater {
-        model: Store.KEY_HELP
-        Text {
-          textFormat: Text.PlainText
-          required property var modelData
-          text: modelData[0]
-          font.family: help.theme.fontFamily
-          font.pixelSize: help.theme.fontBody
-        }
+  // The key column is measured, not guessed: an invisible column is as wide as
+  // its widest row of caps and words, drawn by the same KeyLabel that draws a
+  // row, so the column it sizes is exactly what a row needs.
+  Column {
+    id: keyRuler
+    visible: false
+    Repeater {
+      model: Store.KEY_HELP
+      KeyLabel {
+        required property var modelData
+        label: help.ctl.tv(modelData[0])
       }
     }
+  }
+
+  O.ScrollArea {
+    id: scroller
+    x: help.pad
+    y: help.pad
+    width: help.width - help.pad * 2
+    height: help.height - help.pad * 2
 
     Column {
-      id: helpColumn
-      width: content.width
-      spacing: help.theme.sp(10)
-      Text {
-        textFormat: Text.PlainText
-        text: "Keyboard shortcuts"
-        color: help.theme.panelText
-        font.family: help.theme.fontFamily
-        font.pixelSize: help.theme.fontHeading
-        bottomPadding: help.theme.sp(14)
+      id: sheet
+      width: scroller.width
+      spacing: Kit.Style.spacing.md
+
+      // The title, and which Omarchyform this is beside it, on the next line
+      // when the window is too narrow for both.
+      Flow {
+        width: sheet.width
+        spacing: Kit.Style.spacing.lg
+        bottomPadding: Kit.Style.spacing.md
+        Text {
+          id: title
+          textFormat: Text.PlainText
+          text: help.ctl.t("Keyboard shortcuts")
+          color: Kit.Color.menu.text
+          font.family: Kit.Style.font.family
+          font.pixelSize: Kit.Style.font.heading
+          font.bold: true
+        }
+        Text {
+          objectName: "help-version"
+          visible: help.ctl.pluginVersion !== ""
+          textFormat: Text.PlainText
+          text: help.ctl.t("Omarchyform %1", help.ctl.pluginVersion)
+          color: Kit.Color.textFaint
+          font.family: Kit.Style.font.family
+          font.pixelSize: Kit.Style.font.body
+          height: title.height
+          verticalAlignment: Text.AlignBottom
+        }
       }
-      // In sections, the way the shell's panels break a long list: a rule, a
-      // small bold label, then the rows. Forty keys with nothing between them
-      // was a wall to read down rather than a list to look something up in.
+      // In groups, the way the shell's panels break a long list: a rule, a
+      // section header, then the rows.
       Repeater {
         model: Store.KEY_HELP_SECTIONS
         Column {
           id: section
           required property var modelData
           required property int index
-          width: helpColumn.width
-          spacing: help.theme.sp(10)
+          width: sheet.width
+          spacing: Kit.Style.spacing.md
 
           Rectangle {
             visible: section.index > 0
             width: parent.width
             height: 1
-            color: Qt.rgba(help.theme.panelText.r, help.theme.panelText.g, help.theme.panelText.b, 0.12)
+            color: Kit.Color.track
           }
-          // The shell's section label: caption size, bold, a shade off the text.
-          Text {
-            text: section.modelData.title
-            textFormat: Text.PlainText
-            font.capitalization: Font.AllUppercase
-            font.bold: true
-            font.family: help.theme.fontFamily
-            font.pixelSize: help.theme.fontCaption
-            color: Qt.darker(help.theme.panelText, 1.4)
-            topPadding: section.index > 0 ? help.theme.sp(4) : 0
+          O.PanelSectionHeader {
+            objectName: "help-section"
+            text: help.ctl.tv(section.modelData.title)
+            topPadding: section.index > 0 ? Kit.Style.spacing.xs : 0
           }
 
           Repeater {
@@ -120,35 +123,29 @@ Item {
             Item {
               id: row
               required property var modelData
-              width: helpColumn.width
-              height: Math.max(shortcut.implicitHeight, description.implicitHeight)
-              // Never more than half the room, the gap between the columns counted
-              // against the keys, so a long label cannot squeeze the descriptions
-              // into something narrower than itself on a small window.
-              readonly property real keyColumn: Math.min(Math.ceil(keyRuler.implicitWidth),
-                                                         (helpColumn.width - help.theme.sp(18)) * 0.5)
-              Text {
-                textFormat: Text.PlainText
-                id: shortcut
+              // Room for the scrollbar, which lies over the content's edge.
+              width: sheet.width - scroller.thickness - Kit.Style.spacing.xs
+              height: Math.max(keys.height, description.implicitHeight)
+              readonly property real gap: Kit.Style.spacing.xxl
+              // Never more than half the room, so a long label cannot squeeze
+              // the description narrower than itself in a small window.
+              readonly property real keyColumn: Math.min(Math.ceil(keyRuler.implicitWidth), (row.width - row.gap) * 0.5)
+              KeyLabel {
+                id: keys
                 width: row.keyColumn
-                horizontalAlignment: Text.AlignRight
-                wrapMode: Text.Wrap
-                text: row.modelData[0]
-                color: help.theme.accent
-                font.family: help.theme.fontFamily
-                font.pixelSize: help.theme.fontBody
+                label: help.ctl.tv(row.modelData[0])
               }
               Text {
-                textFormat: Text.PlainText
                 id: description
+                textFormat: Text.PlainText
                 anchors.left: parent.left
-                anchors.leftMargin: row.keyColumn + help.theme.sp(18)
+                anchors.leftMargin: row.keyColumn + row.gap
                 anchors.right: parent.right
                 wrapMode: Text.Wrap
-                text: row.modelData[1]
-                color: help.theme.panelText
-                font.family: help.theme.fontFamily
-                font.pixelSize: help.theme.fontBody
+                text: help.ctl.tv(row.modelData[1])
+                color: Kit.Color.menu.text
+                font.family: Kit.Style.font.family
+                font.pixelSize: Kit.Style.font.body
               }
             }
           }

@@ -53,6 +53,12 @@ const ordinary = count => {
 }
 
 const fixtures = [
+  { name: 'max-line-objects', opens: true,
+    text: () => board(grid(S.MAX_ITEMS, 240, (id, x, y) => note(id, x, y, '',
+      { kind: S.LINE_KINDS[id % 4], ax: id % 2, ay: 0, bx: 1 - id % 2, by: 1 })), [], { version: 8 }) },
+  { name: 'line-endpoint-bounds', opens: true,
+    text: () => board([note(1, 0, 0, '', { kind: 'dashed-line', w: S.MAX_SIZE, h: S.MAX_SIZE,
+      ax: -1e30, ay: 1e30, bx: 1, by: 0 })], [], { version: 8 }) },
   // At no limit: what the targets for a board in ordinary use are held to.
   { name: 'ordinary-50', opens: true, ordinary: true, text: () => ordinary(50) },
   { name: 'ordinary-500', opens: true, ordinary: true, text: () => ordinary(500) },
@@ -131,8 +137,8 @@ const fixtures = [
       Array.from({ length: 68000 }, (_, i) => ({ op: 'add', id: S.MAX_ID - i, items: [note(S.MAX_ID - i, 0, 0, 'h'.repeat(300))] })) } }) },
   { name: 'pictures-missing', opens: true,
     text: () => board(grid(S.MAX_ITEMS, 240, (id, x, y) => ({ id, kind: 'image', x, y, w: 200, h: 200, src: 'p' + id + '.png' }))) },
-  { name: 'future-version', opens: false, cliError: 'is format 8, newer than this understands',
-    text: () => board([note(1, 0, 0, 'x')], [], { version: 8 }) },
+  { name: 'future-version', opens: false, cliError: 'is format 9, newer than this understands',
+    text: () => board([note(1, 0, 0, 'x')], [], { version: 9 }) },
   { name: 'not-a-board', opens: false, cliError: 'is not a board this understands',
     text: () => '['.repeat(1024) + ']'.repeat(1024) }
 ]

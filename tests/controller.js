@@ -700,6 +700,47 @@ console.log('ok — controller: duplicating items, their connectors and their pi
 }
 console.log('ok — controller: the arrange mode, aligning and spreading')
 {
+  // Each alignment lands every marked item exactly on the edge or middle it
+  // names, and an arrow glued between them goes with them, still glued.
+  const box = (id, x, y, w, h) => ({ id, kind: 'rect', x, y, w, h, tint: 'foreground', text: '', pinned: false, src: '' })
+  const board = JSON.stringify({ kind: 'omarchyform.board', version: 8, nextId: 5, links: [], items: [
+    box(1, 0, 0, 200, 100), box(2, 330, 170, 120, 60), box(3, 610, 40, 160, 140),
+    { id: 4, kind: 'arrow', x: 200, y: 50, w: 130, h: 150, ax: 0, ay: 0, bx: 1, by: 1, tint: 'foreground', text: '',
+      pinned: false, src: '', from: { id: 1, x: 1, y: 0.5 }, to: { id: 2, x: 0, y: 0.5 } }] })
+  const want = {
+    left: b => b.ix, right: b => b.ix + b.iw, top: b => b.iy, bottom: b => b.iy + b.ih,
+    centreX: b => b.ix + b.iw / 2, centreY: b => b.iy + b.ih / 2 }
+  for (const edge of Object.keys(want)) {
+    const c = controller()
+    c.session.loadBoard(board, false)
+    c.root.markedIds = [1, 2, 3]
+    c.root.alignTargets(edge)
+    const at = [0, 1, 2].map(i => want[edge](c.items.get(i)))
+    assert.ok(at.every(v => Math.abs(v - at[0]) < 1e-9), edge + ': all on one line, not ' + at)
+    const arrow = c.items.get(3), S = loadStore()
+    assert.deepEqual([arrow.aon, arrow.bon], [1, 2], edge + ': the arrow is still glued to both')
+    const tail = S.lineEndPoint(arrow, 0), head = S.lineEndPoint(arrow, 1)
+    const one = c.items.get(0), two = c.items.get(1)
+    assert.ok(Math.abs(tail.x - (one.ix + one.iw)) < 1e-6 && Math.abs(tail.y - (one.iy + one.ih / 2)) < 1e-6, edge + ': its tail went with box one')
+    assert.ok(Math.abs(head.x - two.ix) < 1e-6 && Math.abs(head.y - (two.iy + two.ih / 2)) < 1e-6, edge + ': its head went with box two')
+  }
+  // The arrow marked along with what it joins moves with them and keeps both.
+  const c = controller()
+  c.session.loadBoard(board, false)
+  c.root.markedIds = [1, 2, 4]
+  c.root.alignTargets('top')
+  assert.deepEqual([c.items.get(3).aon, c.items.get(3).bon], [1, 2], 'aligned with its boxes, the arrow keeps both ends')
+  // Nudged from the keyboard, a box moves by exactly the step, and its arrow
+  // follows; nothing pulls it onto a neighbour.
+  c.root.markedIds = []
+  c.root.selectOnly(1)
+  const x0 = c.items.get(1).ix
+  c.root.nudgeSelected(1, 0)
+  assert.equal(c.items.get(1).ix, x0 + c.root.worldStep, 'one step, exactly')
+  assert.equal(c.items.get(3).bon, 2, 'and the arrow is still glued')
+}
+console.log('ok — controller: every alignment lands on its line, and glued arrows go with it')
+{
   // Finding: navigation that works on a board you cannot write to.
   const c = controller()
   c.session.loadBoard(JSON.stringify({ version: 5, items: [
@@ -1915,6 +1956,7 @@ console.log('ok — controller: the canvas colour is a remembered setting, not p
   assert.ok(body, 'the commit handler is found')
   const said = []
   const persistence = { busy: true, target: '/boards/a.json', contents: 'x',
+    t: (text, a) => loadStore().fillText(text, [a]),
     fail(message) { this.busy = false; said.push(['failed', message]) },
     stale() { said.push(['stale']) }, completed() { said.push(['completed']) } }
   const exited = vm.runInContext(`(function(code) {${body[1]}})`,
@@ -2023,4 +2065,207 @@ console.log('ok — controller: the canvas colour is a remembered setting, not p
     assert.notEqual(blocked.w.startupError, '', code + ': and say what to repair')
   }
   console.log('ok — controller: a foreign file warns, folders that cannot be private block')
+}
+{
+  // A board's earlier versions. The helper keeps them and puts one back
+  // (tests/versions-files.py); what is held here is what the board asks of it
+  // and what it does with the answers.
+  const c = controller()
+  const h = c.of(c.doc)
+  const here = c.doc.currentBoard
+  const note = (id, text) => ({ id, kind: 'note', x: id * 10, y: 0, w: 220, h: 160, tint: 'foreground', text, pinned: false, src: '' })
+  const board = texts => JSON.stringify({ kind: 'omarchyform.board', version: 5, nextId: texts.length + 1,
+    items: texts.map((text, i) => note(i + 1, text)), links: [] })
+  c.session.loadBoard(board(['as it is']), false)
+  c.session.revision = 'rev-read'
+
+  // Every save says where the board's versions are kept, and leaves it to the
+  // helper whether this one is far enough from the last to keep.
+  c.root.addItem('note', 300, 0)
+  c.root.save(true)
+  const write = c.writes[c.writes.length - 1]
+  assert.equal(write.versions, '/versions/v1/' + here)
+  assert.equal(write.versionsRoot, '/versions')
+  assert.equal(write.keepAlways, false)
+  c.complete()
+
+  // Opening the family asks the helper, and until it answers the list is
+  // empty and says it is looking.
+  c.root.beginPalette('all')
+  c.root.openGroup('versions')
+  assert.equal(c.root.paletteGroup, 'versions')
+  assert.deepEqual(Array.from(h.versionList.command.slice(-3)), ['versions', '/versions/v1/' + here, '/versions'])
+  assert.equal(h.versionList.running, true)
+  assert.deepEqual(Array.from(c.root.paletteMatches), [])
+  const stamp = at => new Date(at).toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15) + '.json'
+  const recent = stamp(Date.now() - 30 * 60000), older = stamp(Date.now() - 26 * 3600000)
+  h.versionList.running = false
+  c.session.listedVersions(here, 0, `${recent}\t120\n${older}\t99\nnot-a-version\t5\n`)
+  assert.deepEqual(Array.from(c.root.paletteMatches.map(m => m.arg)), [recent, older], 'newest first, and only what is a version')
+  assert.match(c.root.paletteMatches[0].name, /^(Today|Yesterday) \d\d:\d\d$/)
+
+  // Choosing one asks the helper to put it back, onto the revision in hand
+  // and nothing else, with the board as it is kept first.
+  c.root.paletteIndex = 1
+  c.root.runPaletteChoice()
+  assert.equal(c.root.paletteVisible, false)
+  assert.equal(h.versionSwap.running, true)
+  assert.deepEqual(Array.from(h.versionSwap.command.slice(-10)), ['restore', '/boards/' + here, '/versions/v1/' + here, older,
+    c.workspace.backupPathFor(here), c.workspace.lockPathFor(here), c.session.revision,
+    '/boards', '/backups', '/versions'])
+  assert.equal(c.writes.length, 1, 'nothing was unsaved, so nothing more was written first')
+
+  // The helper has swapped the file. The board reads it the way it reads any
+  // change on disk, and says where it went back to and that nothing is lost.
+  h.versionSwap.running = false
+  c.session.diskText = board(['as it was'])
+  c.root.statusText = ''
+  c.session.swappedVersion(here, h.versionSwap.label, 0)
+  assert.equal(c.items.count, 1)
+  assert.equal(c.items.get(0).itext, 'as it was')
+  assert.match(c.root.statusText, /^Went back to (Today|Yesterday|\w{3} \d+ \w{3}) \d\d:\d\d · the board as it was is in Earlier versions too$/)
+  assert.equal(c.session.restoredTo, '', 'said once')
+  assert.equal(c.session.revision, 'rev-fresh')
+  assert.equal(c.root.canEdit, true)
+  // A change on disk after that is only a change on disk.
+  c.session.diskText = board(['from the command line'])
+  c.session.externalWrite()
+  assert.equal(c.root.statusText, 'Board changed on disk; reloaded')
+
+  // Something typed and not yet written is written first, and going back
+  // waits for that write rather than racing it.
+  c.root.addItem('note', 300, 0)
+  c.root.restoreVersion(recent)
+  assert.equal(c.persistence.busy, true, 'what was on screen is being written')
+  assert.equal(h.versionSwap.running, false)
+  assert.equal(c.session.pendingRestore, recent)
+  c.complete()
+  assert.equal(c.session.pendingRestore, '')
+  assert.equal(h.versionSwap.running, true, 'and then the helper is asked')
+  assert.equal(h.versionSwap.command[h.versionSwap.command.length - 4], c.session.revision, 'onto the revision that write made')
+
+  // Edits made while the helper was at it are not lost to the version it put
+  // back: the two are a conflict, asked about like any other.
+  h.versionSwap.running = false
+  c.root.addItem('note', 600, 0)
+  c.session.diskText = board(['as it was'])
+  c.session.swappedVersion(here, h.versionSwap.label, 0)
+  assert.equal(c.session.conflict, true)
+  assert.equal(c.session.restoredTo, '', 'and the reload that follows the choice says nothing of going back')
+  assert.equal(c.items.count, 3, 'what was typed is still on screen')
+
+  // While two versions exist nothing more is put back.
+  h.versionSwap.command = null
+  c.root.restoreVersion(recent)
+  assert.equal(h.versionSwap.command, null)
+  assert.match(c.root.statusText, /Two versions of this board exist/)
+  c.session.clearConflict()
+
+  // A write that fails does not go on to replace the board.
+  c.session.loadBoard(board(['clean again']), false)
+  c.session.revision = 'rev-clean'
+  c.root.addItem('note', 300, 0)
+  c.root.restoreVersion(recent)
+  assert.equal(c.session.pendingRestore, recent)
+  c.persistence.busy = false
+  c.session.failedSave('Could not replace the board; the version on disk is untouched')
+  assert.equal(c.session.pendingRestore, '')
+  assert.equal(h.versionSwap.command, null)
+  c.root.restoreVersion(recent)
+  assert.equal(h.versionSwap.command, null, 'nor while that failure stands')
+  c.session.saveError = ''
+
+  // What the helper refuses is said, and the board is as it was.
+  c.session.loadBoard(board(['clean again']), false)
+  for (const [code, said] of [[7, /changed on disk first/], [8, /no longer there/], [5, /is larger than 32 MB/], [3, /Could not go back/]]) {
+    c.root.statusText = ''
+    c.session.diskText = board(['clean again'])
+    c.session.swappedVersion(here, 'Today 10:00', code)
+    assert.match(c.root.statusText, said)
+    assert.equal(c.items.get(0).itext, 'clean again')
+  }
+  // Only a name the helper could have listed is ever sent back to it.
+  h.versionSwap.command = null
+  for (const name of ['../../boards/other.json', '20261301-000000.json', '', undefined]) c.root.restoreVersion(name)
+  assert.equal(h.versionSwap.command, null)
+  // A board that is read-only has versions to look at and none to go back to.
+  c.session.loadBoard('{broken', false)
+  c.root.beginPalette('all')
+  c.root.openGroup('versions')
+  h.versionList.running = false
+  c.session.listedVersions(here, 0, `${recent}\t120\n`)
+  c.root.runPaletteChoice()
+  assert.equal(h.versionSwap.command, null)
+  assert.match(c.root.statusText, /Earlier versions · this board is read-only/)
+
+  // An answer for a board since left is not shown on the one arrived at: it
+  // is asked for again.
+  c.session.loadBoard(board(['here']), false)
+  c.session.versions = [{ name: recent, bytes: 1, at: Date.now() }]
+  c.doc.currentBoard = 'other.json'
+  c.session.listedVersions(here, 0, `${recent}\t120\n`)
+  assert.equal(h.versionList.running, true)
+  assert.deepEqual(Array.from(h.versionList.command.slice(-2)), ['/versions/v1/other.json', '/versions'])
+  assert.deepEqual(Array.from(c.session.versions), [])
+  c.session.swappedVersion(here, 'Today 10:00', 0)
+  assert.equal(c.session.restoredTo, '', 'nor is a swap that finished after leaving')
+  console.log('ok — controller: earlier versions are listed, gone back to through the helper, and never over unsaved work')
+}
+{
+  // A board's earlier versions go where the board goes: each move the library
+  // asks of the helper says where they are and where they are to be, and
+  // destroying a board for good names the versions that go with it.
+  const tail = (proc, n) => Array.from(proc.command.slice(-n))
+  let c = controller()
+  c.library.trashIndexLoading = false
+  c.library.entries = [{ path: 'work', dir: true }, { path: 'work/b.json', dir: false }]
+  c.library.dir = 'work'
+  c.library.index = 0
+  c.root.flushSave = () => {}
+  c.library.ask('rename', 'rename to:', 'b')
+  c.library.input = 'plan'
+  c.library.commitPrompt()
+  assert.deepEqual(tail(c.libraryProcs.moveProc, 7), ['/boards', 'work/b.json', '/boards', 'work/plan.json',
+    '/versions/v1/work/b.json', '/versions/v1/work/plan.json', '/versions'])
+
+  // Into the trash, under the name the trash gives it, and back out again.
+  c = controller()
+  c.library.trashIndexLoading = false
+  c.library.entries = [{ path: 'work', dir: true }, { path: 'work/b.json', dir: false }]
+  c.library.dir = 'work'
+  c.library.index = 0
+  c.library.deleteCurrent()
+  c.library.deleteCurrent()
+  const binned = c.libraryProcs.trashProc.pending.file
+  assert.deepEqual(tail(c.libraryProcs.trashProc, 7), ['/boards', 'work/b.json', '/trash', binned,
+    '/versions/v1/work/b.json', '/versions/trash/' + binned, '/versions'])
+  c = controller()
+  c.library.trashIndexLoading = false
+  c.library.trashEntries = [{ file: binned, path: 'work/b.json', dir: false, at: '20261113-120000' }]
+  c.library.inTrash = true
+  c.library.index = 0
+  c.library.restoreCurrent()
+  assert.deepEqual(tail(c.libraryProcs.restoreProc, 7), ['/trash', binned, '/boards', 'work/b.json',
+    '/versions/trash/' + binned, '/versions/v1/work/b.json', '/versions'])
+  c = controller()
+  c.library.trashIndexLoading = false
+  c.library.trashEntries = [{ file: binned, path: 'work/b.json', dir: false, at: '20261113-120000' }]
+  c.library.inTrash = true
+  c.library.index = 0
+  c.library.deleteCurrent()
+  c.library.deleteCurrent()
+  assert.deepEqual(tail(c.libraryProcs.purgeProc, 4), ['/trash', binned, '/versions/trash/' + binned, '/versions'])
+
+  // A library told of no versions folder moves boards as it always did.
+  c = controller()
+  c.library.versionsDir = ''
+  c.library.trashIndexLoading = false
+  c.library.entries = [{ path: 'b.json', dir: false }]
+  c.library.index = 0
+  c.root.flushSave = () => {}
+  c.library.ask('rename', 'rename to:', 'b')
+  c.library.input = 'plan'
+  c.library.commitPrompt()
+  assert.deepEqual(tail(c.libraryProcs.moveProc, 7), ['/boards', 'b.json', '/boards', 'plan.json', '', '', ''])
+  console.log('ok — controller: a board\'s earlier versions are moved, binned, put back and destroyed with it')
 }

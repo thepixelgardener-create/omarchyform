@@ -72,6 +72,8 @@ inspect() {
 # The caches that make a launcher entry appear in a menu and a file type known
 # to a file manager. Best effort on purpose: a missing tool is a stale menu,
 # not a failed install, and neither command exists in a container.
+# Best effort is the point: whatever fails, the || true is meant to run.
+# shellcheck disable=SC2015
 refresh_caches() {
   command -v update-desktop-database >/dev/null 2>&1 &&
     update-desktop-database -q "$data_home/applications" 2>/dev/null || true

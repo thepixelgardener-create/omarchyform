@@ -3,10 +3,109 @@
 Notable changes, newest first. Board file versions are noted where they moved,
 since older boards are migrated on load rather than rejected.
 
+## 0.6.0 — 2026-11-19
+
+### Added
+
+- The icons in the header's line of keys are buttons: a click does what the
+  key does, and resting the pointer on one says what that is. The menu's
+  entries lose their boxes and light up under the pointer and the cursor, as
+  the bar's other controls do.
+- The help (`?`) names the installed version beside its title, read from
+  the plugin's own `manifest.json`.
+- The board speaks the language Omarchy is set to (Setup > Language) and
+  follows a change while it is open. English and German are complete; any
+  other language is English until its catalog in `i18n/` is written, string by
+  string as it is. Counted messages take each language's plural forms, and the
+  command list finds a command by its English name too. Right-to-left
+  languages are still laid out left to right.
+- **Earlier versions…** in the command list takes a board back to how it
+  stood before an earlier save. The file a save replaces is set aside first,
+  at most one every ten minutes, forty for a board and no more than 64 MB, in
+  `~/.local/share/omarchyform/versions/`; nothing is recorded inside the
+  board's file. Going back keeps the board as it was as a version too, and a
+  board's versions follow it when it is renamed, moved, deleted or put back.
+  The command line keeps them for library boards it writes.
+- `bin/omarchyform render <board> <picture.png>` draws a board to a PNG with
+  no display and without the board being open: on white, on black
+  (`--colors dark`) or in one ink (`mono`), the whole board or `--only` the
+  items named. It runs the board's own export scene in a process of its own.
+- `bin/omarchyform skill install` links the agent skill into `~/.agents/skills`
+  and the skills folder of each coding agent already in use; `skill remove`
+  takes the links away.
+- Hold `ctrl` and the bar shows the ctrl shortcuts, icon and key each (undo,
+  redo, copy, paste, duplicate, save, PNG, new board, import, commands, and
+  resize or aim); let go and the usual hints come back.
+- The bar's icons are a step larger: the hint icons, the save mark, and the
+  fit and menu buttons.
+- Arrows and lines glue to shapes: drop either end on a note, box, ellipse,
+  diamond or picture and it sticks to that item's edge, following it as it
+  moves or is resized. Copies of both stay glued copy to copy; moving the line
+  on its own or deleting the item lets go. Saved as `from`/`to` on the line;
+  the command line's `move`, `resize` and `remove` keep glued lines in step.
+- Magnetic alignment while dragging: an item, line or arrow brought within a
+  few pixels of another item's edge or centre lines up with it exactly, with
+  an accent guide drawn across both; a dragged line end lands on another
+  item's side or middle the same way. Hold `shift` to place freely.
+- Standalone lines and arrows: `t` makes a line and `z` an arrow; then
+  drag either endpoint (it snaps level or upright; `shift` sets any angle), or aim it from the keyboard (`ctrl+hjkl` moves the
+  head, `ctrl+shift+hjkl` the tail), and press `s` to cycle plain line, arrow, double-headed
+  arrow and dashed line. Lines support colour, moving, resizing, duplication,
+  undo and PNG export. Boards containing lines use format 8, which older
+  releases open read-only.
+
+### Changed
+
+- The board's panels and its header are drawn with the Omarchy UI kit
+  ([omacom/omarchy-ui](https://github.com/omacom/omarchy-ui), MIT), the
+  shell's own QML kit made into a library, so they look and behave like the
+  rest of Omarchy and follow its theme the same way. The command list and the
+  board browser are its list rows under its keyboard cursor; help draws every
+  key as a key cap, keeping a letter's case, since `h` and `H` do different
+  things; the two-versions question, the header's buttons and their tooltips,
+  the scroll rule and the dimming behind a panel are the kit's. The keys, the
+  fields you type into and the board itself are unchanged. The kit is copied
+  into `kit/` at a pinned revision by `tools/vendor-kit.js`.
+- `z` is the glue key. Pressed on one item and again on another, it joins two
+  shapes with an arrow glued to both, or glues an arrow to a shape, either way
+  round: a free end first, otherwise the nearer. `z z` on one shape puts an
+  arrow beside it, glued at the tail; with nothing selected `z` still makes a
+  free arrow. The line under the board's name says what the second `z` will
+  do, and `esc` cancels. The command list finds a command by its key ahead of
+  names that only start with that letter.
+- `Z` unglues: an arrow lets go of both ends where it is, and a shape lets go
+  of every arrow glued to it, whose other ends hold on.
+- While an arrow's or line's end is dragged, the item it would glue to is
+  ringed, and an end near an item goes onto it instead of being lined up
+  with a third item's side, which could pull it just off the item it was
+  dropped on and leave it unglued.
+- An end dropped inside an item stops at the side the line arrives at,
+  rather than at the side nearest where it was let go, which could take the
+  arrow across the item.
+- Making things moved to the top letter row, left to right: `q` note, `w` box,
+  `e` ellipse, `r` diamond, `t` line, `z` arrow. `n` no longer makes a note.
+  Fullscreen moved from `w` to `F11`.
+- Lines and arrows are drawn in their colour at full strength rather than at a
+  box border's, so a plain line no longer fades into the board. A selected
+  line shows no box, only a handle just past each end, so an arrow's tip stays
+  in sight; a marked line's handles are fainter.
+- The `?` list starts with making and moving things; files come later.
+- The bar's key hints are icons with their keys, and `:` replaces `ctrl+p`
+  there (both still open the command list).
+
 ## 0.5.5 — 2026-11-04
 
 ### Fixed
 
+- A line took the pointer anywhere in its box, so a note under a slanting
+  arrow could not be picked up: the press took the arrow, and dragging it
+  pulled the arrow off both the things it joined. A line now takes the
+  pointer within a few pixels of its stroke.
+- Aligning or spreading boxes together with the arrow that joins them no
+  longer lets go of the arrow when one of the boxes was in line already.
+- An arrow glued to what it joins is left out when they are aligned or spread
+  together: it was counted as one more item to space out and then pulled
+  back onto them, so `a` then `g shift+l` left the boxes unevenly spaced.
 - Switching between tiled and fullscreen waits while a PNG export finishes,
   preserving the surface that owns the export and its completion callback.
 - A delayed paste is refused if its board was reloaded while the clipboard

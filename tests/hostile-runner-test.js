@@ -53,7 +53,7 @@ assert.equal(verdict('one-past-items', 0, {
 }).code, 0, 'CLI validation deliberately warns about canvas limits')
 assert.equal(verdict('one-past-items', 0, success).code, 1, 'a missing limit warning fails')
 assert.equal(verdict('future-version', 1, {
-  ok: false, error: 'board.json is format 8, newer than this understands'
+  ok: false, error: 'board.json is format 9, newer than this understands'
 }).code, 0, 'the expected format refusal passes')
 assert.equal(verdict('future-version', 0, success).code, 1, 'accepting a newer version fails')
 assert.equal(verdict('future-version', 1, { ok: false, error: 'cannot read board' }).code, 1,

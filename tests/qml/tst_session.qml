@@ -54,6 +54,8 @@ ShellRoot {
     property var redoStack: []
     readonly property string boardsDir: test.dir
     readonly property string backupsDir: test.dir
+    readonly property string versionsDir: test.dir + "/versions"
+    function versionsPathFor(relative) { return test.dir + "/versions/v1/" + relative }
     // What was selected is the panes'; the document only says when to forget it.
     function resetSelection(endModes) {}
     function fileText() { return Store.writeFile(items, links, ctl.nextId) }
@@ -73,6 +75,10 @@ ShellRoot {
     function repaintLinks() {}
     function focusKeys() {}
     function flash(text) {}
+    // What it says, as written: these suites read English.
+    function t(text, a, b, c) { return Store.translated(null, text, [a, b, c]) }
+    function tn(one, other, count, a, b) { return Store.translatedCount(null, "en", one, other, count, [a, b]) }
+    function tv(text) { return text }
     // The board puts the three choices on screen; this only has to be callable.
     property int decisions: 0
     function decideConflict() { ctl.decisions += 1 }

@@ -81,6 +81,9 @@ The trace's third rule is for it.
 | Numbers in a board | Board file, import, CLI → lookups, layout, the ids handed out | No value decides an array's length or a loop's count, each range fits every type it passes through, and positions and sizes are held within the board; see [Board values](#board-values). `security.js` refuses an array written at an id; `tests/editing.js` and `tests/cli.js` take a board at the largest id through new items, copies and connectors and open it again, and `tst_ids.qml` does it through Qt's own document and `int`. |
 | CLI operations | stdin/file → model → helper | Parse as data, no evaluation. Invalid JSON must not echo content. CLI/security tests. |
 | Old board history | Board file → `readFile` → dropped | The edit history Omarchyform 0.4.7 to 0.4.10 kept after a board is parsed with the rest of the file, as any JSON reader parses it, through `parseJson`, and then dropped; it is never evaluated. A key after it counts on any line, so a newer version named there keeps the board read-only and the canvas after it is the canvas. A history that is not JSON, or holds more at once than `parseJson` allows, makes the file unreadable rather than half read. A full one costs about 0.2 s once, until the next save writes the board without it. `tests/suite.js`, `tests/editing.js`, `tests/cli.js`, `tst_legacy.qml`. |
+| The board's language | `~/.config/omarchy/language` → `BoardLanguage.qml` → `i18n/<code>.json` → text on screen | The language file is read for a code alone (`Store.languageCode`: two or three letters and a region, else English), so it never becomes a path of its own. It is read whole, unbounded: it is the user's own setting, one short line Omarchy writes, and anyone who can make it large can as well write the shell's own configuration. A catalog is the plugin's own file, parsed through `parseJson` and passed over if it is not an object. `tests/i18n.js` refuses a catalog entry English does not have, a hole it does not have, a missing plural form, a control character, and markup characters English does not have; where a translation is drawn as markup it is escaped as any text is. What is put into a translation (`%1`) is put in once and never read for holes. |
+| A board's earlier versions | Save → helper `commit` → `versions/v1/<board>/` → `versions`, `restore` → board file | The file a save replaces is copied by the helper, under the board's lock, at most every ten minutes, 40 a board and 64 MiB, oldest first; a copy that cannot be made never fails the save. Names and paths travel on stdin; folders are 0700 and versions 0600. A version is listed by name and size only, and only a name of the helper's own form (`YYYYMMDD-HHMMSS.json`, checked on both sides) is ever sent back. Going back is the helper replacing the board file under the lock, onto the revision the session holds, after keeping the board as it is; the board then reads it through the path every change on disk takes, so it is bounded and filled in as any board is, and unsaved edits become a conflict rather than being overwritten. Links are never followed, and nothing outside the versions folder is moved or removed. `tests/versions-files.py`, `tests/controller.js`, `tests/qml/tst_versions.qml`. |
+| A board drawn from the command line | `render` → loader → staging → Quickshell offscreen → chosen PNG | The board is read and bounded by the loader before anything starts (`boardLimit`, the byte limit), and its pictures go through `checkimages` first; the scene opens only what was cleared. The scene is handed a private staging folder inside the library by its environment: no path or name on a command line. It logs nothing and writes only `out.png` there; the stage is removed whether the run succeeds, is refused or times out, and a killed run's is cleared by the next. `tests/render.js`, `security.js`. |
 | Desktop install/open | Opt-in launcher files and summon payload | No automatic install hook; ownership/conflict checks, correct path encoding, no shell interpretation. Desktop tests and manual review. |
 
 ## Cost trace
@@ -176,7 +179,7 @@ new reads it.
 | `text` | at most 1 MiB | plain-text layout, find | In proportion to its length (the long-note row above). |
 | `kind`, `tint`, `texture`, `pinned` | one of their known values, else the default | drawing | Nothing. |
 | `src` | a plain image name in this library | picture checks, decoding | The picture rows above. |
-| `version` | 1 to 7; newer opens read-only | which fields are read | Nothing. |
+| `version` | 1 to 8; newer opens read-only | which fields are read | Nothing. |
 
 The counts, 5,000 items and 20,000 connectors, and the file's bytes are the
 board size row above.
@@ -210,7 +213,7 @@ where this plugin answers each:
 |---|---|---|
 | Private files readable by other accounts: a default umask, files in `/tmp`, a file replaced without its mode, an existing install left loose | The helper writes with `umask 077`; the six folders are made private as the shell starts, existing ones and what is in them too; the shell writes only inside them; imports are 0600 before they are named; temporary files are made in the plugin's own folders | `tests/filesystem.js`, `tests/security.js` |
 | Private data in process arguments (`/proc/<pid>/cmdline`): message text, dictation, tokens, `sh -c` payloads, search terms | Board filesystem requests (including names) go on stdin to a child-free Python helper; image/clipboard helper arguments remain reviewed paths/names; a new argument fails until reviewed | `tests/security.js` (argument table), clipboard and commit tests |
-| Downloads not pinned to a digest, `curl \| sh`, unpinned remote git | No network at all; the baseline finds nothing | `tests/security.js`, `npm run review:marketplace` |
+| Downloads not pinned to a digest, a download piped straight into a shell, unpinned remote git | No network at all; the baseline finds nothing | `tests/security.js`, `npm run review:marketplace` |
 | Freezing or exhausting the shared shell: clipboard auto-reads (hidden fields included), Qt's own paste, drag-and-drop payloads, PNG text bombs, work set by a value in the input | No `TextInput`; bounded paste through the helper; drops refused unread; pictures checked on the way in and before they are drawn; JSON guarded; board, note and file limits; no value from a board decides an array's length, and ids fit an `int` | `test:clipboard`, `test:drop`, `tests/security.js`, filesystem, controller, editing and CLI tests |
 | Local services without per-user authentication | Nothing listens; IPC is Quickshell's own | `tests/security.js` |
 | Changes outside the plugin without consent | The launcher entry is installed only by hand and replaces or removes only its own unchanged files | `tests/desktop.js` |
@@ -827,3 +830,148 @@ successfully saves. The live startupfailure fixture makes the boards path a
 file, verifies no documents/state/trash are loaded and original state/legacy
 bytes remain intact, repairs the fixture and verifies successful migration and
 opening the saved board. Both cases use temporary data, not user boards.
+
+## Standalone lines — cost trace
+
+Line kinds are four fixed strings. Endpoint fields `ax`, `ay`, `bx`, `by`
+are primitive numbers on import and normalized to [0, 1] on load; invalid
+local-file values use fixed defaults. Model roles `lax`, `lay`, `lbx`, `lby`
+carry these fractions through snapshots, copies and exports. Existing byte,
+item-count, coordinate and size limits still apply. Pointer edits bound the
+rectangle and endpoints before writing and use the existing document-owned
+pointer transaction, so reloads invalidate an in-flight edit.
+
+Glue (`from`/`to` on a line) is one level of object holding three primitive
+numbers; import rejects any other shape and copies only those three fields.
+On load an id must name an item on the same board that is not a line, not
+pinned and not the line itself, or the glue is dropped; fractions clamp to
+[0, 1]. Following glue is one pass over the items with one id index, run
+after a move, resize, align or spread, so a pointer move costs O(items) as
+moving already did; it never chains, because a line can only be glued to
+something that is not a line. Finding where a dropped end glues is one pass
+over the items from the top; an end dropped inside an item is put where the
+line from its other end meets the outline, found by forty halvings, a constant.
+A line takes the pointer near its stroke only. Qt's cursor lookup can ask every
+line on screen as the pointer moves, not only those under it, so a pointer move
+over a board of N visible lines costs N mask calls: four comparisons for each
+line whose box the pointer is not in, and one distance to a segment for those it
+is. Not yet measured at the 5,000-item fixture with the pointer moving.
+
+Each line makes one vector path with one shaft and at most two heads; geometry
+construction is constant work. An arrow is one closed outline of at most ten
+points and one tail arc, its head sized from the theme's border width, never
+from the board. A selected or marked line adds two endpoint handles, made only
+while it is selected. Dashed strokes cost at most the bounded line
+length, with a fixed dash pattern, and at most MAX_ITEMS delegates are made.
+The `max-line-objects` hostile fixture exercises all styles at MAX_ITEMS;
+`line-endpoint-bounds` exercises maximum dimensions and endpoint values at and
+past their normalized bounds. No new process, filesystem destination, network
+access, image source or text renderer is introduced. Saved lines use format 8;
+older versions refuse to edit them instead of dropping their geometry.
+
+## A picture from the command line: cost trace — 2026-11-13
+
+`omarchyform render` draws a board with the export scene (`BoardImage`,
+`Node`) under Quickshell's offscreen platform, in a process the command line
+starts and waits for. It is a new consumer of every board field the export
+already reads, in a new place, so each axis is traced for it.
+
+- **Bytes.** The board is read through the helper's bounded `read`, as every
+  other verb reads one, and what the scene is handed is the board written
+  again by `writeFile`, which cannot be larger than the board it came from.
+  The job beside it holds the palette, the cropped places (at most
+  `MAX_ITEMS` integers) and one verdict per picture name.
+- **Expansion and count.** `boardLimit` refuses a board past 5,000 items,
+  20,000 connectors or a 1 MiB note before a stage exists, and the scene asks
+  it again of what it reads. Notes are drawn through `notePreview` as on the
+  board: at most 4,000 characters each. The picture is at most 4096 pixels on
+  a side (`BoardImage.save`).
+- **Repetition.** Pictures decode once per item that draws them, as in the
+  shell. Each name is cleared by `checkimages` (size, type, pixels, compressed
+  text) before the scene starts; one not cleared, missing or reached through
+  a link is never opened and is named in the answer.
+- **Value.** `--only` ids are matched against the board's own ids and become
+  places in its list; nothing from the command line sizes an array or bounds
+  a loop.
+- **Who reads first.** Qt's image reader, held behind the same gate as in the
+  shell (`imagePath` in `BoardRender.qml`), and Quickshell's `FileView` on two
+  files this program wrote a moment before into a 0700 folder.
+- **Where it runs.** Never on the shell's thread: a board that is slow to
+  draw holds only the command, which gives up after 120 seconds and says so.
+  The scene has its own runtime folder inside the stage, so it registers
+  nothing beside the running shell.
+
+Measured on 2026-11-13 (Qt 6.12, offscreen, software), every board in
+`tests/hostile-fixtures.js` through `render`: an ordinary board of 50 items
+in 0.4 s, 5,000 items in 5 to 8 s, and the slowest, 5,000 notes with long
+previews at 32 MB, in 24 s. `npm run test:hostile` now draws or refuses each
+of them and fails on a stage left behind (`tests/render.js --hostile`).
+
+## Earlier versions: cost trace — 2026-11-13
+
+The helper sets aside the file a save replaces, and the board can put one
+back. Nothing is added to a board's file or its format, and no board field is
+read in a new way: a version is a board file, read only by the reader that
+reads every board.
+
+- **Bytes.** A version is copied with the same bounded copy a snapshot uses,
+  and one larger than a board may be is neither kept nor put back. A board's
+  versions hold at most 64 MiB together.
+- **Count.** At most 40 a board, and at most one every ten minutes however
+  often the board is saved. The listing is one `listdir` of the board's own
+  folder; the board reads at most 64 lines of it.
+- **Repetition.** Keeping a version costs one copy of the board, in the
+  helper's process, at most every ten minutes: nothing on the shell's thread.
+  Going back costs one more copy and then what reading a changed board costs,
+  once, and only when asked.
+- **Value.** A version's name is its time. Only a name matching
+  `YYYYMMDD-HHMMSS.json` that reads back as a real time is listed or sent to
+  the helper, which checks the form again; no name is used as a path part
+  without it. A clock put back cannot file a newer version behind an older
+  one.
+- **Who reads first.** The helper, in Python, copying bytes. Qt reads a
+  version only after it has become the board's file, through `snapshot` and
+  `readFile`, with `boardLimit` asked before anything is built.
+- **What cannot be lost.** Going back refuses while a write has failed or two
+  versions are waiting for a choice, writes what is on screen first, and
+  replaces the file only if it is still the revision the session holds. Edits
+  made while the helper works are a conflict. The board as it was is kept as a
+  version before it is replaced, and the version gone back to is read before
+  that can push it out.
+
+The fixtures are in `tests/versions-files.py`: a version at each bound and one
+past it (41 versions, 72 MiB of them), a link named like a version, a name
+that climbs out of the folder, a versions folder that is a file, a link, or
+outside where versions go, and a stale folder under a new board's name.
+
+## The Omarchy UI kit in `kit/` — 2026-11-18
+
+The panels and the header are drawn with the Omarchy UI kit
+([omacom/omarchy-ui](https://github.com/omacom/omarchy-ui), MIT), copied into
+`kit/` at the revision in `kit/KIT_REV` by `tools/vendor-kit.js`: 29 Qt Quick
+components and the kit's theme resolver, about 4,400 lines, all of it runtime
+code a reviewer reads. What it is held to:
+
+- **It reads nothing and runs nothing.** The kit's C++ `ThemeSource`, which
+  reads the theme files and asks Hyprland, is not copied; a plugin cannot load
+  C++. `kit/Theme/ThemeSource.qml` is a plain object of strings and numbers
+  that `Theme.qml` fills from files the shell already reads (the current
+  theme's `colors.toml` and `shell.toml`, `~/.config/omarchy/shell.toml`, the
+  language file), through the same `FileView`s the board uses. The kit parses
+  that text with its own resolver: string splitting and number parsing, no
+  `eval`, no dynamic QML, no network, no process. `tests/security.js` refuses
+  a kit file that imports anything but Qt Quick and itself, runs a process,
+  reaches the network, or draws anything but plain text.
+- **It types nothing.** The kit's `TextField`, `FilterInput` and `SearchList`
+  are `TextInput`s, which in Qt 6.12 read the whole clipboard each time it
+  changes. None of them is copied: `tools/vendor-kit.js` refuses a component
+  that types, every field is still a `LineField` with bounded paste, and the
+  `TextInput` ban in `tests/security.js` covers `kit/` too.
+- **Its cost is the panel's, not the board's.** Kit rows draw the command list,
+  the browser and the two-versions question, in `ListView`s as before, so a
+  large library is still drawn a screenful at a time. Help is at most the
+  shortcut table, a fixed size. Nothing in the kit is driven by a board's
+  contents.
+- **It stays the kit.** A fix belongs upstream, not in `kit/`, where the next
+  copy would undo it; `node tools/vendor-kit.js <checkout> --check` shows what
+  a newer kit changes before it is taken.

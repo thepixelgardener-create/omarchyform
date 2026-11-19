@@ -81,6 +81,9 @@ Item {
     property int selectedIndex: -1
     property int editIndex: -1
     property int linkingFrom: -1
+    property int gluingFrom: -1
+    // Nothing is dragged in a picture; a node only writes this while one is.
+    property var guides: []
     property bool canEdit: false
     property bool showPinned: false
     // The board's palette, with its emphasis taken out: nothing is selected in
@@ -96,6 +99,9 @@ Item {
     function imagePath(name) { return picture.ctl.imagePath(name) }
     function pictureState(name) { return picture.ctl.pictureState(name) }
     function isMarked(id) { return false }
+    // What a node says, a missing picture's words, in the board's language.
+    function t(text, a, b, c) { return picture.ctl.t(text, a, b, c) }
+    function tv(text) { return picture.ctl.tv(text) }
     // An export has no viewport to fall outside of, so nothing is culled and
     // the camera it would be culled against is never read.
     property bool culling: false
@@ -221,7 +227,7 @@ Item {
       }
       if (now - picture.progressed >= picture.patienceMs) {
         capture.stop()
-        picture.finished(false, "Pictures took too long to load; PNG not saved")
+        picture.finished(false, picture.ctl.t("Pictures took too long to load; PNG not saved"))
       }
     }
   }

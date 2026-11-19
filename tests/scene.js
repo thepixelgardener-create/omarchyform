@@ -46,8 +46,10 @@ function measure(size) {
   try {
     const home = path.join(dir, 'home')
     fs.mkdirSync(home)
-    for (const file of fs.readdirSync(repo).filter(f => /\.(qml|js|sh|py)$/.test(f)))
+    for (const file of fs.readdirSync(repo).filter(f => /\.(qml|js|sh|py)$|^manifest\.json$/.test(f)))
       fs.copyFileSync(path.join(repo, file), path.join(dir, file))
+    // The Omarchy UI kit the panels are built from, as the plugin carries it.
+    fs.cpSync(path.join(repo, 'kit'), path.join(dir, 'kit'), { recursive: true })
     for (const module of ['Commons', 'Ui'])
       fs.cpSync(path.join(omarchy, 'shell', module), path.join(dir, module), { recursive: true })
     fs.mkdirSync(path.join(dir, 'services'))
@@ -63,7 +65,7 @@ function measure(size) {
     const display = process.env.WAYLAND_DISPLAY || ''
     const result = spawnSync('qs', ['--no-color', '-p', path.join(dir, 'shell.qml')], {
       encoding: 'utf8', timeout: 180000,
-      env: { ...process.env, HOME: home, QT_QPA_PLATFORM: 'wayland',
+      env: { ...process.env, HOME: home, OMARCHY_LANGUAGE_FILE: path.join(home, 'no-language'), QT_QPA_PLATFORM: 'wayland',
         QT_QPA_PLATFORMTHEME: '', QT_QUICK_CONTROLS_STYLE: 'Basic',
         XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR,
         WAYLAND_DISPLAY: path.isAbsolute(display) ? display

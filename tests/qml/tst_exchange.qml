@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import "../.."
+import "../../BoardStore.js" as Store
 
 // A board with pictures, out of one library and into another. The two halves
 // only make sense against each other: a copy that carries its bytes is worth
@@ -32,6 +33,10 @@ ShellRoot {
 
   Item {
     id: ctl
+    // What it says, as written: these suites read English.
+    function t(text, a, b, c) { return Store.translated(null, text, [a, b, c]) }
+    function tn(one, other, count, a, b) { return Store.translatedCount(null, "en", one, other, count, [a, b]) }
+    function tv(text) { return text }
     property alias items: items
     property alias links: links
     property int nextId: 1

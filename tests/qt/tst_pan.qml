@@ -1,5 +1,6 @@
 import QtQuick
 import QtTest
+import "../../kit/Theme" as Kit
 import "../.."
 import "../../BoardStore.js" as Store
 
@@ -94,6 +95,8 @@ TestCase {
     ctl.leaveWarned = false
     ctl.saveMark = "saved"
     ctl.theme.fontBody = 12
+    // The header and its line are the kit's, so they take their size from it.
+    Kit.ThemeSource.apply({ shellText: "" })
     surface.width = test.width
     surface.height = test.height
     wait(0)
@@ -433,6 +436,58 @@ TestCase {
     verify(plain.indexOf("esc") >= 0, "and how to get out of it")
   }
 
+  function test_theLineSaysWhatZWillDo_data() {
+    return [
+      { tag: "nothing chosen yet", outcome: "none", says: "pick a shape or an arrow" },
+      { tag: "two shapes", outcome: "join", says: "joins these two with an arrow" },
+      { tag: "a shape and an arrow", outcome: "attach", says: "glues the arrow to this" },
+      { tag: "the same shape", outcome: "beside", says: "puts a glued arrow beside it" },
+      { tag: "glued there already", outcome: "already", says: "glued here already" }
+    ]
+  }
+
+  function test_theLineSaysWhatZWillDo(row) {
+    ctl.gluingFrom = 1
+    ctl.glueOutcome = row.outcome
+    wait(0)
+    var plain = findChild(surface, "board-status").text.replace(/<[^>]*>/g, "")
+    verify(plain.indexOf(row.says) >= 0, "it says '" + row.says + "', not: " + plain)
+    verify(plain.indexOf("esc") >= 0, "and how to get out of it")
+    ctl.gluingFrom = -1
+    ctl.glueOutcome = "none"
+  }
+
+  // Holding ctrl puts ctrl's chords in the bar, and letting go puts the
+  // board's own keys back. (A chord while it is held cannot be tested here:
+  // QtTest presses and lets go of the modifier itself around the key.)
+  function test_holdingCtrlShowsWhatCtrlDoes() {
+    surface.focusKeys()
+    wait(0)
+    var line = findChild(surface, "board-hints")
+    verify(line.Accessible.name.indexOf("q note") === 0, "the board's keys first: " + line.Accessible.name)
+    keyPress(Qt.Key_Control, Qt.ControlModifier)
+    verify(line.Accessible.name.indexOf("z undo") === 0, "ctrl's while it is held: " + line.Accessible.name)
+    verify(findChild(surface, "hint-ctrl").visible, "and says they are ctrl's")
+    keyRelease(Qt.Key_Control, Qt.NoModifier)
+    verify(line.Accessible.name.indexOf("q note") === 0, "and the board's again once it is let go")
+  }
+
+  // The icons in the header are buttons: a click does what the key does, and
+  // the pointer resting on one says what that is.
+  function test_aHintIconIsClickable() {
+    surface.width = 1400
+    wait(0)
+    ctl.hintsRun = []
+    for (const word of ["note", "find", "keys", "close"]) {
+      const button = findChild(surface, "hint-" + word)
+      verify(button && button.visible, word + " is on the line")
+      verify(button.clickable, word + " takes a click")
+      verify(button.tip !== "", word + " says what it does")
+      mouseClick(button)
+    }
+    compare(ctl.hintsRun, ["note", "find", "keys", "close"], "each click ran its own key's command")
+  }
+
   // A flash says what just happened; the connector line says what is about to.
   // They shared one line and the flash won, so removing a connector and then
   // starting another gesture inside the two and a half seconds the message
@@ -629,11 +684,13 @@ TestCase {
     surface.width = 380
     surface.height = 320
     ctl.theme.fontBody = 24
-    const line = findChild(surface, "board-status")
+    Kit.ThemeSource.apply({ shellText: "[font]\nbase-size = 24\n" })
     for (const [flag, name] of [["conflictVisible", "conflict-panel"], ["paletteVisible", "command-palette"]]) {
       ctl[flag] = true
       wait(0)
-      verify(line.lineCount > 1, "the line wrapped for " + name)
+      const line = findChild(surface, "board-status").visible ? findChild(surface, "board-status") : findChild(surface, "board-hints")
+      const rows = line.lineCount !== undefined ? line.lineCount : Math.round(line.height / findChild(surface, "hint-note").height)
+      verify(rows > 1, "the line wrapped for " + name)
       const panel = findChild(surface, name)
       verify(panel.y >= line.y + line.height, name + " starts below it")
       ctl[flag] = false
@@ -648,7 +705,7 @@ TestCase {
     for (const flag of ["paletteVisible", "conflictVisible", "helpVisible"]) {
       ctl[flag] = true
       verify(scrim.visible, flag + " dims the board")
-      compare(scrim.color, ctl.theme.panelScrim)
+      compare(scrim.color, Kit.Color.menu.scrim)
       ctl[flag] = false
     }
     verify(!scrim.visible, "and it comes back")
@@ -660,7 +717,7 @@ TestCase {
   // The line of keys is in the header: beside the name where it fits between
   // the name and the buttons, and on a row of its own under them where not.
   function test_theLineSitsInTheHeader() {
-    var line = findChild(surface, "board-status")
+    var line = findChild(surface, "board-hints")
     var toolbar = findChild(surface, "board-toolbar")
     var title = findChild(surface, "board-title")
     var mark = findChild(surface, "save-mark")
@@ -673,7 +730,7 @@ TestCase {
     verify(line.x + line.width <= fit.mapToItem(surface, 0, 0).x, "before the buttons")
     verify(line.y < title.mapToItem(surface, 0, title.height).y, "on the name's row")
     verify(line.y >= toolbar.y && line.y + line.height <= toolbar.y + toolbar.height, "inside the header")
-    compare(line.lineCount, 1)
+    compare(line.height, findChild(surface, "hint-note").height, "on one row")
     var slim = toolbar.height
 
     surface.width = 500
@@ -691,9 +748,9 @@ TestCase {
     compare(mark.text, Store.SAVE_GLYPHS.saved)
     ctl.saveMark = "unsaved"
     compare(mark.text, Store.SAVE_GLYPHS.unsaved)
-    compare(mark.color, ctl.theme.accent)
+    compare(mark.color, Kit.Color.accent)
     ctl.saveMark = "failed"
-    compare(mark.color, ctl.theme.urgent)
+    compare(mark.color, Kit.Color.urgent)
 
     var line = findChild(surface, "board-status")
     ctl.saveError = "notes.json could not be written — ctrl+s to retry"
@@ -713,6 +770,7 @@ TestCase {
     surface.width = 380
     surface.height = 320
     ctl.theme.fontBody = 24
+    Kit.ThemeSource.apply({ shellText: "[font]\nbase-size = 24\n" })
     ctl.linkingFrom = 1
     ctl.linkOutcome = row.outcome
     wait(0)
@@ -741,9 +799,12 @@ TestCase {
         : row.open === "conflict" ? "conflict-panel"
         : row.open === "browser" ? "browser-panel" : "help-panel")
       verify(panel !== null && panel.visible, row.tag + " is on screen")
-      var at = panel.mapFromItem(surface, row.x, row.y)
-      verify(at.x >= 0 && at.y >= 0 && at.x <= panel.width && at.y <= panel.height,
-             row.tag + " is under the press at " + row.x + "," + row.y)
+      // Waited for, not read at once: the header's keys are a Flow, laid out
+      // a frame later, and a panel is placed under the header.
+      tryVerify(function () {
+        var at = panel.mapFromItem(surface, row.x, row.y)
+        return at.x >= 0 && at.y >= 0 && at.x <= panel.width && at.y <= panel.height
+      }, 1000, row.tag + " is under the press at " + row.x + "," + row.y)
     }
 
     drag(Qt.MiddleButton, row.x, row.y, 70, 50)

@@ -19,6 +19,11 @@
 │   └── v2/
 │       ├── board.json.bak
 │       └── work/project-a.json.bak
+├── versions/
+│   └── v1/
+│       └── work/project-a.json/
+│           ├── 20261113-093205.json
+│           └── 20261113-141950.json
 └── state.json
 ```
 
@@ -39,6 +44,17 @@ read safely; `validate` below says which. Back it up, sync it,
 edit it by hand, put it in git — it is your file, and a board that changes while
 it is open is noticed rather than overwritten.
 
+Further back than that is `versions/`: a folder for each board, mirroring the
+boards tree, holding the board as it stood before earlier saves. Each is a
+whole board file, named by when it was set aside, in UTC, and can be opened,
+copied out or deleted like any other. One is kept at most every ten minutes,
+forty for a board and no more than 64 MB, the oldest making way.
+**Earlier versions…** in the command list puts one back; the
+[guide](guide.md#earlier-versions) has the rest. A board's versions move with
+it when it is renamed, moved or deleted from the board browser; moved by hand,
+they stay behind under the old name, and a new board made under that name
+starts without them.
+
 Every write to a board goes through one coordinated step: the file is replaced
 under a lock, and only if it is still the version the writer last read. The
 version it replaces is kept first. So two writers that both read the same board
@@ -49,7 +65,8 @@ boards. This needs `flock` (util-linux) on the path, alongside the `bash` and
 coreutils the plugin already uses. Older boards are migrated on load: v1 had no ids or
 shapes, v2 stored fixed pastel hexes which are mapped onto theme roles. Version 4 adds
 background pinning, version 5 pasted pictures; older plugin versions open these
-files read-only instead of silently losing that state.
+files read-only instead of silently losing that state. Version 8 adds standalone
+line and arrow objects, including their endpoint geometry.
 
 A pasted picture is written to `images/` and the item keeps only its file name,
 so a screenshot is not re-encoded into every autosave — and the same picture on
@@ -124,11 +141,32 @@ and being written answers `{"ok": false, "error": "… changed since it was read
 and exits 1, leaving the other writer's board alone; `--force` is the explicit
 overwrite, and keeps what it replaced.
 
-It cannot draw: a picture of a board needs the running shell, so `ctrl+e`
-on an open board exports a PNG and nothing here does.
+`render` draws a board to a PNG without the board being open:
+
+```bash
+bin/omarchyform render ideas.json ideas.png                  # on white
+bin/omarchyform render ideas.json ideas.png --colors dark    # or mono, for print
+bin/omarchyform render ideas.json part.png --only 3,4,7      # just those items
+```
+
+It is the board's own export scene, the one `ctrl+e` uses, started by
+Quickshell with no display in a process of its own, so the running shell is
+not involved and cannot be held up by it. The picture is the board's bounds
+with 32 pixels around them, at most 4096 on a side, in one of the three export
+palettes; the desktop theme's own colours need the shell, so `ctrl+e` is still
+the way to those. Pictures on the board are checked before they are opened, as
+the board checks them, and one that is missing or refused is drawn as a
+missing picture and named in `picturesLeftOut` with the reason. It will not
+write over a file that exists without `--force`.
 
 `skills/omarchyform/SKILL.md` ships alongside it, so a coding agent asked to
-sketch something out as a board can do it without being told any of this, and
+sketch something out as a board can do it without being told any of this.
+`bin/omarchyform skill install` links it into `~/.agents/skills` and into the
+skills folder of each agent you already use (Claude Code, Codex, Pi, Gemini,
+Hermes), the way Omarchy links its own; a skill of that name that is not a
+link is left alone and named in the answer. `skill remove` takes the links
+away, and `skill` alone says where they are. Being links, they follow the
+plugin as it updates, and
 [`docs/for-agents.md`](for-agents.md) is the long version — this same
 program explained to something that drives it through files and will never see
 the screen. Most of it is the part a command list cannot teach: how big a note

@@ -132,11 +132,64 @@ the CLI to create boards and is not a contribution guide.
   at the limit with `FULL_ITEMS` or `FULL_LINKS`, and anything that reads a
   board asks `boardLimit` before building it.
 
+## The Omarchy UI kit
+
+- The panels and the header are built from the Omarchy UI kit's Qt Quick
+  components ([omacom/omarchy-ui](https://github.com/omacom/omarchy-ui)),
+  copied into `kit/` by `node tools/vendor-kit.js /path/to/omarchy-ui`. The
+  copy is verbatim but for its imports; `kit/KIT_REV` names the revision and
+  `--check` says what a newer kit would change. Fix a kit file upstream, never
+  in `kit/`: the next copy would undo it.
+- A shell plugin cannot load the kit's C++ theme reader, so
+  `kit/Theme/ThemeSource.qml` stands in for it and `Theme.qml` (`feedKit`)
+  fills it from the files the shell reads. A test fills it from a fixture.
+- Chrome reads the kit (`import "kit/Theme" as Kit`, `import "kit/Ui" as O`);
+  the board and its items read `Theme.qml` through `BoardPalette`. Don't
+  hard-code a colour, size or radius a kit token covers.
+- Nothing that types comes from the kit: its fields are `TextInput`s, and
+  every field here is a `LineField`. `tools/vendor-kit.js` refuses to copy a
+  component that types, and `tests/security.js` holds `kit/` to the plugin's
+  rules. `tests/contract.js` checks every kit token a panel names.
+- A kit row in a delegate must not declare a property the kit already has
+  (`current` on a `ListRow`): the shell refuses the file. `npm run lint:qml`
+  fails on it.
+
+## Words on screen
+
+- Nothing the board shows is written into a view as bare text. A string said
+  where it is shown goes through the controller's `t("…")`, with `%1`, `%2`
+  for what goes in it, never English glued together; a counted one through
+  `tn("one", "other", count)`, whose `%1` is the count. A string kept in one
+  of BoardStore's tables is said through `tv(…)`, and `Store.displayStrings()`
+  lists every table it comes from.
+- `node tests/i18n.js` holds `i18n/en.json` to exactly what the source says;
+  after adding or changing a string, run it with `--write-english` and commit
+  the result. A string used two ways in English with two meanings in another
+  language (`open`, the verb, and `open now`, the state) gets two keys.
+- A translation goes in `i18n/<code>.json`, translating only what `en.json`
+  has, with the same holes, the plural forms its language counts in, and no
+  markup. `--pending` lists what each catalog still lacks.
+- Drawn as markup, a translated string is escaped like any other text
+  (`Store.escapeMarkup`, or `hintMarkup`, which escapes its word).
+- Test stand-ins carry `t`, `tn` and `tv` saying English as written, and every
+  runner that starts the whole plugin points `OMARCHY_LANGUAGE_FILE` at a file
+  of its own, so a machine set to another language does not change what the
+  suites read.
+
 ## Regression checks
 
 For these paths, run `npm test` and `npm run test:qml`. Changes to QML interaction
 or bindings also need `npm run test:ui`. Use temporary boards and isolated data
 folders; do not test by editing a user's real boards or restarting their shell.
+
+Changes to QML also need `npm run lint:qml`: no file may gain a qmllint warning
+of any kind (see [Development](development.md)). Changes to a shell or Python
+script need `npm run lint`, which runs shellcheck at every severity; a finding
+that is meant is disabled on its line with the reason beside it.
+
+Before a release, and after any change CI cannot run, run `npm run
+check:local`: everything above plus `test:hostile` and the live
+`test:omarchy`, which need Quickshell and a desktop with its displays on.
 
 Relevant suites: `tests/split.js`, `tests/exchange.js`, `tests/editing.js`,
 `tests/suite.js`, `tests/cli.js`, and `tests/qml/`.

@@ -36,7 +36,579 @@ function boundedMove(items, indices, dx, dy) {
   return { dx: Math.max(lowX, Math.min(highX, dx)), dy: Math.max(lowY, Math.min(highY, dy)) }
 }
 
-var KINDS = ["note", "rect", "ellipse", "diamond"]
+var SHAPE_KINDS = ["note", "rect", "ellipse", "diamond"]
+var LINE_KINDS = ["line", "arrow", "double-arrow", "dashed-line"]
+var KINDS = SHAPE_KINDS.concat(LINE_KINDS)
+function isLine(kind) { return LINE_KINDS.indexOf(kind) >= 0 }
+function lineUnit(value, fallback) { return Math.max(0, Math.min(1, num(value, fallback))) }
+
+// A line's ends as fractions of its box, tail (a) and head (b). Without them
+// it is a level line across its box.
+function unitEnds(ax, ay, bx, by) {
+  return { ax: lineUnit(ax, 0.08), ay: lineUnit(ay, 0.5), bx: lineUnit(bx, 0.92), by: lineUnit(by, 0.5) }
+}
+// From a file row's ax, ay, bx, by, and from the model's lax, lay, lbx, lby.
+// lineEnds is asked for every line on each pointer move of a drag (alignBox),
+// so neither builds anything on the way.
+function rowEnds(row) {
+  row = row || {}
+  return unitEnds(row.ax, row.ay, row.bx, row.by)
+}
+function lineEnds(n) {
+  n = n || {}
+  return unitEnds(n.lax, n.lay, n.lbx, n.lby)
+}
+// The model's roles for a row's ends.
+function lineEndRoles(row) {
+  var e = rowEnds(row)
+  return { lax: e.ax, lay: e.ay, lbx: e.bx, lby: e.by }
+}
+// Where a line's ends are on the board.
+function linePoints(n) {
+  var e = lineEnds(n)
+  return { ax: n.ix + e.ax * n.iw, ay: n.iy + e.ay * n.ih, bx: n.ix + e.bx * n.iw, by: n.iy + e.by * n.ih }
+}
+// Where end 0 (the tail) or 1 (the head, where an arrow points) is: { x, y }.
+function lineEndPoint(n, end) {
+  var p = linePoints(n)
+  return end === 0 ? { x: p.ax, y: p.ay } : { x: p.bx, y: p.by }
+}
+// A line's box reaches this far past its ends, room for an arrowhead.
+var LINE_PAD = 24
+
+// An arrowhead grows with the stroke, so a theme with heavier borders keeps
+// the same shape: about six and a half strokes long, opening at about 46°.
+function arrowHead(strokeWidth) {
+  var stroke = Math.max(2, num(strokeWidth, 2)), length = Math.max(13, stroke * 6.5)
+  return { stroke: stroke, length: length, wing: length * 0.42 }
+}
+
+// A plain line is one stroked segment. An arrow is one filled outline, shaft
+// and heads together. Drawn as separate strokes, the GPU blended a translucent
+// colour twice where they overlapped, which showed as a bright knot at the
+// tip, and the chevron ended in a blunt join when zoomed in.
+// Whether (x, y), in a line's own box of w by h, is within `reach` of the
+// line itself. A line takes the pointer there and nowhere else in its box: a
+// slanting arrow's box covers whatever it joins, and taking presses across all
+// of it meant a note under it could not be dragged, and the drag took the
+// arrow instead and pulled it off both ends.
+function nearLine(ends, w, h, x, y, reach) {
+  var ax = ends.ax * w, ay = ends.ay * h, bx = ends.bx * w, by = ends.by * h
+  var dx = bx - ax, dy = by - ay, length2 = dx * dx + dy * dy
+  var t = length2 < 1e-6 ? 0 : Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / length2))
+  var px = ax + t * dx - x, py = ay + t * dy - y
+  return px * px + py * py <= reach * reach
+}
+
+function linePath(kind, w, h, ends, strokeWidth) {
+  var ax = ends.ax * w, ay = ends.ay * h, bx = ends.bx * w, by = ends.by * h
+  var dx = bx - ax, dy = by - ay, length = Math.sqrt(dx * dx + dy * dy)
+  if (kind === "line" || kind === "dashed-line")
+    return "M " + ax + " " + ay + " L " + bx + " " + by
+  if (length < 0.01) return ""
+  var ux = dx / length, uy = dy / length
+  var spec = arrowHead(strokeWidth), half = spec.stroke / 2
+  var doubleHead = kind === "double-arrow"
+  // A short arrow keeps some shaft between its heads.
+  var head = Math.min(spec.length, length / (doubleHead ? 3 : 2))
+  var wing = Math.max(half, spec.wing * head / spec.length)
+  var start = doubleHead ? head : 0, stop = length - head
+  function point(along, across) {
+    return (ax + ux * along - uy * across) + " " + (ay + uy * along + ux * across)
+  }
+  var path = "M " + point(start, -half)
+    + " L " + point(stop, -half) + " L " + point(stop, -wing)
+    + " L " + point(length, 0) + " L " + point(stop, wing)
+    + " L " + point(stop, half) + " L " + point(start, half)
+  if (doubleHead) path += " L " + point(start, wing) + " L " + point(0, 0) + " L " + point(start, -wing)
+  // The tail is round, like both ends of a plain line.
+  else path += " A " + half + " " + half + " 0 0 1 " + point(0, -half)
+  return path + " Z"
+}
+
+// What another item lines up by: its left, centre and right, and its top,
+// middle and bottom. A line's are its ends', not its padded box's.
+function alignBox(n) {
+  if (!isLine(n.kind)) return { left: n.ix, top: n.iy, right: n.ix + n.iw, bottom: n.iy + n.ih }
+  // Written out rather than through linePoints and spanBox: this is asked of
+  // every item on each pointer move, and at MAX_ITEMS lines the calls cost a
+  // tenth of the move.
+  var e = lineEnds(n), ax = n.ix + e.ax * n.iw, ay = n.iy + e.ay * n.ih
+  var bx = n.ix + e.bx * n.iw, by = n.iy + e.by * n.ih
+  return { left: Math.min(ax, bx), top: Math.min(ay, by), right: Math.max(ax, bx), bottom: Math.max(ay, by) }
+}
+// What the items at `indices` line up by together: the box round all of theirs.
+function groupAlignBox(items, indices) {
+  var box = null
+  for (var i = 0; i < indices.length; i++) {
+    var b = alignBox(items.get(indices[i]))
+    box = box ? { left: Math.min(box.left, b.left), top: Math.min(box.top, b.top),
+                  right: Math.max(box.right, b.right), bottom: Math.max(box.bottom, b.bottom) } : b
+  }
+  return box
+}
+// The box two points span, and a box moved by (dx, dy).
+function spanBox(ax, ay, bx, by) {
+  return { left: Math.min(ax, bx), top: Math.min(ay, by), right: Math.max(ax, bx), bottom: Math.max(ay, by) }
+}
+function shiftBox(b, dx, dy) {
+  return { left: b.left + dx, top: b.top + dy, right: b.right + dx, bottom: b.bottom + dy }
+}
+function alignXs(b) { return [b.left, (b.left + b.right) / 2, b.right] }
+function alignYs(b) { return [b.top, (b.top + b.bottom) / 2, b.bottom] }
+
+// The nearest pairing of one of `mine` with one of `theirs`, within `tolerance`:
+// { shift, at, box } or null. Every other item is a candidate; a board holds at
+// most MAX_ITEMS, nine comparisons each, once per pointer move.
+function nearestAlignment(items, skip, mine, axis, tolerance) {
+  var best = null
+  for (var i = 0; i < items.count; i++) {
+    if (skip[i]) continue
+    var box = alignBox(items.get(i)), theirs = axis === "x" ? alignXs(box) : alignYs(box)
+    for (var m = 0; m < mine.length; m++)
+      for (var t = 0; t < theirs.length; t++) {
+        var shift = theirs[t] - mine[m]
+        if (Math.abs(shift) <= tolerance && (!best || Math.abs(shift) < Math.abs(best.shift)))
+          best = { shift: shift, at: theirs[t], box: box }
+      }
+  }
+  return best
+}
+
+// A guide from the moved thing to what it lined up with, across both.
+function alignGuide(axis, at, a, b) {
+  return axis === "x"
+    ? { x1: at, y1: Math.min(a.top, b.top), x2: at, y2: Math.max(a.bottom, b.bottom) }
+    : { x1: Math.min(a.left, b.left), y1: at, x2: Math.max(a.right, b.right), y2: at }
+}
+
+// Magnetic alignment for a drag: the items at `targets`, which together lay
+// over `start` (an alignBox) when the drag began, are to move by (dx, dy).
+// Where an edge or centre of theirs comes within `tolerance` of another
+// item's, the move is adjusted so the two line up exactly. Returns the move
+// and the guides to draw for it.
+function magneticMove(items, targets, start, dx, dy, tolerance) {
+  var skip = {}
+  for (var i = 0; i < targets.length; i++) skip[targets[i]] = true
+  var t = Math.max(0, num(tolerance, 0))
+  var moved = shiftBox(start, dx, dy)
+  var bx = nearestAlignment(items, skip, alignXs(moved), "x", t)
+  var by = nearestAlignment(items, skip, alignYs(moved), "y", t)
+  var out = { dx: dx + (bx ? bx.shift : 0), dy: dy + (by ? by.shift : 0), guides: [] }
+  var final = shiftBox(start, out.dx, out.dy)
+  if (bx) out.guides.push(alignGuide("x", bx.at, final, bx.box))
+  if (by) out.guides.push(alignGuide("y", by.at, final, by.box))
+  return out
+}
+
+// While an end is dragged it is drawn the same way: level or upright with the
+// line's other end, and in line with the edges and centres of other items, so
+// an arrow lands square on a box's side or middle. `items` and `self` (the
+// line's own index) are optional; without them only the line itself counts.
+function snappedLineEnd(n, end, x, y, tolerance, items, self) {
+  var other = lineEndPoint(n, end === 0 ? 1 : 0), ox = other.x, oy = other.y
+  var t = Math.max(0, num(tolerance, 0))
+  var dx = Math.abs(x - ox), dy = Math.abs(y - oy)
+  var guides = []
+  var own = spanBox(x, y, ox, oy)
+  // Its own other end first: the nearer of level and upright wins, so a short
+  // line snaps the way it leans.
+  var sx = null, sy = null
+  if (dy <= t && dy <= dx) sy = { shift: oy - y, at: oy, box: own }
+  else if (dx <= t) sx = { shift: ox - x, at: ox, box: own }
+  if (items) {
+    var skip = {}
+    if (self !== undefined) skip[self] = true
+    var ax = nearestAlignment(items, skip, [x], "x", t), ay = nearestAlignment(items, skip, [y], "y", t)
+    if (ax && (!sx || Math.abs(ax.shift) < Math.abs(sx.shift))) sx = ax
+    if (ay && (!sy || Math.abs(ay.shift) < Math.abs(sy.shift))) sy = ay
+  }
+  if (sx) x += sx.shift
+  if (sy) y += sy.shift
+  var point = spanBox(x, y, x, y)
+  if (sx && items) guides.push(alignGuide("x", sx.at, point, sx.box))
+  if (sy && items) guides.push(alignGuide("y", sy.at, point, sy.box))
+  return { x: x, y: y, guides: guides }
+}
+
+// The roles that move one end to (x, y), the other end holding still.
+function movedLineEnd(n, end, x, y) {
+  var p = linePoints(n)
+  x = clampCoord(x); y = clampCoord(y)
+  // No further from the other end than a box with its padding can reach.
+  var span = MAX_SIZE - LINE_PAD
+  function from(still, to) { return still + Math.max(-span, Math.min(span, to - still)) }
+  if (end === 0) return lineFromPoints(from(p.bx, x), from(p.by, y), p.bx, p.by)
+  return lineFromPoints(p.ax, p.ay, from(p.ax, x), from(p.ay, y))
+}
+
+// A line's box and ends, from where its two ends are on the board.
+function lineFromPoints(ax, ay, bx, by) {
+  var w = clampSize(Math.abs(bx - ax) + LINE_PAD), h = clampSize(Math.abs(by - ay) + LINE_PAD)
+  var left = clampCoord((ax + bx - w) / 2), top = clampCoord((ay + by - h) / 2)
+  return { ix: left, iy: top, iw: w, ih: h,
+    lax: lineUnit((ax - left) / w, 0), lay: lineUnit((ay - top) / h, 0),
+    lbx: lineUnit((bx - left) / w, 1), lby: lineUnit((by - top) / h, 1) }
+}
+
+// ------------------------------------------------------------------ glue
+// Either end of a line can be glued to another item: the item's id, and the
+// place on it as a fraction of its box, so the end keeps its spot on the
+// item's outline as the item moves or is resized. In the model the ends are
+// `aon`/`bon` (0 for none) with `aonx`, `aony`, `bonx`, `bony`; in the file,
+// a line's `from` and `to` are { id, x, y }.
+function noGlue() { return { aon: 0, aonx: 0.5, aony: 0.5, bon: 0, bonx: 0.5, bony: 0.5 } }
+
+// A glue end read from a file or a row: { id, x, y } or null.
+function glueEnd(v) {
+  if (!v || typeof v !== "object") return null
+  var id = num(v.id, 0)
+  if (!isItemId(id)) return null
+  return { id: id, x: lineUnit(v.x, 0.5), y: lineUnit(v.y, 0.5) }
+}
+
+// The model's glue roles for a row's `from` and `to`.
+function glueRoles(row) {
+  var out = noGlue()
+  if (!row || !isLine(row.kind)) return out
+  var a = glueEnd(row.from), b = glueEnd(row.to)
+  if (a) { out.aon = a.id; out.aonx = a.x; out.aony = a.y }
+  if (b) { out.bon = b.id; out.bonx = b.x; out.bony = b.y }
+  return out
+}
+
+// A copy's glue, from its original's: to the copy of what that is glued to,
+// `copyOf` mapping an original's id to its copy's, or to nothing. Glued to an
+// original, a copied line would be pulled back over the line it came from.
+function copiedGlue(n, copyOf) {
+  var a = copyOf[n.aon], b = copyOf[n.bon]
+  return { aon: a !== undefined ? a : 0, aonx: lineUnit(n.aonx, 0.5), aony: lineUnit(n.aony, 0.5),
+           bon: b !== undefined ? b : 0, bonx: lineUnit(n.bonx, 0.5), bony: lineUnit(n.bony, 0.5) }
+}
+
+// What an end can be glued to: anything but a line or a background.
+function canHoldGlue(n) { return !!n && !isLine(n.kind) && n.ipinned !== true }
+
+// How far out from its middle a point is, in the item's own shape: 1 on its
+// outline, less inside. A box's outline is its box; an ellipse's and a
+// diamond's are their own.
+function outlineReach(kind, dx, dy, hw, hh) {
+  var u = Math.abs(dx) / Math.max(hw, 0.01), v = Math.abs(dy) / Math.max(hh, 0.01)
+  if (kind === "ellipse") return Math.sqrt(u * u + v * v)
+  if (kind === "diamond") return u + v
+  return Math.max(u, v)
+}
+
+// What z does to the item it started on, `from`, and the one it ends on,
+// `to` (indices). Two shapes are joined by a new arrow; a shape and a line,
+// whichever came first, have one end of the line glued to the shape; a shape
+// and itself get an arrow beside it, glued at the tail. Answers { outcome }
+// with what it needs: "join" { a, b }, "attach" { line, shape, end },
+// "beside" { shape }, "already" (that line has an end on that shape), or
+// "none" (two lines, a background, something not there).
+function gluePlan(items, from, to) {
+  if (from < 0 || to < 0 || from >= items.count || to >= items.count) return { outcome: "none" }
+  var f = items.get(from), g = items.get(to)
+  if (f.ipinned === true || g.ipinned === true) return { outcome: "none" }
+  var fLine = isLine(f.kind), gLine = isLine(g.kind)
+  if (from === to) return fLine ? { outcome: "none" } : drawable({ outcome: "beside", shape: from, values: besideLine(items, from) })
+  if (fLine && gLine) return { outcome: "none" }
+  if (!fLine && !gLine) return drawable({ outcome: "join", a: from, b: to, values: joiningLine(items, from, to) })
+  var line = fLine ? from : to, shape = fLine ? to : from
+  var n = items.get(line), s = items.get(shape)
+  if (n.aon === s.iid || n.bon === s.iid) return { outcome: "already", line: line, shape: shape }
+  // A free end before one glued elsewhere; between two alike, the nearer.
+  var cx = s.ix + s.iw / 2, cy = s.iy + s.ih / 2
+  var a = lineEndPoint(n, 0), b = lineEndPoint(n, 1)
+  var da = (a.x - cx) * (a.x - cx) + (a.y - cy) * (a.y - cy), db = (b.x - cx) * (b.x - cx) + (b.y - cy) * (b.y - cy)
+  var end = !n.aon && n.bon ? 0 : n.aon && !n.bon ? 1 : da <= db ? 0 : 1
+  var values = attachedLineEnd(items, line, end, shape)
+  var moved = {}, roles = ["ix", "iy", "iw", "ih", "lax", "lay", "lbx", "lby"]
+  for (var r = 0; r < roles.length; r++) moved[roles[r]] = values[roles[r]] !== undefined ? values[roles[r]] : n[roles[r]]
+  return drawable({ outcome: "attach", line: line, shape: shape, end: end, values: values, row: moved })
+}
+
+// A plan whose arrow can be drawn as it says: both ends where the glue puts
+// them, which a line longer than an item may be cannot reach ("far"), and
+// apart, which two shapes that touch are not ("touching").
+function drawable(plan) {
+  var v = plan.row || plan.values
+  var a = lineEndPoint(v, 0), b = lineEndPoint(v, 1)
+  if (Math.abs(b.x - a.x) + Math.abs(b.y - a.y) < 8) return { outcome: "touching" }
+  var wantA = plan.values.tailAt, wantB = plan.values.headAt
+  if ((wantA && Math.abs(wantA.x - a.x) + Math.abs(wantA.y - a.y) > 0.5)
+      || (wantB && Math.abs(wantB.x - b.x) + Math.abs(wantB.y - b.y) > 0.5)) return { outcome: "far" }
+  return plan
+}
+
+// Where an end glued to the item at `index` goes when it comes from (x, y):
+// the point on its outline facing that way.
+function glueFacing(items, index, x, y) {
+  var n = items.get(index)
+  return glueOnto(n, index, n.ix + n.iw / 2, n.iy + n.ih / 2, 0, { x: x, y: y })
+}
+
+// The roles that glue end `end` of the line at `line` to the item at `shape`,
+// on the side facing the line's other end.
+function attachedLineEnd(items, line, end, shape) {
+  var n = items.get(line), other = lineEndPoint(n, end === 0 ? 1 : 0)
+  var glue = glueFacing(items, shape, other.x, other.y)
+  var values = movedLineEnd(n, end, glue.px, glue.py)
+  var on = end === 0 ? "aon" : "bon"
+  values[on] = glue.id; values[on + "x"] = glue.x; values[on + "y"] = glue.y
+  values[end === 0 ? "tailAt" : "headAt"] = { x: glue.px, y: glue.py }
+  return values
+}
+
+// The roles of an arrow beside the item at `index`, its tail glued to the
+// item's side facing the head, the head 200 out to its right.
+function besideLine(items, index) {
+  var n = items.get(index)
+  var hx = n.ix + n.iw + 200, hy = n.iy + n.ih / 2
+  var tail = glueFacing(items, index, hx, hy)
+  var values = lineFromPoints(tail.px, tail.py, hx, hy)
+  values.aon = tail.id; values.aonx = tail.x; values.aony = tail.y
+  values.tailAt = { x: tail.px, y: tail.py }
+  return values
+}
+
+// A plan's roles as the model takes them, without what it was checked by.
+function planRoles(plan) {
+  var out = {}
+  for (var role in plan.values) if (role !== "tailAt" && role !== "headAt") out[role] = plan.values[role]
+  return out
+}
+
+// The roles of an arrow joining the items at `a` and `b`, glued to each on
+// the side facing the other.
+function joiningLine(items, a, b) {
+  var na = items.get(a), nb = items.get(b)
+  var tail = glueFacing(items, a, nb.ix + nb.iw / 2, nb.iy + nb.ih / 2)
+  var head = glueFacing(items, b, na.ix + na.iw / 2, na.iy + na.ih / 2)
+  var values = lineFromPoints(tail.px, tail.py, head.px, head.py)
+  values.aon = tail.id; values.aonx = tail.x; values.aony = tail.y
+  values.bon = head.id; values.bonx = head.x; values.bony = head.y
+  values.tailAt = { x: tail.px, y: tail.py }; values.headAt = { x: head.px, y: head.py }
+  return values
+}
+
+// Where the line from (ox, oy), outside a shape, to (ix, iy), inside it,
+// crosses the shape's outline; all relative to the shape's middle. Null when
+// the first is not outside or the second not inside. The shapes are convex,
+// so there is one crossing, found by halving.
+function outlineEntry(kind, ox, oy, ix, iy, hw, hh) {
+  if (outlineReach(kind, ix, iy, hw, hh) > 1 || outlineReach(kind, ox, oy, hw, hh) <= 1) return null
+  var lo = 0, hi = 1
+  for (var k = 0; k < 40; k++) {
+    var mid = (lo + hi) / 2
+    if (outlineReach(kind, ox + (ix - ox) * mid, oy + (iy - oy) * mid, hw, hh) > 1) lo = mid
+    else hi = mid
+  }
+  var x = ox + (ix - ox) * hi, y = oy + (iy - oy) * hi
+  // Exactly on the outline: on a box's side, or scaled onto the curve or slant.
+  if (kind === "ellipse" || kind === "diamond") {
+    var reach = outlineReach(kind, x, y, hw, hh)
+    return { x: x / reach, y: y / reach }
+  }
+  if (Math.abs(x) / Math.max(hw, 0.01) >= Math.abs(y) / Math.max(hh, 0.01)) x = x < 0 ? -hw : hw
+  else y = y < 0 ? -hh : hh
+  return { x: x, y: y }
+}
+
+// Where an end put down at (x, y) would be glued: the topmost item it is on or
+// within `tolerance` of, and the nearest point on that item's outline, so an
+// arrow stops at the edge rather than in the middle: a box's nearest side, or
+// out from an ellipse's or a diamond's middle onto its curve or slant.
+// `toward` is the line's other end, the way out from a point dropped dead
+// centre. Returns { id, at, x, y, px, py } (its index, the fractions and the
+// point) or null.
+function glueAt(items, x, y, self, tolerance, toward) {
+  var t = Math.max(0, num(tolerance, 0))
+  for (var i = items.count - 1; i >= 0; i--) {
+    if (i === self) continue
+    var n = items.get(i)
+    if (!canHoldGlue(n)) continue
+    var glue = glueOnto(n, i, x, y, t, toward)
+    if (glue) return glue
+  }
+  return null
+}
+
+// glueAt for one item, `n` at index `i`: where on its outline an end put down
+// at (x, y) would be glued, or null when that is not on it or within `t`.
+function glueOnto(n, i, x, y, t, toward) {
+  if (x < n.ix - t || x > n.ix + n.iw + t || y < n.iy - t || y > n.iy + n.ih + t) return null
+  var hw = n.iw / 2, hh = n.ih / 2, cx = n.ix + hw, cy = n.iy + hh
+  var dx = x - cx, dy = y - cy
+  // Dropped inside, with the other end outside: the end stops where the
+  // line from the other end first meets the outline, so an arrow ends at
+  // the side it arrives at rather than crossing the item to the side
+  // nearest where it was let go.
+  var entry = toward ? outlineEntry(n.kind, toward.x - cx, toward.y - cy, dx, dy, hw, hh) : null
+  if (entry) {
+    var ex = cx + entry.x, ey = cy + entry.y
+    return { id: n.iid, at: i, x: lineUnit((ex - n.ix) / n.iw, 0.5), y: lineUnit((ey - n.iy) / n.ih, 0.5), px: ex, py: ey }
+  }
+  if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01 && toward) { dx = toward.x - cx; dy = toward.y - cy }
+  if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) { dx = 1; dy = 0 }
+  var px, py, reach
+  if (n.kind === "ellipse" || n.kind === "diamond") {
+    // Out from the middle onto the curve or the slant.
+    reach = outlineReach(n.kind, dx, dy, hw, hh)
+    px = cx + dx / reach; py = cy + dy / reach
+  } else {
+    // A box's nearest side, keeping the place along it where it was put.
+    px = Math.max(n.ix, Math.min(n.ix + n.iw, x)); py = Math.max(n.iy, Math.min(n.iy + n.ih, y))
+    reach = (px === x && py === y) ? 0 : 2
+    if (reach === 0) {
+      var sides = [x - n.ix, n.ix + n.iw - x, y - n.iy, n.iy + n.ih - y]
+      var near = sides.indexOf(Math.min.apply(null, sides))
+      if (near === 0) px = n.ix
+      else if (near === 1) px = n.ix + n.iw
+      else if (near === 2) py = n.iy
+      else py = n.iy + n.ih
+    }
+  }
+  // Outside the shape (a corner of an ellipse's box) and not near its edge.
+  if (reach > 1 && Math.sqrt((px - x) * (px - x) + (py - y) * (py - y)) > t) return null
+  return { id: n.iid, at: i, x: lineUnit((px - n.ix) / n.iw, 0.5), y: lineUnit((py - n.iy) / n.ih, 0.5), px: px, py: py }
+}
+
+// The roles that put end `end` of the line at `index` down at (x, y), by the
+// mouse or by a key. On or within `pull` of another item, the end glues to its
+// outline (glueAt) and lands there; a null `pull` puts it down free. Answers
+// { values, glued, onto }: onto is the index of the item it is glued to, or -1.
+function placeLineEnd(items, index, end, x, y, pull) {
+  var n = items.get(index)
+  var glue = pull === null ? null : glueAt(items, x, y, index, pull, lineEndPoint(n, end === 0 ? 1 : 0))
+  var values = movedLineEnd(n, end, glue ? glue.px : x, glue ? glue.py : y)
+  var on = end === 0 ? "aon" : "bon"
+  values[on] = glue ? glue.id : 0
+  if (glue) { values[on + "x"] = glue.x; values[on + "y"] = glue.y }
+  return { values: values, glued: glue !== null, onto: glue ? glue.at : -1 }
+}
+
+// Where a dragged end goes: onto an item when it is on or near one, and
+// otherwise lined up as snappedLineEnd would. The item comes first, so being
+// lined up with a third item's side never pulls an end off the shape it was
+// dropped on. `free` puts it down where it is, glued to nothing. Answers
+// placeLineEnd's answer and the guides to draw: around the item it will be
+// glued to, marked `glue`, or the alignment hairlines.
+function draggedLineEnd(items, index, end, x, y, pull, free) {
+  if (free) return { placed: placeLineEnd(items, index, end, x, y, null), guides: [] }
+  var placed = placeLineEnd(items, index, end, x, y, pull)
+  var guides = []
+  if (!placed.glued) {
+    var at = snappedLineEnd(items.get(index), end, x, y, pull, items, index)
+    placed = placeLineEnd(items, index, end, at.x, at.y, pull)
+    guides = at.guides
+  }
+  if (placed.glued) {
+    var n = items.get(placed.onto)
+    guides = [{ glue: true, x1: n.ix, y1: n.iy, x2: n.ix + n.iw, y2: n.iy + n.ih }]
+  }
+  return { placed: placed, guides: guides }
+}
+
+// Where a glued end is now: on its item, or null when it is not glued or its
+// item is gone. `byId` is idIndex(items).
+function gluedPoint(items, byId, id, fx, fy) {
+  if (!id) return null
+  var at = byId[id]
+  if (at === undefined) return null
+  var n = items.get(at)
+  if (!canHoldGlue(n)) return null
+  return { x: n.ix + fx * n.iw, y: n.iy + fy * n.ih }
+}
+
+// Brings every glued line back onto the items it is glued to, after they have
+// moved or changed size. Answers how many lines moved.
+function followGlue(items) {
+  var byId = null, moved = 0
+  for (var i = 0; i < items.count; i++) {
+    var n = items.get(i)
+    if (!isLine(n.kind) || (!n.aon && !n.bon)) continue
+    if (!byId) byId = idIndex(items)
+    var p = linePoints(n)
+    var a = gluedPoint(items, byId, n.aon, n.aonx, n.aony) || { x: p.ax, y: p.ay }
+    var b = gluedPoint(items, byId, n.bon, n.bonx, n.bony) || { x: p.bx, y: p.by }
+    if (Math.abs(a.x - p.ax) + Math.abs(a.y - p.ay) + Math.abs(b.x - p.bx) + Math.abs(b.y - p.by) < 1e-6) continue
+    var values = lineFromPoints(a.x, a.y, b.x, b.y)
+    for (var role in values) if (n[role] !== values[role]) items.setProperty(i, role, values[role])
+    moved++
+  }
+  return moved
+}
+
+// The ids of the items at `indices`, as a lookup.
+function idsAt(items, indices) {
+  var lookup = {}
+  for (var i = 0; i < indices.length; i++) lookup[items.get(indices[i]).iid] = true
+  return lookup
+}
+
+// Lets go of each end of the line at `i` whose item `release` answers true for.
+function releaseGlue(items, i, release) {
+  var n = items.get(i)
+  if (!isLine(n.kind)) return
+  if (n.aon && release(n.aon)) items.setProperty(i, "aon", 0)
+  if (n.bon && release(n.bon)) items.setProperty(i, "bon", 0)
+}
+
+// The indices among `indices` whose place is their own to change: all but a
+// line glued at either end, which goes where what it is glued to goes. Lined
+// up or spread with the boxes it joins, such a line would be counted as one
+// more item to place and then pulled back onto them, leaving the boxes
+// unevenly spaced.
+function placedByHand(items, indices) {
+  var out = []
+  for (var i = 0; i < indices.length; i++) {
+    var n = items.get(indices[i])
+    if (isLine(n.kind) && (n.aon || n.bon)) continue
+    out.push(indices[i])
+  }
+  return out
+}
+
+// Lets go of whatever the lines among `indices` are glued to, unless that is
+// moving with them too: a line dragged on its own comes away from its items.
+// `together`, when given, is the indices of everything moved as one, some of
+// which may not have had to move: aligned with the two boxes it joins, a line
+// keeps both ends even when one box was in line already.
+function unglueMoved(items, indices, together) {
+  var moving = idsAt(items, together || indices)
+  function staying(id) { return !moving[id] }
+  for (var i = 0; i < indices.length; i++) releaseGlue(items, indices[i], staying)
+}
+
+// What Z lets go of for the items at `indices`: every end of a line among
+// them, and every end glued to a shape among them. The lines stay where they
+// are. Answers how many ends would be let go of, and with `apply` lets go.
+function unglueAll(items, indices, apply) {
+  var shapes = {}, lines = {}, ends = 0
+  for (var k = 0; k < indices.length; k++) {
+    var m = items.get(indices[k])
+    if (isLine(m.kind)) lines[indices[k]] = true
+    else shapes[m.iid] = true
+  }
+  for (var i = 0; i < items.count; i++) {
+    var n = items.get(i)
+    if (!isLine(n.kind)) continue
+    var whole = lines[i] === true
+    var a = n.aon && (whole || shapes[n.aon] === true), b = n.bon && (whole || shapes[n.bon] === true)
+    if (a) { ends++; if (apply) items.setProperty(i, "aon", 0) }
+    if (b) { ends++; if (apply) items.setProperty(i, "bon", 0) }
+  }
+  return ends
+}
+
+// Lets go of the items at `indices`: they are being removed.
+function unglueFrom(items, indices) {
+  var gone = idsAt(items, indices)
+  function going(id) { return gone[id] === true }
+  for (var i = 0; i < items.count; i++) releaseGlue(items, i, going)
+}
+
 var CANVAS_PATTERNS = ["Dots", "Grid", "Ruled"]
 
 // The canvas's colour, a setting like its pattern rather than part of a board.
@@ -298,28 +870,96 @@ function keyMarkup(key, color) {
   return '<font color="' + color + '">' + escapeMarkup(key) + "</font>"
 }
 
-function hintMarkup(key, label, color) {
-  if (!keyLeads(key, label)) return keyMarkup(key, color) + ": " + escapeMarkup(label)
-  return keyMarkup(label.slice(0, 1), color) + escapeMarkup(label.slice(1))
+// `say` puts a label into the person's language (a controller's tv); without
+// one it is said as written. A key lights the first letter of its word only
+// where the word, in whatever language, still starts with it.
+function asWritten(text) { return text }
+function hintMarkup(key, label, color, say) {
+  var word = (say || asWritten)(label)
+  if (!keyLeads(key, word)) return keyMarkup(key, color) + ": " + escapeMarkup(word)
+  return keyMarkup(word.slice(0, 1), color) + escapeMarkup(word.slice(1))
 }
 
 // The separator is drawn as markup, where a run of spaces collapses to one —
 // so a line separated by spaces alone arrives with its hints run together.
 // Every caller passes something visible.
-function hintLine(hints, color, separator) {
+function hintLine(hints, color, separator, say) {
   var out = []
-  for (var i = 0; i < hints.length; i++) out.push(hintMarkup(hints[i][0], hints[i][1], color))
-  return out.join(separator === undefined ? " · " : separator)
+  for (var i = 0; i < hints.length; i++) out.push(hintMarkup(hints[i][0], hints[i][1], color, say))
+  return out.join(separator === undefined || separator === null ? " · " : separator)
 }
 
 // What each surface offers, as data: the view joins and colours them, and the
 // help panel below stays the one long list.
-// The palette answers to `:` as well, which is the sibling of `/` and the one
-// worth learning — but a key drawn in front of its own separator reads as
-// ":: commands", which looks like a typo on the one line that is meant to
-// teach. The chord is what this line says; the help list names both.
-var BOARD_HINTS = [["n", "note"], ["r", "rect"], ["e", "ellipse"], ["x", "connect"],
-                   ["ctrl+p", "commands"], ["/", "find"], ["?", "keys"], ["esc", "close"]]
+//
+// The board's own line is an icon and a key per hint, the way the bar draws
+// its other controls; the word is what a screen reader hears (hintWords) and
+// what the help list says. With no word after the key, `:` no longer reads as
+// ":: commands", so the line teaches the key worth learning, not the chord.
+var BOARD_HINTS = [["q", "note"], ["w", "box"], ["e", "ellipse"], ["r", "diamond"],
+                   ["t", "line"], ["z", "arrow"], ["x", "connect"],
+                   [":", "commands"], ["/", "find"], ["?", "keys"], ["esc", "close"]]
+// What ctrl does, shown in the bar while ctrl is held on its own: the chords
+// are the keys a person is least likely to remember. With a single line in
+// hand, ctrl+hjkl aims it rather than resizing.
+function ctrlHints(lineInHand) {
+  return [["z", "undo"], ["r", "redo"], ["c", "copy"], ["v", "paste"], ["d", "duplicate"],
+          ["s", "save"], ["e", "png"], ["n", "new board"], ["o", "import"], ["p", "commands"],
+          ["hjkl", lineInHand ? "aim head" : "resize"]]
+}
+// The icon for each hint above, board's then ctrl's: Nerd Font Material
+// Design glyphs, the family SAVE_GLYPHS comes from.
+var HINT_GLYPHS = {
+  note: String.fromCodePoint(0xF039B), box: String.fromCodePoint(0xF0E5F),
+  ellipse: String.fromCodePoint(0xF0EA1), diamond: String.fromCodePoint(0xF070C),
+  line: String.fromCodePoint(0xF055E), arrow: String.fromCodePoint(0xF005C),
+  connect: String.fromCodePoint(0xF0D3D),
+  commands: String.fromCodePoint(0xF07B7), find: String.fromCodePoint(0xF0349),
+  keys: String.fromCodePoint(0xF097B), close: String.fromCodePoint(0xF0156),
+  undo: String.fromCodePoint(0xF054C), redo: String.fromCodePoint(0xF044E),
+  copy: String.fromCodePoint(0xF018F), paste: String.fromCodePoint(0xF0192),
+  duplicate: String.fromCodePoint(0xF0191), save: String.fromCodePoint(0xF0193),
+  png: String.fromCodePoint(0xF02E9), "new board": String.fromCodePoint(0xF0214),
+  import: String.fromCodePoint(0xF0770), resize: String.fromCodePoint(0xF0A68),
+  "aim head": String.fromCodePoint(0xF0615)
+}
+
+// Icon, a step larger than the text so it reads beside the key (StyledText's
+// size="+1" is relative, about 1.2 times, so it follows the theme's text
+// size), then the key in the accent. Between hints, three &nbsp; entities:
+// StyledText collapses spaces, no-break and en spaces included, to one; the
+// entity is kept. A dot between icons would be noise.
+function iconHintLine(hints, color) {
+  var out = []
+  for (var i = 0; i < hints.length; i++)
+    out.push('<font size="+1">' + escapeMarkup(HINT_GLYPHS[hints[i][1]] || hints[i][1]) + "</font>\u00a0" +
+             keyMarkup(hints[i][0], color))
+  return out.join("&nbsp;&nbsp;&nbsp;")
+}
+// What a click on a hint in the header does: the command its key runs, by
+// name, so a click and the key cannot come to do different things. "close" is
+// escape, which steps back one thing at a time and closes the board last;
+// what ctrl+hjkl does is a key held down, so it has no click.
+var HINT_COMMANDS = {
+  note: "New note", box: "New box", ellipse: "New ellipse", diamond: "New diamond",
+  line: "New line", arrow: "Glue with an arrow", connect: "Connect to another",
+  commands: "Run a command", find: "Find in this board", keys: "Keys",
+  undo: "Undo", redo: "Redo", copy: "Copy out", paste: "Paste in", duplicate: "Duplicate",
+  save: "Save now", png: "Export a PNG", "new board": "New board", import: "Import a board",
+  "the other pane": "The other pane"
+}
+function hintCommand(word) {
+  return Object.prototype.hasOwnProperty.call(HINT_COMMANDS, word) ? HINT_COMMANDS[word] : ""
+}
+// What a hint's tooltip says: its command's name, or for escape what it does.
+var CLOSE_TIP = "Close, or step back"
+function hintTip(word, say) {
+  var name = word === "close" ? CLOSE_TIP : hintCommand(word)
+  return name === "" ? "" : (say || asWritten)(name)
+}
+function hintWords(hints, say) {
+  return hints.map(function (h) { return h[0] + " " + (say || asWritten)(h[1]) }).join(", ")
+}
 var FIND_HINTS = [["enter", "next"], ["esc", "done"]]
 var ARRANGE_HINTS = [["hjkl", "edges"], ["c/m", "centres"], ["HJKL", "spread evenly"],
                      ["esc", "cancel"]]
@@ -339,7 +979,7 @@ var CONFLICT_HINTS = [["1 2 3 or tab", "choose"], ["enter", "do it"],
                       ["esc", "decide later; nothing is lost either way"]]
 var PROMPT_HINTS = [["enter", "confirm"], ["esc", "cancel"]]
 var EMPTY_HINTS = [["a", "add a board"], ["A", "Add a folder"]]
-var START_HINTS = [["n", "New note"], ["Ctrl+V", "Paste text"]]
+var START_HINTS = [["q", "New note"], ["Ctrl+V", "Paste text"]]
 
 // ------------------------------------------------------------- failures
 // What an operation that can fail on its own time belongs to. A subprocess
@@ -500,7 +1140,8 @@ function paletteTint(palette, group, tint) {
 //   arrange         Typing comes before connecting because both can be true at
 //   backgrounds     once — x holds a source, i starts a caret — and while there
 //   editing         is a caret in a note, x is the letter x.
-//   linking
+//   linking         x and z hold a first end the same way, and cannot both.
+//   gluing
 //   flash           what just happened, and goes away by itself.
 //   switching       what it is busy with.
 //   hints           nothing in particular: the keys.
@@ -509,7 +1150,7 @@ function paletteTint(palette, group, tint) {
 // The line said "saving…" for the moment each write took, and every edit made
 // the keys blink out of the header and back.
 var STATUS_TIERS = ["none", "saveError", "trashIndexError", "conflict", "damaged", "failure",
-                    "palette", "arrange", "backgrounds", "editing", "linking",
+                    "palette", "arrange", "backgrounds", "editing", "linking", "gluing",
                     "flash", "switching", "hints"]
 
 function statusTier(s) {
@@ -527,6 +1168,7 @@ function statusTier(s) {
   if (s.showPinned) return "backgrounds"
   if (s.editing) return "editing"
   if (s.linking) return "linking"
+  if (s.gluing) return "gluing"
   if (s.statusText !== "") return "flash"
   if (s.switching) return "switching"
   // The keys are for the pane the keyboard is in. Beside it, a pane that is
@@ -553,6 +1195,8 @@ var SAVE_GLYPHS = {
   failed: String.fromCodePoint(0xF0F42), readonly: String.fromCodePoint(0xF033E)
 }
 var FIT_GLYPH = String.fromCodePoint(0xF18F4)
+// What a row of the board browser is, at a glance: a folder, or a board.
+var BROWSER_GLYPHS = { folder: String.fromCodePoint(0xF024B), board: String.fromCodePoint(0xF0219) }
 var MENU_GLYPH = String.fromCodePoint(0xF035C)
 
 // ------------------------------------------------------------ connectors
@@ -580,12 +1224,22 @@ function linkAt(links, a, b) {
 // What the board says while the far end is being chosen. Written from the
 // outcome rather than beside it, so the words and the mutation move together.
 // Every string in it is ours, so there is nothing here to escape.
-function linkHint(outcome, color) {
-  var line = outcome === "remove" ? keyMarkup("x", color) + " removes this connector"
-    : outcome === "reverse" ? keyMarkup("x", color) + " turns this connector round"
-    : outcome === "create" ? keyMarkup("x", color) + " connects these two"
-    : "pick the other end, then " + keyMarkup("x", color)
-  return line + " \u00b7 " + hintMarkup("esc", "cancel", color)
+var LINK_HINTS = { remove: "%1 removes this connector", reverse: "%1 turns this connector round",
+                   create: "%1 connects these two", none: "pick the other end, then %1" }
+// What z will do while its second item is being chosen (gluePlan).
+var GLUE_HINTS = { join: "%1 joins these two with an arrow", attach: "%1 glues the arrow to this",
+                   beside: "%1 puts a glued arrow beside it", already: "this arrow is glued here already",
+                   far: "too far apart for one arrow", touching: "these two touch: there is no room for an arrow",
+                   none: "pick a shape or an arrow, then %1" }
+function glueHint(outcome, color, say) {
+  var words = (say || asWritten)(GLUE_HINTS.hasOwnProperty(outcome) ? GLUE_HINTS[outcome] : GLUE_HINTS.none)
+  return fillText(escapeMarkup(words), [keyMarkup("z", color)]) + " \u00b7 " + hintMarkup("esc", "cancel", color, say)
+}
+function linkHint(outcome, color, say) {
+  var words = (say || asWritten)(LINK_HINTS.hasOwnProperty(outcome) ? LINK_HINTS[outcome] : LINK_HINTS.none)
+  // The words are a catalog's, the key is ours: the one is escaped, and the
+  // other put in after.
+  return fillText(escapeMarkup(words), [keyMarkup("x", color)]) + " \u00b7 " + hintMarkup("esc", "cancel", color, say)
 }
 
 // Canvas text is untrusted, including notes in local/synced boards. Keep the
@@ -621,11 +1275,14 @@ function notePreview(text) {
 // what the help teaches, and a list that says "Type in it (edit)" is teaching
 // two things at once. Nothing dispatches by an alias: it is only a way in.
 var COMMANDS = [
-  { name: "New note", key: "n", run: "addRelative", arg: "note", needs: "edit" },
-  { name: "New box", key: "r", run: "addRelative", arg: "rect", needs: "edit", also: ["rectangle"] },
+  { name: "New note", key: "q", run: "addRelative", arg: "note", needs: "edit" },
+  { name: "New box", key: "w", run: "addRelative", arg: "rect", needs: "edit", also: ["rectangle"] },
   { name: "New ellipse", key: "e", run: "addRelative", arg: "ellipse", needs: "edit" },
+  { name: "New diamond", key: "r", run: "addRelative", arg: "diamond", needs: "edit", also: ["rhombus"] },
+  { name: "New line", key: "t", run: "addRelative", arg: "line", needs: "edit" },
+  { name: "Glue with an arrow", key: "z", run: "glueKey", needs: "edit", also: ["new arrow", "connect", "attach"] },
   { name: "Type in it", key: "i", run: "editSelected", needs: "target", also: ["edit", "edit text"] },
-  { name: "Change shape", key: "s", run: "cycleKind", needs: "target" },
+  { name: "Change shape", key: "s", run: "cycleKind", needs: "target", also: ["line style", "arrow style"] },
   { name: "Change colour", key: "c", run: "recolorItem", needs: "target" },
   { name: "Item texture…", key: "", run: "openGroup", arg: "texture", opens: "texture", needs: "texture", also: ["background", "fill"] },
   { name: "Texture: Plain", key: "", run: "setTexture", arg: "plain", needs: "texture", group: "texture", also: ["background", "fill"] },
@@ -635,6 +1292,7 @@ var COMMANDS = [
   { name: "Texture: Hatch", key: "", run: "setTexture", arg: "hatch", needs: "texture", group: "texture", also: ["background", "fill"] },
   { name: "Connect to another", key: "x", run: "toggleLinking", needs: "target", also: ["link"] },
   { name: "Remove its connectors", key: "X", run: "unlinkSelected", needs: "target", also: ["disconnect", "unlink"] },
+  { name: "Unglue", key: "Z", run: "unglueTargets", needs: "target", also: ["detach", "let go"] },
   { name: "Duplicate", key: "ctrl+d", run: "duplicateTargets", needs: "target" },
   { name: "Delete", key: "del", run: "removeTargets", needs: "target" },
   // The chord's own entry is its family's: in the list it opens the six
@@ -690,7 +1348,7 @@ var COMMANDS = [
     also: ["background", "color", "black"] },
   { name: "Zoom in", key: "+", run: "zoomCentre", arg: 1.2, needs: "" },
   { name: "Zoom out", key: "-", run: "zoomCentre", arg: 1 / 1.2, needs: "" },
-  { name: "Fullscreen or windowed", key: "w", run: "toggleWindowMode", needs: "" },
+  { name: "Fullscreen or windowed", key: "F11", run: "toggleWindowMode", needs: "" },
   // Two views, of one board or of two. The key that made a layout takes it
   // away again, so there is nothing to learn for closing.
   { name: "Split side by side", key: "v", run: "toggleSplit", arg: "side-by-side", needs: "",
@@ -719,6 +1377,11 @@ var COMMANDS = [
   { name: "Export a PNG in black and white", key: "", run: "choosePng", arg: "mono", needs: "", group: "png",
     also: ["png mono", "monochrome", "greyscale", "grayscale", "print"] },
   { name: "Save now", key: "ctrl+s", run: "flushSave", needs: "" },
+  // The board as it stood at earlier saves. A family whose members are not in
+  // this table: they are the versions the board has, listed when it is opened
+  // (versionChoices).
+  { name: "Earlier versions…", key: "", run: "openGroup", arg: "versions", needs: "", opens: "versions", dynamic: true,
+    also: ["history", "restore", "go back", "backup", "revert"] },
   // Only offered while two versions of the open board exist. They have no keys
   // of their own: the panel that appears with the conflict numbers them, and
   // this is how they are found by name.
@@ -757,8 +1420,14 @@ function aliasLeads(command, needle) {
 // command that `opens` that group stands for them. Browsing, with nothing
 // typed, shows the family's one entry; typing finds any of them by name; and
 // inside a family, `group`, the list is that family and nothing else.
-function matchCommands(query, scope, group) {
-  var needle = String(query === undefined ? "" : query).toLowerCase().trim()
+//
+// `say` is the person's language: a command answers to its name there, and to
+// its English name and aliases as well, which is what every guide and every
+// other machine calls it.
+function matchCommands(query, scope, group, say) {
+  var typed = String(query === undefined ? "" : query).trim()
+  var needle = typed.toLowerCase()
+  var keyed = []
   var leading = []
   var rest = []
   // What only an alias found. Behind the names, because a command whose own
@@ -777,6 +1446,11 @@ function matchCommands(query, scope, group) {
     if (needle === "") { rest.push(COMMANDS[i]); continue }
     var name = COMMANDS[i].name.toLowerCase()
     var at = name.indexOf(needle)
+    if (say) {
+      var said = String(say(COMMANDS[i].name)).toLowerCase()
+      var there = said.indexOf(needle)
+      if (there >= 0 && (at < 0 || there < at)) at = there
+    }
     // The key is worth searching as well as the name: someone who half
     // remembers the letter should be able to type it and see what it does.
     // Tested before the substring, or a command whose name happens to contain
@@ -784,18 +1458,276 @@ function matchCommands(query, scope, group) {
     //
     // One bucket each, so a command that matches by name and by alias both is
     // still offered once.
-    if (at === 0 || COMMANDS[i].key.toLowerCase() === needle) leading.push(COMMANDS[i])
+    // The key's own command first, then the names that start with it.
+    // Case counts there: z and Z are two keys.
+    if (COMMANDS[i].key === typed) keyed.push(COMMANDS[i])
+    else if (at === 0 || COMMANDS[i].key.toLowerCase() === needle) leading.push(COMMANDS[i])
     else if (at > 0) rest.push(COMMANDS[i])
     else if (aliasLeads(COMMANDS[i], needle)) aliased.push(COMMANDS[i])
   }
-  return leading.concat(rest, aliased)
+  return keyed.concat(leading, rest, aliased)
 }
 
 // What a family is called, for the line the list shows it under.
-function groupTitle(group) {
+function groupTitle(group, say) {
   for (var i = 0; i < COMMANDS.length; i++)
-    if (COMMANDS[i].opens === group) return COMMANDS[i].name.replace(/…$/, "")
+    if (COMMANDS[i].opens === group) return String((say || asWritten)(COMMANDS[i].name)).replace(/…$/, "")
   return ""
+}
+
+// ------------------------------------------------------- earlier versions
+// The helper keeps the file a save replaces, at most one every ten minutes,
+// in a folder of the board's own, and names each by when it was kept, in UTC
+// (BoardFiles.py, keep_version). What it lists comes back as lines of a name
+// and a size.
+var VERSION_NAME = /^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})\.json$/
+// More than the helper keeps, so the list is bounded by this side as well.
+var MAX_VERSIONS_LISTED = 64
+
+// When a version was kept, in milliseconds, or NaN for a name that is not one.
+function versionTime(name) {
+  var m = VERSION_NAME.exec(String(name))
+  if (!m) return NaN
+  var at = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]), Number(m[6]))
+  // Date.UTC rolls a thirteenth month over into the next year; a name that
+  // does not read back as itself was never a time.
+  var back = new Date(at)
+  return back.getUTCMonth() === Number(m[2]) - 1 && back.getUTCDate() === Number(m[3])
+    && back.getUTCHours() === Number(m[4]) ? at : NaN
+}
+
+// The helper's listing as rows, newest first, as it lists them.
+function versionRows(text) {
+  var rows = []
+  var lines = String(text).split("\n")
+  for (var i = 0; i < lines.length && rows.length < MAX_VERSIONS_LISTED; i++) {
+    var parts = lines[i].split("\t")
+    var at = parts.length === 2 ? versionTime(parts[0]) : NaN
+    if (isNaN(at) || !/^[0-9]{1,12}$/.test(parts[1])) continue
+    rows.push({ name: parts[0], bytes: Number(parts[1]), at: at })
+  }
+  return rows
+}
+
+var WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+function twoDigits(n) { return (n < 10 ? "0" : "") + n }
+
+// When a version is from, the way a person says it: the day by name while it
+// is near, by date once it is not, and the year only when it is another one.
+//
+// The four shapes are catalog entries like any other, so a language orders a
+// date its own way: a weekday, day, month and time; or a day, month, year and
+// time, which in English takes a comma the other does not.
+var VERSION_SHAPES = { today: "Today %1", yesterday: "Yesterday %1", near: "%1 %2 %3 %4", far: "%1 %2 %3, %4" }
+function versionLabel(at, now, say) {
+  say = say || asWritten
+  var then = new Date(at), today = new Date(now)
+  var clock = twoDigits(then.getHours()) + ":" + twoDigits(then.getMinutes())
+  var days = Math.round((new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()
+    - new Date(then.getFullYear(), then.getMonth(), then.getDate()).getTime()) / 86400000)
+  if (days === 0) return fillText(say(VERSION_SHAPES.today), [clock])
+  if (days === 1) return fillText(say(VERSION_SHAPES.yesterday), [clock])
+  var month = say(MONTHS[then.getMonth()])
+  if (then.getFullYear() !== today.getFullYear())
+    return fillText(say(VERSION_SHAPES.far), [then.getDate(), month, then.getFullYear(), clock])
+  return fillText(say(VERSION_SHAPES.near), [say(WEEKDAYS[then.getDay()]), then.getDate(), month, clock])
+}
+
+// A board's versions as the rows the command list draws: shaped like the
+// commands in the table, so the one panel lists them, and found by typing
+// part of when they are from. A row is its date and nothing beside it: how
+// long ago that was, where a command has its key, took the room the date
+// needed in a narrow panel.
+function versionChoices(rows, query, now, say) {
+  var typed = String(query === undefined ? "" : query).trim()
+  var needle = typed.toLowerCase()
+  var found = []
+  for (var i = 0; rows && i < rows.length; i++) {
+    var label = versionLabel(rows[i].at, now, say)
+    if (needle !== "" && label.toLowerCase().indexOf(needle) < 0) continue
+    found.push({ name: label, key: "", run: "restoreVersion", arg: rows[i].name,
+                 needs: "edit", group: "versions" })
+  }
+  return found
+}
+
+// ------------------------------------------------------------- languages
+// The board speaks the language Omarchy is set to. A catalog is one JSON
+// object for a language, from the English text to its translation, with %1,
+// %2 where something is put in; a counted string is an object of the forms
+// its language has ("one", "few", "other"…), found under its English plural.
+// English is the text in the source and has no catalog to load: whatever a
+// catalog does not have is said in English, string by string.
+
+// The language a line of ~/.config/omarchy/language names, or English.
+function languageCode(raw) {
+  var code = String(raw === undefined || raw === null ? "" : raw).trim()
+  return /^[a-z]{2,3}(-[A-Za-z]{2})?$/.test(code) ? code : "en"
+}
+
+// The catalogs to try for a language, most particular first: pt-BR, then pt.
+function languageChain(code) {
+  if (code === "en") return []
+  var dash = code.indexOf("-")
+  return dash > 0 ? [code, code.slice(0, dash)] : [code]
+}
+
+// CLDR's plural category for a whole count, by Omarchy language code: the
+// rules the shell's own Commons/Plural.js has, so a count here takes the
+// form it takes in the menu beside it.
+function pluralCategory(code, count) {
+  var n = Math.abs(Math.trunc(Number(count) || 0))
+  var n10 = n % 10
+  var n100 = n % 100
+  var millions = n !== 0 && n % 1000000 === 0
+  function within(value, low, high) { return value >= low && value <= high }
+  switch (String(code || "")) {
+  case "ja": case "ko": case "zh-CN": case "zh-TW": case "th": case "vi": case "id": case "ms":
+    return "other"
+  case "hi": case "bn": case "fa": case "si":
+    return n <= 1 ? "one" : "other"
+  case "fr": case "pt-BR":
+    return n <= 1 ? "one" : millions ? "many" : "other"
+  case "ca": case "es-MX": case "it": case "pt":
+    return n === 1 ? "one" : millions ? "many" : "other"
+  case "fil":
+    return (n10 === 4 || n10 === 6 || n10 === 9) ? "other" : "one"
+  case "is":
+    return n10 === 1 && n100 !== 11 ? "one" : "other"
+  case "cs": case "sk":
+    return n === 1 ? "one" : within(n, 2, 4) ? "few" : "other"
+  case "pl":
+    if (n === 1) return "one"
+    return within(n10, 2, 4) && !within(n100, 12, 14) ? "few" : "many"
+  case "ru": case "uk":
+    if (n10 === 1 && n100 !== 11) return "one"
+    return within(n10, 2, 4) && !within(n100, 12, 14) ? "few" : "many"
+  case "hr": case "sr":
+    if (n10 === 1 && n100 !== 11) return "one"
+    return within(n10, 2, 4) && !within(n100, 12, 14) ? "few" : "other"
+  case "sl":
+    if (n100 === 1) return "one"
+    if (n100 === 2) return "two"
+    return within(n100, 3, 4) ? "few" : "other"
+  case "lt":
+    if (within(n100, 11, 19)) return "other"
+    return n10 === 1 ? "one" : n10 >= 2 ? "few" : "other"
+  case "lv":
+    if (n10 === 0 || within(n100, 11, 19)) return "zero"
+    return n10 === 1 ? "one" : "other"
+  case "ro":
+    if (n === 1) return "one"
+    return n === 0 || within(n100, 1, 19) ? "few" : "other"
+  case "ar":
+    if (n <= 2) return ["zero", "one", "two"][n]
+    return within(n100, 3, 10) ? "few" : within(n100, 11, 99) ? "many" : "other"
+  case "he":
+    return n === 1 ? "one" : n === 2 ? "two" : "other"
+  case "ga":
+    if (n <= 2) return n === 0 ? "other" : n === 1 ? "one" : "two"
+    return within(n, 3, 6) ? "few" : within(n, 7, 10) ? "many" : "other"
+  default:
+    return n === 1 ? "one" : "other"
+  }
+}
+
+// %1, %2… put in. In one pass, so something put in that itself reads "%2"
+// is left as it is; a hole with nothing for it stays a hole.
+function fillText(template, args) {
+  return String(template).replace(/%([1-9])/g, function (hole, digit) {
+    var value = args ? args[Number(digit) - 1] : undefined
+    return value === undefined || value === null ? hole : String(value)
+  })
+}
+
+// A catalog's own entry for `text`, or undefined: only a property of the
+// catalog itself, so "constructor" is a word like any other.
+function catalogEntry(catalog, text) {
+  return catalog && Object.prototype.hasOwnProperty.call(catalog, text) ? catalog[text] : undefined
+}
+
+// `text` in the catalog's language, with `args` put in; English when the
+// catalog does not have it.
+function translated(catalog, text, args) {
+  var found = catalogEntry(catalog, text)
+  return fillText(typeof found === "string" && found !== "" ? found : text, args)
+}
+
+// A counted string: `one` and `other` are the English forms, the catalog has
+// the language's under the English plural, and %1 is the count.
+function translatedCount(catalog, language, one, other, count, args) {
+  var found = catalogEntry(catalog, other)
+  var form = ""
+  if (found && typeof found === "object") {
+    var category = found[pluralCategory(language, count)]
+    form = typeof category === "string" && category !== "" ? category
+      : typeof found.other === "string" ? found.other : ""
+  }
+  if (form === "") form = Number(count) === 1 ? one : other
+  return fillText(form, [count].concat(args || []))
+}
+
+// Every string that reaches the screen out of a table here rather than out
+// of a t("…") written where it is shown: what a controller's tv is handed.
+// tests/i18n.js holds the English catalog to these and to the t() calls, so
+// a string added to a table has a catalog entry before it is ever shown.
+function displayStrings() {
+  var found = []
+  function add(text) { if (typeof text === "string" && text !== "" && found.indexOf(text) < 0) found.push(text) }
+  function hints(table) { for (var i = 0; i < table.length; i++) add(table[i][1]) }
+  var i, j
+  for (i = 0; i < COMMANDS.length; i++) add(COMMANDS[i].name)
+  for (i = 0; i < MENU_COMMANDS.length; i++) add(MENU_COMMANDS[i].label)
+  add(ZOOM_COMMANDS[0].label)
+  add(CLOSE_TIP)
+  var tables = [BOARD_HINTS, ctrlHints(false), ctrlHints(true), FIND_HINTS, ARRANGE_HINTS, PINNED_HINTS, BROWSER_HINTS,
+                TRASH_HINTS, PALETTE_HINTS, CONFLICT_HINTS, PROMPT_HINTS, EMPTY_HINTS, START_HINTS]
+  for (i = 0; i < tables.length; i++) hints(tables[i])
+  for (var outcome in LINK_HINTS) add(LINK_HINTS[outcome])
+  for (var glueOutcome in GLUE_HINTS) add(GLUE_HINTS[glueOutcome])
+  // The help list: what each key does, and the keys themselves where they
+  // are said in words rather than as keys.
+  for (i = 0; i < KEY_HELP_SECTIONS.length; i++) {
+    add(KEY_HELP_SECTIONS[i].title)
+    for (j = 0; j < KEY_HELP_SECTIONS[i].rows.length; j++) {
+      var row = KEY_HELP_SECTIONS[i].rows[j]
+      if (keysInWords(row[0])) add(row[0])
+      add(row[1])
+    }
+  }
+  for (var shape in VERSION_SHAPES) add(VERSION_SHAPES[shape])
+  for (i = 0; i < WEEKDAYS.length; i++) add(WEEKDAYS[i])
+  for (i = 0; i < MONTHS.length; i++) add(MONTHS[i])
+  for (i = 0; i < EXPORT_PALETTE_NAMES.length; i++) {
+    add(exportNote(EXPORT_PALETTE_NAMES[i], false))
+    add(exportNote(EXPORT_PALETTE_NAMES[i], true))
+  }
+  for (i = 0; i < CANVAS_PATTERNS.length; i++) add(CANVAS_PATTERNS[i])
+  add("Plain")
+  for (i = 0; i < CANVAS_COLOURS.length; i++) add(CANVAS_COLOURS[i])
+  for (i = 0; i < TEXTURES.length; i++) add(TEXTURES[i])
+  for (var refusal in PICTURE_REFUSALS) add(PICTURE_REFUSALS[refusal])
+  add(UNCHECKED_PICTURE)
+  add(FULL_ITEMS)
+  add(FULL_LINKS)
+  add(TOO_LARGE)
+  add(TOO_LONG_LIST)
+  add("has a note longer than 1 MB")
+  add(tooManyRows({ items: { length: MAX_ITEMS + 1 } }))
+  add(tooManyRows({ links: { length: MAX_LINKS + 1 } }))
+  add(DAMAGE_SYMLINK)
+  add(DAMAGE_LARGE)
+  return found
+}
+
+// Whether a help row's key column says something in words: "drag on canvas",
+// "hold ctrl", as against "ctrl+d" or "h j k l", which read the same anywhere.
+var KEY_WORDS = /^(ctrl|shift|super|alt|tab|esc|del|enter|space|backspace|wheel|png|hjkl|HJKL|[a-z]|[A-Z]|F[0-9]+)$/
+function keysInWords(keys) {
+  var parts = String(keys).split(/[^A-Za-z0-9]+/)
+  for (var i = 0; i < parts.length; i++) if (parts[i] !== "" && !/^[0-9]+$/.test(parts[i]) && !KEY_WORDS.test(parts[i])) return true
+  return false
 }
 
 function commandByName(name) {
@@ -809,13 +1741,15 @@ function commandByName(name) {
 // does, as it does for the menu. Keyed by what a command runs, then by its
 // argument, so a new command in a family already here has one already.
 var COMMAND_ICONS = {
-  addRelative: { note: "\uf249", rect: "\uf096", ellipse: "\uf10c" },
+  addRelative: { line: "\uf068", arrow: "\uf178", note: "\uf249", rect: "\uf096", ellipse: "\uf10c", diamond: "\uf29f" },
+  glueKey: "\uf178",
   setTexture: "\uf00a",
   editSelected: "\uf040",
   cycleKind: "\uf1b2",
   recolorItem: "\uf1fc",
   toggleLinking: "\uf0c1",
   unlinkSelected: "\uf127",
+  unglueTargets: "\uf127",
   duplicateTargets: "\uf24d",
   removeTargets: "\uf1f8",
   beginArrange: "\uf037",
@@ -837,7 +1771,8 @@ var COMMAND_ICONS = {
   setCanvasBackground: "\uf03e",
   setCanvasColour: "\uf042",
   // A family's entry wears the glyph its members do.
-  openGroup: { texture: "\uf00a", layer: "\uf0dc", canvas: "\uf03e", png: "\uf03e", conflict: "\uf0a0" },
+  openGroup: { texture: "\uf00a", layer: "\uf0dc", canvas: "\uf03e", png: "\uf03e", conflict: "\uf0a0", versions: "\uf1da" },
+  restoreVersion: "\uf1da",
   toggleWindowMode: "\uf2d0",
   // Columns for side by side, a stack of boxes for stacked.
   toggleSplit: { "side-by-side": "\uf0db", stacked: "\uf233" },
@@ -868,10 +1803,66 @@ function commandIcon(command) {
   return typeof icon === "string" ? icon : ""
 }
 
-// The shortcut list, in the groups a person looks for a key by. The shell's own
+// The shortcut list, in the groups a person looks for a key by, most used
+// first: making and moving things, then the view, then files. The shell's own
 // panels break a long list with small labels and a rule between sections, and
 // forty rows with nothing between them read as a wall.
 var KEY_HELP_SECTIONS = [
+  { title: "Make and change", rows: [
+    ["q w e r t", "new note, box, ellipse, diamond, line"],
+    ["z, move, z", "join two shapes with a glued arrow, or glue an arrow to a shape"],
+    ["z z", "a glued arrow beside the shape; with nothing selected, a new arrow"],
+    ["Z", "unglue: an arrow lets go of both ends, a shape of every arrow on it"],
+    ["s", "cycle shape or line style"],
+    ["end dropped on a shape", "a line's end glues to its edge and follows it"],
+    ["enter / i", "write in it, as plain text"],
+    ["c", "change its colour"],
+    [". then Item texture", "plain, ruled, grid, dots or hatch background"],
+    ["p / shift+p", "pin as background / select backgrounds"],
+    ["ctrl+d", "duplicate it, connectors between the copies included"],
+    ["del / backspace", "delete what is marked, or the one under the cursor"],
+    ["u / ctrl+r", "undo / redo"]
+  ] },
+  { title: "Move and arrange", rows: [
+    ["h j k l", "move the selection around"],
+    ["tab", "cycle through everything"],
+    ["H J K L", "push the selected item"],
+    ["ctrl+hjkl", "resize it, from the bottom-right"],
+    ["ctrl / ctrl+shift + hjkl", "on a line: move its head / its tail"],
+    ["space", "mark this one as well"],
+    ["a", "mark everything"],
+    ["g then h j k l", "align the marked items on that edge"],
+    ["g then c / m", "align their centres on one line"],
+    ["g then H J K L", "spread them evenly, outermost two staying put"],
+    ["] / [", "bring forward / send backward, where they overlap"],
+    ["} / {", "bring right to the front / send right to the back"]
+  ] },
+  { title: "Connect", rows: [
+    ["x", "connect: x on one, click or tab to the other, x again"],
+    // Which of the two it will be is said on the line in the header while the
+    // far end is being chosen, so this row says that there is a choice rather
+    // than asking anyone to work out which side of it they are on.
+    ["x on a connected pair", "turn that connector round, or remove it — the line says which"],
+    ["X", "remove every connector on this item at once"]
+  ] },
+  { title: "View", rows: [
+    ["f", "fit the whole board on screen"],
+    ["0", "reset the view"],
+    ["+ / -", "zoom"],
+    ["F11", "fullscreen or windowed"],
+    ["v / V", "split side by side / stacked; the same key again for one pane"],
+    ["o", "the other pane; b there opens another board in it"],
+    ["/", "find: type to search the notes, enter steps through matches"]
+  ] },
+  { title: "Find your way", rows: [
+    ["? / F1", "this list"],
+    ["hold ctrl", "the bar shows what ctrl does, until you let go"],
+    [": / ctrl+p", "run any command by name, without knowing its key"],
+    [". or right-click", "what can be done with what is selected"],
+    ["m", "show or hide the menu in the header"],
+    ["m then h l / tab", "walk the menu; enter picks, esc closes"],
+    ["esc", "back out, then close the board"]
+  ] },
   { title: "Boards and files", rows: [
     ["b", "boards: browse, open, create"],
     ["ctrl+n / F2", "new board / name the current board"],
@@ -883,63 +1874,12 @@ var KEY_HELP_SECTIONS = [
     ["super+v", "paste a picture or text (also ctrl+v)"],
     ["super+c", "copy a picture or text (also ctrl+c)"]
   ] },
-  { title: "Make and change", rows: [
-    ["n", "new note beside the selected one"],
-    ["r / e", "new box / ellipse"],
-    ["s", "cycle shape: note, box, ellipse, diamond"],
-    ["c", "change its colour"],
-    [". then Item texture", "plain, ruled, grid, dots or hatch background"],
-    ["p / shift+p", "pin as background / select backgrounds"],
-    ["ctrl+d", "duplicate it, connectors between the copies included"],
-    ["del / backspace", "delete what is marked, or the one under the cursor"],
-    ["u / ctrl+r", "undo / redo"]
-  ] },
-  { title: "Connect", rows: [
-    ["x", "connect: x on one, click or tab to the other, x again"],
-    // Which of the two it will be is said on the line in the header while the
-    // far end is being chosen, so this row says that there is a choice rather
-    // than asking anyone to work out which side of it they are on.
-    ["x on a connected pair", "turn that connector round, or remove it — the line says which"],
-    ["X", "remove every connector on this item at once"]
-  ] },
-  { title: "Write", rows: [
-    ["enter / i", "edit the selected item as plain text"]
-  ] },
-  { title: "Move and arrange", rows: [
-    ["h j k l", "move the selection around"],
-    ["tab", "cycle through everything"],
-    ["H J K L", "push the selected item"],
-    ["ctrl+hjkl", "resize it, from the bottom-right"],
-    ["space", "mark this one as well"],
-    ["a", "mark everything"],
-    ["g then h j k l", "align the marked items on that edge"],
-    ["g then c / m", "align their centres on one line"],
-    ["g then H J K L", "spread them evenly, outermost two staying put"],
-    ["] / [", "bring forward / send backward, where they overlap"],
-    ["} / {", "bring right to the front / send right to the back"]
-  ] },
-  { title: "View", rows: [
-    ["f", "fit the whole board on screen"],
-    ["0", "reset the view"],
-    ["+ / -", "zoom"],
-    ["w", "fullscreen or windowed"],
-    ["v / V", "split side by side / stacked; the same key again for one pane"],
-    ["o", "the other pane; b there opens another board in it"],
-    ["/", "find: type to search the notes, enter steps through matches"]
-  ] },
-  { title: "Find your way", rows: [
-    ["? / F1", "this list"],
-    [": / ctrl+p", "run any command by name, without knowing its key"],
-    [". or right-click", "what can be done with what is selected"],
-    ["m", "show or hide the menu in the header"],
-    ["m then h l / tab", "walk the menu; enter picks, esc closes"],
-    ["esc", "back out, then close the board"]
-  ] },
   { title: "Pointer", rows: [
     ["shift+click", "mark items together"],
     ["drag on canvas", "sweep a rectangle to mark everything it touches"],
     ["shift+drag", "sweep, keeping what was already marked"],
-    ["drag an item", "move it, and everything marked with it"],
+    ["drag an item", "move it, and everything marked with it; it lines up with what it nears"],
+    ["shift while dragging", "no magnet: place it, or a line end, anywhere"],
     ["middle/right drag", "pan the canvas"],
     ["drag the line between panes", "resize them; double-click it to even them out"],
     ["wheel", "zoom at the pointer"]
@@ -954,16 +1894,89 @@ var KEY_HELP = (function () {
   return rows
 })()
 
+// A help label as the keys to press and the words between them, so the keys
+// can be drawn as key caps: "g then h j k l" is g, "then", h, j, k, l. It reads
+// the label as shown, translated or not, because a translation moves the words
+// and keeps the keys ("Strg halten").
+//
+// A key is a single character, a function key, a named key, or a run of the
+// letters hjkl standing for all four; a token holding a + is a chord, its keys
+// drawn and anything else in it kept as words ("shift+click"). A slash or a
+// comma between keys is a word, so "p / shift+p" reads as two choices; the
+// slash alone is the find key. The one single letter that is a word is "a"
+// after a word, as in "x on a connected pair".
+var KEY_NAMES = ["ctrl", "shift", "alt", "super", "tab", "esc", "enter", "del", "backspace",
+  "space", "strg", "umschalt", "entf", "eingabe", "leertaste", "rücktaste"]
+function isKeyName(word) {
+  if (word.length === 1) return true
+  if (/^F\d{1,2}$/.test(word)) return true
+  if (/^[hjklHJKL]{4}$/.test(word)) return true
+  return KEY_NAMES.indexOf(word.toLowerCase()) >= 0
+}
+function keyLabelParts(label) {
+  var text = String(label === undefined || label === null ? "" : label)
+  var tokens = text.split(/\s+/).filter(function (t) { return t !== "" })
+  var out = []
+  function word(w) {
+    var last = out.length ? out[out.length - 1] : null
+    if (last && last.text !== undefined) last.text += (/^[,]/.test(w) ? "" : " ") + w
+    else out.push({ text: w })
+  }
+  function key(k) { out.push({ key: k }) }
+  var lastWasWord = false
+  for (var i = 0; i < tokens.length; i++) {
+    var t = tokens[i]
+    if (tokens.length === 1 && t.length === 1) { key(t); break }
+    if (t === "/" && i > 0 && i < tokens.length - 1) { word("/"); lastWasWord = false; continue }
+    // A + standing between two chords joins them; at the start it is the key.
+    if (t === "+" && i > 0 && tokens[i - 1] !== "/") { word("+"); lastWasWord = false; continue }
+    var trail = ""
+    if (t.length > 1 && /,$/.test(t)) { trail = ","; t = t.slice(0, -1) }
+    if (t === "a" && lastWasWord) { word(t + trail); continue }
+    if (t.length > 1 && t.indexOf("+") > 0 && t.indexOf("+") < t.length - 1) {
+      var parts = t.split("+")
+      var anyKey = false
+      for (var p = 0; p < parts.length; p++) {
+        if (isKeyName(parts[p])) { key(parts[p]); anyKey = true }
+        else word((p > 0 ? "+" : "") + parts[p])
+      }
+      if (trail) word(trail)
+      lastWasWord = !anyKey
+      continue
+    }
+    if (isKeyName(t)) {
+      key(t)
+      if (trail) word(trail)
+      lastWasWord = false
+    } else {
+      word(t + trail)
+      lastWasWord = true
+    }
+  }
+  return out
+}
+
 // ---------------------------------------------------------------- marshalling
 // One shape in, one shape out. The file, the undo stack and the models all
 // speak this, so there is a single definition of what an item is.
 
 function itemRows(items) {
-  var out = []
+  var out = [], byId = null
   for (var i = 0; i < items.count; i++) {
     var n = items.get(i)
-    out.push({ id: n.iid, kind: n.kind, x: n.ix, y: n.iy, w: n.iw, h: n.ih, tint: n.itint, text: n.itext, pinned: n.ipinned === true, src: n.isrc })
-    if (n.kind !== "image" && normalizeTexture(n.itexture) !== "plain") out[out.length - 1].texture = n.itexture
+    var row = { id: n.iid, kind: n.kind, x: n.ix, y: n.iy, w: n.iw, h: n.ih, tint: n.itint, text: n.itext, pinned: n.ipinned === true, src: n.isrc }
+    if (isLine(n.kind)) {
+      var ends = lineEnds(n)
+      row.ax = ends.ax; row.ay = ends.ay; row.bx = ends.bx; row.by = ends.by
+      // Glue only to an item that is on the board and can hold it.
+      if (n.aon || n.bon) {
+        if (!byId) byId = idIndex(items)
+        if (n.aon && gluedPoint(items, byId, n.aon, 0, 0)) row.from = { id: n.aon, x: lineUnit(n.aonx, 0.5), y: lineUnit(n.aony, 0.5) }
+        if (n.bon && gluedPoint(items, byId, n.bon, 0, 0)) row.to = { id: n.bon, x: lineUnit(n.bonx, 0.5), y: lineUnit(n.bony, 0.5) }
+      }
+    }
+    if (n.kind !== "image" && normalizeTexture(n.itexture) !== "plain") row.texture = n.itexture
+    out.push(row)
   }
   return out
 }
@@ -994,6 +2007,10 @@ function syncItems(items, rows) {
   while (same < rows.length && same < items.count && items.get(same).iid === rows[same].id) same++
   for (var i = 0; i < same; i++) {
     var have = items.get(i), want = rows[i]
+    var ends = lineEndRoles(want)
+    for (var role in ends) if (have[role] !== ends[role]) items.setProperty(i, role, ends[role])
+    var glue = glueRoles(want)
+    for (var g in glue) if (have[g] !== glue[g]) items.setProperty(i, g, glue[g])
     if (have.kind !== want.kind) items.setProperty(i, "kind", want.kind)
     if (have.ix !== want.x) items.setProperty(i, "ix", want.x)
     if (have.iy !== want.y) items.setProperty(i, "iy", want.y)
@@ -1008,8 +2025,10 @@ function syncItems(items, rows) {
   for (var r = items.count - 1; r >= same; r--) items.remove(r)
   for (var a = same; a < rows.length; a++) {
     var n = rows[a]
-    items.append({ iid: n.id, kind: n.kind, ix: n.x, iy: n.y, iw: n.w, ih: n.h, itint: n.tint,
-                   itext: n.text, ipinned: n.pinned === true, isrc: n.src, itexture: normalizeTexture(n.texture) })
+    items.append(Object.assign({ iid: n.id, kind: n.kind, ix: n.x, iy: n.y, iw: n.w, ih: n.h, itint: n.tint },
+                               lineEndRoles(n),
+                               { itext: n.text, ipinned: n.pinned === true, isrc: n.src, itexture: normalizeTexture(n.texture) },
+                               glueRoles(n)))
   }
 }
 
@@ -1053,8 +2072,7 @@ function itemModelRows(rows) {
     used[id] = true
     var kind = KINDS.indexOf(n.kind) >= 0 ? n.kind
       : (n.kind === "image" && imageIsValid(n.src) ? "image" : "note")
-    made.push({
-      iid: id,
+    made.push(Object.assign({ iid: id }, lineEndRoles(n), {
       kind: kind,
       ix: clampCoord(num(n.x, 0)),
       iy: clampCoord(num(n.y, 0)),
@@ -1065,7 +2083,15 @@ function itemModelRows(rows) {
       itext: typeof n.text === "string" ? n.text : "",
       ipinned: n.pinned === true,
       isrc: kind === "image" ? n.src : ""
-    })
+    }, glueRoles({ kind: kind, from: n.from, to: n.to })))
+  }
+  // Glue holds only to an item on this board that can take it, and never to
+  // the line itself; anything else is let go of as the board is read.
+  var holds = {}
+  for (var h = 0; h < made.length; h++) if (canHoldGlue(made[h])) holds[made[h].iid] = true
+  for (var m = 0; m < made.length; m++) {
+    if (!holds[made[m].aon] || made[m].aon === made[m].iid) made[m].aon = 0
+    if (!holds[made[m].bon] || made[m].bon === made[m].iid) made[m].bon = 0
   }
   return made
 }
@@ -1156,10 +2182,12 @@ function newIds(items, next, count) {
 // that is broken.
 //
 // Version 6 was a board with its edit history, which Omarchyform 0.4.7 to
-// 0.4.10 kept in the file; version 7 adds item textures. Older readers open
-// these boards read-only to prevent feature loss. A board with textures still
-// writes version 7 and any other version 5, neither with a history.
-var FORMAT_VERSION = 7
+// 0.4.10 kept in the file; version 7 adds item textures, and version 8 lines.
+// Older readers open these boards read-only to prevent feature loss. A board
+// writes the oldest version that holds what it has: 8 with a line in it, 7
+// with a texture, and 5 otherwise.
+var FORMAT_VERSION = 8
+var TEXTURE_VERSION = 7
 var PLAIN_VERSION = 5
 
 // A whole number from 1 to FORMAT_VERSION. "5" and 4.5 are not versions.
@@ -1234,6 +2262,12 @@ var FULL_ITEMS = "A board holds at most " + thousands(MAX_ITEMS) + " items"
 var FULL_LINKS = "A board holds at most " + thousands(MAX_LINKS) + " connectors"
 // What a board past MAX_BOARD_BYTES is, wherever it is turned away.
 var TOO_LARGE = "larger than " + MAX_BOARD_BYTES / 1048576 + " MB"
+// Why a board is read-only when its file was never read: said after the
+// board's name, as boardLimit's reasons are.
+var DAMAGE_SYMLINK = "goes through a symlink"
+var DAMAGE_LARGE = "is " + TOO_LARGE
+// What a picture the helper gave no answer about is said to be.
+var UNCHECKED_PICTURE = "could not be checked"
 
 // Qt's JSON.parse keeps every element of an array it is still reading on the
 // engine's own stack, and nothing checks that stack as it grows: past about
@@ -1386,10 +2420,11 @@ var FORMAT_MARKER = "omarchyform.board"
 
 function writeFile(items, links, nextId) {
   var rows = itemRows(items)
-  var textured = rows.some(function (row) { return row.texture !== undefined })
+  var version = rows.some(function (row) { return isLine(row.kind) }) ? FORMAT_VERSION
+    : rows.some(function (row) { return row.texture !== undefined }) ? TEXTURE_VERSION : PLAIN_VERSION
   return JSON.stringify({
     kind: FORMAT_MARKER,
-    version: textured ? FORMAT_VERSION : PLAIN_VERSION,
+    version: version,
     nextId: nextId,
     items: rows,
     links: linkRows(links)
@@ -1581,13 +2616,25 @@ function importBoard(raw) {
   var rows = []
   for (var i = 0; i < data.items.length; i++) {
     var row = data.items[i], out = {}
-    var numeric = ["id", "x", "y", "w", "h"]
+    var numeric = ["id", "x", "y", "w", "h", "ax", "ay", "bx", "by"]
     var strings = ["kind", "text", "tint", "color", "texture", "src"]
     for (var j = 0; j < numeric.length; j++) field(row, out, numeric[j], true)
     for (var k = 0; k < strings.length; k++) field(row, out, strings[k], false)
     if (row.pinned !== undefined) {
       if (typeof row.pinned !== "boolean") throw new Error("Invalid board field")
       out.pinned = row.pinned
+    }
+    // A line's glue is one level deep, three numbers, and nothing else.
+    var ends = ["from", "to"]
+    for (var e = 0; e < ends.length; e++) {
+      var glue = row[ends[e]]
+      if (glue === undefined) continue
+      if (glue === null || typeof glue !== "object" || Array.isArray(glue)) throw new Error("Invalid board field")
+      var kept = {}
+      field(glue, kept, "id", true)
+      field(glue, kept, "x", true)
+      field(glue, kept, "y", true)
+      out[ends[e]] = kept
     }
     rows.push(out)
   }

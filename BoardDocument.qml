@@ -62,6 +62,12 @@ Item {
   function scheduleSave() { session.scheduleSave() }
   function flushSave() { session.flushSave() }
   function openBoard(path, fresh) { session.openBoard(path, fresh) }
+  // The board as it stood at earlier saves, newest first, once asked for:
+  // rows of a name, a size and a time (Store.versionRows).
+  readonly property var versions: session.versions
+  readonly property bool versionsLoading: session.versionsLoading
+  function listVersions() { session.listVersions() }
+  function restoreVersion(name) { session.restoreVersion(name) }
   function useDisk() { session.useDisk() }
   function replaceDisk() { session.replaceDisk() }
   function keptAsCopy(name) { session.keptAsCopy(name) }
@@ -77,11 +83,17 @@ Item {
   readonly property bool stateReady: doc.workspace.stateReady
   readonly property string boardsDir: doc.workspace.boardsDir
   readonly property string backupsDir: doc.workspace.backupsDir
+  readonly property string versionsDir: doc.workspace.versionsDir
+  function versionsPathFor(relative) { return doc.workspace.versionsPathFor(relative) }
   readonly property var library: doc.workspace.library
   function backupPathFor(relative) { return doc.workspace.backupPathFor(relative) }
   function recheckPictures(names) { doc.workspace.recheckPictures(names) }
   function lockPathFor(relative) { return doc.workspace.lockPathFor(relative) }
   function fileCommand(action, args) { return doc.workspace.fileCommand(action, args) }
+  // What the session says, in the workspace's language.
+  function t(text, a, b, c) { return doc.workspace.t(text, a, b, c) }
+  function tn(one, other, count, a, b) { return doc.workspace.tn(one, other, count, a, b) }
+  function tv(text) { return doc.workspace.tv(text) }
   function writeState() { doc.workspace.writeState() }
 
   // Every pane showing this board, for what the session has to say to the view.

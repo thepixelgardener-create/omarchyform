@@ -15,6 +15,9 @@ BarWidget {
 
   readonly property string pluginId: "thepixelgardener.omarchyform"
 
+  // The one thing the icon says, in the language the board speaks.
+  BoardLanguage { id: words }
+
   readonly property bool boardOpen: root.bar && root.bar.shell
     && typeof root.bar.shell.isPluginOpen === "function"
     && root.bar.shell.isPluginOpen(root.pluginId)
@@ -55,7 +58,7 @@ BarWidget {
     // problem.
     active: root.boardOpen
     activeColor: Commons.Color.accent
-    tooltipText: root.boardOpen ? "Omarchyform — open" : "Omarchyform"
+    tooltipText: root.boardOpen ? words.t("Omarchyform — open") : "Omarchyform"
     onPressed: root.toggleBoard()
   }
 }

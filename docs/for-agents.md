@@ -55,14 +55,18 @@ somewhere harmless first** if you are not certain, then move it in.
 
 ### What it cannot do
 
-`bin/omarchyform` cannot draw. A picture of a board needs the scene, and the
-scene needs the running shell. If someone wants a PNG, tell them: open the
-board and press `ctrl+e`. See §7.
+It cannot draw a board in the desktop theme's own colours: those belong to the
+running shell, and `ctrl+e` on an open board is the way to them. What it can
+do is `render` a board on white, on black or in one ink, which is how you
+look at what you made. See §7.
 
-It also does not know which board is open right now, and does not touch the
+It does not know which board is open right now, and does not touch the
 trash or the pictures beside a board. It does keep backups: every write saves
 the version it replaced, in `backups/` for a board in the library and as
-`<file>.bak` beside one anywhere else.
+`<file>.bak` beside one anywhere else. A board in the library also keeps
+earlier versions, at most one every ten minutes, which the person can go back
+to from the board (**Earlier versions…** in the command list), so a change you
+make to a board they care about is one they can take back.
 
 ---
 
@@ -88,7 +92,8 @@ the version it replaced, in `backups/` for a board in the library and as
 `maximumCoordinate`, and anything past them is brought within them. Paint
 order is array order: later items are drawn over earlier ones.
 
-**`kind`** is one of `note`, `rect`, `ellipse`, `diamond`, or `image`. A note is
+**`kind`** is one of `note`, `rect`, `ellipse`, `diamond`, `image`,
+`line`, `arrow`, `double-arrow`, or `dashed-line`. A note is
 a rectangle with a rule across the top and its text aligned to the top left;
 the others centre their text. An `image` carries a file name in `src` and is
 not something to create from here — there is no op for it, because the picture
@@ -105,7 +110,7 @@ a cluster sits on, or a label for a region. Pin the shape *after* the items
 that go on top of it exist, and give it a `muted` tint.
 
 **`texture`** is optional on notes and shapes: `plain` (default), `ruled`,
-`grid`, `dots`, or `hatch`. Textured boards use format 7; any other board is 5.
+`grid`, `dots`, or `hatch`. Textured boards use format 7; boards containing standalone lines use format 8; other boards use format 5.
 Images stay plain. Unknown texture values load as plain. `setTexture` sets one.
 
 **Links.** Directed, drawn as an arrow from `from` to `to`. **Only one runs
@@ -343,13 +348,27 @@ overlap? Is anything further than about 400 from its nearest neighbour for no
 reason? Is more than a third of the board tinted? Those three questions catch
 most of it.
 
-You cannot see the board. Say so rather than claiming it looks good.
+Then look at it: `omarchyform render board.json /some/where/board.png`
+writes a picture you can open, and `--only 3,4,7` frames just those items when
+a large board is too small to read at 4096 pixels across. A picture catches
+what geometry does not: text that does not fit its item, a connector running
+behind a third item, a board that reads as a wall. If you could not look, say
+so rather than claiming it looks good.
 
 ---
 
 ## 7. Pictures
 
-Exporting is the shell's job, not this one's. Tell the person:
+`omarchyform render <board> <picture.png>` writes a PNG with no shell and no
+display: the board's bounds and 32 pixels around them, at most 4096 on a side.
+`--colors` is `light` (on white, the default), `dark` or `mono`; `--only`
+takes ids and frames just those items; `--force` writes over a picture that is
+there. The answer has the size of the picture and `picturesLeftOut`, each
+picture on the board that was not drawn and why. It needs Quickshell, which
+an Omarchy machine has; without it the answer says so.
+
+A picture in the desktop theme's own colours is the shell's job. For that,
+tell the person:
 
 - `ctrl+e` writes a PNG of the board, with no header, grid or selection rings.
 - **Marking items first** (`space` on each, or `a` for everything) gives a
@@ -380,3 +399,22 @@ Exporting is the shell's job, not this one's. Tell the person:
 - **Do not fill a board to make it look substantial.** Twelve items that say
   something beat forty that repeat each other, and the person can see the
   difference immediately even if you cannot.
+
+### Standalone line objects
+
+`kind` also accepts `line`, `arrow`, `double-arrow`, and `dashed-line`.
+These use ordinary item position and size, with optional endpoint fractions
+`ax`, `ay`, `bx`, `by` in [0, 1] relative to that rectangle. Defaults are
+(0.08, 0.5) and (0.92, 0.5). Endpoints are clamped on load; malformed values
+use the defaults. Imports require primitive numeric fields. Lines use format
+8 so older releases open their boards read-only. CLI `add` and `setKind`
+accept all four kinds. Line styles do not interpret text or fill textures.
+
+A line's ends can be glued to other items: optional `from` and `to`, each
+`{ "id": <item id>, "x": <0..1>, "y": <0..1> }`, the item and the place on it
+as fractions of its box (`{"id": 3, "x": 0, "y": 0.5}` is the middle of item
+3's left side). A glued end follows its item when the item moves or is
+resized, in the app and through CLI `move` and `resize`. Glue to an item that
+does not exist, to a line, to a pinned background or to the line itself is
+dropped on load; `remove` lets go of the removed item. Moving a glued line on
+its own lets go of both ends.

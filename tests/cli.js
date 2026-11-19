@@ -402,7 +402,7 @@ try {
     run('new', file, '--note', 'a', '--note', 'b')
     assert.equal(pipe(JSON.stringify([{ op: 'setTexture', args: [2, 'hatch'] }]), 'apply', file, '-').status, 0)
     const written = JSON.parse(fs.readFileSync(file, 'utf8'))
-    assert.equal(written.version, S.FORMAT_VERSION)
+    assert.equal(written.version, 7)
     assert.equal(written.items[1].texture, 'hatch')
     assert.equal(written.items[0].texture, undefined, 'plain is not written down')
     const unknown = pipe(JSON.stringify([{ op: 'setTexture', args: [1, 'tartan'] }]), 'apply', file, '-')
@@ -584,7 +584,7 @@ try {
     const unversioned = current.replace(/  "version": \d+,\n/, '')
     assert.notEqual(unversioned, current)
     for (const front of [current, unversioned]) for (const gap of ['\n  ', ' ']) {
-      const newer = front.slice(0, -3) + ',\n  "history": {"v":1},' + gap + '"version": 8\n}\n'
+      const newer = front.slice(0, -3) + ',\n  "history": {"v":1},' + gap + '"version": 9\n}\n'
       fs.writeFileSync(file, newer)
       const refused = pipe(JSON.stringify([{ op: 'setText', args: [1, 'no'] }]), 'apply', file)
       assert.equal(refused.status, 1, refused.raw)
@@ -678,6 +678,104 @@ try {
     assert.equal(answer.error, 'python3 not found', out.stdout)
     assert.equal(fs.readFileSync(file, 'utf8'), before, 'the board is untouched')
     console.log('ok — command line: a missing python3 is named, as JSON')
+  }
+
+  {
+    // A board in the library keeps earlier versions when the command line
+    // writes it, where the board itself lists them: what a write replaced,
+    // and not one for every write. A board anywhere else has its .bak only.
+    const library = path.join(dir, '.local/share/omarchyform')
+    const inside = path.join(library, 'boards', 'kept.json')
+    fs.mkdirSync(path.dirname(inside), { recursive: true })
+    assert.equal(run('new', inside, '--note', 'one').status, 0)
+    const add = text => pipe(JSON.stringify([{ op: 'add', args: ['note', 0, 300, 220, 160, text] }]), 'apply', inside, '-')
+    assert.equal(add('two').status, 0)
+    assert.equal(add('three').status, 0)
+    const kept = path.join(library, 'versions/v1/kept.json')
+    const versions = fs.readdirSync(kept)
+    assert.equal(versions.length, 1, 'one version, not one a write: ' + versions)
+    assert.match(versions[0], /^\d{8}-\d{6}\.json$/)
+    assert.deepEqual(asThePluginWouldLoad(path.join(kept, versions[0])).rows.map(r => r.text), ['one'], 'the board the first write replaced')
+    assert.equal(fs.statSync(kept).mode & 0o777, 0o700)
+    assert.equal(fs.statSync(path.join(kept, versions[0])).mode & 0o777, 0o600)
+    const outside = path.join(dir, 'unkept.json')
+    run('new', outside, '--note', 'one')
+    pipe(JSON.stringify([{ op: 'add', args: ['note', 0, 300] }]), 'apply', outside, '-')
+    assert.equal(fs.existsSync(outside + '.bak'), true)
+    assert.deepEqual(fs.readdirSync(path.join(library, 'versions/v1')), ['kept.json'], 'and none for a board outside the library')
+    // A link anywhere on the way to a board's versions is never followed: not
+    // to keep one, and not to clear "stale" ones that are someone else's.
+    const v1 = path.join(library, 'versions/v1'), held = path.join(library, 'versions/v1-held')
+    const elsewhere = path.join(dir, 'elsewhere')
+    fs.mkdirSync(path.join(elsewhere, 'fresh.json'), { recursive: true })
+    fs.writeFileSync(path.join(elsewhere, 'fresh.json', 'precious'), 'not a version')
+    fs.renameSync(v1, held)
+    fs.symlinkSync(elsewhere, v1)
+    assert.equal(run('new', path.join(library, 'boards', 'fresh.json'), '--note', 'x').status, 0, 'the board is still written')
+    assert.equal(add('four').status, 0)
+    assert.equal(fs.readFileSync(path.join(elsewhere, 'fresh.json', 'precious'), 'utf8'), 'not a version', 'nothing outside is cleared')
+    assert.deepEqual(fs.readdirSync(elsewhere), ['fresh.json'], 'or kept there')
+    fs.unlinkSync(v1)
+    fs.renameSync(held, v1)
+    console.log('ok — command line: a library board it writes keeps the version each first write replaced')
+  }
+
+  {
+    // The skill is linked the way Omarchy links its own: into ~/.agents/skills
+    // and into the folder of each agent that has one, and nowhere else.
+    const home = fs.mkdtempSync(path.join(dir, 'skill-home-'))
+    const at = { ...env, HOME: home }
+    const skill = (...args) => {
+      const out = spawnSync(process.execPath, [cli, 'skill', ...args], { encoding: 'utf8', input: '', env: at })
+      return { status: out.status, out: JSON.parse(out.stdout) }
+    }
+    const source = path.join(__dirname, '..', 'skills', 'omarchyform')
+    const shared = path.join(home, '.agents/skills/omarchyform')
+    const claude = path.join(home, '.claude/skills/omarchyform')
+    const codex = path.join(home, '.codex/skills/omarchyform')
+    const pi = path.join(home, '.pi/agent/skills/omarchyform')
+
+    const before = skill()
+    assert.equal(before.status, 0)
+    assert.equal(before.out.skill, source)
+    assert.deepEqual(before.out.linked, [], 'nothing is linked until it is asked for')
+    assert.deepEqual(fs.readdirSync(home), [], 'and asking writes nothing')
+
+    // Claude has a folder, with a stale link in it; Codex has a folder with a
+    // skill of that name somebody made by hand; Pi was never used.
+    fs.mkdirSync(path.dirname(claude), { recursive: true })
+    fs.symlinkSync('/somewhere/else', claude)
+    fs.mkdirSync(codex, { recursive: true })
+    fs.writeFileSync(path.join(codex, 'SKILL.md'), 'mine')
+
+    const installed = skill('install')
+    assert.equal(installed.status, 0)
+    assert.deepEqual(installed.out.linked, [shared, claude], 'the shared folder is made, a stale link replaced')
+    assert.equal(fs.readlinkSync(shared), source)
+    assert.equal(fs.readlinkSync(claude), source)
+    assert.ok(fs.readFileSync(path.join(shared, 'SKILL.md'), 'utf8').startsWith('---\nname: omarchyform'), 'the link leads to the skill')
+    assert.deepEqual(installed.out.left.map(entry => entry.path), [codex], 'a skill that is not a link is named and left')
+    assert.equal(fs.readFileSync(path.join(codex, 'SKILL.md'), 'utf8'), 'mine')
+    assert.equal(fs.existsSync(path.dirname(pi)), false, 'no folder is made for an agent that has none')
+    assert.deepEqual(skill('install').out.linked, [shared, claude], 'installing twice is installing once')
+    assert.deepEqual(skill().out.linked, [shared, claude])
+
+    // Removing takes this program's links and nothing else: not the hand-made
+    // skill, and not a link that has since been pointed somewhere else.
+    fs.unlinkSync(claude)
+    fs.symlinkSync('/somewhere/else', claude)
+    const removed = skill('remove')
+    assert.deepEqual(removed.out.removed, [shared])
+    assert.equal(fs.readlinkSync(claude), '/somewhere/else')
+    assert.equal(fs.readFileSync(path.join(codex, 'SKILL.md'), 'utf8'), 'mine')
+    assert.deepEqual(skill('remove').out.removed, [], 'removing twice removes nothing')
+
+    for (const args of [['upgrade'], ['--force'], ['install', 'extra']]) {
+      const refused = skill(...args)
+      assert.equal(refused.status, 1, 'skill ' + args.join(' ') + ' exits 1')
+      assert.equal(refused.out.ok, false)
+    }
+    console.log('ok — command line: the skill is linked for the agents that are there, and unlinked again')
   }
 } finally {
   fs.rmSync(dir, { recursive: true, force: true })

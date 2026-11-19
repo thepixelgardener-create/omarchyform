@@ -10,6 +10,7 @@ import errno
 import fcntl
 import io
 import os
+import re
 import stat
 import sys
 from contextlib import contextmanager
@@ -132,6 +133,117 @@ def move_new(source, destination):
         raise OSError(error, os.strerror(error))
 
 
+# Earlier versions of a board: the file a save is about to replace, kept in a
+# folder of the board's own outside the boards tree. A board is saved every
+# time typing pauses, so not every save is kept: one at most every ten
+# minutes, forty a board, and no more than two boards' worth of bytes, the
+# oldest going first. The name is when it was kept, in UTC.
+VERSION_NAME = re.compile(r'^\d{8}-\d{6}\.json$')
+VERSION_STAMP = '%Y%m%d-%H%M%S'
+VERSION_GAP_SECONDS = 600
+MAX_VERSIONS = 40
+MAX_VERSION_BYTES = 2 * MAX_BOARD_BYTES
+
+
+def versions_in(folder):
+    # Oldest first. Only plain files named the way this names them: a link or
+    # anything else someone put there is not a version.
+    try:
+        names = sorted(name for name in os.listdir(folder) if VERSION_NAME.match(name))
+    except OSError:
+        return []
+    return [name for name in names
+            if not os.path.islink(os.path.join(folder, name)) and os.path.isfile(os.path.join(folder, name))]
+
+
+def same_bytes(one, other):
+    import filecmp
+    try:
+        return os.stat(one).st_size == os.stat(other).st_size and filecmp.cmp(one, other, shallow=False)
+    except OSError:
+        return False
+
+
+def keep_version(board, folder, root, always, fresh=False):
+    # Called with the board's lock held, before the board is replaced. A
+    # version that cannot be kept never stops the save it rides on: whatever
+    # goes wrong here, the board is still written.
+    import shutil
+    try:
+        if not folder:
+            return
+        under(folder, root)
+        if os.path.islink(folder):
+            return
+        if not os.path.isfile(board) or os.path.islink(board):
+            # Nothing is being replaced. When the writer expected nothing to
+            # be there (`fresh`), the board is new, and versions already under
+            # its name were another board's, since moved or deleted by hand,
+            # and are not this one's to go back to. A board written over
+            # whatever is there, as an open board is when its file went
+            # missing under it, is the same board: its versions stay, and the
+            # caps prune them as usual.
+            if fresh and os.path.isdir(folder):
+                shutil.rmtree(folder)
+            return
+        if os.stat(board).st_size > MAX_BOARD_BYTES:
+            return
+        names = versions_in(folder)
+        utc = datetime.timezone.utc
+        now = datetime.datetime.now(utc)
+        if names:
+            newest = datetime.datetime.strptime(names[-1][:15], VERSION_STAMP).replace(tzinfo=utc)
+            if not always and 0 <= (now - newest).total_seconds() < VERSION_GAP_SECONDS:
+                return
+            if same_bytes(board, os.path.join(folder, names[-1])):
+                return
+            # Names sort by time. A clock put back must not file a newer
+            # version behind an older one.
+            now = max(now, newest + datetime.timedelta(seconds=1))
+        os.makedirs(folder, mode=0o700, exist_ok=True)
+        with temporary(folder) as staged:
+            with open(board, 'rb') as original, open(staged, 'wb') as copy:
+                bounded(original, copy)
+            os.replace(staged, os.path.join(folder, now.strftime(VERSION_STAMP) + '.json'))
+        names = versions_in(folder)
+        sizes = {name: os.stat(os.path.join(folder, name)).st_size for name in names}
+        while len(names) > 1 and (len(names) > MAX_VERSIONS or sum(sizes[name] for name in names) > MAX_VERSION_BYTES):
+            os.unlink(os.path.join(folder, names.pop(0)))
+    except (OSError, SystemExit, ValueError):
+        pass
+
+
+def keep_backup(board, backup):
+    import shutil
+    parents(backup)
+    if os.path.exists(board):
+        with temporary(os.path.dirname(backup) or '.') as aside:
+            with open(board, "rb") as original, open(aside, "wb") as saved:
+                shutil.copyfileobj(original, saved)
+            os.replace(aside, backup)
+
+
+def follow_versions(old, new, root):
+    # A board's versions go where it goes. Whatever is already at the new
+    # place was left by a board that is no longer there: the move itself
+    # refuses to land on one that is. Never worth failing a move over.
+    import shutil
+    try:
+        if not old or not new:
+            return
+        under(old, root)
+        under(new, root)
+        if os.path.islink(new) or os.path.isfile(new):
+            os.unlink(new)
+        elif os.path.isdir(new):
+            shutil.rmtree(new)
+        if os.path.isdir(old) and not os.path.islink(old):
+            parents(new)
+            os.rename(old, new)
+    except (OSError, SystemExit):
+        pass
+
+
 def make_private(folders):
     # Exit 3 when a folder cannot be made private: not a plugin folder, not
     # made, not this user's, not a folder, or its mode cannot be set. Then
@@ -219,7 +331,7 @@ def run(op, args, source):
     elif op == 'commit':
         import shutil
         board, backup, lock, expected = args[:4]
-        root, backup_root = (args[4:] + ['', ''])[:2]
+        root, backup_root, versions, versions_root, version_mode = (args[4:] + [''] * 5)[:5]
         under(board, root)
         under(backup, backup_root)
         if any(os.path.islink(p) for p in (board, backup, backup + '.tmp')):
@@ -241,19 +353,54 @@ def run(op, args, source):
                 if expected != '-' and expected != current:
                     sys.stdout.write(current)
                     refuse(7)
-                parents(backup)
-                if os.path.exists(board):
-                    with temporary(os.path.dirname(backup) or '.') as aside:
-                        with open(board, "rb") as original, open(aside, "wb") as saved:
-                            shutil.copyfileobj(original, saved)
-                        os.replace(aside, backup)
+                keep_version(board, versions, versions_root, version_mode == 'always', expected == '')
+                keep_backup(board, backup)
+                os.replace(staged, board)
+                sys.stdout.write(revision(board))
+    elif op == 'versions':
+        # A board's earlier versions, newest first: each one's name and size.
+        folder, root = args
+        if os.path.isdir(folder):
+            under(folder, root)
+            for name in reversed(versions_in(folder)):
+                sys.stdout.write(f'{name}\t{os.stat(os.path.join(folder, name)).st_size}\n')
+    elif op == 'restore':
+        # An earlier version put back as the board, under the lock and only
+        # onto the revision the caller read, as a save is. The board as it is
+        # goes into its versions first, so going back can itself be gone back
+        # on. Exit 8 says the version asked for is not there.
+        board, versions, name, backup, lock, expected, root, backup_root, versions_root = args
+        under(board, root)
+        under(backup, backup_root)
+        under(versions, versions_root)
+        if not VERSION_NAME.match(name):
+            refuse(2)
+        chosen = os.path.join(versions, name)
+        if any(os.path.islink(p) for p in (board, backup, versions, chosen)):
+            refuse()
+        if not os.path.isfile(chosen):
+            refuse(8)
+        parents(board)
+        with temporary(os.path.dirname(board) or '.') as staged:
+            # Copied first: keeping the board as it is can push the oldest
+            # version out, and that may be the one being gone back to.
+            with open(chosen, 'rb') as original, open(staged, 'wb') as copy:
+                bounded(original, copy)
+            with locked(lock):
+                current = revision(board)
+                if expected != '-' and expected != current:
+                    sys.stdout.write(current)
+                    refuse(7)
+                keep_version(board, versions, versions_root, True)
+                keep_backup(board, backup)
                 os.replace(staged, board)
                 sys.stdout.write(revision(board))
     elif op == 'mkdir':
         os.mkdir(confined(*args), mode=0o700)
     elif op == 'move':
         import shutil
-        source_root, source_name, target_root, target_name = args
+        source_root, source_name, target_root, target_name = args[:4]
+        versions_from, versions_to, versions_root = (args[4:] + [''] * 3)[:3]
         old = confined(source_root, source_name)
         new = confined(target_root, target_name)
         parents(new)
@@ -276,9 +423,11 @@ def run(op, args, source):
                 shutil.rmtree(old)
             else:
                 os.unlink(old)
+        follow_versions(versions_from, versions_to, versions_root)
     elif op == 'purge':
         import shutil
-        root, name = args
+        root, name = args[:2]
+        versions, versions_root = (args[2:] + [''] * 2)[:2]
         if '/' in name:
             refuse()
         path = confined(root, name)
@@ -286,6 +435,14 @@ def run(op, args, source):
             shutil.rmtree(path)
         elif os.path.lexists(path):
             os.unlink(path)
+        # What is destroyed for good takes its earlier versions with it.
+        try:
+            if versions:
+                under(versions, versions_root)
+                if os.path.isdir(versions) and not os.path.islink(versions):
+                    shutil.rmtree(versions)
+        except (OSError, SystemExit):
+            pass
     elif op == 'publish':
         root, name, staged = args
         if '/' in name:

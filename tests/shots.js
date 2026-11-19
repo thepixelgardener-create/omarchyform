@@ -6,6 +6,7 @@
 //   node tests/shots.js tokyo-night catppuccin-latte
 //   node tests/shots.js --light --dark   one of each, whichever is installed
 //   node tests/shots.js --hold           and leave the board up to drive by hand
+//   node tests/shots.js --language de    in German, as Setup > Language would set it
 //
 // `--hold` takes the pictures and then stays open on the isolated boards this
 // run built, which is what docs/pointer-checks.md is done against: a pointer
@@ -60,7 +61,15 @@ function firstThemeOfMode(mode) {
   throw new Error('no ' + mode + ' theme installed to photograph')
 }
 
-const args = process.argv.slice(2).filter(a => a !== '--hold')
+// `--language de` photographs it in that language, as Setup > Language
+// would set it; without it, English, whatever the machine is set to.
+const languageAt = process.argv.indexOf('--language')
+const language = languageAt >= 0 ? process.argv[languageAt + 1] : ''
+if (languageAt >= 0 && !/^[a-z]{2,3}(-[A-Za-z]{2})?$/.test(language || '')) {
+  console.error('--language takes a code Omarchy uses, as de or pt-BR')
+  process.exit(2)
+}
+const args = process.argv.slice(2).filter((a, i, all) => a !== '--hold' && a !== '--language' && all[i - 1] !== '--language')
 const hold = process.argv.includes('--hold')
 let requested
 try {
@@ -104,7 +113,7 @@ function report(theme, out) {
 // promise returned from it would run the cleanup while the board was still up,
 // and take the boards out from under the person driving it.
 async function capture(theme) {
-  const out = path.join(cache, theme.label)
+  const out = path.join(cache, theme.label + (language ? '-' + language : ''))
   fs.rmSync(out, { recursive: true, force: true })
   fs.mkdirSync(out, { recursive: true })
 
@@ -114,8 +123,12 @@ async function capture(theme) {
   try {
     const home = path.join(dir, 'home')
     fs.mkdirSync(home)
-    for (const file of fs.readdirSync(repo).filter(f => /\.(qml|js|sh|py)$/.test(f)))
+    for (const file of fs.readdirSync(repo).filter(f => /\.(qml|js|sh|py)$|^manifest\.json$/.test(f)))
       fs.copyFileSync(path.join(repo, file), path.join(dir, file))
+    // The Omarchy UI kit the panels are built from, as the plugin carries it.
+    fs.cpSync(path.join(repo, 'kit'), path.join(dir, 'kit'), { recursive: true })
+    // The catalogs, so a picture can be taken in another language.
+    fs.cpSync(path.join(repo, 'i18n'), path.join(dir, 'i18n'), { recursive: true })
     for (const module of ['Commons', 'Ui'])
       fs.cpSync(path.join(omarchy, 'shell', module), path.join(dir, module), { recursive: true })
     fs.mkdirSync(path.join(dir, 'services'))
@@ -143,7 +156,8 @@ async function capture(theme) {
     }
 
     const display = process.env.WAYLAND_DISPLAY || ''
-    const shellEnv = { ...process.env, HOME: home, QT_QPA_PLATFORM: 'wayland',
+    fs.writeFileSync(path.join(home, 'language'), language ? language + '\n' : '')
+    const shellEnv = { ...process.env, HOME: home, OMARCHY_LANGUAGE_FILE: path.join(home, 'language'), QT_QPA_PLATFORM: 'wayland',
       QT_QPA_PLATFORMTHEME: '', QT_QUICK_CONTROLS_STYLE: 'Basic',
       XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR,
       WAYLAND_DISPLAY: path.isAbsolute(display) ? display

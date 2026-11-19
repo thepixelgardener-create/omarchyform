@@ -42,6 +42,8 @@ board=${board%$'\n'x}
 escaped=${board//\\/"\\\\"}
 escaped=${escaped//\"/"\\\""}
 for code in {1..31}; do
+  # The format is built on purpose: it is \xNN for a number this loop chose.
+  # shellcheck disable=SC2059
   printf -v character "\\x$(printf %02x "$code")"
   printf -v replacement '\\u%04x' "$code"
   escaped=${escaped//"$character"/"$replacement"}

@@ -7,6 +7,154 @@ function tests(S) {
   const t = []
   const test = (name, fn) => t.push({ name, fn })
 
+  test("standalone lines preserve endpoints, styles and format through save and undo", () => {
+    for (const kind of S.LINE_KINDS) {
+      const source = new FakeModel([item({kind, lax: 0.9, lay: 0.1, lbx: 0.2, lby: 0.8})])
+      const file = JSON.parse(S.writeFile(source, new FakeModel(), 2))
+      eq(file.version, 8)
+      const loaded = new FakeModel()
+      S.fillItems(loaded, file.items)
+      eq(S.itemRows(loaded), S.itemRows(source))
+      loaded.setProperty(0, "lax", 0)
+      S.syncItems(loaded, file.items)
+      eq(S.itemRows(loaded), S.itemRows(source))
+      ok(!/NaN|Infinity/.test(S.linePath(kind, 100, 100, S.lineEnds(loaded.get(0)))))
+    }
+  })
+  test("a dragged line end snaps level or upright when it is nearly so", () => {
+    const xy = r => JSON.stringify({ x: r.x, y: r.y })
+    // Tail at (0, 50), head at (100, 50) in a 100 x 100 box at the origin.
+    const n = { ix: 0, iy: 0, iw: 100, ih: 100, lax: 0, lay: 0.5, lbx: 1, lby: 0.5 }
+    eq(xy(S.snappedLineEnd(n, 1, 200, 57, 10)), JSON.stringify({ x: 200, y: 50 }), "nearly level: level")
+    eq(xy(S.snappedLineEnd(n, 1, 200, 70, 10)), JSON.stringify({ x: 200, y: 70 }), "past the tolerance: as dragged")
+    eq(xy(S.snappedLineEnd(n, 1, 6, 150, 10)), JSON.stringify({ x: 0, y: 150 }), "nearly upright: upright")
+    eq(xy(S.snappedLineEnd(n, 0, 95, 45, 10)), JSON.stringify({ x: 95, y: 50 }), "a short one snaps the way it leans")
+    eq(xy(S.snappedLineEnd(n, 1, 200, 57, 0)), JSON.stringify({ x: 200, y: 57 }), "no tolerance, no snap")
+  })
+  test("a dragged item lines up with the edges and centres of the others", () => {
+    const m = new FakeModel([item({ iid: 1, ix: 0, iy: 0, iw: 100, ih: 100 }),
+                             item({ iid: 2, ix: 300, iy: 400, iw: 100, ih: 100 })])
+    const start = S.alignBox(m.get(0))
+    let r = S.magneticMove(m, [0], start, 296, 50, 8)
+    eq([r.dx, r.dy], [300, 50], "left edges meet; the other axis is as dragged")
+    eq(r.guides.length, 1, "one guide, for the axis that snapped")
+    eq([r.guides[0].x1, r.guides[0].x2], [300, 300], "drawn on the shared edge")
+    r = S.magneticMove(m, [0], start, 349, 403, 8)
+    eq([r.dx, r.dy], [350, 400], "centre to centre, top to top")
+    r = S.magneticMove(m, [0], start, 120, 200, 8)
+    eq([r.dx, r.dy, r.guides.length], [120, 200, 0], "far from everything: no pull")
+    // A line lines up by its ends, not its padded box.
+    const lines = new FakeModel([item({ iid: 1, ix: 0, iy: 0, iw: 100, ih: 100 }),
+                                 item({ iid: 2, kind: "arrow", ix: 0, iy: 300, iw: 200, ih: 60, lax: 0, lay: 0.5, lbx: 1, lby: 0.5 })])
+    r = S.magneticMove(lines, [0], S.alignBox(lines.get(0)), 0, 275, 8)
+    eq(r.dy, 280, "a box's middle onto an arrow's shaft")
+  })
+
+  test("a dragged line end lands on another item's side or middle", () => {
+    const m = new FakeModel([item({ iid: 1, kind: "arrow", ix: 0, iy: 0, iw: 100, ih: 24, lax: 0, lay: 0.5, lbx: 1, lby: 0.5 }),
+                             item({ iid: 2, ix: 300, iy: 200, iw: 100, ih: 100 })])
+    const r = S.snappedLineEnd(m.get(0), 1, 304, 246, 8, m, 0)
+    eq([r.x, r.y], [300, 250], "the middle of the box's left side")
+    eq(r.guides.length, 2)
+    const far = S.snappedLineEnd(m.get(0), 1, 200, 120, 8, m, 0)
+    eq([far.x, far.y, far.guides.length], [200, 120, 0], "nothing near: where it was put")
+  })
+  test("an end put down on a shape is glued to its outline, whatever the shape", () => {
+    for (const [kind, want] of [["rect", [200, 140]], ["ellipse", [200, 150]], ["diamond", [200, 150]]]) {
+      const m = new FakeModel([item({ iid: 1, kind, ix: 100, iy: 100, iw: 100, ih: 100 })])
+      // Dropped inside, to the right of the middle and a little low.
+      const g = S.glueAt(m, 170, kind === "rect" ? 140 : 150, -1, 8)
+      eq(g.id, 1, kind + ": glued")
+      eq([Math.round(g.px), Math.round(g.py)], want, kind + ": out on the outline")
+    }
+    const m = new FakeModel([item({ iid: 1, kind: "ellipse", ix: 100, iy: 100, iw: 100, ih: 100 })])
+    eq(S.glueAt(m, 102, 102, -1, 8), null, "an ellipse's box corner is not the ellipse")
+    eq(S.glueAt(m, 150, 150, 0, 8), null, "never to itself")
+    const pinned = new FakeModel([item({ iid: 1, ipinned: true, ix: 0, iy: 0, iw: 500, ih: 500 })])
+    eq(S.glueAt(pinned, 10, 10, -1, 8), null, "never to a background")
+  })
+
+  test("a dragged end goes onto the shape it is near before it is lined up with another", () => {
+    // Note 1's right side is at 180; note 2's left side, lower down, at 194.
+    const m = new FakeModel([
+      item({ iid: 1, kind: "note", ix: 0, iy: 0, iw: 180, ih: 140 }),
+      item({ iid: 2, kind: "note", ix: 194, iy: 400, iw: 180, ih: 140 }),
+      item({ iid: 3, kind: "arrow", ix: 400, iy: 38, iw: 200, ih: 24, lax: 0, lay: 0.5, lbx: 1, lby: 0.5 })])
+    // Five past note 1's side: lining it up with note 2 would take it to 194,
+    // fourteen past, too far to be glued.
+    const d = S.draggedLineEnd(m, 2, 0, 185, 70, 10, false)
+    eq([d.placed.glued, d.placed.onto, d.placed.values.aon], [true, 0, 1], "glued to the note it was dropped by")
+    eq(d.guides.length, 1, "one guide")
+    eq([d.guides[0].glue, d.guides[0].x1, d.guides[0].y1, d.guides[0].x2, d.guides[0].y2], [true, 0, 0, 180, 140],
+      "and it rings the note")
+    const off = S.draggedLineEnd(m, 2, 0, 190, 300, 10, false)
+    eq([off.placed.glued, off.guides.some(g => g.glue)], [false, false], "away from both: lined up, not glued")
+    eq(off.placed.values.aon, 0)
+    const free = S.draggedLineEnd(m, 2, 0, 170, 70, 10, true)
+    eq([free.placed.glued, free.guides.length, free.placed.values.aon], [false, 0, 0], "free: on the note and not glued")
+  })
+  test("an end dropped inside a shape stops at the side the line arrives at", () => {
+    for (const kind of ["rect", "ellipse", "diamond"]) {
+      const m = new FakeModel([item({ iid: 1, kind, ix: 100, iy: 100, iw: 200, ih: 100 })])
+      // From the upper left, dropped in the lower right of the shape: it
+      // stops on the near outline, not on the far side it was let go by.
+      const g = S.glueAt(m, 240, 165, -1, 8, { x: -100, y: 0 })
+      eq(g.id, 1, kind)
+      const u = (g.px - 200) / 100, v = (g.py - 150) / 50
+      const reach = kind === "ellipse" ? Math.sqrt(u * u + v * v) : kind === "diamond" ? Math.abs(u) + Math.abs(v) : Math.max(Math.abs(u), Math.abs(v))
+      near(reach, 1, kind + ": on the outline", 1e-6)
+      ok(g.px < 200 && g.py < 150, kind + ": on the side facing where the line comes from, not " + [g.px, g.py])
+      // On the line from the other end to where it was dropped.
+      const cross = (g.px + 100) * 165 - g.py * (240 + 100)
+      ok(Math.abs(cross) < 1e-3, kind + ": in line with the arrow")
+    }
+    const m = new FakeModel([item({ iid: 1, kind: "rect", ix: 100, iy: 100, iw: 200, ih: 100 })])
+    const both = S.glueAt(m, 260, 180, -1, 8, { x: 150, y: 120 })
+    eq([both.px, both.py], [260, 200], "with the other end inside too: the nearest side, as before")
+  })
+
+  test("a glued line follows its item, and lets go of what it moved away from", () => {
+    const m = new FakeModel([
+      item({ iid: 1, kind: "rect", ix: 300, iy: 0, iw: 100, ih: 100 }),
+      item({ iid: 2, kind: "arrow", ix: 0, iy: 38, iw: 324, ih: 24, lax: 0, lay: 0.5, lbx: 300 / 324, lby: 0.5, bon: 1, bonx: 0, bony: 0.5 })])
+    m.setProperty(0, "iy", 200)
+    eq(S.followGlue(m), 1, "one line moved")
+    const n = m.get(1), e = S.lineEnds(n)
+    eq([n.ix + e.bx * n.iw, n.iy + e.by * n.ih], [300, 250], "the head is on the box's side again")
+    eq(Math.round(n.ix + e.ax * n.iw), 0, "the tail stays put")
+    eq(S.followGlue(m), 0, "nothing to do the second time")
+    S.unglueMoved(m, [1])
+    eq(m.get(1).bon, 0, "moved without its box, it comes away")
+  })
+
+  // Separate strokes for the shaft and each head overlap at the tip, and the
+  // GPU blends a translucent colour once per overlap: a bright knot there.
+  // One closed outline is drawn once, whatever renders it.
+  test("an arrow is one closed outline, however long and however heavy", () => {
+    for (const kind of ["arrow", "double-arrow"])
+      for (const span of [400, 30, 3])
+        for (const stroke of [1, 2, 6]) {
+          const path = S.linePath(kind, span, 20, {ax: 0, ay: 0.5, bx: 1, by: 0.5}, stroke)
+          eq((path.match(/M/g) || []).length, 1)
+          ok(/ Z$/.test(path) && !/NaN|Infinity/.test(path))
+        }
+    const thin = S.arrowHead(2), heavy = S.arrowHead(6)
+    ok(heavy.length > thin.length)
+    near(heavy.wing / heavy.length, thin.wing / thin.length)
+  })
+  test("line endpoint moves hold the other end and bound geometry", () => {
+    const n = item({kind: "arrow"}), before = S.lineEnds(n)
+    const changed = S.movedLineEnd(n, 0, -150, 250)
+    near(changed.ix + changed.lbx * changed.iw, n.ix + before.bx * n.iw)
+    near(changed.iy + changed.lby * changed.ih, n.iy + before.by * n.ih)
+    near(changed.ix + changed.lax * changed.iw, -150)
+    near(changed.iy + changed.lay * changed.ih, 250)
+    const huge = S.movedLineEnd(n, 1, 1e30, -1e30)
+    ok(huge.iw <= S.MAX_SIZE && huge.ih <= S.MAX_SIZE)
+    const loaded = S.itemModelRows([{id: 1, kind: "line", ax: {}, ay: -5, bx: 100, by: "bad"}])[0]
+    eq(S.lineEnds(loaded), {ax: 0.08, ay: 0, bx: 1, by: 0.5})
+  })
+
   test("state and trash paths stay relative and readable", () => {
     for (const bad of [null, 2, "", "../boards", "/outside", "a/../b", "a//b", "a/", "a\nb", "a\tb"])
       eq(S.safeRelative(bad), false, String(bad))
@@ -847,6 +995,8 @@ function tests(S) {
 
     // Half-remembering the letter should work too: type it and see what it does.
     eq(S.matchCommands("g")[0].name, "Align and spread")
+    eq(S.matchCommands("z")[0].name, "Glue with an arrow", "z is the glue key")
+    eq(S.matchCommands("Z")[0].name, "Unglue", "and Z, a key of its own, is unglue")
     eq(S.matchCommands("zzz").length, 0)
   })
 
@@ -863,7 +1013,12 @@ function tests(S) {
       ok(S.groupTitle(group) !== "", group + " has a title")
       ok(names("", "all", group).length >= 2, group + " has members")
     }
-    for (const c of S.COMMANDS.filter(c => c.opens)) ok(groups.has(c.opens), c.name + " opens a family")
+    // One family's members are not in the table: the versions a board has,
+    // listed when the family is opened (versionChoices).
+    for (const c of S.COMMANDS.filter(c => c.opens && !c.dynamic)) ok(groups.has(c.opens), c.name + " opens a family")
+    eq(S.COMMANDS.filter(c => c.dynamic).map(c => c.opens).join(","), "versions")
+    ok(S.groupTitle("versions") === "Earlier versions", "and has a title all the same")
+    eq(names("", "all", "versions").length, 0, "nothing in the table stands in for a version")
     // A family's members all need the same thing, so opening the family from
     // its entry can never show a member the entry's scope would hide.
     for (const group of groups) {
@@ -1024,7 +1179,7 @@ function tests(S) {
       opened: true, helpVisible: false, browserVisible: false, finding: false,
       saveError: "", trashIndexError: "", diskChanged: false, damaged: false,
       failureText: "", paletteVisible: false, arranging: false, showPinned: false,
-      editing: false, linking: false, statusText: "", switching: false
+      editing: false, linking: false, gluing: false, statusText: "", switching: false
     }
     const on = over => S.statusTier(Object.assign({}, quiet, over))
 
@@ -1044,6 +1199,7 @@ function tests(S) {
       ["backgrounds", { showPinned: true }],
       ["editing", { editing: true }],
       ["linking", { linking: true }],
+      ["gluing", { gluing: true }],
       ["flash", { statusText: "Copied" }],
       ["switching", { switching: true }]
     ]
@@ -1481,8 +1637,8 @@ function tests(S) {
     ok(unversioned !== board)
     for (const gap of ["\n  ", " "]) {
       const where = gap === " " ? "on the history's line" : "on a line of its own"
-      eq(S.readFile(withHistory(history, "," + gap + '"version": 8')), null, "a later version 8 " + where)
-      eq(S.readFile(withHistory(history, "," + gap + '"version": 8', unversioned)), null, "the only version, 8, " + where)
+      eq(S.readFile(withHistory(history, "," + gap + '"version": 9')), null, "a later version 9 " + where)
+      eq(S.readFile(withHistory(history, "," + gap + '"version": 9', unversioned)), null, "the only version, 8, " + where)
       eq(S.readFile(withHistory(history, "," + gap + '"version": 5')).items.length, 1)
       const after = S.readFile(withHistory(history,
         "," + gap + '"items": [{"id": 9, "kind": "note", "text": "after"}], "nextId": 12, "links": []'))
@@ -1977,6 +2133,31 @@ function tests(S) {
        "nor can a key")
   })
 
+  test("the board's hints are an icon and a key each, with words for a screen reader", () => {
+    const line = S.iconHintLine(S.BOARD_HINTS, "#ff0000")
+    for (const [key, label] of S.BOARD_HINTS) {
+      eq(typeof S.HINT_GLYPHS[label], "string", label + " has an icon")
+      eq(S.HINT_GLYPHS[label].length, 2, label + " is one glyph from the Nerd Font's private area")
+      ok(line.includes('<font size="+1">' + S.HINT_GLYPHS[label] + "</font>\u00a0" + '<font color="#ff0000">' + S.escapeMarkup(key) + "</font>"),
+         label + " is drawn, its icon a step over the text")
+      ok(!line.includes(label), label + " is not spelled out on screen")
+    }
+    eq(new Set(Object.values(S.HINT_GLYPHS)).size, Object.keys(S.HINT_GLYPHS).length, "no two icons alike")
+    for (const lineInHand of [false, true])
+      for (const [, label] of S.ctrlHints(lineInHand))
+        eq(S.HINT_GLYPHS[label].length, 2, "ctrl's " + label + " has an icon too")
+    ok(S.hintWords(S.BOARD_HINTS).startsWith("q note, w box"), "the words survive")
+    // A click on a hint runs a command the table has, so a click and its key
+    // cannot drift apart; only escape and a held key are not commands.
+    const names = new Set(S.COMMANDS.map(c => c.name))
+    for (const [, word] of S.BOARD_HINTS.concat(S.ctrlHints(false), S.ctrlHints(true))) {
+      const name = S.hintCommand(word)
+      if (word === "close") ok(name === "" && S.hintTip(word) !== "", "escape is not a command, but says what it does")
+      else if (word === "resize" || word === "aim head") ok(name === "", word + " is a held key, not a click")
+      else ok(names.has(name), word + " runs a command the table has: " + name)
+    }
+    ok(S.hintCommand("toString") === "" && S.hintCommand("__proto__") === "", "only its own words")
+  })
   test("a hint line joins its hints and every set is pairs", () => {
     eq(S.hintLine([["n", "note"], ["x", "cut"]], "#ff0000", " | "),
        '<font color="#ff0000">n</font>ote | <font color="#ff0000">x</font>: cut', "joined")
@@ -2017,6 +2198,26 @@ function tests(S) {
     }
     eq(S.KEY_HELP.length, rows, "the flat list is every section's rows")
     eq(new Set(S.KEY_HELP.map(r => r[0])).size, S.KEY_HELP.length, "no key is listed twice")
+  })
+
+  test("a help label splits into the keys to press and the words between", () => {
+    const show = label => S.keyLabelParts(label).map(p => p.key !== undefined ? "[" + p.key + "]" : p.text).join(" ")
+    eq(show("g then h j k l"), "[g] then [h] [j] [k] [l]")
+    eq(show("z, move, z"), "[z] , move, [z]")
+    eq(show("p / shift+p"), "[p] / [shift] [p]")
+    eq(show("/"), "[/]")
+    eq(show("+ / -"), "[+] / [-]")
+    eq(show("ctrl / ctrl+shift + hjkl"), "[ctrl] / [ctrl] [shift] + [hjkl]")
+    eq(show("x on a connected pair"), "[x] on a connected pair")
+    eq(show("shift+click"), "[shift] +click")
+    eq(show("Strg halten"), "[Strg] halten")
+    eq(show("mark, then ctrl+e"), "mark, then [ctrl] [e]")
+    eq(show("? / F1"), "[?] / [F1]")
+    eq(show("Z"), "[Z]")
+    eq(show("drag the line between panes"), "drag the line between panes")
+    // Case is the key: h and H do different things, so neither is rewritten.
+    eq(show("H J K L"), "[H] [J] [K] [L]")
+    for (const [label] of S.KEY_HELP) ok(S.keyLabelParts(label).length > 0, `${label} shows something`)
   })
 
   test("every command in the list wears an icon", () => {
@@ -2150,7 +2351,7 @@ function tests(S) {
     const model = new FakeModel([item(), item({ iid: 2, kind: "ellipse", itexture: "grid" }),
       item({ iid: 3, kind: "image", isrc: "picture.png", itexture: "dots" })])
     const file = JSON.parse(S.writeFile(model, new FakeModel(), 4))
-    eq(file.version, S.FORMAT_VERSION)
+    eq(file.version, 7)
     eq(file.items.map(r => r.texture || "plain"), ["plain", "grid", "plain"])
     const loaded = new FakeModel()
     S.fillItems(loaded, file.items)
@@ -2176,6 +2377,53 @@ function tests(S) {
       ok((S.texturePath(kind, texture, 100000, 100000, 0).match(/M /g) || []).length <= 1000)
     }
     eq(S.texturePath("image", "grid", 200, 200, 0), "")
+  })
+
+  // The helper lists a board's earlier versions as lines of a name and a
+  // size; the name is when the version was kept, in UTC.
+  test("earlier versions are read off the helper's listing, newest first, and nothing else is", () => {
+    const rows = S.versionRows(["20261113-133205.json\t120", "20261112-090000.json\t99", "",
+      "notes.txt\t4", "20261301-000000.json\t5", "20260230-000000.json\t5", "20261113-250000.json\t5",
+      "20261113-133205.json", "20261113-133205.json\tmany", "../20261113-133205.json\t1", "20250105-235959.json\t7"].join("\n"))
+    eq(rows.map(r => r.name).join(","), "20261113-133205.json,20261112-090000.json,20250105-235959.json")
+    eq(rows[0].bytes, 120)
+    eq(rows[0].at, Date.UTC(2026, 10, 13, 13, 32, 5))
+    ok(isNaN(S.versionTime("20261301-000000.json")) && isNaN(S.versionTime("x")) && isNaN(S.versionTime(undefined)))
+    // However many lines arrive, the list is bounded on this side too.
+    const many = []
+    for (let i = 0; i < 500; i++) many.push("2026" + String(101 + i % 12).slice(1) + "01-0000" + String(100 + i % 60).slice(1) + ".json\t1")
+    eq(S.versionRows(many.join("\n")).length, S.MAX_VERSIONS_LISTED)
+    eq(S.versionRows("").length, 0)
+    eq(S.versionRows(undefined).length, 0)
+  })
+
+  test("a version is named by when it is from, as a person would say it", () => {
+    // Local time, whatever zone the suite runs in: built from local parts.
+    const at = (y, m, d, h, min) => new Date(y, m - 1, d, h, min, 0).getTime()
+    const now = at(2026, 11, 13, 15, 0)
+    eq(S.versionLabel(at(2026, 11, 13, 14, 32), now), "Today 14:32")
+    eq(S.versionLabel(at(2026, 11, 13, 0, 5), now), "Today 00:05")
+    eq(S.versionLabel(at(2026, 11, 12, 23, 59), now), "Yesterday 23:59")
+    eq(S.versionLabel(at(2026, 11, 3, 9, 7), now), "Tue 3 Nov 09:07")
+    eq(S.versionLabel(at(2025, 12, 31, 18, 0), now), "31 Dec 2025, 18:00")
+  })
+
+  test("versions are rows the command list can draw, found by typing when they are from", () => {
+    const at = (y, m, d, h, min) => new Date(y, m - 1, d, h, min, 0).getTime()
+    const now = at(2026, 11, 13, 15, 0)
+    const rows = [{ name: "20261113-133205.json", bytes: 1, at: at(2026, 11, 13, 14, 32) },
+                  { name: "20261112-090000.json", bytes: 1, at: at(2026, 11, 12, 10, 0) }]
+    const all = S.versionChoices(rows, "", now)
+    eq(all.map(c => c.name).join(","), "Today 14:32,Yesterday 10:00")
+    eq(all[0].run, "restoreVersion")
+    eq(all[0].arg, "20261113-133205.json")
+    eq(all[0].needs, "edit")
+    eq(all[0].key, "", "the date has the row to itself")
+    ok(S.commandIcon(all[0]) !== "", "and has a glyph, as every row does")
+    eq(S.versionChoices(rows, " YEST ", now).map(c => c.arg).join(","), "20261112-090000.json")
+    eq(S.versionChoices(rows, "last week", now).length, 0)
+    eq(S.versionChoices(null, "", now).length, 0)
+    eq(S.versionChoices(undefined, undefined, now).length, 0)
   })
 
   return t

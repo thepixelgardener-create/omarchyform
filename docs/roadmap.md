@@ -150,6 +150,16 @@ the CLI refuses malformed arguments and unknown flags in JSON, and board
 names sort consistently. Canvas accessibility describes the selected item.
 See the changelog for the complete maintenance changes.
 
+## 0.6.0 — Glue, lines and the Omarchy UI kit
+
+Shipped. Standalone lines and arrows glue to shapes and follow them, with `z`
+to join and `Z` to let go, and items line up magnetically while dragged. The
+board speaks Omarchy's language (English and German complete), keeps earlier
+versions of a board to go back to, and draws a board to PNG from the command
+line. The panels and header are drawn with the Omarchy UI kit
+(omacom/omarchy-ui); the header's icons can be clicked, and the help names the
+installed version. See the changelog for the complete list.
+
 ## Next maintenance pass
 
 Measured on 2026-10-19, on the machine in
@@ -191,7 +201,7 @@ each probe an instrument comes before the change it measures.
   the 4-second exceptions, tripled in CI, stay the regression ceilings.
   Accept a performance change against the targets, measured back to back.
 
-## 0.6 — Editable, labeled connectors
+## 0.7 — Editable, labeled connectors
 
 Make relationships useful in a decision diagram: connect “Ready?” to “Ship”,
 label the arrow “yes”, and select it to edit, reverse or remove it.

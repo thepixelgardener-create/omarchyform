@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import "../.."
+import "../../BoardStore.js" as Store
 
 // Opening a board Omarchyform 0.4.7 to 0.4.10 wrote with its history, the
 // whole way: a real document, its session and its writer, against boards
@@ -32,6 +33,8 @@ ShellRoot {
     id: stubWorkspace
     readonly property string boardsDir: test.dir
     readonly property string backupsDir: test.dir
+    readonly property string versionsDir: test.dir + "/versions"
+    function versionsPathFor(relative) { return test.dir + "/versions/v1/" + relative }
     property int autosaveMs: 50
     property bool stateReady: true
     property QtObject library: QtObject {
@@ -42,6 +45,10 @@ ShellRoot {
     function backupPathFor(relative) { return test.dir + "/bak__" + relative + ".bak" }
     function lockPathFor(relative) { return test.dir + "/lock__" + relative + ".lock" }
     function fileCommand(action, args) { return ["bash", test.dir + "/BoardFiles.sh", action].concat(args) }
+    // What it says, as written: these suites read English.
+    function t(text, a, b, c) { return Store.translated(null, text, [a, b, c]) }
+    function tn(one, other, count, a, b) { return Store.translatedCount(null, "en", one, other, count, [a, b]) }
+    function tv(text) { return text }
     function writeState() {}
     function panesViewing(doc) { return [] }
     function recheckPictures(names) {}

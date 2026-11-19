@@ -96,7 +96,7 @@ for (const file of ["Board.qml", "Node.qml", "Browser.qml", "Help.qml", "BoardTo
 const themeTokens = declaredMembers(read("Theme.qml"))
 // The board and its items read BoardPalette instead, checked further down.
 const themed = ["Browser.qml", "Help.qml", "BoardToolbar.qml",
-                "BoardImage.qml", "ScrollHint.qml", "Commands.qml", "Conflict.qml", "Surface.qml"]
+                "BoardImage.qml", "ScrollHint.qml", "Commands.qml", "Conflict.qml"]
 for (const file of themed) expect(referenced(read(file), "theme."), themeTokens, "Theme.qml", file)
 
 // The session addresses its document as session.ctl.
@@ -162,8 +162,7 @@ const layoutStub = nestedMembers(layoutSource, "ctl")
 // Omarchy's own singletons and that suite runs where there is only Qt. This is
 // what keeps the copy honest: everything a panel reads has to be in both.
 const layoutTheme = membersAt(blockBody(layoutSource, "property QtObject theme:"), 6)
-for (const file of ["BoardToolbar.qml", "Help.qml", "Browser.qml", "ScrollHint.qml", "Commands.qml", "Conflict.qml",
-                    "Surface.qml"]) {
+for (const file of ["BoardToolbar.qml", "Help.qml", "Browser.qml", "ScrollHint.qml", "Commands.qml", "Conflict.qml"]) {
   expect(referenced(read(file), "ctl."), layoutStub, "the tst_layout stub", file)
   expect(referenced(read(file), "theme."), layoutTheme, "the tst_layout stub's theme", file)
 }
@@ -179,10 +178,8 @@ const helpReads = read("Help.qml")
 const rigCtl = roomy.slice(roomy.indexOf("id: c"))
 expect(referenced(helpReads, "ctl."), membersAt(rigCtl, 8),
   "the roomyHelp rig's ctl", "tests/qt/tst_layout.qml")
-// Help draws its card with Surface, which reads the rig's theme as well.
-for (const reads of [helpReads, read("Surface.qml")])
-  expect(referenced(reads, "theme."), membersAt(blockBody(roomy, "property QtObject theme:"), 10),
-    "the roomyHelp rig's theme", "tests/qt/tst_layout.qml")
+expect(referenced(helpReads, "theme."), membersAt(blockBody(roomy, "property QtObject theme:"), 10),
+  "the roomyHelp rig's theme", "tests/qt/tst_layout.qml")
 
 // The canvas suite mounts the whole board — the surface, the items on it, the
 // header and every panel it hosts — against one stub, so that stub stands in
@@ -194,7 +191,7 @@ const panSource = read("tests/qt/PaneStub.qml")
 const panStub = declaredMembers(panSource)
 const panTheme = membersAt(blockBody(panSource, "property QtObject theme:"), 4)
 for (const file of ["Board.qml", "Node.qml", "BoardToolbar.qml", "Help.qml", "Browser.qml",
-                    "ScrollHint.qml", "Commands.qml", "Conflict.qml", "BoardImage.qml", "Surface.qml"]) {
+                    "ScrollHint.qml", "Commands.qml", "Conflict.qml", "BoardImage.qml"]) {
   expect(referenced(read(file), "ctl."), panStub, "the tst_pan stub", file)
   expect(referenced(read(file), "theme."), panTheme, "the tst_pan stub's theme", file)
 }
@@ -242,6 +239,19 @@ expect(referenced(read("BoardPalette.qml"), "colours.base."), declaredMembers(re
 expect(referenced(read("BoardPalette.qml"), "colours.base."),
   membersAt(blockBody(read("tests/qt/tst_export.qml"), "property QtObject theme:"), 6),
   "the tst_export stub's theme", "BoardPalette.qml")
+// And the scene `omarchyform render` draws in, which is not the shell either:
+// its controller holds what an export reads off one, and its theme what a
+// palette is built on. A member missing there is a picture that fails only
+// from the command line.
+{
+  const scene = read("BoardRender.qml")
+  expect(referenced(read("BoardImage.qml"), "picture.ctl."), nestedMembers(scene, "holder"),
+    "the render scene's controller", "BoardRender.qml")
+  expect(referenced(read("BoardPalette.qml"), "colours.base."),
+    membersAt(blockBody(scene, "readonly property QtObject theme:"), 6), "the render scene's theme", "BoardRender.qml")
+  expect(referenced(read("BoardImage.qml"), "picture.ctl.sceneTheme."),
+    membersAt(blockBody(scene, "readonly property QtObject sceneTheme:"), 6), "the render scene's palette", "BoardRender.qml")
+}
 
 // A file also reaches into itself by its own id, and QML resolves that name the
 // same way it resolves ctl. — at runtime, in code paths a green suite may never
@@ -265,7 +275,7 @@ function declaredSignals(source) {
 for (const file of ["Omarchyform.qml", "BoardPane.qml", "BoardDocument.qml", "BoardSession.qml", "BoardPersistence.qml", "BoardExchange.qml", "BoardLibrary.qml",
                     "Board.qml", "Node.qml", "Browser.qml", "Help.qml", "BoardToolbar.qml",
                     "BoardImage.qml", "ScrollHint.qml", "Commands.qml", "Conflict.qml",
-                    "Theme.qml", "Surface.qml"]) {
+                    "Theme.qml"]) {
   const source = read(file)
   const rootId = (source.match(/^\s*id:\s*(\w+)\s*$/m) || [])[1]
   if (!rootId) { failures.push(`${file}: no id on the root object to check against`); continue }
@@ -488,6 +498,30 @@ for (const file of [...fs.readdirSync(root).filter(f => f.endsWith(".qml")),
 for (const entry of [...Store.MENU_COMMANDS, ...Store.ZOOM_COMMANDS]) {
   if (!controller.has(entry.run)) failures.push(`Menu action ${entry.run} is missing`)
 }
+
+// The panels read the Omarchy UI kit's tokens (kit/Theme) by name, and a name
+// the copied kit does not have is an undefined colour or size on a desktop —
+// silent on one Qt, a TypeError on another, and nothing a stub stands between.
+// Its token groups are nested (Style.spacing.md, Color.menu.text), so both
+// levels are checked: the group on the singleton, then the name in the group.
+const kitSingletons = {}
+for (const name of ["Color", "Style", "Border", "Tokens", "ThemeSource", "I18n", "Util"])
+  kitSingletons[name] = read("kit/Theme/" + name + ".qml")
+let kitReads = 0
+for (const file of fs.readdirSync(root).filter(f => f.endsWith(".qml"))) {
+  const source = read(file)
+  for (const m of source.matchAll(/\bKit\.(\w+)\.(\w+)(?:\.(\w+))?/g)) {
+    const [, single, member, inner] = m
+    kitReads++
+    const kit = kitSingletons[single]
+    if (kit === undefined) { failures.push(`${file}: the kit has no ${single}`); continue }
+    if (!declaredMembers(kit).has(member)) { failures.push(`${file}: kit ${single} has no '${member}'`); continue }
+    if (inner === undefined || !new RegExp("property QtObject " + member + ":").test(kit)) continue
+    const group = membersAt(blockBody(kit, "property QtObject " + member + ":"), 4)
+    if (!group.has(inner)) failures.push(`${file}: kit ${single}.${member} has no '${inner}'`)
+  }
+}
+if (kitReads === 0) failures.push("no panel reads the kit: the check above found nothing to check")
 
 if (failures.length) {
   for (const line of failures) console.error("  " + line)

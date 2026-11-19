@@ -21,6 +21,10 @@ TestCase {
 
   Item {
     id: ctl
+    // What it says, as written: these suites read English.
+    function t(text, a, b, c) { return Store.translated(null, text, [a, b, c]) }
+    function tn(one, other, count, a, b) { return Store.translatedCount(null, "en", one, other, count, [a, b]) }
+    function tv(text) { return text }
     property alias items: itemModel
     property alias links: linkModel
     property int minItemSize: 60
@@ -38,7 +42,6 @@ TestCase {
       property bool isLight: false
       property color dotColor: "#202020"
       property int fontHeading: 16
-      property color panelScrim: "#80000000"
       readonly property var markupColors: ({ foreground: "#cccccc", accent: "#00ffff",
                                              urgent: "#ff5555", muted: "#888888" })
       function sp(n) { return n }
@@ -99,6 +102,23 @@ TestCase {
     Store.fillItems(itemModel, rows)
     linkModel.clear()
     linkModel.append({ lfrom: 1, lto: 2 })
+  }
+
+  function test_standaloneArrowIsInThePng() {
+    Store.fillItems(itemModel, [{id: 1, kind: "arrow", x: 0, y: 0, w: 180, h: 100,
+      ax: 0.1, ay: 0.2, bx: 0.9, by: 0.8, tint: "foreground", text: ""}])
+    linkModel.clear()
+    picture.exportColors = "light"
+    picture.save(test.file("standalone-arrow.png"))
+    tryVerify(function () { return test.outcome !== null }, 15000)
+    verify(test.outcome.success)
+    readBack.source = Qt.resolvedUrl("generated/standalone-arrow.png")
+    compare(readBack.status, Image.Ready)
+    var shot = grabImage(readBack)
+    var shaft = shot.pixel(122, 82)
+    verify(shaft.r < 0.8, "the arrow shaft is drawn at its saved endpoints")
+    var empty = shot.pixel(122, 52)
+    verify(empty.r > 0.9, "a line has no box fill")
   }
 
   function test_everyPictureIsInTheFile() {

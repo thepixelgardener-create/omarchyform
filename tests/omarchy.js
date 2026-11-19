@@ -18,8 +18,10 @@ const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'omarchyform-compat-'))
 try {
   const home = path.join(dir, 'home')
   fs.mkdirSync(home)
-  for (const file of fs.readdirSync(path.join(__dirname, '..')).filter(f => /\.(qml|js|sh|py)$/.test(f)))
+  for (const file of fs.readdirSync(path.join(__dirname, '..')).filter(f => /\.(qml|js|sh|py)$|^manifest\.json$/.test(f)))
     fs.copyFileSync(path.join(__dirname, '..', file), path.join(dir, file))
+  // The Omarchy UI kit the panels are built from, as the plugin carries it.
+  fs.cpSync(path.join(__dirname, '..', 'kit'), path.join(dir, 'kit'), { recursive: true })
   for (const module of ['Commons', 'Ui'])
     fs.cpSync(path.join(omarchy, 'shell', module), path.join(dir, module), { recursive: true })
   fs.mkdirSync(path.join(dir, 'services'))
@@ -87,7 +89,7 @@ try {
     fs.copyFileSync(path.join(__dirname, 'qml/tst_startupfailure.qml'), path.join(dir, 'startupfailure.qml'))
     const blocked = spawnSync('qs', ['--no-color', '-p', path.join(dir, 'startupfailure.qml')], {
       encoding: 'utf8', timeout: 15000,
-      env: {...process.env, HOME: blockedHome, QT_QPA_PLATFORM: 'wayland', QT_QPA_PLATFORMTHEME: '',
+      env: {...process.env, HOME: blockedHome, OMARCHY_LANGUAGE_FILE: path.join(blockedHome, 'no-language'), QT_QPA_PLATFORM: 'wayland', QT_QPA_PLATFORMTHEME: '',
         QT_QUICK_CONTROLS_STYLE: 'Basic', XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR,
         WAYLAND_DISPLAY: path.isAbsolute(display) ? display : path.join(process.env.XDG_RUNTIME_DIR || '', display)}
     })
@@ -102,7 +104,7 @@ try {
     fs.copyFileSync(path.join(__dirname, 'qml/tst_freshstart.qml'), path.join(dir, 'fresh.qml'))
     const started = spawnSync('qs', ['--no-color', '-p', path.join(dir, 'fresh.qml')], {
       encoding: 'utf8', timeout: 30000,
-      env: {...process.env, HOME: fresh, QT_QPA_PLATFORM: 'wayland', QT_QPA_PLATFORMTHEME: '',
+      env: {...process.env, HOME: fresh, OMARCHY_LANGUAGE_FILE: path.join(fresh, 'no-language'), QT_QPA_PLATFORM: 'wayland', QT_QPA_PLATFORMTHEME: '',
         QT_QUICK_CONTROLS_STYLE: 'Basic', XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR,
         WAYLAND_DISPLAY: path.isAbsolute(display) ? display : path.join(process.env.XDG_RUNTIME_DIR || '', display)}
     })
@@ -114,7 +116,7 @@ try {
   }
   const result = spawnSync('qs', ['--no-color', '-p', path.join(dir, 'shell.qml')], {
     encoding: 'utf8', timeout: 30000,
-    env: {...process.env, HOME: home, PATH: (paste ? path.join(dir, 'stubs') + ':' : '') + process.env.PATH, QT_QPA_PLATFORM: 'wayland',
+    env: {...process.env, HOME: home, OMARCHY_LANGUAGE_FILE: path.join(home, 'no-language'), PATH: (paste ? path.join(dir, 'stubs') + ':' : '') + process.env.PATH, QT_QPA_PLATFORM: 'wayland',
       QT_QPA_PLATFORMTHEME: '', QT_QUICK_CONTROLS_STYLE: 'Basic', XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR,
       WAYLAND_DISPLAY: path.isAbsolute(display) ? display : path.join(process.env.XDG_RUNTIME_DIR || '', display),
       OMARCHYFORM_TEST_DIR: dir}

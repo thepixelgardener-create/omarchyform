@@ -2,6 +2,7 @@ import QtQuick
 import QtTest
 import "../.."
 import "../../BoardStore.js" as Store
+import "../../kit/Theme" as Kit
 
 TestCase {
   id: test
@@ -10,9 +11,30 @@ TestCase {
   visible: true
   width: 480
   height: 360
+  // The kit's panels take their sizes from the kit's theme, so it gets the
+  // same pressure the stub's palette does: the stub's 24px text in a small window.
+  readonly property string bigType: "[font]\nbase-size = 24\n"
+  // For the tests about what a panel says rather than whether it fits: the
+  // kit scales its spacing with its text, and at the pressure size a small
+  // window has room for two rows, whatever they are.
+  function atOrdinarySize(run) {
+    Kit.ThemeSource.apply({ shellText: "" })
+    try { run() } finally { Kit.ThemeSource.apply({ shellText: test.bigType }) }
+  }
+
+  function initTestCase() {
+    Kit.ThemeSource.apply({ colorsText: 'mode = "dark"\nbackground = "#101315"\nforeground = "#cacccc"\naccent = "#e68e0d"\n',
+                            shellText: test.bigType, userShellText: "", rounding: 0, animations: false })
+  }
+
   Item {
     id: ctl
+    // What it says, as written: these suites read English.
+    function t(text, a, b, c) { return Store.translated(null, text, [a, b, c]) }
+    function tn(one, other, count, a, b) { return Store.translatedCount(null, "en", one, other, count, [a, b]) }
+    function tv(text) { return text }
     property bool helpVisible: true
+    property string pluginVersion: "0.6.0"
     // The accent the hint lines name their keys in, as markup wants it.
     property string accentMarkup: "#00ffff"
     // What Theme.qml is, at the sizes this suite exists to push against: a
@@ -27,8 +49,6 @@ TestCase {
       // The header is a bar and takes the theme's bar colours. Distinct from
       // the canvas here on purpose: these stand for tokens a theme may set to
       // something of their own.
-      property color barBackground: "#161b22"
-      property color barForeground: "#e6e6e6"
       property color accent: "cyan"
       property color urgent: "red"
       property color muted: "gray"
@@ -42,22 +62,8 @@ TestCase {
       property color dotColor: "#202020"
       // The shell's summoned-surface tokens. A gradient border on purpose, so
       // the ring Surface paints for one is drawn under the Qt CI runs too.
-      property color panelBackground: "#0d1117"
-      property color panelText: "#dddddd"
-      property color panelScrim: "#80101315"
-      property color cursorFill: "#14cccccc"
-      property color cursorText: "cyan"
-      property var panelBorder: ({ color: "#ffaa00", widths: { top: 2, right: 2, bottom: 2, left: 2 },
-                                   gradient: { colors: ["#ffaa00", "#ff4466"], angle: 45, enabled: true } })
-      property var cursorBorder: ({ color: "transparent", widths: { top: 0, right: 0, bottom: 0, left: 0 },
-                                    gradient: { colors: [], angle: 0, enabled: false } })
       // The shell's button fills, its section label and glyph sizes, and the
       // menu's family.
-      property color controlFill: "#0acccccc"
-      property color hoverFill: "#14cccccc"
-      property string menuFontFamily: "monospace"
-      property int fontCaption: 10
-      property int fontIcon: 18
       readonly property var markupColors: ({ foreground: "#cccccc", accent: "#00ffff",
                                              urgent: "#ff5555", muted: "#888888" })
       function sp(n) { return n }
@@ -112,7 +118,16 @@ TestCase {
     property string paletteGroup: ""
     property int paletteIndex: 0
     property int paletteRows: 9
-    readonly property var paletteMatches: Store.matchCommands(ctl.paletteQuery, ctl.paletteScope, ctl.paletteGroup)
+    // As BoardPane.qml binds them: the versions family is the versions a
+    // board has, and an empty list says why it is empty.
+    property var versions: []
+    property bool versionsLoading: false
+    readonly property string paletteEmpty: ctl.paletteGroup !== "versions" || ctl.paletteQuery !== "" ? "nothing goes by that"
+      : ctl.versionsLoading ? "looking…"
+      : "none yet · one is kept as the board is saved, at most every ten minutes"
+    readonly property var paletteMatches: ctl.paletteGroup === "versions"
+      ? Store.versionChoices(ctl.versions, ctl.paletteQuery, Date.now())
+      : Store.matchCommands(ctl.paletteQuery, ctl.paletteScope, ctl.paletteGroup)
     function commandReady(needs) { return needs !== "target" }
     function commandExcuse(needs) { return "nothing is selected" }
     function setPaletteQuery(text) { ctl.paletteQuery = text }
@@ -135,7 +150,7 @@ TestCase {
   QtObject { id: keyboardless; function paletteKey(event) {} }
   Commands { id: commandList; ctl: ctl; board: keyboardless; y: 40; anchors.horizontalCenter: parent.horizontalCenter }
   Conflict { id: decision; ctl: ctl; y: 40; anchors.horizontalCenter: parent.horizontalCenter }
-  function cleanup() { ctl.paletteQuery = ""; ctl.paletteGroup = "" }
+  function cleanup() { ctl.paletteQuery = ""; ctl.paletteGroup = ""; ctl.versions = []; ctl.versionsLoading = false }
 
   function test_untrustedTitleIsPlainText() {
     const oldTitle = ctl.boardTitle
@@ -147,19 +162,15 @@ TestCase {
     } finally { ctl.boardTitle = oldTitle }
   }
 
-  // The header is a bar, so it is painted in the theme's bar colours rather
-  // than the canvas ones.
-  //
-  // Reading them here is worth little as a guard against a stub missing one:
-  // a stub short of `barForeground` still passes this on Qt 6.11, with no
-  // warning, while the same tree fails on the 6.4 that CI runs. What keeps
-  // that from happening is the name check in tests/contract.js, which does not
-  // depend on which Qt is doing the reading.
+  // The header is a bar, so it is painted in the kit's bar colours rather
+  // than the canvas ones. That every kit token a panel names exists is checked
+  // by tests/contract.js, which does not depend on which Qt is reading.
   function test_toolbarTakesTheBarColours() {
-    compare(toolbar.color, Qt.rgba(ctl.theme.barBackground.r, ctl.theme.barBackground.g, ctl.theme.barBackground.b, 1),
-            "the header takes the bar colour, solid, so nothing under it reads through")
-    verify(toolbar.color !== ctl.theme.canvasBackground, "which is its own colour, not the canvas")
-    verify(toolbar.border.color !== ctl.theme.canvasBackground, "and its edge is drawn against it")
+    const bar = Kit.Color.bar.background
+    compare(toolbar.color, Qt.rgba(bar.r, bar.g, bar.b, 1),
+            "the header takes the kit's bar colour, solid, so nothing under it reads through")
+    compare(toolbar.border.color, Kit.Color.track, "and its edge is the kit's rule")
+    compare(findChild(toolbar, "board-title").color, Kit.Color.bar.text, "its name is in the bar's text colour")
   }
 
   function test_toolbarFitsLargeFonts() {
@@ -173,7 +184,7 @@ TestCase {
     verify(waitForRendering(toolbar))
     const closed = toolbar.implicitHeight
     // One line of chrome at a body font this large, long board name and all.
-    verify(closed < ctl.theme.fontSubtitle * 3)
+    verify(closed < Kit.Style.font.title * 3, closed + " is one row of chrome")
 
     ctl.menuVisible = true
     verify(waitForRendering(toolbar))
@@ -207,7 +218,73 @@ TestCase {
     verify(prompt.x + prompt.width <= prompt.parent.width)
   }
 
-  function test_paletteShrinksToWhatMatches() {
+  // A board's earlier versions are rows of the same list: when each is from,
+  // readable in a narrow panel at a large size, and the family's name on the
+  // line above them.
+  function test_earlierVersionsAreRowsOfTheList() { atOrdinarySize(earlierVersionsAreRowsOfTheList) }
+  function earlierVersionsAreRowsOfTheList() {
+    var now = Date.now()
+    ctl.versions = [{ name: "20261113-133205.json", bytes: 120, at: now - 30 * 60000 },
+                    { name: "20261112-090000.json", bytes: 99, at: now - 26 * 3600000 },
+                    { name: "20250105-235959.json", bytes: 7, at: now - 400 * 86400000 }]
+    ctl.paletteGroup = "versions"
+    verify(waitForRendering(commandList))
+    compare(commandList.visibleRows, 3)
+    verify(findChild(commandList, "command-prompt").text.indexOf("Earlier versions") === 0)
+    verify(!findChild(commandList, "command-empty").visible)
+    var day = Store.versionLabel(now - 26 * 3600000, now)
+    var shown = false
+    for (var i = 0; i < 3 && !shown; i++) {
+      var texts = []
+      test.textsUnder(commandList, texts)
+      shown = texts.some(function (t) { return t.text === day && !t.truncated && t.width > 0 })
+    }
+    verify(shown, "the date is drawn whole: " + day)
+    ctl.paletteQuery = "yesterday"
+    verify(waitForRendering(commandList))
+    compare(ctl.paletteMatches.length, 1)
+    compare(commandList.visibleRows, 1)
+  }
+
+  function textsUnder(item, found) {
+    for (var i = 0; i < item.children.length; i++) {
+      var child = item.children[i]
+      if (child.text !== undefined && child.truncated !== undefined) found.push(child)
+      test.textsUnder(child, found)
+    }
+    // A ListView's rows are children of its content item.
+    if (item.contentItem) test.textsUnder(item.contentItem, found)
+  }
+
+  // A board with none says why, in the list's own place and within its width.
+  function test_noEarlierVersionsSaysWhy_data() {
+    return [{ tag: "at its usual width", width: 800 }, { tag: "in a narrow window", width: 320 }]
+  }
+  function test_noEarlierVersionsSaysWhy(row) {
+    var was = test.width
+    test.width = row.width
+    try {
+      ctl.paletteGroup = "versions"
+      ctl.versionsLoading = true
+      verify(waitForRendering(commandList))
+      var empty = findChild(commandList, "command-empty")
+      verify(empty.visible)
+      compare(empty.title, "looking…")
+      ctl.versionsLoading = false
+      verify(waitForRendering(commandList))
+      verify(empty.title.indexOf("none yet") === 0)
+      var at = empty.mapToItem(commandList, 0, 0)
+      verify(at.x >= 0 && at.x + empty.width <= commandList.width, "the sentence stays inside the panel")
+      verify(at.y >= 0 && at.y + empty.height <= commandList.height, "and inside its one row: " + empty.height + " in " + commandList.height)
+      ctl.paletteQuery = "x"
+      verify(waitForRendering(commandList))
+      compare(empty.title, "nothing goes by that")
+    } finally { test.width = was }
+  }
+
+  function test_paletteShrinksToWhatMatches() { atOrdinarySize(paletteShrinksToWhatMatches) }
+  function paletteShrinksToWhatMatches() {
+    verify(waitForRendering(commandList))
     const many = commandList.height
     ctl.paletteQuery = "Change colour"
     verify(waitForRendering(commandList))
@@ -268,23 +345,21 @@ TestCase {
   }
 
   function test_panelsAreSolidCardsInTheShellsColours() {
-    const cards = [cardOf(commandList), cardOf(decision), cardOf(help), findChild(browser, "browser-panel")]
-    for (const card of cards) {
-      compare(card.color, ctl.theme.panelBackground, "the menu's colour")
-      compare(card.color.a, 1, "and nothing shows through it")
+    // Every summoned panel is the kit's card on the menu surface, in the kit's
+    // resolution of it, edged as the kit edges the menu.
+    for (const kitCard of [findChild(help, "help-card"), findChild(commandList, "command-card"),
+                           findChild(browser, "browser-panel"), findChild(decision, "conflict-card")]) {
+      compare(kitCard.color, Kit.Color.menu.background, "the kit's menu colour")
+      compare(kitCard.color.a, 1, "and nothing shows through it")
+      compare(JSON.stringify(kitCard.borderSpec),
+              JSON.stringify(Kit.Border.surfaceSpec("menu", "border", Kit.Color.menu.border, Math.max(1, Kit.Style.space(2)))),
+              "inside the menu's border")
     }
-    // This stub's border is a gradient, which a Rectangle cannot draw: the card
-    // paints a ring over itself instead of using its own border.
-    const card = cardOf(commandList)
-    verify(!card.flat, "a gradient is not a flat border")
-    compare(card.border.width, 0, "so the Rectangle's own is off")
-    verify(card.children[0].visible, "and the ring is drawn")
     // The two-versions question has the ordinary edge, as the shell's own
     // confirmation dialog does; its heading carries the urgency instead, in the
-    // theme's colour for it and behind a mark that is not only a colour.
-    compare(cardOf(decision).spec, ctl.theme.panelBorder, "the ordinary panel edge")
+    // kit's colour for it and behind a mark that is not only a colour.
     const heading = findChild(decision, "conflict-body").children[0]
-    compare(heading.color, ctl.theme.urgent, "the heading is in the urgent colour")
+    compare(heading.color, Kit.Color.urgent, "the heading is in the urgent colour")
     compare(heading.text.charAt(0), "\uf071", "behind a warning mark")
   }
 
@@ -296,11 +371,26 @@ TestCase {
     const stack = [content]
     while (stack.length) {
       const item = stack.pop()
-      if (item.font !== undefined && item.font.capitalization === Font.AllUppercase) labels.push(item.text)
+      if (item.objectName === "help-section") labels.push(item.text)
       for (let i = 0; i < item.children.length; i++) stack.push(item.children[i])
     }
     compare(labels.length, Store.KEY_HELP_SECTIONS.length, "one label per section")
     compare(keyRows(help).length, Store.KEY_HELP.length, "and every row under one of them")
+  }
+
+  // The help says which Omarchyform it describes, beside its title and inside
+  // the card, and leaves the number out when the manifest could not be read.
+  function test_helpSaysTheVersion() {
+    const version = findChild(help, "help-version")
+    verify(version, "a version line")
+    verify(version.visible)
+    compare(version.text, "Omarchyform " + ctl.pluginVersion)
+    const at = version.mapToItem(help, 0, 0)
+    verify(at.x >= 0 && at.x + version.implicitWidth <= help.width, "inside the card")
+    const before = ctl.pluginVersion
+    ctl.pluginVersion = ""
+    verify(!version.visible, "no number, no line")
+    ctl.pluginVersion = before
   }
 
   // The empty field says what it is for, and says it after the caret: both
@@ -314,10 +404,10 @@ TestCase {
            "starting after the caret, not under it")
   }
 
-  // The command list's rows are the shell menu's: tall enough to read a name at
-  // a glance, however small the theme sets its text.
-  function test_commandRowsAreTheMenusSize() {
-    verify(commandList.rowHeight >= ctl.theme.sp(50), "at least the menu's fifty")
+  // The command list's rows are the kit's list rows: tall enough to read a
+  // name at a glance, at whatever size the theme sets its text.
+  function test_commandRowsAreTheKitsSize() {
+    verify(commandList.rowHeight >= Kit.Style.font.title * 1.5, "room to read a name: " + commandList.rowHeight)
   }
 
   function test_helpFitsAndScrolls() {
@@ -391,9 +481,14 @@ TestCase {
       height: 1200
       property int fs: 24
       property alias help: inner
+      Component.onCompleted: Kit.ThemeSource.apply({ shellText: "[font]\nbase-size = " + rig.fs + "\n" })
+      Component.onDestruction: Kit.ThemeSource.apply({ shellText: test.bigType })
       Item {
         id: c
         property bool helpVisible: true
+        property string pluginVersion: "0.6.0"
+        function t(text, a, b, c) { return Store.translated(null, text, [a, b, c]) }
+        function tv(text) { return text }
         // The suite's own palette at this rig's text size. Only the sizes are
         // this test's business, so the colours come from the theme above
         // rather than being invented a second time.
@@ -401,16 +496,12 @@ TestCase {
           property color canvasBackground: ctl.theme.canvasBackground
           property color foreground: ctl.theme.foreground
           property color accent: ctl.theme.accent
-          property color panelBackground: ctl.theme.panelBackground
-          property color panelText: ctl.theme.panelText
-          property var panelBorder: ctl.theme.panelBorder
           property int borderWidth: ctl.theme.borderWidth
           property int cornerRadius: ctl.theme.cornerRadius
           property string fontFamily: ctl.theme.fontFamily
           property int fontBody: rig.fs
           property int fontSubtitle: rig.fs
           property int fontHeading: rig.fs + 4
-          property int fontCaption: rig.fs - 2
           // Spacing scales with the text, the way a theme's Style.space does.
           function sp(n) { return Math.round(n * rig.fs / 12) }
         }
@@ -423,9 +514,7 @@ TestCase {
   // swallower among its children as well, and which of them comes first is
   // none of this test's business.
   function scroller(help) {
-    for (let i = 0; i < help.children.length; i++)
-      if (help.children[i].contentHeight !== undefined) return help.children[i]
-    return null
+    return help.flickable
   }
 
   function keyRows(help) {
@@ -454,8 +543,9 @@ TestCase {
         const key = row.children[0]
         verify(row.keyColumn < row.width * 0.5,
           `at ${size}px the key column is not clamped, so nothing need wrap`)
-        compare(key.lineCount, 1,
-          `'${key.text}' fits its column on one line at ${size}px`)
+        for (let i = 0; i < key.children.length; i++)
+          if (key.children[i].modelData !== undefined)
+            compare(key.children[i].y, 0, `'${key.label}' fits its column on one line at ${size}px`)
       }
       rig.destroy()
     }
@@ -471,9 +561,9 @@ TestCase {
       const description = row.children[1]
       verify(description.width > 0, "the description has somewhere to go")
       verify(description.width >= key.width,
-        `'${key.text}': the description is not the narrower column`)
-      verify(row.height >= Math.max(key.contentHeight, description.contentHeight) - 0.5,
-        `'${key.text}': the row is tall enough for whichever side wrapped`)
+        `'${key.label}': the description is not the narrower column`)
+      verify(row.height >= Math.max(key.height, description.contentHeight) - 0.5,
+        `'${key.label}': the row is tall enough for whichever side wrapped`)
     }
   }
 
@@ -489,7 +579,7 @@ TestCase {
     const panel = findChild(browser, "browser-panel")
     verify(footer !== undefined)
     verify(footer.width <= test.width - 32)
-    verify(footer.implicitHeight > ctl.theme.fontBody)
+    verify(footer.implicitHeight > Kit.Style.font.body)
     verify(panel.y + panel.height < footer.y)
   }
 }

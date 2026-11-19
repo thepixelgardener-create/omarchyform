@@ -62,6 +62,9 @@ Item {
   // Ids of the items marked alongside the cursor. Ids rather than indices,
   // because a delete renumbers indices and a mark must survive that.
   property var markedIds: []
+  // Where a drag has lined something up with something else, in world
+  // coordinates: [{x1, y1, x2, y2}]. Drawn by the board while the drag lasts.
+  property var guides: []
   // A lookup beside the list rather than a scan through it. isMarked is a
   // binding on every delegate, so marking the board used to ask n x m
   // questions before the next frame could start — a thousand items marked
@@ -74,6 +77,14 @@ Item {
   }
   property int editIndex: -1      // -1 means normal mode: every key is a command
   property int linkingFrom: -1    // id of the first end while connecting
+  property int gluingFrom: -1     // id of what z started on, while gluing
+  // What pressing z again would do with what it started on and the item the
+  // keyboard is on now, said on the line before it happens (Store.gluePlan,
+  // which glueKey carries out).
+  readonly property string glueOutcome: {
+    if (root.gluingFrom < 0 || !root.canEdit) return "none"
+    return Store.gluePlan(root.items, Store.indexOfId(root.items, root.gluingFrom), root.selectedIndex).outcome
+  }
   // What pressing x again would do to the two ends chosen so far, so the line
   // in the header can say it before it happens. addLink asks the same
   // question of the same table when it carries it out, so the promise and the
@@ -96,10 +107,15 @@ Item {
   property bool imageBusy: false
   readonly property bool exchangeBusy: root.workspace.exchange.busy
   readonly property bool dialogOpen: root.workspace.exchange.dialogOpen
-  readonly property string boardState: root.opening ? "Opening… " + Math.floor(root.doc.openedShare * 100) + "%"
-    : root.damaged ? "Read only" : root.saveError !== "" ? "Save failed"
-    : root.diskChanged ? "Changed on disk" : root.saving ? "Saving…"
-    : root.waiting ? "Not saved yet" : "Saved locally"
+  readonly property string boardState: root.opening ? root.t("Opening… %1%", Math.floor(root.doc.openedShare * 100))
+    : root.damaged ? root.t("Read only") : root.saveError !== "" ? root.t("Save failed")
+    : root.diskChanged ? root.t("Changed on disk") : root.saving ? root.t("Saving…")
+    : root.waiting ? root.t("Not saved yet") : root.t("Saved locally")
+  // What everything this pane says goes through: the workspace's language.
+  function t(text, a, b, c) { return root.workspace.t(text, a, b, c) }
+  function tn(one, other, count, a, b) { return root.workspace.tn(one, other, count, a, b) }
+  function tv(text) { return root.workspace.tv(text) }
+  readonly property string pluginVersion: root.workspace.pluginVersion || ""
   // What the mark beside the name shows; boardState is what it says aloud.
   readonly property string saveMark: Store.saveMark({ opening: root.opening, damaged: root.damaged,
     saveError: root.saveError, diskChanged: root.diskChanged, waiting: root.waiting, saving: root.saving })
@@ -129,7 +145,7 @@ Item {
     if (!root.canEdit || !text) return
     root.addItem("note", root.toWorldX(root.viewW / 2), root.toWorldY(root.viewH / 2),
                  { text: text, width: 300, height: 200 })
-    root.flash("Text pasted · enter to edit", "paste")
+    root.flash(root.t("Text pasted · enter to edit"), "paste")
     root.focusKeys()
   }
 
@@ -161,8 +177,7 @@ Item {
     while (waiting.length > stale && !root.stillShows(waiting[stale].board, waiting[stale].shown)) stale += 1
     if (stale > 0) {
       root.imageQueue = waiting.slice(stale)
-      root.report(stale === 1 ? "Board changed; that picture was not added"
-                              : "Board changed; " + stale + " pictures were not added",
+      root.report(root.tn("Board changed; that picture was not added", "Board changed; %1 pictures were not added", stale),
                   waiting[0].atPoint ? "picture" : "paste")
     }
     if (root.imageQueue.length === 0) return
@@ -184,7 +199,7 @@ Item {
                      x: wx + entries.length * Store.DUPLICATE_OFFSET,
                      y: wy + entries.length * Store.DUPLICATE_OFFSET })
     }
-    if (entries.length === 0) { root.flash("drop an image file from your files"); return }
+    if (entries.length === 0) { root.flash(root.t("drop an image file from your files")); return }
     // This pane, named: the keyboard can be in the other one, and is not what
     // decides where a picture goes.
     root.workspace.exchange.importDropped(entries, root)
@@ -199,7 +214,7 @@ Item {
     // The size arrived after a board switch. The point this was meant for
     // belongs to a board that is no longer open, so the picture is not placed.
     if (placing && !root.stillShows(placing.board, placing.shown)) {
-      root.report("Board changed; that picture was not added",
+      root.report(root.tn("Board changed; that picture was not added", "Board changed; %1 pictures were not added", 1),
                   placing.atPoint ? "picture" : "paste")
       root.pumpImages()
       return
@@ -208,7 +223,7 @@ Item {
     // Not editable by the time it was measured: read-only, or busy with
     // something else. Said, not dropped without a word.
     if (!root.canEdit) {
-      root.report("Picture not added · " + root.commandExcuse(""), placing && placing.atPoint ? "picture" : "paste")
+      root.report(root.t("Picture not added · %1", root.commandExcuse("")), placing && placing.atPoint ? "picture" : "paste")
       root.pumpImages()
       return
     }
@@ -224,7 +239,7 @@ Item {
     root.addItem("image", atX, atY, { src: name, width: fitW, height: fitH })
     // A drop carries the point it was let go of; a paste does not. That is
     // also which operation it recovers: the file manager or the clipboard.
-    root.flash(naturalWidth > 0 ? "Image added" : "Image added · it could not be read, so the size is a guess",
+    root.flash(naturalWidth > 0 ? root.t("Image added") : root.t("Image added · it could not be read, so the size is a guess"),
                placing && placing.atPoint ? "picture" : "paste")
     // A picture dropped on the pane the keyboard is not in leaves it there.
     if (root.active) root.focusKeys()
@@ -233,7 +248,7 @@ Item {
 
   function copySelection() {
     var t = root.targets()
-    if (t.length === 0) { root.flash("nothing selected to copy"); return }
+    if (t.length === 0) { root.flash(root.t("nothing selected to copy")); return }
     root.workspace.exchange.copyItems(t)
   }
 
@@ -256,9 +271,9 @@ Item {
   function choosePng(palette) {
     // Both panes render into the same file on the way out, so a second picture
     // waits for the first rather than being drawn over it.
-    if (root.workspace.imageBusy) { root.flash("Finishing image export…"); return }
+    if (root.workspace.imageBusy) { root.flash(root.t("Finishing image export…")); return }
     // Half a board is not a picture of it.
-    if (root.opening) { root.flash("Still opening this board…"); return }
+    if (root.opening) { root.flash(root.t("Still opening this board…")); return }
     root.pngPalette = Store.EXPORT_PALETTE_NAMES.indexOf(palette) >= 0 ? palette : "theme"
     root.workspace.exchange.choose("png")
   }
@@ -282,14 +297,14 @@ Item {
       root.imageBusy = false
       // What it actually made a picture of, because the two things that can
       // vary are the two things worth confirming afterwards.
-      if (code === 0) root.flash("PNG saved · " + Store.exportNote(root.pngPalette, root.pngCropped), "png")
-      else root.report("Could not save PNG; choose a location outside the app data folder", "png")
+      if (code === 0) root.flash(root.t("PNG saved · %1", root.tv(Store.exportNote(root.pngPalette, root.pngCropped))), "png")
+      else root.report(root.t("Could not save PNG; choose a location outside the app data folder"), "png")
     }
   }
 
   function renameBoard() {
     root.openBrowser()
-    root.library.ask("rename-current", "board name:", root.boardTitle)
+    root.library.ask("rename-current", root.t("board name:"), root.boardTitle)
   }
 
   // A line that says what just happened and then goes away. Deleting is one
@@ -340,7 +355,7 @@ Item {
       failureText: root.failureText,
       paletteVisible: root.paletteVisible, arranging: root.arranging,
       showPinned: root.showPinned, editing: root.editIndex >= 0,
-      linking: root.linkingFrom >= 0, statusText: root.statusText,
+      linking: root.linkingFrom >= 0, gluing: root.gluingFrom >= 0, statusText: root.statusText,
       switching: root.pendingBoard !== null || root.leaving
     }
   }
@@ -480,7 +495,7 @@ Item {
     if (at >= 0) m.splice(at, 1)
     else m.push(n.iid)
     root.markedIds = m
-    root.flash(m.length === 0 ? "nothing marked" : m.length + " marked")
+    root.flash(m.length === 0 ? root.t("nothing marked") : root.tn("%1 marked", "%1 marked", m.length))
     root.repaintLinks()
   }
 
@@ -491,7 +506,7 @@ Item {
       if (!n.ipinned) m.push(n.iid)
     }
     root.markedIds = m
-    root.flash(m.length + " marked")
+    root.flash(root.tn("%1 marked", "%1 marked", m.length))
     root.repaintLinks()
   }
 
@@ -515,9 +530,9 @@ Item {
     else if (root.selectedIndex < 0 || !root.isMarked(root.items.get(root.selectedIndex).iid))
       root.selectedIndex = Store.indexOfId(root.items, m[m.length - 1])
     root.editIndex = -1
-    root.linkingFrom = -1
+    root.linkingFrom = -1; root.gluingFrom = -1
     root.repaintLinks()
-    root.flash(m.length === 0 ? "nothing marked" : m.length + " marked")
+    root.flash(m.length === 0 ? root.t("nothing marked") : root.tn("%1 marked", "%1 marked", m.length))
     root.focusKeys()
   }
 
@@ -538,11 +553,11 @@ Item {
     for (var i = 0; i < t.length; i++) root.items.setProperty(t[i], "ipinned", !unpin)
     root.markedIds = []
     root.editIndex = -1
-    root.linkingFrom = -1
+    root.linkingFrom = -1; root.gluingFrom = -1
     root.showPinned = false
     if (!unpin) root.selectedIndex = -1
     root.save()
-    root.flash(unpin ? "unpinned" : "pinned as background · shift+p to select backgrounds")
+    root.flash(unpin ? root.t("unpinned") : root.t("pinned as background · shift+p to select backgrounds"))
     root.focusKeys()
   }
 
@@ -551,7 +566,7 @@ Item {
     root.markedIds = []
     root.selectedIndex = -1
     root.editIndex = -1
-    root.linkingFrom = -1
+    root.linkingFrom = -1; root.gluingFrom = -1
     root.selectNext(1)
     root.focusKeys()
   }
@@ -590,6 +605,7 @@ Item {
   function discardPointerEdit() {
     var edit = root.pointerEdit
     root.pointerEdit = null
+    root.guides = []
     if (edit && edit.doc.pointerOwner === root) edit.doc.pointerOwner = null
   }
 
@@ -606,6 +622,7 @@ Item {
   function finishPointerEdit(cancel) {
     var edit = root.pointerEdit
     root.pointerEdit = null
+    root.guides = []
     if (!edit || edit.doc.pointerOwner !== root) return
     edit.doc.pointerOwner = null
     if (edit.doc !== root.doc || edit.token !== edit.doc.loadSerial) return
@@ -631,7 +648,7 @@ Item {
     root.doc.nextId = snap.nextId
     if (root.selectedIndex >= root.items.count) root.selectedIndex = root.items.count - 1
     root.editIndex = -1
-    root.linkingFrom = -1
+    root.linkingFrom = -1; root.gluingFrom = -1
     root.repaintLinks()
     // Rebuilding the model tears down every delegate, which drops keyboard
     // focus; without this a second undo never reaches the key handler.
@@ -671,20 +688,19 @@ Item {
     if (!root.canEdit) return
     // A board past the cap could not be opened again (Store.boardLimit), so
     // it is not built in the first place.
-    if (root.items.count >= Store.MAX_ITEMS) { root.flash(Store.FULL_ITEMS); return }
+    if (root.items.count >= Store.MAX_ITEMS) { root.flash(root.tv(Store.FULL_ITEMS)); return }
     root.showPinned = false
     root.markedIds = []
     root.pushUndo()
     var initial = content || {}
     var w = Store.clampSize(initial.width === undefined ? (kind === "note" ? 180 : 160) : initial.width)
-    var h = Store.clampSize(initial.height === undefined ? (kind === "note" ? 140 : 110) : initial.height)
+    var h = Store.clampSize(initial.height === undefined ? (Store.isLine(kind) ? 60 : kind === "note" ? 140 : 110) : initial.height)
     var taken = Store.newIds(root.items, root.doc.nextId, 1)
-    root.items.append({
-      iid: taken.ids[0], kind: kind,
+    root.items.append(Object.assign({ iid: taken.ids[0], kind: kind }, Store.lineEndRoles({}), {
       ix: Store.clampCoord(wx - w / 2), iy: Store.clampCoord(wy - h / 2), iw: w, ih: h,
       itint: Store.TINTS[root.doc.nextColor % Store.TINTS.length],
       itext: initial.text || "", ipinned: false, isrc: initial.src || "", itexture: "plain"
-    })
+    }, Store.noGlue(), initial.roles || {}))
     root.doc.nextId = taken.next
     root.doc.nextColor += 1
     root.selectedIndex = root.items.count - 1
@@ -782,11 +798,11 @@ Item {
   // Every pane wears the same background: it is a setting, not part of a board.
   function setCanvasBackground(pattern) {
     if (!root.workspace.setCanvasBackground(pattern)) return
-    root.flash("Canvas pattern: " + pattern)
+    root.flash(root.t("Canvas pattern: %1", root.tv(pattern)))
   }
   function setCanvasColour(colour) {
     if (!root.workspace.setCanvasColour(colour)) return
-    root.flash("Canvas colour: " + colour)
+    root.flash(root.t("Canvas colour: %1", root.tv(colour)))
   }
 
   function showHelp() { root.helpVisible = true }
@@ -808,8 +824,16 @@ Item {
   // A family of commands the list is showing by itself, or "" for all of them.
   property string paletteGroup: ""
 
-  readonly property var paletteMatches: root.paletteVisible
-    ? Store.matchCommands(root.paletteQuery, root.paletteScope, root.paletteGroup) : []
+  // The versions family is not in the table: its members are the versions
+  // this board has, asked for when the family is opened.
+  readonly property var paletteMatches: !root.paletteVisible ? []
+    : root.paletteGroup === "versions" ? Store.versionChoices(root.doc.versions, root.paletteQuery, Date.now(), root.tv)
+    : Store.matchCommands(root.paletteQuery, root.paletteScope, root.paletteGroup, root.tv)
+  // What the list says when it is empty: nothing answers what was typed, or,
+  // for versions, why there are none to show.
+  readonly property string paletteEmpty: root.paletteGroup !== "versions" || root.paletteQuery !== "" ? root.t("nothing goes by that")
+    : root.doc.versionsLoading ? root.t("looking…")
+    : root.t("none yet · one is kept as the board is saved, at most every ten minutes")
   // How many rows the panel draws. The rest are still there to be typed at.
   readonly property int paletteRows: 9
 
@@ -819,7 +843,7 @@ Item {
   function beginSelectionActions() {
     if (!root.canEdit) return
     if (root.targets().length === 0 && !(root.selected() && root.selected().ipinned)) {
-      root.flash("nothing selected · space marks the one under the cursor")
+      root.flash(root.t("nothing selected · space marks the one under the cursor"))
       return
     }
     root.beginPalette("selection")
@@ -850,10 +874,14 @@ Item {
     if (Store.groupTitle(group) === "") return
     if (!root.paletteVisible) root.beginPalette("all")
     if (!root.paletteVisible) return
+    if (group === "versions") root.doc.listVersions()
     root.paletteGroup = group
     root.paletteQuery = ""
     root.paletteIndex = 0
   }
+  // Going back to an earlier version. The document does it, since two panes
+  // on one board are going back together.
+  function restoreVersion(name) { root.doc.restoreVersion(name) }
   function leaveGroup() {
     root.paletteGroup = ""
     root.paletteQuery = ""
@@ -892,21 +920,27 @@ Item {
   }
 
   function commandExcuse(needs) {
-    if (needs === "conflict") return "this board has not changed underneath you"
-    if (!root.canEdit) return root.damaged ? "this board is read-only" : "the board is not ready yet"
-    if (needs === "group") return "mark two or more"
-    if (needs === "texture") return "select a note or shape"
-    if (needs === "target" || needs === "item") return "nothing is selected"
-    return "not now"
+    if (needs === "conflict") return root.t("this board has not changed underneath you")
+    if (!root.canEdit) return root.damaged ? root.t("this board is read-only") : root.t("the board is not ready yet")
+    if (needs === "group") return root.t("mark two or more")
+    if (needs === "texture") return root.t("select a note or shape")
+    if (needs === "target" || needs === "item") return root.t("nothing is selected")
+    return root.t("not now")
   }
 
   function runPaletteChoice() {
     var choice = root.paletteMatches[root.paletteIndex]
-    if (!choice) { root.flash(root.paletteQuery === "" ? "no commands" : "no command goes by that"); return }
+    if (!choice) { root.flash(root.paletteQuery === "" ? root.t("no commands") : root.t("no command goes by that")); return }
     // A family's entry opens the family here, whatever its key does: `g`
     // still waits for a second key, and the list names the answers instead.
     if (choice.opens) { root.openGroup(choice.opens); return }
     root.endPalette()
+    // A version is not a command in the table: it is run as what it is.
+    if (choice.run === "restoreVersion") {
+      if (root.commandReady(choice.needs)) root.restoreVersion(choice.arg)
+      else root.flash(root.t("%1 · %2", root.t("Earlier versions"), root.commandExcuse(choice.needs)))
+      return
+    }
     root.runCommand(choice.name)
   }
 
@@ -917,11 +951,19 @@ Item {
     var command = Store.commandByName(name)
     if (!command || typeof root[command.run] !== "function") return
     if (!root.commandReady(command.needs)) {
-      root.flash(command.name + " · " + root.commandExcuse(command.needs))
+      root.flash(root.t("%1 · %2", root.tv(command.name), root.commandExcuse(command.needs)))
       return
     }
     if (command.arg === undefined) root[command.run]()
     else root[command.run](command.arg)
+  }
+
+  // A click on a hint in the header: what its key does, through the same
+  // dispatch, so a click on something not ready yet says why, as the key does.
+  function runHint(word) {
+    if (word === "close") { root.back(); return }
+    var name = Store.hintCommand(word)
+    if (name !== "") root.runCommand(name)
   }
 
   // Finding is navigation, not editing, so it works on a board that cannot be
@@ -937,7 +979,7 @@ Item {
   readonly property string findNeedle: root.findQuery.toLowerCase()
 
   function beginFind() {
-    if (root.items.count === 0) { root.flash("nothing on this board to find yet"); return }
+    if (root.items.count === 0) { root.flash(root.t("nothing on this board to find yet")); return }
     root.showPinned = false
     root.stopEditing()
     root.finding = true
@@ -973,7 +1015,7 @@ Item {
   function nextMatch() {
     var m = Store.findMatches(root.items, root.findQuery)
     root.findCount = m.length
-    if (m.length === 0) { root.flash(root.findQuery === "" ? "type something to find" : "no match"); return }
+    if (m.length === 0) { root.flash(root.findQuery === "" ? root.t("type something to find") : root.t("no match")); return }
     var at = -1
     for (var i = 0; i < m.length; i++) if (m[i] === root.selectedIndex) { at = i; break }
     root.selectedIndex = m[(at + 1) % m.length]
@@ -994,7 +1036,7 @@ Item {
 
   function beginArrange() {
     if (!root.canEdit) return
-    if (root.targets().length < 2) { root.flash("mark two or more items to arrange them"); return }
+    if (root.targets().length < 2) { root.flash(root.t("mark two or more items to arrange them")); return }
     root.arranging = true
   }
 
@@ -1003,29 +1045,35 @@ Item {
   function alignTargets(edge) {
     root.arranging = false
     if (!root.canEdit) return
-    var moves = Store.alignMoves(root.items, root.targets(), edge)
-    if (moves.length === 0) { root.flash("already aligned"); return }
+    var moves = Store.alignMoves(root.items, Store.placedByHand(root.items, root.targets()), edge)
+    if (moves.length === 0) { root.flash(root.t("already aligned")); return }
     root.applyMoves(moves)
-    root.flash("aligned " + moves.length + (moves.length === 1 ? " item" : " items"))
+    root.flash(root.tn("aligned %1 item", "aligned %1 items", moves.length))
   }
 
   function spreadTargets(axis) {
     root.arranging = false
     if (!root.canEdit) return
-    var t = root.targets()
-    if (t.length < 3) { root.flash("mark three or more items to spread them"); return }
+    var t = Store.placedByHand(root.items, root.targets())
+    if (t.length < 3) { root.flash(root.t("mark three or more items to spread them")); return }
     var moves = Store.spreadMoves(root.items, t, axis)
-    if (moves.length === 0) { root.flash("already evenly spaced"); return }
+    if (moves.length === 0) { root.flash(root.t("already evenly spaced")); return }
     root.applyMoves(moves)
-    root.flash("spread " + moves.length + (moves.length === 1 ? " item" : " items"))
+    root.flash(root.tn("spread %1 item", "spread %1 items", moves.length))
   }
 
   function applyMoves(moves) {
     root.pushUndo()
+    var moved = []
     for (var i = 0; i < moves.length; i++) {
       root.items.setProperty(moves[i].index, "ix", moves[i].x)
       root.items.setProperty(moves[i].index, "iy", moves[i].y)
+      moved.push(moves[i].index)
     }
+    // Lined up or spread as one, what was marked together stays glued
+    // together, whichever of it had to move.
+    Store.unglueMoved(root.items, moved, root.targets())
+    Store.followGlue(root.items)
     root.save()
     root.repaintLinks()
   }
@@ -1047,24 +1095,25 @@ Item {
     var joining = 0
     var joined = Store.linkRows(root.links)
     for (var k = 0; k < joined.length; k++) if (copying[joined[k].from] && copying[joined[k].to]) joining++
-    if (root.items.count + ordered.length > Store.MAX_ITEMS) { root.flash(Store.FULL_ITEMS); return }
-    if (root.links.count + joining > Store.MAX_LINKS) { root.flash(Store.FULL_LINKS); return }
+    if (root.items.count + ordered.length > Store.MAX_ITEMS) { root.flash(root.tv(Store.FULL_ITEMS)); return }
+    if (root.links.count + joining > Store.MAX_LINKS) { root.flash(root.tv(Store.FULL_LINKS)); return }
     root.pushUndo()
     var fresh = []
     var byOriginal = ({})
     var taken = Store.newIds(root.items, root.doc.nextId, ordered.length)
     root.doc.nextId = taken.next
+    // Every copy's id first, so a copied line can glue to the copy of an
+    // item that comes after it.
+    for (var o = 0; o < ordered.length; o++) byOriginal[root.items.get(ordered[o]).iid] = taken.ids[o]
     for (var i = 0; i < ordered.length; i++) {
       var n = root.items.get(ordered[i])
       var id = taken.ids[i]
-      byOriginal[n.iid] = id
       // An image copy points at the same file: the picture is shared by every
       // board already, and duplicating one should not duplicate megabytes.
-      root.items.append({
-        iid: id, kind: n.kind,
+      root.items.append(Object.assign({ iid: id, kind: n.kind }, Store.lineEndRoles(Store.lineEnds(n)), {
         ix: Store.clampCoord(n.ix + Store.DUPLICATE_OFFSET), iy: Store.clampCoord(n.iy + Store.DUPLICATE_OFFSET),
         iw: n.iw, ih: n.ih, itint: n.itint, itext: n.itext, ipinned: false, isrc: n.isrc, itexture: Store.normalizeTexture(n.itexture)
-      })
+      }, Store.copiedGlue(n, byOriginal)))
       fresh.push(id)
     }
     // A connector is copied only when both of its ends were: half of one would
@@ -1077,13 +1126,15 @@ Item {
     root.selectedIndex = root.items.count - 1
     root.save()
     root.repaintLinks()
-    root.flash(fresh.length === 1 ? "Duplicated" : "Duplicated " + fresh.length + " items")
+    root.flash(root.tn("Duplicated", "Duplicated %1 items", fresh.length))
   }
 
   // Indices must arrive descending: removing one shifts every index after it.
   function removeAt(indices) {
     if (indices.length === 0) return
     root.pushUndo()
+    // A line glued to something deleted stays where it is, unglued.
+    Store.unglueFrom(root.items, indices)
     for (var k = 0; k < indices.length; k++) {
       var id = root.items.get(indices[k]).iid
       root.items.remove(indices[k])
@@ -1097,7 +1148,7 @@ Item {
     if (root.selectedIndex >= root.items.count) root.selectedIndex = root.items.count - 1
     root.save(true)
     root.repaintLinks()
-    root.flash((indices.length === 1 ? "deleted" : indices.length + " deleted") + " · u to undo")
+    root.flash(root.tn("deleted · u to undo", "%1 deleted · u to undo", indices.length))
     if (!root.library.showing) root.focusKeys()
   }
 
@@ -1115,10 +1166,10 @@ Item {
     // the working canvas, and which background is on top is still a question.
     var here = root.selected()
     var t = here && here.ipinned ? [root.selectedIndex] : root.targets()
-    if (t.length === 0) { root.flash("nothing selected to move"); return }
+    if (t.length === 0) { root.flash(root.t("nothing selected to move")); return }
     var moves = Store.layerMoves(root.items.count, t, where)
     if (moves.length === 0) {
-      root.flash(where === "front" || where === "forward" ? "already at the front" : "already at the back")
+      root.flash(where === "front" || where === "forward" ? root.t("already at the front") : root.t("already at the back"))
       return
     }
     root.pushUndo()
@@ -1145,18 +1196,19 @@ Item {
   function textureTargets() {
     var here = root.selected()
     var targets = here && here.ipinned ? [root.selectedIndex] : root.targets()
-    return targets.filter(function (at) { return root.items.get(at).kind !== "image" })
+    // A picture and a line take no texture.
+    return targets.filter(function (at) { return Store.SHAPE_KINDS.indexOf(root.items.get(at).kind) >= 0 })
   }
 
   function setTexture(texture) {
     if (!root.canEdit || Store.TEXTURES.indexOf(texture) < 0) return
     var targets = root.textureTargets()
     var changed = targets.filter(function (at) { return Store.normalizeTexture(root.items.get(at).itexture) !== texture })
-    if (changed.length === 0) { root.flash(targets.length ? "texture already " + texture : "select a note or shape"); return }
+    if (changed.length === 0) { root.flash(targets.length ? root.t("texture already %1", root.tv(texture)) : root.t("select a note or shape")); return }
     root.pushUndo()
     for (var i = 0; i < changed.length; i++) root.items.setProperty(changed[i], "itexture", texture)
     root.save()
-    root.flash("texture: " + texture + " · " + changed.length + (changed.length === 1 ? " item" : " items") + " · u to undo")
+    root.flash(root.tn("texture: %2 · %1 item · u to undo", "texture: %2 · %1 items · u to undo", changed.length, root.tv(texture)))
   }
 
   function cycleKind() {
@@ -1166,11 +1218,14 @@ Item {
     if (!n || t.length === 0) return
     // Turning an image into a box would drop the picture with no way back, so
     // it keeps its shape and takes the rest of the selection with it.
-    if (n.kind === "image") { root.flash("an image keeps its shape"); return }
+    if (n.kind === "image") { root.flash(root.t("an image keeps its shape")); return }
     root.pushUndo()
-    var next = Store.cycle(Store.KINDS, n.kind)
+    // A shape cycles through shapes and a line through lines; the rest of the
+    // selection changes only when it is the same sort of thing.
+    var family = Store.isLine(n.kind) ? Store.LINE_KINDS : Store.SHAPE_KINDS
+    var next = Store.cycle(family, n.kind)
     for (var i = 0; i < t.length; i++)
-      if (root.items.get(t[i]).kind !== "image") root.items.setProperty(t[i], "kind", next)
+      if (family.indexOf(root.items.get(t[i]).kind) >= 0) root.items.setProperty(t[i], "kind", next)
     root.save()
   }
 
@@ -1180,6 +1235,7 @@ Item {
     var n = root.selected()
     if (!n) return
     if (root.linkingFrom < 0) {
+      root.gluingFrom = -1
       root.linkingFrom = n.iid
       // Whatever the line was saying is about the last thing that finished,
       // not about the one starting now. The order below the header already
@@ -1190,8 +1246,82 @@ Item {
       return
     }
     if (n.iid !== root.linkingFrom) root.addLink(root.linkingFrom, n.iid)
-    root.linkingFrom = -1
+    root.linkingFrom = -1; root.gluingFrom = -1
     root.repaintLinks()
+  }
+
+  // z glues, the way x connects: on a shape or a line it holds that as the
+  // first item, and pressed again on the item the keyboard has moved to it
+  // does what gluePlan says for the pair. Two shapes get an arrow joining
+  // them; a shape and a line, either way round, get one end of the line glued
+  // to the shape; a shape and itself get an arrow beside it, glued at the
+  // tail. With nothing selected it makes a free arrow, as it always has. The
+  // keyboard stays on the second item, so z again carries on from there.
+  function glueKey() {
+    var n = root.selected()
+    if (!n) { root.gluingFrom = -1; root.addRelative("arrow"); return }
+    if (!root.canEdit || n.ipinned) return
+    // What it held was deleted since: this press starts afresh.
+    if (root.gluingFrom >= 0 && Store.indexOfId(root.items, root.gluingFrom) < 0) root.gluingFrom = -1
+    if (root.gluingFrom < 0) {
+      root.linkingFrom = -1
+      root.gluingFrom = n.iid
+      root.statusText = ""
+      root.repaintLinks()
+      return
+    }
+    var from = Store.indexOfId(root.items, root.gluingFrom), to = root.selectedIndex
+    root.gluingFrom = -1
+    var plan = Store.gluePlan(root.items, from, to)
+    // A new arrow goes in whole, glued, in the one step that adds it: the
+    // save addItem asks for must not find it half made.
+    if (plan.outcome === "join" || plan.outcome === "beside") {
+      var keep = root.items.get(to).iid, before = root.items.count
+      root.addItem("arrow", 0, 0, { roles: Store.planRoles(plan) })
+      if (root.items.count === before) return
+      if (plan.outcome === "join") {
+        root.selectedIndex = Store.indexOfId(root.items, keep)
+        root.flash(root.t("joined with an arrow"))
+      } else root.centerOnSelected()
+      root.repaintLinks()
+      return
+    } else if (plan.outcome === "attach") {
+      root.pushUndo()
+      var values = Store.planRoles(plan)
+      for (var key in values) root.items.setProperty(plan.line, key, values[key])
+      root.flash(root.t("arrow glued"))
+    } else if (plan.outcome === "already") {
+      root.flash(root.t("this arrow is glued here already"))
+      root.repaintLinks()
+      return
+    } else if (plan.outcome === "far" || plan.outcome === "touching") {
+      root.flash(root.tv(Store.GLUE_HINTS[plan.outcome]))
+      root.repaintLinks()
+      return
+    } else {
+      root.flash(root.t("z glues an arrow to a shape, or joins two shapes"))
+      root.repaintLinks()
+      return
+    }
+    root.save()
+    root.repaintLinks()
+  }
+
+  // Z lets go: what is marked, or the item the keyboard is on. An arrow lets
+  // go of both its ends and stays where it is; a shape lets go of every arrow
+  // glued to it, whose other ends hold on.
+  function unglueTargets() {
+    if (!root.canEdit) return
+    var t = root.targets()
+    if (t.length === 0) return
+    var ends = Store.unglueAll(root.items, t, false)
+    if (ends === 0) { root.flash(root.t("nothing glued here")); return }
+    root.pushUndo()
+    Store.unglueAll(root.items, t, true)
+    root.gluingFrom = -1
+    root.save()
+    root.repaintLinks()
+    root.flash(root.tn("let go of %1 end · u to undo", "let go of %1 ends · u to undo", ends))
   }
 
   // Connectors point somewhere: an arrow carries a meaning a plain line
@@ -1206,7 +1336,7 @@ Item {
     // Taking one away or turning one round is always possible; adding one is
     // not, past the cap (Store.MAX_LINKS).
     if (found.outcome !== "remove" && found.outcome !== "reverse" && root.links.count >= Store.MAX_LINKS) {
-      root.flash(Store.FULL_LINKS)
+      root.flash(root.tv(Store.FULL_LINKS))
       return
     }
     root.pushUndo()
@@ -1214,7 +1344,7 @@ Item {
       root.links.remove(found.at)
       root.save(true)
       root.repaintLinks()
-      root.flash("connector removed · u to undo")
+      root.flash(root.t("connector removed · u to undo"))
       return
     }
     if (found.outcome === "reverse") {
@@ -1242,7 +1372,7 @@ Item {
         root.links.remove(j)
       }
     }
-    if (removed) { root.save(true); root.repaintLinks(); root.flash("connectors removed · u to undo") }
+    if (removed) { root.save(true); root.repaintLinks(); root.flash(root.t("connectors removed · u to undo")) }
   }
 
   // --------------------------------------------------------------- navigation
@@ -1250,8 +1380,8 @@ Item {
     // Choosing the far end of a connector by clicking it: the near end is
     // held, as moving to it with the keys holds it, until x joins them or
     // escape lets go. A background is not something to join.
-    var source = root.linkingFrom
-    if (source >= 0 && root.items.get(index).ipinned) return
+    var source = root.linkingFrom, glueSource = root.gluingFrom
+    if ((source >= 0 || glueSource >= 0) && root.items.get(index).ipinned) return
     if (additive && !root.items.get(index).ipinned) {
       if (root.markedIds.length === 0 && root.selectedIndex >= 0 && root.selectedIndex !== index
           && !root.items.get(root.selectedIndex).ipinned) root.markedIds = [root.items.get(root.selectedIndex).iid]
@@ -1262,14 +1392,28 @@ Item {
     } else root.selectOnly(index)
     root.editIndex = -1
     root.linkingFrom = source
+    root.gluingFrom = glueSource
     root.repaintLinks()
     root.focusKeys()
   }
 
-  function moveTargets(dx, dy) {
+  // `magnetic` is a pointer drag that lines up with other items when it comes
+  // near. The pointer's whole travel since the drag began is what is snapped,
+  // not each step of it, so an item lets go again once the pointer is pulled
+  // past the pull, rather than creeping.
+  function moveTargets(dx, dy, magnetic) {
     if (!root.canEdit) return
     var t = root.targets()
     var model = root.items
+    if (magnetic && root.pointerEdit && t.length > 0) {
+      var edit = root.pointerEdit
+      if (!edit.drag) edit.drag = { x0: model.get(t[0]).ix, y0: model.get(t[0]).iy, box: Store.groupAlignBox(model, t) }
+      var curX = model.get(t[0]).ix - edit.drag.x0, curY = model.get(t[0]).iy - edit.drag.y0
+      var want = Store.magneticMove(model, t, edit.drag.box, curX + dx, curY + dy, 8 / root.zoom)
+      dx = want.dx - curX
+      dy = want.dy - curY
+      root.guides = want.guides
+    } else if (root.guides.length > 0) root.guides = []
     var move = Store.boundedMove(model, t, dx, dy)
     root.batching = true
     try {
@@ -1277,6 +1421,12 @@ Item {
         var n = model.get(t[i])
         model.setProperty(t[i], "ix", n.ix + move.dx)
         model.setProperty(t[i], "iy", n.iy + move.dy)
+      }
+      // A line moved without what it is glued to comes away from it; a line
+      // glued to something that moved goes with it.
+      if (move.dx !== 0 || move.dy !== 0) {
+        Store.unglueMoved(model, t)
+        Store.followGlue(model)
       }
     } finally { root.batching = false }
     root.repaintLinks()
@@ -1293,6 +1443,7 @@ Item {
         model.setProperty(t[i], "iw", Store.clampSize(n.iw + dx))
         model.setProperty(t[i], "ih", Store.clampSize(n.ih + dy))
       }
+      Store.followGlue(model)
     } finally { root.batching = false }
     root.repaintLinks()
   }
@@ -1301,7 +1452,7 @@ Item {
     root.markedIds = []
     root.selectedIndex = index
     root.editIndex = -1
-    root.linkingFrom = -1
+    root.linkingFrom = -1; root.gluingFrom = -1
     root.repaintLinks()
   }
 
@@ -1360,6 +1511,34 @@ Item {
     root.pushUndo()
     root.resizeTargets(dx * root.worldStep, dy * root.worldStep)
     root.centerOnSelected()
+    root.scheduleSave()
+  }
+
+  // The one line the keyboard would aim, or -1. Stretching a line's box keeps
+  // its slope, so a line made with t stayed level until the mouse moved an
+  // end. With a single line in hand, ctrl+hjkl moves its head instead.
+  function lineInHand() {
+    var t = root.targets()
+    return t.length === 1 && Store.isLine(root.items.get(t[0]).kind) ? t[0] : -1
+  }
+
+  // One end moves a step; the other stays where it is, as when dragging.
+  // end 0 is the tail, 1 the head (where an arrow points).
+  function moveLineEnd(end, dx, dy) {
+    if (!root.canEdit) return
+    var at = root.lineInHand()
+    if (at < 0) return
+    var n = root.items.get(at), from = Store.lineEndPoint(n, end)
+    // Stepped onto an item, the end glues to its outline, as when dropped.
+    var values = Store.placeLineEnd(root.items, at, end,
+                                    from.x + dx * root.worldStep, from.y + dy * root.worldStep, 0).values
+    var changed = false
+    for (var role in values) if (Math.abs(values[role] - (n[role] || 0)) > 1e-9) { changed = true; break }
+    if (!changed) return
+    root.pushUndo()
+    for (var key in values) root.items.setProperty(at, key, values[key])
+    root.centerOnSelected()
+    root.repaintLinks()
     root.scheduleSave()
   }
 
@@ -1438,6 +1617,7 @@ Item {
 
   // -------------------------------------------------------------------- modes
   function editSelected() {
+    if (root.selected() && Store.isLine(root.selected().kind)) return
     if (root.selected() && root.selected().ipinned) return
     if (!root.canEdit) return
     if (root.selectedIndex < 0) return
@@ -1461,8 +1641,9 @@ Item {
     else if (root.finding) root.endFind()
     else if (root.arranging) root.arranging = false
     else if (root.showPinned) { root.showPinned = false; root.selectedIndex = -1 }
-    else if (root.clearMarks()) root.flash("marks cleared")
-    else if (root.linkingFrom >= 0) { root.linkingFrom = -1; root.repaintLinks() }
+    else if (root.clearMarks()) root.flash(root.t("marks cleared"))
+    else if (root.linkingFrom >= 0) { root.linkingFrom = -1; root.gluingFrom = -1; root.repaintLinks() }
+    else if (root.gluingFrom >= 0) root.gluingFrom = -1
     // Last, so escape never has to choose between dismissing a failure and
     // leaving a mode — and before closing, so the keystroke that takes an
     // answer down is not also the one that closes the board.
@@ -1531,6 +1712,7 @@ Item {
       if (kept.length !== root.markedIds.length) root.markedIds = kept
     }
     if (root.linkingFrom >= 0 && Store.indexOfId(root.items, root.linkingFrom) < 0) root.linkingFrom = -1
+    if (root.gluingFrom >= 0 && Store.indexOfId(root.items, root.gluingFrom) < 0) root.gluingFrom = -1
     root.repaintLinks()
   }
 
@@ -1552,7 +1734,7 @@ Item {
     root.arranging = false
     root.conflictVisible = false
     root.helpVisible = false
-    if (root.linkingFrom >= 0) { root.linkingFrom = -1; root.repaintLinks() }
+    if (root.linkingFrom >= 0 || root.gluingFrom >= 0) { root.linkingFrom = -1; root.gluingFrom = -1; root.repaintLinks() }
   }
 
   function activate() { root.workspace.activate(root) }
@@ -1570,9 +1752,12 @@ Item {
     root.markedIds = []
     root.showPinned = false
     root.selectedIndex = -1
+    // What z holds is an id, and a board read again can give that id to
+    // something else: it never outlives the board it was taken on.
+    root.gluingFrom = -1
     if (!endModes) return
     root.editIndex = -1
-    root.linkingFrom = -1
+    root.linkingFrom = -1; root.gluingFrom = -1
   }
 
   // The surface is going away. What was half done on it ends; the board and
@@ -1583,7 +1768,7 @@ Item {
     root.showPinned = false
     root.selectedIndex = -1
     root.editIndex = -1
-    root.linkingFrom = -1
+    root.linkingFrom = -1; root.gluingFrom = -1
     root.helpVisible = false
   }
 

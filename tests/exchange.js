@@ -10,7 +10,12 @@ const source = read('BoardExchange.qml')
 const workspace = read('Omarchyform.qml')
 
 function fixture() {
-  const a = { name: 'a', dataDir: '/a', imagesDir: '/a/images', fileCommand: (op, args) => [op, ...args] }, b = { name: 'b', dataDir: '/b' }
+  // What a pane says goes through its language; here that is English, as written.
+  const S = loadStore()
+  const words = { t: (text, x, y, z) => S.translated(null, text, [x, y, z]), tv: text => text,
+    tn: (one, other, count, x, y) => S.translatedCount(null, 'en', one, other, count, [x, y]) }
+  const a = { name: 'a', dataDir: '/a', imagesDir: '/a/images', fileCommand: (op, args) => [op, ...args], ...words },
+    b = { name: 'b', dataDir: '/b', ...words }
   const root = { activePane: a, exchangePane: a }
   let busy = false
   const signals = [], staged = []

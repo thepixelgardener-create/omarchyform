@@ -11,10 +11,13 @@
 //   omarchyform apply <file> [ops.json|-] [--out FILE] [--dry-run] [--force]
 //   omarchyform validate <file>
 //   omarchyform ops
+//   omarchyform render <file> <picture.png> [--colors light|dark|mono] [--only ID,ID...] [--force]
+//   omarchyform skill [install|remove]
 //
-// What it deliberately cannot do is draw: a picture of a board needs the
-// scene, and the scene needs the shell. `ctrl+e` on an open board exports a
-// PNG; nothing here does.
+// Everything but `render` is plain JavaScript and needs no Qt. A picture needs
+// the scene the board itself is drawn by, so `render` starts Quickshell on
+// its offscreen platform, in a process of its own, with no display and
+// without the running shell.
 const fs = require("fs")
 const os = require("os")
 const path = require("path")
@@ -62,6 +65,10 @@ function aside(file, kind) {
   if (kind === "backup")
     return inLibrary ? path.join(LIBRARY, "backups", "v2", target.slice(boards.length + 1) + ".bak")
                      : target + ".bak"
+  // Earlier versions are kept for a board in the library, where the board
+  // itself lists them; one anywhere else has its .bak and nothing more.
+  if (kind === "versions")
+    return inLibrary ? path.join(LIBRARY, "versions", "v1", target.slice(boards.length + 1)) : ""
   return path.join(LIBRARY, "locks",
     S.lockKey(inLibrary ? target.slice(boards.length + 1) : target) + ".lock")
 }
@@ -172,8 +179,16 @@ function readBoard(file) {
 function writeBoard(board, file, expected) {
   const text = S.writeFile(board.items, board.links, board.nextId)
   const target = path.resolve(file)
+  // What this replaces is kept as an earlier version when the last one kept
+  // is ten minutes old or more, as it is when the board saves itself.
+  // The versions are confined to the library's versions folder, as the
+  // shell's are: none of the folders on the way may be a link.
+  const versions = aside(target, "versions")
+  const versionsRoot = versions ? path.join(LIBRARY, "versions") : ""
+  if (versionsRoot) fs.mkdirSync(versionsRoot, { recursive: true, mode: 0o700 })
   const written = helper("commit",
-    [target, aside(target, "backup"), aside(target, "lock"), expected === undefined ? "-" : expected], text)
+    [target, aside(target, "backup"), aside(target, "lock"), expected === undefined ? "-" : expected,
+     "", "", versions, versionsRoot, "spaced"], text)
   if (written.status === 7)
     die(file + " changed since it was read", "another writer got there first; read it again, or pass --force")
   if (written.status === 5)
@@ -276,6 +291,10 @@ const OPS = {
       const at = mustRow(board, a[0], "move")
       board.items.setProperty(at, "ix", S.clampCoord(S.num(a[1], 0)))
       board.items.setProperty(at, "iy", S.clampCoord(S.num(a[2], 0)))
+      // As on the board: a line moved on its own comes away from what it was
+      // glued to, and lines glued to what moved go with it.
+      S.unglueMoved(board.items, [at])
+      S.followGlue(board.items)
       return { changed: Number(a[0]) }
     }
   },
@@ -286,6 +305,7 @@ const OPS = {
       const at = mustRow(board, a[0], "resize")
       board.items.setProperty(at, "iw", S.clampSize(S.num(a[1], S.MIN_SIZE)))
       board.items.setProperty(at, "ih", S.clampSize(S.num(a[2], S.MIN_SIZE)))
+      S.followGlue(board.items)
       return { changed: Number(a[0]) }
     }
   },
@@ -308,6 +328,8 @@ const OPS = {
     run(board, a) {
       const id = Number(a[0])
       const at = mustRow(board, id, "remove")
+      // A line glued to it stays where it is, unglued.
+      S.unglueFrom(board.items, [at])
       board.items.remove(at)
       for (let i = board.links.count - 1; i >= 0; i--) {
         const link = board.links.get(i)
@@ -491,7 +513,204 @@ function verbOps(args) {
   })
 }
 
-const VERBS = { new: verbNew, inspect: verbInspect, apply: verbApply, validate: verbValidate, ops: verbOps }
+// ---------------------------------------------------------------- a picture
+// The board's own export scene, run by Quickshell with no display. This side
+// does what the shell does before it draws: the board is read and bounded by
+// the loader, and every picture on it goes through the helper's checkimages
+// before Qt may open it. The scene is handed a staging folder, private and
+// inside the library, and nothing else: no path and no name on its command
+// line, which another account could read.
+const SCENE = path.join(__dirname, "..", "BoardRender.qml")
+const PICTURE_HELPER = path.join(__dirname, "..", "BoardFiles.sh")
+// How the scene says it went, in the only words it has: its exit status.
+const RENDER_EXITS = {
+  3: "the scene could not read what it was handed",
+  4: "there is nothing on the board to draw",
+  5: "the board's pictures took too long to load; nothing was written"
+}
+// A board at every limit is drawn in well under this; past it something is
+// stuck, and the answer says so rather than waiting.
+const RENDER_MS = 120000
+
+// Which of a board's pictures may be opened: "" for one found fit, and why
+// not for any other. An answer the helper did not give is not a picture to
+// draw, as in the shell.
+function checkedPictures(rows, imagesDir) {
+  const names = S.pictureNames(rows)
+  const states = {}
+  if (!names.length) return states
+  const out = spawnSync("bash", [PICTURE_HELPER, "checkimages", imagesDir],
+    { encoding: "utf8", input: names.map(name => name + "\t\n").join("") })
+  const answers = out.status === 0 ? S.pictureAnswers(out.stdout || "") : {}
+  for (const name of names)
+    states[name] = Object.prototype.hasOwnProperty.call(answers, name) ? answers[name].refused : "could not be checked"
+  return states
+}
+
+// The size a PNG says it is, or null for a file that is not one.
+function pngSize(file) {
+  let head
+  try {
+    const fd = fs.openSync(file, "r")
+    head = Buffer.alloc(24)
+    const read = fs.readSync(fd, head, 0, 24, 0)
+    fs.closeSync(fd)
+    if (read < 24) return null
+  } catch { return null }
+  if (head.subarray(0, 8).toString("latin1") !== "\x89PNG\r\n\x1a\n" || head.subarray(12, 16).toString("latin1") !== "IHDR") return null
+  return { width: head.readUInt32BE(16), height: head.readUInt32BE(20) }
+}
+
+function verbRender(args) {
+  const file = args[0]
+  const out = args[1]
+  if (!file || file.startsWith("--") || !out || out.startsWith("--"))
+    die("render needs a board and a picture: omarchyform render <file> <picture.png>")
+  const rest = args.slice(2)
+  onlyFlags(rest, "render", ["--force"], ["--colors", "--only"])
+  if (!out.toLowerCase().endsWith(".png")) die("the picture is a PNG", "name it something.png")
+  const target = path.resolve(out)
+  if (target === path.resolve(file)) die("the picture cannot be written over the board")
+  // Looked at, not through: a link at the picture's place is never written
+  // through, --force or not, since it could lead to the board or anything else.
+  let there = null
+  try { there = fs.lstatSync(target) } catch { /* nothing there */ }
+  if (there && !there.isFile()) die(out + " is not a plain file", "the picture is written only as a file of its own")
+  if (there && there.nlink > 1) die(out + " has other names", "it may be the board, or something else; nothing was written")
+  if (there && !rest.includes("--force")) die(out + " exists", "pass --force to write over it")
+  let colors = "light"
+  if (rest.includes("--colors")) colors = valueAfter(rest, rest.indexOf("--colors"), "--colors needs a palette")
+  if (!S.exportPalette(colors)) die(`there is no palette ${colors}`, Object.keys(S.EXPORT_PALETTES))
+
+  // Bounded as the board bounds it: one it would open empty and read-only is
+  // not drawn from here either.
+  const loaded = loadBoard(file, readText(file))
+  const beyond = S.boardLimit(loaded.data)
+  if (beyond !== "") die(`${file} ${beyond}`, "the board opens it empty and read-only, so there is no picture of it to make")
+  const board = { items: loaded.items, links: loaded.links, nextId: S.nextFreeId(loaded.items, loaded.data.nextId) }
+  const rows = S.itemRows(board.items)
+  // What is asked for by id is cropped to by place, as the board crops to
+  // what is marked.
+  const only = []
+  if (rest.includes("--only")) {
+    for (const part of valueAfter(rest, rest.indexOf("--only"), "--only needs ids, as 3,4,7").split(",")) {
+      if (!/^[0-9]+$/.test(part)) die(`--only takes ids, not ${part}`, "as 3,4,7")
+      const at = rows.findIndex(row => row.id === Number(part))
+      if (at < 0) die(`there is no item ${part}`)
+      if (!only.includes(at)) only.push(at)
+    }
+  }
+  if (!rows.length) die("there is nothing on the board to draw")
+
+  const imagesDir = path.join(LIBRARY, "images")
+  const pictures = checkedPictures(rows, imagesDir)
+  const staging = path.join(LIBRARY, "render")
+  const made = helper("private", [LIBRARY, staging])
+  if (made.status !== 0 && made.status !== 4) die("cannot make a private folder to draw in", staging)
+  // A stage whose run was killed before it could clear up is cleared by the
+  // next one, once it is too old to be a run still going.
+  for (const name of fs.readdirSync(staging)) {
+    const stale = path.join(staging, name)
+    try { if (name.startsWith("job-") && Date.now() - fs.statSync(stale).mtimeMs > 2 * RENDER_MS) fs.rmSync(stale, { recursive: true, force: true }) }
+    catch { /* another run's, and gone already */ }
+  }
+  const stage = fs.mkdtempSync(path.join(staging, "job-"))
+  // die ends the process where it stands, and a `finally` with it, so what
+  // went wrong is carried out of here and said once the stage is gone.
+  let failed = null, size = null
+  try {
+    fs.writeFileSync(path.join(stage, "board.json"), S.writeFile(board.items, board.links, board.nextId), { mode: 0o600 })
+    fs.writeFileSync(path.join(stage, "job.json"), JSON.stringify({ colors, only, pictures, imagesDir }), { mode: 0o600 })
+    // Its own runtime folder as well, so the instance it registers and the
+    // log it keeps are in the stage and go with it, and nothing of it is left
+    // beside the running shell's.
+    const run = spawnSync("qs", ["--no-color", "-p", SCENE], {
+      encoding: "utf8", timeout: RENDER_MS, maxBuffer: 16 * 1024 * 1024,
+      env: { ...process.env, QT_QPA_PLATFORM: "offscreen", QT_QPA_PLATFORMTHEME: "", QT_QUICK_BACKEND: "software",
+             QML_DISABLE_DISK_CACHE: "1", XDG_RUNTIME_DIR: stage, OMARCHYFORM_RENDER_DIR: stage }
+    })
+    const drawn = path.join(stage, "out.png")
+    if (run.error && run.error.code === "ENOENT")
+      failed = ["quickshell (qs) not found", "a picture is drawn by Quickshell, which the Omarchy shell runs on"]
+    else if (run.error && run.error.code === "ETIMEDOUT")
+      failed = ["the picture took too long to draw", `gave up after ${RENDER_MS / 1000} seconds; nothing was written`]
+    else if (Object.prototype.hasOwnProperty.call(RENDER_EXITS, run.status)) failed = [RENDER_EXITS[run.status]]
+    else if (run.status !== 0 || !(size = pngSize(drawn)))
+      failed = ["the picture could not be drawn",
+                (run.stderr || run.stdout || "").trim().split("\n").slice(-3).join("\n") || "exit " + run.status]
+    else {
+      // Put in place in one step that never follows a link. Without --force
+      // it is made only if nothing is there, even something that appeared
+      // while the picture was drawn; with it, a copy beside the target is
+      // renamed over it, which replaces a name rather than writing into
+      // whatever the name leads to.
+      try {
+        if (!rest.includes("--force")) fs.copyFileSync(drawn, target, fs.constants.COPYFILE_EXCL)
+        else {
+          const beside = path.join(path.dirname(target), "." + path.basename(target) + ".omarchyform-" + process.pid)
+          try {
+            fs.copyFileSync(drawn, beside, fs.constants.COPYFILE_EXCL)
+            fs.renameSync(beside, target)
+          } finally { fs.rmSync(beside, { force: true }) }
+        }
+      } catch (error) {
+        failed = error.code === "EEXIST" ? [out + " exists", "it appeared while the picture was drawn; pass --force to write over it"]
+                                         : ["cannot write " + out, error.message]
+      }
+    }
+  } finally {
+    fs.rmSync(stage, { recursive: true, force: true })
+  }
+  if (failed) die(failed[0], failed[1])
+  const leftOut = Object.keys(pictures).filter(name => pictures[name] !== "").map(name => ({ name, why: pictures[name] }))
+  answer({ ok: true, file: target, width: size.width, height: size.height, colors,
+           items: only.length ? only.length : rows.length, picturesLeftOut: leftOut })
+}
+
+// The skill beside this program teaches a coding agent these verbs. Omarchy
+// links its own skills into ~/.agents/skills and into each agent's own
+// folder, and this does the same with the same rule: a link is made or
+// replaced, and anything that is not a link is somebody's and is left alone.
+// Only agents that have a folder already get one, so none is made for an
+// agent that was never used.
+const SKILL = path.join(__dirname, "..", "skills", "omarchyform")
+const HOME = process.env.HOME || os.homedir()
+const AGENT_FOLDERS = [".claude/skills", ".codex/skills", ".pi/agent/skills", ".gemini/config/skills", ".hermes/skills"]
+
+function linkOf(file) {
+  try { return fs.lstatSync(file).isSymbolicLink() ? fs.readlinkSync(file) : null } catch { return undefined }
+}
+
+function verbSkill(args) {
+  const action = args[0]
+  if (action !== undefined && action !== "install" && action !== "remove")
+    die(`skill: ${action.startsWith("-") ? "there is no flag " : "nothing more is expected, not "}${action}`, ["install", "remove"])
+  onlyFlags(args.slice(1), "skill", [])
+  if (!fs.existsSync(path.join(SKILL, "SKILL.md"))) die("the skill is not beside this program", SKILL)
+  const shared = path.join(HOME, ".agents/skills")
+  const places = [shared, ...AGENT_FOLDERS.map(folder => path.join(HOME, folder))].map(folder => path.join(folder, "omarchyform"))
+  if (action === undefined)
+    return answer({ ok: true, skill: SKILL, linked: places.filter(place => linkOf(place) === SKILL),
+                    hint: "omarchyform skill install links it for your coding agents; skill remove takes the links away" })
+  const linked = [], removed = [], left = []
+  for (const place of places) {
+    const now = linkOf(place)
+    if (action === "remove") {
+      if (now === SKILL) { fs.unlinkSync(place); removed.push(place) }
+      continue
+    }
+    const folder = path.dirname(place)
+    if (folder !== shared && !fs.existsSync(folder)) continue
+    if (now === null) { left.push({ path: place, why: "it is not a link, so it is not this program's to replace" }); continue }
+    fs.mkdirSync(folder, { recursive: true })
+    if (now !== undefined) fs.unlinkSync(place)
+    fs.symlinkSync(SKILL, place)
+    linked.push(place)
+  }
+  answer(action === "remove" ? { ok: true, removed } : { ok: true, skill: SKILL, linked, left })
+}
+
+const VERBS = { new: verbNew, inspect: verbInspect, apply: verbApply, validate: verbValidate, ops: verbOps, render: verbRender, skill: verbSkill }
 
 const argv = process.argv.slice(2)
 const verb = argv.shift()

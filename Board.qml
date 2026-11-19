@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import "BoardStore.js" as Store
+import "kit/Theme" as Kit
 
 // The canvas surface. Hosted by either the fullscreen overlay or the windowed
 // toplevel; both share one controller, so switching never loses your place.
@@ -26,7 +27,7 @@ FocusScope {
 
   function exportPng(path) {
     if (board.ctl.imageBusy) return
-    if (board.ctl.items.count === 0) { board.ctl.flash("Add a note before exporting an image"); return }
+    if (board.ctl.items.count === 0) { board.ctl.flash(board.ctl.t("Add a note before exporting an image")); return }
     board.ctl.imageBusy = true
     exportDestination = path
     picture.exportColors = board.ctl.pngPalette
@@ -40,9 +41,9 @@ FocusScope {
     ctl: board.ctl
     onFinished: function(success, reason) {
       if (success) board.ctl.finishPng(board.exportDestination)
-      else { board.ctl.imageBusy = false; board.ctl.flash(reason !== "" ? reason : "Could not render PNG") }
+      else { board.ctl.imageBusy = false; board.ctl.flash(reason !== "" ? reason : board.ctl.t("Could not render PNG")) }
     }
-    onStillLoading: board.ctl.flash("Waiting for pictures to load…")
+    onStillLoading: board.ctl.flash(board.ctl.t("Waiting for pictures to load…"))
   }
 
   function repaintGrid() { grid.requestPaint() }
@@ -481,8 +482,37 @@ FocusScope {
         // stands each item after the one before it, and cannot once that one
         // is a background living in the other layer — so an item brought
         // forward over a board that starts with one stayed where it was.
-        z: index
+        // The line under the cursor comes to the top while it is there: an
+        // end glued to a shape has its handle on the shape, and under the
+        // shape it could be neither seen nor taken.
+        z: index + (board.ctl.selectedIndex === index && Store.isLine(kind) ? Store.MAX_ITEMS : 0)
       }
+    }
+  }
+
+  // Alignment guides while a drag is lined up with another item: hairlines
+  // in screen space, so they stay one pixel wide at any zoom. A guide marked
+  // `glue` is the item a dragged line end will be glued to, ringed a few
+  // pixels outside its box.
+  Repeater {
+    objectName: "align-guides"
+    model: board.ctl.guides
+    delegate: Rectangle {
+      required property var modelData
+      readonly property bool ring: modelData.glue === true
+      readonly property real pad: ring ? 4 : 0
+      readonly property real sx1: modelData.x1 * board.ctl.zoom + board.ctl.camX
+      readonly property real sy1: modelData.y1 * board.ctl.zoom + board.ctl.camY
+      readonly property real sx2: modelData.x2 * board.ctl.zoom + board.ctl.camX
+      readonly property real sy2: modelData.y2 * board.ctl.zoom + board.ctl.camY
+      x: Math.round(Math.min(sx1, sx2) - pad)
+      y: Math.round(Math.min(sy1, sy2) - pad)
+      width: Math.max(1, Math.abs(sx2 - sx1) + 2 * pad)
+      height: Math.max(1, Math.abs(sy2 - sy1) + 2 * pad)
+      color: ring ? "transparent" : board.theme.accent
+      border.color: board.theme.accent
+      border.width: ring ? 2 : 0
+      opacity: 0.8
     }
   }
 
@@ -576,25 +606,40 @@ FocusScope {
     // the PNG export and the screenshot harness both go through (Node.qml).
     // The text is cut short; a note may hold a megabyte of it.
     Accessible.role: Accessible.Pane
-    Accessible.name: "Board " + board.ctl.boardTitle
+    Accessible.name: board.ctl.t("Board %1", board.ctl.boardTitle)
     Accessible.description: keys.describeSelection()
     function describeSelection() {
       var at = board.ctl.selectedIndex, count = board.ctl.items.count
-      if (at < 0 || at >= count) return count === 0 ? "Empty" : count + " items, none selected"
+      if (at < 0 || at >= count)
+        return count === 0 ? board.ctl.t("Empty") : board.ctl.tn("%1 item, none selected", "%1 items, none selected", count)
       var item = board.ctl.items.get(at)
-      var kind = ({ note: "Note", rect: "Box", ellipse: "Ellipse", diamond: "Diamond", image: "Picture" })[item.kind] || "Item"
+      var kind = item.kind === "note" ? board.ctl.t("Note") : item.kind === "rect" ? board.ctl.t("Box")
+        : item.kind === "ellipse" ? board.ctl.t("Ellipse") : item.kind === "diamond" ? board.ctl.t("Diamond")
+        : item.kind === "image" ? board.ctl.t("Picture") : item.kind === "line" ? board.ctl.t("Line")
+        : item.kind === "arrow" ? board.ctl.t("Arrow") : item.kind === "double-arrow" ? board.ctl.t("Double-headed arrow")
+        : item.kind === "dashed-line" ? board.ctl.t("Dashed line") : board.ctl.t("Item")
       var text = item.itext.length > 200 ? item.itext.slice(0, 200) + "…" : item.itext
-      return kind + " " + (at + 1) + " of " + count + (item.ipinned ? ", in the background" : "")
-        + (board.ctl.linkingFrom >= 0 ? ", connecting" : "") + (text !== "" ? ": " + text : "")
+      return board.ctl.t("%1 %2 of %3", kind, at + 1, count) + (item.ipinned ? board.ctl.t(", in the background") : "")
+        + (board.ctl.linkingFrom >= 0 || board.ctl.gluingFrom >= 0 ? board.ctl.t(", connecting") : "") + (text !== "" ? ": " + text : "")
     }
 
     // Printable keys are a table rather than a ladder of else-ifs: adding a
     // command is one line, and the cheat sheet is the only other place to
     // touch.
     readonly property var commands: ({
-      "n": function () { board.ctl.addRelative("note") },
-      "r": function () { board.ctl.addRelative("rect") },
+      // The top letter row makes things, left to right as a drawing app's
+      // toolbar reads: q w e r t z on the QWERTZ keyboard this was laid out on.
+      // Matched on the character typed, so each layout keeps its own row
+      // letters.
+      "q": function () { board.ctl.addRelative("note") },
+      "w": function () { board.ctl.addRelative("rect") },
       "e": function () { board.ctl.addRelative("ellipse") },
+      "r": function () { board.ctl.addRelative("diamond") },
+      "t": function () { board.ctl.addRelative("line") },
+      // z glues rather than only making: on a shape, then on another shape
+      // or an arrow, it joins or attaches them (BoardPane.glueKey).
+      "z": function () { board.ctl.glueKey() },
+      "Z": function () { board.ctl.unglueTargets() },
       "p": function () { board.ctl.togglePin() },
       "P": function () { board.ctl.togglePinnedSelection() },
       "s": function () { board.ctl.cycleKind() },
@@ -605,7 +650,6 @@ FocusScope {
       "i": function () { board.ctl.editSelected() },
       "x": function () { board.ctl.toggleLinking() },
       "X": function () { board.ctl.unlinkSelected() },
-      "w": function () { board.ctl.toggleWindowMode() },
       "v": function () { board.ctl.toggleSplit("side-by-side") },
       "V": function () { board.ctl.toggleSplit("stacked") },
       "o": function () { board.ctl.otherPane() },
@@ -637,7 +681,16 @@ FocusScope {
       return null
     }
 
+    // Held, ctrl turns the bar's hints into what ctrl does: they stay while it
+    // is down, through any chords made with it, and go when it is let go of.
+    property bool ctrlHeld: false
+    onActiveFocusChanged: if (!activeFocus) keys.ctrlHeld = false
+    Keys.onReleased: function (event) { if (event.key === Qt.Key_Control) keys.ctrlHeld = false }
+
     Keys.onPressed: function (event) {
+      if (event.key === Qt.Key_Control) { keys.ctrlHeld = true; return }
+      // A key without ctrl means it was let go of where this could not see.
+      if ((event.modifiers & Qt.ControlModifier) === 0) keys.ctrlHeld = false
       if (board.ctl.pointerEdit) {
         board.ctl.finishPointerEdit(true)
         // Escape cancels this gesture only; it must not also dismiss the board.
@@ -733,8 +786,11 @@ FocusScope {
 
       if (ctrl) {
         // Ctrl plus a movement key resizes, the same way Shift plus one moves.
+        // A line has no size to pull, so it aims instead: ctrl moves the
+        // head, ctrl+shift the tail.
         var rd = keys.direction(event.key, "")
-        if (rd) board.ctl.resizeSelected(rd[0], rd[1])
+        if (rd && board.ctl.lineInHand() >= 0) board.ctl.moveLineEnd(shift ? 0 : 1, rd[0], rd[1])
+        else if (rd) board.ctl.resizeSelected(rd[0], rd[1])
         else if (event.key === Qt.Key_R) board.ctl.redo()
         else if (event.key === Qt.Key_Z) shift ? board.ctl.redo() : board.ctl.undo()
         else if (event.key === Qt.Key_S && shift) board.ctl.exportBoard()
@@ -762,6 +818,8 @@ FocusScope {
 
       if (event.key === Qt.Key_Escape) board.ctl.back()
       else if (event.key === Qt.Key_F2) board.ctl.renameBoard()
+      // Off w, which the top row of making keys took; F11 is fullscreen elsewhere.
+      else if (event.key === Qt.Key_F11) board.ctl.toggleWindowMode()
       else if (event.key === Qt.Key_F1) board.ctl.toggleHelp()
       else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) board.ctl.editSelected()
       else if (event.key === Qt.Key_Tab) board.ctl.selectNext(1)
@@ -827,7 +885,8 @@ FocusScope {
     objectName: "panel-scrim"
     anchors.fill: parent
     visible: board.ctl.paletteVisible || board.ctl.conflictVisible || board.ctl.helpVisible
-    color: board.theme.panelScrim
+    // The kit's scrim behind the menu, as the browser's is.
+    color: Kit.Color.menu.scrim
   }
 
   BoardToolbar {
@@ -837,8 +896,10 @@ FocusScope {
     anchors { top: parent.top; left: parent.left; right: parent.right; margins: board.theme.sp(16) }
     height: implicitHeight
     visible: !board.ctl.browsing && !board.ctl.helpVisible
-    lineWidth: findLine.visible ? findLine.implicitWidth : status.visible ? status.implicitWidth : 0
-    lineHeight: findLine.visible ? findLine.height : status.visible ? status.height : 0
+    lineWidth: findLine.visible ? findLine.implicitWidth : hintLine.visible ? hintLine.natural
+      : status.visible ? status.implicitWidth : 0
+    lineHeight: findLine.visible ? findLine.height : hintLine.visible ? hintLine.height
+      : status.visible ? status.height : 0
   }
 
   Column {
@@ -850,7 +911,7 @@ FocusScope {
     Text {
       textFormat: Text.PlainText
       anchors.horizontalCenter: parent.horizontalCenter
-      text: "Start with a thought."
+      text: board.ctl.t("Start with a thought.")
       color: board.theme.foreground
       font.family: board.theme.fontFamily
       font.pixelSize: board.theme.fontHeading
@@ -858,7 +919,7 @@ FocusScope {
     Text {
       anchors.horizontalCenter: parent.horizontalCenter
       textFormat: Text.StyledText
-      text: Store.hintLine(Store.START_HINTS, board.ctl.accentMarkup)
+      text: Store.hintLine(Store.START_HINTS, board.ctl.accentMarkup, null, board.ctl.tv)
       width: parent.width
       wrapMode: Text.Wrap
       horizontalAlignment: Text.AlignHCenter
@@ -978,11 +1039,11 @@ FocusScope {
     Text {
       textFormat: Text.PlainText
       id: findLabel
-      text: "find: "
-      color: board.ctl.theme.barForeground
+      text: board.ctl.t("find: ")
+      color: Kit.Color.bar.text
       opacity: 0.85
-      font.family: board.theme.fontFamily
-      font.pixelSize: board.theme.fontBody
+      font.family: Kit.Style.font.family
+      font.pixelSize: Kit.Style.font.body
     }
 
     // Wide enough to see the caret in an empty query, and it grows with what
@@ -997,19 +1058,19 @@ FocusScope {
       LineField {
         id: findField
         objectName: "find-field"
-        color: board.ctl.theme.barForeground
-        selectionColor: board.ctl.theme.accent
-        selectedTextColor: board.ctl.theme.barBackground
-        font.family: board.theme.fontFamily
-        font.pixelSize: board.theme.fontBody
+        color: Kit.Color.bar.text
+        selectionColor: Kit.Color.accent
+        selectedTextColor: Kit.Color.bar.background
+        font.family: Kit.Style.font.family
+        font.pixelSize: Kit.Style.font.body
 
         // Typed into, it is the query. Set from anywhere else — a test, the
         // screenshot harness, a find reopened on the query it had — it follows,
         // so the two cannot show different things. Both sides check before
         // writing, so neither can chase the other.
         Accessible.role: Accessible.EditableText
-        Accessible.name: "Find on this board"
-        Accessible.description: board.ctl.findCount + " matches"
+        Accessible.name: board.ctl.t("Find on this board")
+        Accessible.description: board.ctl.tn("%1 match", "%1 matches", board.ctl.findCount)
 
         onTextChanged: board.ctl.setFindQuery(text)
         readonly property string query: board.ctl.findQuery
@@ -1048,14 +1109,14 @@ FocusScope {
       width: Math.min(implicitWidth,
                       Math.max(0, toolbar.width - board.theme.sp(16) - findLabel.width - findView.width))
       wrapMode: Text.Wrap
-      color: board.ctl.theme.barForeground
+      color: Kit.Color.bar.text
       opacity: 0.85
-      font.family: board.theme.fontFamily
-      font.pixelSize: board.theme.fontBody
+      font.family: Kit.Style.font.family
+      font.pixelSize: Kit.Style.font.body
       text: (board.ctl.findQuery === "" ? ""
-             : " · " + (board.ctl.findCount === 0 ? "no match"
-                        : board.ctl.findCount === 1 ? "1 match" : board.ctl.findCount + " matches"))
-            + " · " + Store.hintLine(Store.FIND_HINTS, board.ctl.accentMarkup)
+             : " · " + Store.escapeMarkup(board.ctl.findCount === 0 ? board.ctl.t("no match")
+                        : board.ctl.tn("%1 match", "%1 matches", board.ctl.findCount)))
+            + " · " + Store.hintLine(Store.FIND_HINTS, board.ctl.accentMarkup, null, board.ctl.tv)
     }
   }
 
@@ -1072,16 +1133,21 @@ FocusScope {
     horizontalAlignment: Text.AlignHCenter
     wrapMode: Text.Wrap
     // The bar's text, held back as its other secondary text is.
-    color: board.ctl.theme.barForeground
+    color: Kit.Color.bar.text
     opacity: 0.85
-    font.family: board.theme.fontFamily
-    font.pixelSize: board.theme.fontBody
-    visible: status.tier !== "none"
+    font.family: Kit.Style.font.family
+    font.pixelSize: Kit.Style.font.body
+    visible: status.tier !== "none" && status.tier !== "hints"
     // Markup, so a key can be a different colour from the word it sits in.
     // Everything reaching this line from a board file, a file name or the
     // keyboard is escaped on the way: this is the one place on the board that
     // renders tags, and a board is a file other people can send you.
     textFormat: Text.StyledText
+    Accessible.role: Accessible.StaticText
+    Accessible.name: status.text
+    // The bar's hints, or ctrl's while it is held.
+    readonly property var hints: keys.ctrlHeld
+      ? Store.ctrlHints(keys.ctrlHeld && board.ctl.lineInHand() >= 0) : Store.BOARD_HINTS
     // Which of the things wanting this line gets it is decided in BoardStore,
     // by the same call the controller makes to know whether a failure is on
     // screen and its time is running. Here it is only joined and coloured.
@@ -1089,42 +1155,121 @@ FocusScope {
     // Asked to close with either of the first and third unresolved, the line
     // says the next ask closes all the same.
     readonly property string closeAnyway: board.ctl.leaveWarned
-      ? " · " + Store.hintMarkup("esc", "close anyway", board.ctl.accentMarkup) : ""
+      ? " · " + Store.hintMarkup("esc", board.ctl.t("close anyway"), board.ctl.accentMarkup) : ""
     text:
       status.tier === "saveError" ? Store.escapeMarkup(board.ctl.saveError) + status.closeAnyway
       : status.tier === "trashIndexError" ? Store.escapeMarkup(board.ctl.library.trashIndexError)
       : status.tier === "conflict"
-      ? Store.escapeMarkup(board.ctl.boardTitle) + " changed on disk · "
-        + Store.hintMarkup("ctrl+s", "choose which version to keep", board.ctl.accentMarkup)
+      ? Store.escapeMarkup(board.ctl.t("%1 changed on disk", board.ctl.boardTitle)) + " · "
+        + Store.hintMarkup("ctrl+s", board.ctl.t("choose which version to keep"), board.ctl.accentMarkup)
         + status.closeAnyway
       : status.tier === "damaged"
       ? Store.escapeMarkup(board.ctl.damageReason !== ""
-          ? board.ctl.boardTitle + " " + board.ctl.damageReason + " — not opening it"
-          : board.ctl.boardTitle + " could not be read — not saving over it")
+          ? board.ctl.t("%1 %2 — not opening it", board.ctl.boardTitle, board.ctl.tv(board.ctl.damageReason))
+          : board.ctl.t("%1 could not be read — not saving over it", board.ctl.boardTitle))
       // Escaped like any other text that has been through a file name or a
       // helper's output: this is the one place on the board that renders tags.
       : status.tier === "failure" ? Store.escapeMarkup(board.ctl.failureText)
       : status.tier === "palette"
-      ? "commands · " + Store.hintLine(Store.PALETTE_HINTS, board.ctl.accentMarkup)
+      ? Store.escapeMarkup(board.ctl.t("commands")) + " · " + Store.hintLine(Store.PALETTE_HINTS, board.ctl.accentMarkup, null, board.ctl.tv)
       : status.tier === "arrange"
-      ? "arrange · " + Store.hintLine(Store.ARRANGE_HINTS, board.ctl.accentMarkup)
+      ? Store.escapeMarkup(board.ctl.t("arrange")) + " · " + Store.hintLine(Store.ARRANGE_HINTS, board.ctl.accentMarkup, null, board.ctl.tv)
       : status.tier === "backgrounds"
-      ? "backgrounds · " + Store.hintLine(Store.PINNED_HINTS, board.ctl.accentMarkup)
+      ? Store.escapeMarkup(board.ctl.t("backgrounds")) + " · " + Store.hintLine(Store.PINNED_HINTS, board.ctl.accentMarkup, null, board.ctl.tv)
       : status.tier === "editing"
-      ? Store.hintMarkup("esc", "done typing", board.ctl.accentMarkup)
+      ? Store.hintMarkup("esc", board.ctl.t("done typing"), board.ctl.accentMarkup)
       // While the far end is being chosen, the line says what x will do to
       // this pair rather than what x is for: connect them, turn the one that
       // is already there round, or take it away. The controller works that out
       // from the same table addLink changes, so the line cannot promise one
       // thing and the board do another.
       : status.tier === "linking"
-      ? Store.linkHint(board.ctl.linkOutcome, board.ctl.accentMarkup)
+      ? Store.linkHint(board.ctl.linkOutcome, board.ctl.accentMarkup, board.ctl.tv)
+      // The same for z: join, attach, or what to pick first.
+      : status.tier === "gluing"
+      ? Store.glueHint(board.ctl.glueOutcome, board.ctl.accentMarkup, board.ctl.tv)
       : status.tier === "flash" ? Store.escapeMarkup(board.ctl.statusText)
-      : status.tier === "switching" ? "saving before switching boards…"
-      // The other pane is still there when the window is too small to show
-      // it, and the line says how to reach it rather than leave it forgotten.
-      : (board.ctl.squeezed ? Store.hintMarkup("o", "the other pane", board.ctl.accentMarkup) + " \u00b7 " : "")
-        + Store.hintLine(Store.BOARD_HINTS, board.ctl.accentMarkup)
+      : status.tier === "switching" ? Store.escapeMarkup(board.ctl.t("saving before switching boards…"))
+      // The keys themselves are buttons, in hintLine below.
+      : ""
+  }
+
+  // With nothing else to say, the line is the board's keys, or ctrl's while it
+  // is held: a button each, so the icons can be clicked as well as read. A
+  // click runs what the key runs. Centred where the line goes, and wrapping
+  // into rows under the name where it does not fit beside it.
+  Flow {
+    id: hintLine
+    objectName: "board-hints"
+    visible: status.tier === "hints"
+    // How wide it is on one row: what the header decides by, before the line
+    // is laid out beside the name or under it. The Repeater counts as nothing.
+    readonly property real natural: {
+      var w = 0, n = 0
+      for (var i = 0; i < hintLine.children.length; i++) {
+        var c = hintLine.children[i]
+        if (!(c.shown === undefined ? c.visible : c.shown) || c.implicitWidth <= 0) continue
+        w += c.implicitWidth
+        n += 1
+      }
+      return w + Math.max(0, n - 1) * hintLine.spacing
+    }
+    width: Math.min(Math.ceil(natural), toolbar.lineSpan)
+    x: toolbar.x + toolbar.lineX + (toolbar.lineSpan - width) / 2
+    y: toolbar.y + toolbar.lineY
+    spacing: Kit.Style.spacing.md
+    opacity: 0.85
+    Accessible.role: Accessible.ToolBar
+    Accessible.name: Store.hintWords(status.hints, board.ctl.tv)
+    // The other pane is still there when the window is too small to show it,
+    // and the line says how to reach it rather than leave it forgotten.
+    HintButton {
+      objectName: "hint-the other pane"
+      readonly property bool shown: board.ctl.squeezed
+      visible: shown
+      key: "o"
+      label: board.ctl.t("the other pane")
+      tip: board.ctl.tv("The other pane")
+      keyColor: board.ctl.accentMarkup
+      onActivated: board.ctl.runHint("the other pane")
+    }
+    // While ctrl is held, the keys after it are ctrl's.
+    Row {
+      objectName: "hint-ctrl"
+      readonly property bool shown: keys.ctrlHeld
+      visible: shown
+      height: hintLine.children.length > 3 ? hintLine.children[3].height : implicitHeight
+      spacing: Kit.Style.spacing.xxs
+      Text {
+        anchors.verticalCenter: parent.verticalCenter
+        textFormat: Text.PlainText
+        text: "ctrl"
+        color: board.ctl.accentMarkup
+        font.family: Kit.Style.font.family
+        font.pixelSize: Kit.Style.font.body
+      }
+      Text {
+        anchors.verticalCenter: parent.verticalCenter
+        textFormat: Text.PlainText
+        text: "+"
+        color: Kit.Color.bar.text
+        font.family: Kit.Style.font.family
+        font.pixelSize: Kit.Style.font.body
+      }
+    }
+    Repeater {
+      model: status.hints
+      HintButton {
+        required property var modelData
+        objectName: "hint-" + modelData[1]
+        glyph: Store.HINT_GLYPHS[modelData[1]] || ""
+        key: modelData[0]
+        tip: Store.hintTip(modelData[1], board.ctl.tv)
+        keyColor: board.ctl.accentMarkup
+        clickable: Store.hintCommand(modelData[1]) !== "" || modelData[1] === "close"
+        onActivated: board.ctl.runHint(modelData[1])
+      }
+    }
   }
 
   // Which of two panes the keys go to: the accent round its edge, the way the

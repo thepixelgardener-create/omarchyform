@@ -38,13 +38,16 @@ Item {
   property int selectedIndex: -1
   property int editIndex: -1
   property int linkingFrom: -1
+  property int gluingFrom: -1
+  property var guides: []
   property string linkOutcome: "none"
+  property string glueOutcome: "none"
   property var markedRect: null
   property int undoCount: 0
   property int saveCount: 0
   property var pointerEdit: null
   function beginPointerEdit() { pointerEdit = {}; pushUndo() }
-  function finishPointerEdit(cancel) { if (pointerEdit && !cancel) save(); pointerEdit = null }
+  function finishPointerEdit(cancel) { guides = []; if (pointerEdit && !cancel) save(); pointerEdit = null }
   property int removeCount: 0
   property int minItemSize: 60
   property bool culling: false
@@ -66,7 +69,7 @@ Item {
       diskChanged: ctl.diskChanged, damaged: ctl.damaged, failureText: ctl.failureText,
       paletteVisible: ctl.paletteVisible, arranging: ctl.arranging,
       showPinned: ctl.showPinned, editing: ctl.editIndex >= 0,
-      linking: ctl.linkingFrom >= 0, statusText: ctl.statusText,
+      linking: ctl.linkingFrom >= 0, gluing: ctl.gluingFrom >= 0, statusText: ctl.statusText,
       switching: ctl.pendingBoard !== null
     }
   }
@@ -137,6 +140,7 @@ Item {
   property bool findDimming: false
   property bool arranging: false
   property bool helpVisible: false
+  property string pluginVersion: "0.6.0"
   property bool imageBusy: false
   property var activeBoard: null
 
@@ -149,6 +153,13 @@ Item {
   property string paletteGroup: ""
   property int paletteIndex: 0
   property int paletteRows: 9
+  readonly property string paletteEmpty: "nothing goes by that"
+  // What it says, as written: these suites read English.
+  function t(text, a, b, c) { return Store.translated(null, text, [a, b, c]) }
+  function tn(one, other, count, a, b) { return Store.translatedCount(null, "en", one, other, count, [a, b]) }
+  function tv(text) { return text }
+  property var hintsRun: []
+  function runHint(word) { ctl.hintsRun = ctl.hintsRun.concat([word]) }
   readonly property var paletteMatches: Store.matchCommands(ctl.paletteQuery, ctl.paletteScope, ctl.paletteGroup)
   function commandReady(needs) { return true }
   function commandExcuse(needs) { return "" }
@@ -189,6 +200,7 @@ Item {
   // about the pointer, and a missing one is a TypeError rather than a
   // failure that says so.
   function addRelative(kind) {}
+  function glueKey() {}
   function alignTargets(edge) {}
   function spreadTargets(axis) {}
   function beginArrange() {}
@@ -238,6 +250,8 @@ Item {
   function repaintLinks() {}
   function resetView() {}
   function resizeSelected(dx, dy) {}
+  function lineInHand() { return -1 }
+  function moveLineEnd(end, dx, dy) {}
   function runMenu(index) {}
   function selectNext(step) {}
   function toggleHelp() {}
@@ -249,38 +263,29 @@ Item {
   function toggleWindowMode() {}
   function undo() {}
   function unlinkSelected() {}
+  function unglueTargets() {}
   function zoomCentre(factor) {}
 
   // The board draws in its own palette and the panels in the theme; one
   // stand-in serves both, so it carries the palette's members as well.
   readonly property QtObject sceneTheme: ctl.theme
   property QtObject theme: QtObject {
+    // What a picture's palette reads off the theme and off the board's own
+    // palette: without them every Board built here logged two assignments of
+    // undefined before its first test ran.
+    property bool isLight: false
+    property var chosen: null
+    property string shade: "Theme"
     property color canvasBackground: "#101315"
     property color foreground: "#cccccc"
     property color connector: "#cccccc"
     property real connectorAlpha: 0.55
-    property color barBackground: "#161b22"
-    property color barForeground: "#e6e6e6"
     property color accent: "cyan"
     property color urgent: "red"
     property color muted: "gray"
     property color dotColor: "#202020"
-    property color panelBackground: "#101315"
-    property color panelText: "#cccccc"
-    property color panelScrim: "#80101315"
-    property color cursorFill: "#14cccccc"
-    property color cursorText: "cyan"
-    property var panelBorder: ({ color: "#cccccc", widths: { top: 2, right: 2, bottom: 2, left: 2 },
-                                 gradient: { colors: [], angle: 0, enabled: false } })
-    property var cursorBorder: ({ color: "transparent", widths: { top: 0, right: 0, bottom: 0, left: 0 },
-                                  gradient: { colors: [], angle: 0, enabled: false } })
     // The shell's button fills, its section label and glyph sizes, and the
     // menu's family.
-    property color controlFill: "#0acccccc"
-    property color hoverFill: "#14cccccc"
-    property string menuFontFamily: "monospace"
-    property int fontCaption: 10
-    property int fontIcon: 18
     property string fontFamily: "monospace"
     // Not readonly: one test below turns the text up to what a theme with
     // large type does in a small window, which is where a hint that does

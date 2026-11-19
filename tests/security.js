@@ -15,7 +15,8 @@ function qmlPolicy(source) {
   const lines = source.split('\n')
   for (let i = 0; i < lines.length; i++) {
     if (!/\bText\s*\{/.test(lines[i]) || /^\s*\/\//.test(lines[i])) continue
-    const start = /^( *)Text \{$/.exec(lines[i])
+    // A Text on its own line, or assigned to a property (`contentItem: Text {`).
+    const start = /^( *)(?:\w+: )?Text \{$/.exec(lines[i])
     if (!start) { errors.push(`line ${i+1}: unsupported Text layout`); continue }
     const pad = start[1]
     const end = lines.findIndex((line, n) => n > i && line === pad + '}')
@@ -36,6 +37,8 @@ function qmlPolicy(source) {
 assert.ok(qmlPolicy('Text {\n  text: userText\n}').length)
 assert.ok(qmlPolicy('Text {\n  textFormat: Text.AutoText\n}').length)
 assert.ok(qmlPolicy('Text { text: userText }').length)
+assert.ok(qmlPolicy('contentItem: Text {\n  text: userText\n}').length)
+assert.deepEqual(qmlPolicy('contentItem: Text {\n  textFormat: Text.PlainText\n}'), [])
 assert.ok(qmlPolicy('console.log(note)').length)
 assert.ok(qmlPolicy('new XMLHttpRequest()').length)
 assert.ok(qmlPolicy('command: ["bash", "-c", note]').length)
@@ -87,6 +90,32 @@ for (const file of fs.readdirSync(root).filter(f => f.endsWith('.qml'))) {
   assert.equal((source.match(/textFormat: Text\.StyledText/g)||[]).length,
     styledCounts[file] || 0, `${file}: new styled renderer requires data-flow review`)
 }
+// The Omarchy UI kit (kit/, copied by tools/vendor-kit.js) runs in the shell
+// as the plugin's own code does, so it is held to the same rules: plain text
+// only, nothing that types (fields are LineFields, below), nothing that runs a
+// process or reaches the network, and imports only of Qt Quick and of itself.
+// A new copy of the kit that breaks one of these is reviewed before it ships.
+const kitFiles = []
+for (const dir of ['kit/Ui', 'kit/Theme'])
+  for (const file of fs.readdirSync(path.join(root, dir)).filter(f => /\.(qml|js)$/.test(f)))
+    kitFiles.push(dir + '/' + file)
+assert.ok(kitFiles.length > 0, 'the kit is where tools/vendor-kit.js puts it')
+assert.ok(fs.existsSync(path.join(root, 'kit/LICENSE')) && fs.existsSync(path.join(root, 'kit/KIT_REV')),
+  'the kit carries its licence and the revision it was copied from')
+for (const file of kitFiles) {
+  const source = fs.readFileSync(path.join(root, file), 'utf8')
+  if (file.endsWith('.qml')) assert.deepEqual(qmlPolicy(source), [], file)
+  assert.equal((source.match(/textFormat: Text\.(StyledText|RichText|MarkdownText)/g) || []).length, 0,
+    `${file}: the kit draws plain text only`)
+  assert.ok(!/\b(TextInput|TextEdit)\s*\{/.test(source), `${file}: typing goes through LineField`)
+  // Code only: the kit's comments say what it left out, by name.
+  const code = source.split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n')
+  assert.ok(!newBoundary(code), `${file}: reaches the network`)
+  assert.ok(!/\b(Process|execDetached|Quickshell\.exec)\b/.test(code), `${file}: runs a process`)
+  for (const line of source.split('\n').filter(l => /^\s*import\s/.test(l)))
+    assert.ok(/^\s*import\s+(QtQuick[\w.]*|"[^"]*")(\s+as\s+\w+)?\s*$/.test(line), `${file}: imports ${line.trim()}`)
+}
+
 // Qt's own paste reads everything a clipboard's owner sends before anything
 // here can count it, so an owner that never stops sending takes the shell's
 // memory. Every field that takes typing hands its paste keys to pasteInto,
@@ -232,11 +261,15 @@ assert.equal((filesHelper.match(/place_new "\$temporary" "\$images_root\//g) || 
 // checkimages has found it fit: imagePath is the only file URL into the
 // folder, and it answers one only for a picture pictureState has cleared.
 const gate = '    return root.pictureState(name) === "" ? "file://" + root.imagesDir + "/" + name : ""'
+// The command line's picture is drawn in a process of its own, which has the
+// same gate over what the command line had checked before starting it.
+const renderGate = '      return holder.pictureState(name) === "" ? "file://" + render.job.imagesDir + "/" + name : ""'
 function ungatedPictures(sources) {
   const errors = []
   for (const [file, source] of sources)
     source.split('\n').forEach((line, i) => {
-      if (/^\s*\/\//.test(line) || (file === 'Omarchyform.qml' && line === gate)) return
+      if (/^\s*\/\//.test(line) || (file === 'Omarchyform.qml' && line === gate)
+          || (file === 'BoardRender.qml' && line === renderGate)) return
       if (/(imagesDir|\/images\/)/.test(line) && /file:|resolvedUrl|Qt\.url|source\s*[:=]/.test(line))
         errors.push(`${file}:${i + 1}: a picture URL that is not imagePath's, which waits for its check`)
     })
@@ -250,6 +283,16 @@ assert.deepEqual(ungatedPictures(fs.readdirSync(root).filter(f => /\.(qml|js)$/.
   .map(f => [f, fs.readFileSync(path.join(root, f), 'utf8')])), [], 'every picture waits for its check')
 assert.ok(fs.readFileSync(path.join(root, 'Omarchyform.qml'), 'utf8').includes('  function imagePath(name) {\n' + gate + '\n  }'),
   'imagePath is the gate')
+{
+  const scene = fs.readFileSync(path.join(root, 'BoardRender.qml'), 'utf8')
+  assert.ok(scene.includes('    function imagePath(name) {\n' + renderGate + '\n    }'), 'and the gate in a picture drawn without the shell')
+  assert.match(scene, /function pictureState\(name\) \{\n\s*if \(!Store\.imageIsValid\(name\) \|\| render\.job === null\) return "missing"\n\s*var found = render\.job\.pictures\[name\]\n\s*return typeof found === "string" \? found : "could not be checked"/,
+    'which clears only what the command line was told is fit')
+  const cli = fs.readFileSync(path.join(root, 'bin/omarchyform'), 'utf8')
+  assert.match(cli, /const pictures = checkedPictures\(rows, imagesDir\)/, 'and the command line asks checkimages before it starts the scene')
+  assert.match(cli, /states\[name\] = Object\.prototype\.hasOwnProperty\.call\(answers, name\) \? answers\[name\]\.refused : "could not be checked"/,
+    'an answer the helper did not give is not a picture to draw')
+}
 
 // What the marketplace's reviewers have raised against other plugins, held
 // here as rules: docs/security-review.md, "Before submitting", lists each class
@@ -285,18 +328,28 @@ const reviewedArguments = [
   'BoardExchange.qml: "importimage", [next.pane.imagesDir, "drop-" + Date.now() + "-" + exchange.dropSeq, next.path]',
   'BoardExchange.qml: "cliptext", [exchange.ctl.dataDir]',
   'BoardLibrary.qml: "mkdir", [library.boardsDir, dir]',
-  'BoardLibrary.qml: "move", [library.boardsDir, e.path, library.boardsDir, target]',
-  'BoardLibrary.qml: "purge", [library.trashDir, e.file]',
-  'BoardLibrary.qml: "move", [library.boardsDir, e.path, library.trashDir, file]',
-  'BoardLibrary.qml: "move", [library.trashDir, e.file, library.boardsDir, e.path]',
+  // A board's earlier versions follow it: where they are and where they go
+  // ride with the move, on stdin like the names they are made from.
+  'BoardLibrary.qml: "move", [library.boardsDir, e.path, library.boardsDir, target, library.versionsOf(e.path), library.versionsOf(target), library.versionsDir]',
+  'BoardLibrary.qml: "purge", [library.trashDir, e.file, library.versionsInTrash(e.file), library.versionsDir]',
+  'BoardLibrary.qml: "move", [library.boardsDir, e.path, library.trashDir, file, library.versionsOf(e.path), library.versionsInTrash(file), library.versionsDir]',
+  'BoardLibrary.qml: "move", [library.trashDir, e.file, library.boardsDir, e.path, library.versionsInTrash(e.file), library.versionsOf(e.path), library.versionsDir]',
+  'BoardSession.qml: "versions", [session.ctl.versionsPathFor(session.ctl.currentBoard), session.ctl.versionsDir]',
+  'BoardSession.qml: "restore", [session.ctl.boardPath, session.ctl.versionsPathFor(session.ctl.currentBoard), name, session.ctl.backupPathFor(session.ctl.currentBoard), session.ctl.lockPathFor(session.ctl.currentBoard), session.revision, session.ctl.boardsDir, session.ctl.backupsDir, session.ctl.versionsDir]',
   'BoardPane.qml: "export", [root.dataDir + "/.image-export.png", path, root.dataDir]',
   'BoardSession.qml: "snapshot", [session.ctl.boardPath, session.ctl.lockPathFor(session.ctl.currentBoard), session.ctl.boardsDir]',
   'BoardSession.qml: "filesize", [session.ctl.boardPath]',
   'BoardSession.qml: "check", [session.ctl.boardsDir, session.ctl.currentBoard]',
   'Omarchyform.qml: "checkimages", [root.imagesDir]',
-  'Omarchyform.qml: "private", [root.dataDir, root.boardsDir, root.backupsDir, root.trashDir, root.imagesDir, root.locksDir]',
+  'Omarchyform.qml: "private", [root.dataDir, root.boardsDir, root.backupsDir, root.trashDir, root.imagesDir, root.locksDir, root.versionsDir]',
   'bin/omarchyform: "revision", [path.resolve(file)]',
-  'bin/omarchyform: "commit", [target, aside(target, "backup"), aside(target, "lock"), expected === undefined ? "-" : expected], text',
+  'bin/omarchyform: "commit", [target, aside(target, "backup"), aside(target, "lock"), expected === undefined ? "-" : expected, "", "", versions, versionsRoot, "spaced"], text',
+  'bin/omarchyform: "private", [LIBRARY, staging]',
+  // The two programs a picture starts. Neither is handed a board's path or
+  // name: the helper gets the pictures folder, with the names on stdin, and
+  // the scene finds its staging folder in its environment.
+  'bin/omarchyform: "bash", [PICTURE_HELPER, "checkimages", imagesDir]',
+  'bin/omarchyform: "qs", ["--no-color", "-p", SCENE]',
   'BoardLibrary.qml: ["find", library.boardsDir, "-mindepth", "1", "-printf", "%y\\\\t%P\\\\n"]',
   'Omarchyform.qml: ["cp", "-n", root.legacyPath, root.boardsDir + "/board.json"]'
 ]
@@ -309,6 +362,13 @@ for (const file of runtimeQml) {
 }
 for (const call of calls(fs.readFileSync(path.join(root, 'bin/omarchyform'), 'utf8'), 'helper'))
   if (call !== 'verb, args, input') usedArguments.push(`bin/omarchyform: ${call}`)
+// Every other program the command line starts, by its whole argument list.
+for (const call of calls(fs.readFileSync(path.join(root, 'bin/omarchyform'), 'utf8'), 'spawnSync')) {
+  const started = /^("[^"]+"), (\[[^\]]*\])/.exec(call)
+  assert.ok(started, 'bin/omarchyform starts a program whose arguments cannot be read off: ' + call)
+  if (started[1] !== '"python3"') usedArguments.push(`bin/omarchyform: ${started[1]}, ${started[2]}`)
+}
+assert.match(fs.readFileSync(path.join(root, 'bin/omarchyform'), 'utf8'), /spawnSync\("python3", \[HELPER\], /, 'the file helper is started with its own path and nothing else')
 assert.deepEqual(usedArguments.filter(a => !reviewedArguments.includes(a)), [],
   'a helper call with arguments not yet reviewed for private contents')
 assert.deepEqual(reviewedArguments.filter(a => !usedArguments.includes(a)), [], 'a reviewed call that is gone: take it off the list')
@@ -330,7 +390,7 @@ const privateProcess = fs.readFileSync(path.join(root, 'BoardFileProcess.qml'), 
 assert.match(privateProcess, /\["python3", request\.activeCommand\[1\]\.replace/, 'native arguments contain only the helper path')
 assert.match(privateProcess, /worker\.write\(request\.activeCommand\[2\]/, 'operation and names travel on stdin')
 for (const [file, ids] of Object.entries({
-  'BoardPersistence.qml': ['commit'], 'BoardSession.qml': ['diskRead', 'diskSize', 'pathCheck'],
+  'BoardPersistence.qml': ['commit'], 'BoardSession.qml': ['diskRead', 'diskSize', 'pathCheck', 'versionList', 'versionSwap'],
   'BoardLibrary.qml': ['mkdirProc', 'moveProc', 'trashProc', 'restoreProc', 'purgeProc'],
   'BoardExchange.qml': ['reading', 'publish'], 'BoardPane.qml': ['imagePublish'],
   'Omarchyform.qml': ['initProc']
@@ -342,6 +402,10 @@ for (const [file, ids] of Object.entries({
 const privateTest = spawnSync('python3', [path.join(root, 'tests/private-files.py')], {encoding: 'utf8', timeout: 15000})
 assert.equal(privateTest.status, 0, privateTest.stderr || String(privateTest.error))
 process.stdout.write(privateTest.stdout)
+// And the versions it keeps of a board: which saves, how many, going back.
+const versionsTest = spawnSync('python3', [path.join(root, 'tests/versions-files.py')], {encoding: 'utf8', timeout: 60000})
+assert.equal(versionsTest.status, 0, versionsTest.stderr || String(versionsTest.error))
+process.stdout.write(versionsTest.stdout)
 
 
 for (const file of runtimeQml) {
@@ -356,7 +420,7 @@ for (const file of runtimeQml) {
   }
 }
 assert.match(fs.readFileSync(path.join(root, 'Omarchyform.qml'), 'utf8'),
-  /command: root\.fileCommand\("private", \[root\.dataDir, root\.boardsDir, root\.backupsDir, root\.trashDir, root\.imagesDir, root\.locksDir\]\)/,
+  /command: root\.fileCommand\("private", \[root\.dataDir, root\.boardsDir, root\.backupsDir, root\.trashDir, root\.imagesDir, root\.locksDir, root\.versionsDir\]\)/,
   'every folder of the plugin\'s is made private as the shell starts, the data folder first')
 
 // Nothing is staged in the shared /tmp: every temporary file is made inside a
