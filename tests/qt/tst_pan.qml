@@ -463,13 +463,29 @@ TestCase {
   function test_holdingCtrlShowsWhatCtrlDoes() {
     surface.focusKeys()
     wait(0)
-    var line = findChild(surface, "board-status")
+    var line = findChild(surface, "board-hints")
     verify(line.Accessible.name.indexOf("q note") === 0, "the board's keys first: " + line.Accessible.name)
     keyPress(Qt.Key_Control, Qt.ControlModifier)
     verify(line.Accessible.name.indexOf("z undo") === 0, "ctrl's while it is held: " + line.Accessible.name)
-    verify(line.text.indexOf("ctrl") >= 0, "and says they are ctrl's")
+    verify(findChild(surface, "hint-ctrl").visible, "and says they are ctrl's")
     keyRelease(Qt.Key_Control, Qt.NoModifier)
     verify(line.Accessible.name.indexOf("q note") === 0, "and the board's again once it is let go")
+  }
+
+  // The icons in the header are buttons: a click does what the key does, and
+  // the pointer resting on one says what that is.
+  function test_aHintIconIsClickable() {
+    surface.width = 1400
+    wait(0)
+    ctl.hintsRun = []
+    for (const word of ["note", "find", "keys", "close"]) {
+      const button = findChild(surface, "hint-" + word)
+      verify(button && button.visible, word + " is on the line")
+      verify(button.clickable, word + " takes a click")
+      verify(button.tip !== "", word + " says what it does")
+      mouseClick(button)
+    }
+    compare(ctl.hintsRun, ["note", "find", "keys", "close"], "each click ran its own key's command")
   }
 
   // A flash says what just happened; the connector line says what is about to.
@@ -669,11 +685,12 @@ TestCase {
     surface.height = 320
     ctl.theme.fontBody = 24
     Kit.ThemeSource.apply({ shellText: "[font]\nbase-size = 24\n" })
-    const line = findChild(surface, "board-status")
     for (const [flag, name] of [["conflictVisible", "conflict-panel"], ["paletteVisible", "command-palette"]]) {
       ctl[flag] = true
       wait(0)
-      verify(line.lineCount > 1, "the line wrapped for " + name)
+      const line = findChild(surface, "board-status").visible ? findChild(surface, "board-status") : findChild(surface, "board-hints")
+      const rows = line.lineCount !== undefined ? line.lineCount : Math.round(line.height / findChild(surface, "hint-note").height)
+      verify(rows > 1, "the line wrapped for " + name)
       const panel = findChild(surface, name)
       verify(panel.y >= line.y + line.height, name + " starts below it")
       ctl[flag] = false
@@ -700,7 +717,7 @@ TestCase {
   // The line of keys is in the header: beside the name where it fits between
   // the name and the buttons, and on a row of its own under them where not.
   function test_theLineSitsInTheHeader() {
-    var line = findChild(surface, "board-status")
+    var line = findChild(surface, "board-hints")
     var toolbar = findChild(surface, "board-toolbar")
     var title = findChild(surface, "board-title")
     var mark = findChild(surface, "save-mark")
@@ -713,7 +730,7 @@ TestCase {
     verify(line.x + line.width <= fit.mapToItem(surface, 0, 0).x, "before the buttons")
     verify(line.y < title.mapToItem(surface, 0, title.height).y, "on the name's row")
     verify(line.y >= toolbar.y && line.y + line.height <= toolbar.y + toolbar.height, "inside the header")
-    compare(line.lineCount, 1)
+    compare(line.height, findChild(surface, "hint-note").height, "on one row")
     var slim = toolbar.height
 
     surface.width = 500

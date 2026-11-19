@@ -2147,6 +2147,16 @@ function tests(S) {
       for (const [, label] of S.ctrlHints(lineInHand))
         eq(S.HINT_GLYPHS[label].length, 2, "ctrl's " + label + " has an icon too")
     ok(S.hintWords(S.BOARD_HINTS).startsWith("q note, w box"), "the words survive")
+    // A click on a hint runs a command the table has, so a click and its key
+    // cannot drift apart; only escape and a held key are not commands.
+    const names = new Set(S.COMMANDS.map(c => c.name))
+    for (const [, word] of S.BOARD_HINTS.concat(S.ctrlHints(false), S.ctrlHints(true))) {
+      const name = S.hintCommand(word)
+      if (word === "close") ok(name === "" && S.hintTip(word) !== "", "escape is not a command, but says what it does")
+      else if (word === "resize" || word === "aim head") ok(name === "", word + " is a held key, not a click")
+      else ok(names.has(name), word + " runs a command the table has: " + name)
+    }
+    ok(S.hintCommand("toString") === "" && S.hintCommand("__proto__") === "", "only its own words")
   })
   test("a hint line joins its hints and every set is pairs", () => {
     eq(S.hintLine([["n", "note"], ["x", "cut"]], "#ff0000", " | "),

@@ -896,8 +896,10 @@ FocusScope {
     anchors { top: parent.top; left: parent.left; right: parent.right; margins: board.theme.sp(16) }
     height: implicitHeight
     visible: !board.ctl.browsing && !board.ctl.helpVisible
-    lineWidth: findLine.visible ? findLine.implicitWidth : status.visible ? status.implicitWidth : 0
-    lineHeight: findLine.visible ? findLine.height : status.visible ? status.height : 0
+    lineWidth: findLine.visible ? findLine.implicitWidth : hintLine.visible ? hintLine.natural
+      : status.visible ? status.implicitWidth : 0
+    lineHeight: findLine.visible ? findLine.height : hintLine.visible ? hintLine.height
+      : status.visible ? status.height : 0
   }
 
   Column {
@@ -1135,15 +1137,14 @@ FocusScope {
     opacity: 0.85
     font.family: Kit.Style.font.family
     font.pixelSize: Kit.Style.font.body
-    visible: status.tier !== "none"
+    visible: status.tier !== "none" && status.tier !== "hints"
     // Markup, so a key can be a different colour from the word it sits in.
     // Everything reaching this line from a board file, a file name or the
     // keyboard is escaped on the way: this is the one place on the board that
     // renders tags, and a board is a file other people can send you.
     textFormat: Text.StyledText
-    // The hints are icons on screen; a screen reader gets their words.
     Accessible.role: Accessible.StaticText
-    Accessible.name: status.tier === "hints" ? Store.hintWords(status.hints, board.ctl.tv) : status.text
+    Accessible.name: status.text
     // The bar's hints, or ctrl's while it is held.
     readonly property var hints: keys.ctrlHeld
       ? Store.ctrlHints(keys.ctrlHeld && board.ctl.lineInHand() >= 0) : Store.BOARD_HINTS
@@ -1189,11 +1190,86 @@ FocusScope {
       ? Store.glueHint(board.ctl.glueOutcome, board.ctl.accentMarkup, board.ctl.tv)
       : status.tier === "flash" ? Store.escapeMarkup(board.ctl.statusText)
       : status.tier === "switching" ? Store.escapeMarkup(board.ctl.t("saving before switching boards…"))
-      // The other pane is still there when the window is too small to show
-      // it, and the line says how to reach it rather than leave it forgotten.
-      : (board.ctl.squeezed ? Store.hintMarkup("o", board.ctl.t("the other pane"), board.ctl.accentMarkup) + " \u00b7 " : "")
-        + (keys.ctrlHeld ? Store.keyMarkup("ctrl", board.ctl.accentMarkup) + "&nbsp;+&nbsp;&nbsp;" : "")
-        + Store.iconHintLine(status.hints, board.ctl.accentMarkup)
+      // The keys themselves are buttons, in hintLine below.
+      : ""
+  }
+
+  // With nothing else to say, the line is the board's keys, or ctrl's while it
+  // is held: a button each, so the icons can be clicked as well as read. A
+  // click runs what the key runs. Centred where the line goes, and wrapping
+  // into rows under the name where it does not fit beside it.
+  Flow {
+    id: hintLine
+    objectName: "board-hints"
+    visible: status.tier === "hints"
+    // How wide it is on one row: what the header decides by, before the line
+    // is laid out beside the name or under it. The Repeater counts as nothing.
+    readonly property real natural: {
+      var w = 0, n = 0
+      for (var i = 0; i < hintLine.children.length; i++) {
+        var c = hintLine.children[i]
+        if (!(c.shown === undefined ? c.visible : c.shown) || c.implicitWidth <= 0) continue
+        w += c.implicitWidth
+        n += 1
+      }
+      return w + Math.max(0, n - 1) * hintLine.spacing
+    }
+    width: Math.min(Math.ceil(natural), toolbar.lineSpan)
+    x: toolbar.x + toolbar.lineX + (toolbar.lineSpan - width) / 2
+    y: toolbar.y + toolbar.lineY
+    spacing: Kit.Style.spacing.md
+    opacity: 0.85
+    Accessible.role: Accessible.ToolBar
+    Accessible.name: Store.hintWords(status.hints, board.ctl.tv)
+    // The other pane is still there when the window is too small to show it,
+    // and the line says how to reach it rather than leave it forgotten.
+    HintButton {
+      objectName: "hint-the other pane"
+      readonly property bool shown: board.ctl.squeezed
+      visible: shown
+      key: "o"
+      label: board.ctl.t("the other pane")
+      tip: board.ctl.tv("The other pane")
+      keyColor: board.ctl.accentMarkup
+      onActivated: board.ctl.runHint("the other pane")
+    }
+    // While ctrl is held, the keys after it are ctrl's.
+    Row {
+      objectName: "hint-ctrl"
+      readonly property bool shown: keys.ctrlHeld
+      visible: shown
+      height: hintLine.children.length > 3 ? hintLine.children[3].height : implicitHeight
+      spacing: Kit.Style.spacing.xxs
+      Text {
+        anchors.verticalCenter: parent.verticalCenter
+        textFormat: Text.PlainText
+        text: "ctrl"
+        color: board.ctl.accentMarkup
+        font.family: Kit.Style.font.family
+        font.pixelSize: Kit.Style.font.body
+      }
+      Text {
+        anchors.verticalCenter: parent.verticalCenter
+        textFormat: Text.PlainText
+        text: "+"
+        color: Kit.Color.bar.text
+        font.family: Kit.Style.font.family
+        font.pixelSize: Kit.Style.font.body
+      }
+    }
+    Repeater {
+      model: status.hints
+      HintButton {
+        required property var modelData
+        objectName: "hint-" + modelData[1]
+        glyph: Store.HINT_GLYPHS[modelData[1]] || ""
+        key: modelData[0]
+        tip: Store.hintTip(modelData[1], board.ctl.tv)
+        keyColor: board.ctl.accentMarkup
+        clickable: Store.hintCommand(modelData[1]) !== "" || modelData[1] === "close"
+        onActivated: board.ctl.runHint(modelData[1])
+      }
+    }
   }
 
   // Which of two panes the keys go to: the accent round its edge, the way the

@@ -7,6 +7,10 @@ since older boards are migrated on load rather than rejected.
 
 ### Added
 
+- The icons in the header's line of keys are buttons: a click does what the
+  key does, and resting the pointer on one says what that is. The menu's
+  entries lose their boxes and light up under the pointer and the cursor, as
+  the bar's other controls do.
 - The help (`?`) names the installed version beside its title, read from
   the plugin's own `manifest.json`.
 - The board speaks the language Omarchy is set to (Setup > Language) and

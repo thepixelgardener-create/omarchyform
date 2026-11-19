@@ -958,6 +958,14 @@ Item {
     else root[command.run](command.arg)
   }
 
+  // A click on a hint in the header: what its key does, through the same
+  // dispatch, so a click on something not ready yet says why, as the key does.
+  function runHint(word) {
+    if (word === "close") { root.back(); return }
+    var name = Store.hintCommand(word)
+    if (name !== "") root.runCommand(name)
+  }
+
   // Finding is navigation, not editing, so it works on a board that cannot be
   // written to as well as one that can.
   property bool finding: false

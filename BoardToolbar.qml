@@ -8,7 +8,7 @@ import "kit/Theme" as Kit
 // it over the bar, and the bar says where it goes.
 //
 // Drawn with the Omarchy UI kit: the bar's colours as the kit resolves them,
-// its icon buttons with their tooltips for fit and the menu, and its bordered
+// its icon buttons with their tooltips for fit and the menu, and its plain
 // buttons for the menu's entries, the keyboard cursor on one as on any kit
 // control. The layout stays here, because the line has to fit around it.
 Rectangle {
@@ -60,7 +60,9 @@ Rectangle {
     Item {
       id: topRow
       width: parent.width
-      height: Math.max(identity.height, actions.height)
+      // Tall enough for the line too when it sits beside the name: its keys
+      // are buttons, with a little room round each to light on hover.
+      height: Math.max(identity.height, actions.height, toolbar.lineBeside ? toolbar.lineHeight : 0)
 
       Row {
         id: identity
@@ -162,8 +164,8 @@ Rectangle {
           id: entry
           required property var modelData
           required property int index
-          bordered: true
-          // The keyboard cursor looks like the pointer over it, as on every kit control.
+          // Unboxed, as the bar's other controls are: lit under the pointer
+          // and the keyboard cursor alike, as on every kit control.
           hasCursor: toolbar.ctl.menuIndex === index
           foreground: toolbar.barText
           text: entry.modelData.id === "zoom" ? toolbar.ctl.tv(entry.modelData.label) + " " + Math.round(toolbar.ctl.zoom * 100) + "%"

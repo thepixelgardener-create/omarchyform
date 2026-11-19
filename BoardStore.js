@@ -936,6 +936,27 @@ function iconHintLine(hints, color) {
              keyMarkup(hints[i][0], color))
   return out.join("&nbsp;&nbsp;&nbsp;")
 }
+// What a click on a hint in the header does: the command its key runs, by
+// name, so a click and the key cannot come to do different things. "close" is
+// escape, which steps back one thing at a time and closes the board last;
+// what ctrl+hjkl does is a key held down, so it has no click.
+var HINT_COMMANDS = {
+  note: "New note", box: "New box", ellipse: "New ellipse", diamond: "New diamond",
+  line: "New line", arrow: "Glue with an arrow", connect: "Connect to another",
+  commands: "Run a command", find: "Find in this board", keys: "Keys",
+  undo: "Undo", redo: "Redo", copy: "Copy out", paste: "Paste in", duplicate: "Duplicate",
+  save: "Save now", png: "Export a PNG", "new board": "New board", import: "Import a board",
+  "the other pane": "The other pane"
+}
+function hintCommand(word) {
+  return Object.prototype.hasOwnProperty.call(HINT_COMMANDS, word) ? HINT_COMMANDS[word] : ""
+}
+// What a hint's tooltip says: its command's name, or for escape what it does.
+var CLOSE_TIP = "Close, or step back"
+function hintTip(word, say) {
+  var name = word === "close" ? CLOSE_TIP : hintCommand(word)
+  return name === "" ? "" : (say || asWritten)(name)
+}
 function hintWords(hints, say) {
   return hints.map(function (h) { return h[0] + " " + (say || asWritten)(h[1]) }).join(", ")
 }
@@ -1659,6 +1680,7 @@ function displayStrings() {
   for (i = 0; i < COMMANDS.length; i++) add(COMMANDS[i].name)
   for (i = 0; i < MENU_COMMANDS.length; i++) add(MENU_COMMANDS[i].label)
   add(ZOOM_COMMANDS[0].label)
+  add(CLOSE_TIP)
   var tables = [BOARD_HINTS, ctrlHints(false), ctrlHints(true), FIND_HINTS, ARRANGE_HINTS, PINNED_HINTS, BROWSER_HINTS,
                 TRASH_HINTS, PALETTE_HINTS, CONFLICT_HINTS, PROMPT_HINTS, EMPTY_HINTS, START_HINTS]
   for (i = 0; i < tables.length; i++) hints(tables[i])

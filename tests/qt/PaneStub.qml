@@ -158,6 +158,8 @@ Item {
   function t(text, a, b, c) { return Store.translated(null, text, [a, b, c]) }
   function tn(one, other, count, a, b) { return Store.translatedCount(null, "en", one, other, count, [a, b]) }
   function tv(text) { return text }
+  property var hintsRun: []
+  function runHint(word) { ctl.hintsRun = ctl.hintsRun.concat([word]) }
   readonly property var paletteMatches: Store.matchCommands(ctl.paletteQuery, ctl.paletteScope, ctl.paletteGroup)
   function commandReady(needs) { return true }
   function commandExcuse(needs) { return "" }
