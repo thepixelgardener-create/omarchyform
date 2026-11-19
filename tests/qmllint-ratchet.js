@@ -57,6 +57,7 @@ function lint(dir) {
   const r = spawnSync(qmllint, files, { cwd: dir, encoding: 'utf8', maxBuffer: 64 << 20 })
   if (r.error) throw new Error('cannot run ' + qmllint + ': ' + r.error.message)
   const counts = new Map(), lines = []
+  const unjudged = new Set()
   const sources = new Map()
   function sourceLine(file, n) {
     if (!sources.has(file)) {
@@ -72,13 +73,23 @@ function lint(dir) {
     // every read of one is "not found on type QObject". Those are the kit's
     // shape, not a fault here, and counting them would fail every panel built
     // on it. Only a read through the kit's own namespace is let off.
-    if (/missing-property/.test(text) && /not found on type "QObject"/.test(text)
+    // Matched on the message, not the [missing-property] tag: the older
+    // qmllint CI runs (Qt 6.4) prints no tag at all.
+    if (/not found on type "QObject"/.test(text)
         && /\bKit\.[\w.]*$/.test(sourceLine(path.basename(m[2]), +m[3]).slice(0, +m[4] - 1))) continue
-    const key = path.basename(m[2]) + ' · ' + kindOf(m)
+    const file = path.basename(m[2])
+    // A module this machine does not have (CI has no Quickshell, and Qt 6.4
+    // there may lack QtQuick.Controls): every binding and handler on its types
+    // is then a warning, and a file that uses one more FileView looks like a
+    // regression. Such a file cannot be judged here, so it is left out on both
+    // sides; where the module is installed, as on an Omarchy machine running
+    // check:local, it is ratcheted like any other.
+    if (/was not found\. Did you add all import paths\?|Failed to import/.test(m[5])) unjudged.add(file)
+    const key = file + ' · ' + kindOf(m)
     counts.set(key, (counts.get(key) || 0) + 1)
-    lines.push({ key, text })
+    lines.push({ key, file, text })
   }
-  return { counts, lines }
+  return { counts, lines, unjudged }
 }
 
 function main() {
@@ -112,6 +123,10 @@ function main() {
     const untar = spawnSync('tar', ['-x', '-C', dir], { input: archive.stdout })
     if (untar.status !== 0) throw new Error('could not unpack ' + base)
     const before = lint(dir)
+    // Left out on both sides if either side could not resolve it.
+    const unjudged = new Set([...head.unjudged, ...before.unjudged])
+    for (const side of [head, before])
+      for (const key of [...side.counts.keys()]) if (unjudged.has(key.split(' · ')[0])) side.counts.delete(key)
 
     const worse = []
     for (const [key, n] of head.counts) {
@@ -121,6 +136,7 @@ function main() {
     const better = [...before.counts].filter(([key, n]) => (head.counts.get(key) || 0) < n)
     const total = m => [...m.values()].reduce((a, b) => a + b, 0)
     const summary = `qmllint: ${total(head.counts)} warnings here, ${total(before.counts)} at ${base.slice(0, 12)}`
+      + (unjudged.size ? ` (not judged here, a module missing: ${[...unjudged].sort().join(', ')})` : '')
     if (worse.length) {
       console.error(summary)
       console.error('More warnings than the base has, by file and kind:')
