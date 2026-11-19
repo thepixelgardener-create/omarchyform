@@ -18,7 +18,7 @@ const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'omarchyform-compat-'))
 try {
   const home = path.join(dir, 'home')
   fs.mkdirSync(home)
-  for (const file of fs.readdirSync(path.join(__dirname, '..')).filter(f => /\.(qml|js|sh|py)$/.test(f)))
+  for (const file of fs.readdirSync(path.join(__dirname, '..')).filter(f => /\.(qml|js|sh|py)$|^manifest\.json$/.test(f)))
     fs.copyFileSync(path.join(__dirname, '..', file), path.join(dir, file))
   // The Omarchy UI kit the panels are built from, as the plugin carries it.
   fs.cpSync(path.join(__dirname, '..', 'kit'), path.join(dir, 'kit'), { recursive: true })

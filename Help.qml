@@ -68,14 +68,32 @@ Item {
       width: scroller.width
       spacing: Kit.Style.spacing.md
 
-      Text {
-        textFormat: Text.PlainText
-        text: help.ctl.t("Keyboard shortcuts")
-        color: Kit.Color.menu.text
-        font.family: Kit.Style.font.family
-        font.pixelSize: Kit.Style.font.heading
-        font.bold: true
+      // The title, and which Omarchyform this is beside it, on the next line
+      // when the window is too narrow for both.
+      Flow {
+        width: sheet.width
+        spacing: Kit.Style.spacing.lg
         bottomPadding: Kit.Style.spacing.md
+        Text {
+          id: title
+          textFormat: Text.PlainText
+          text: help.ctl.t("Keyboard shortcuts")
+          color: Kit.Color.menu.text
+          font.family: Kit.Style.font.family
+          font.pixelSize: Kit.Style.font.heading
+          font.bold: true
+        }
+        Text {
+          objectName: "help-version"
+          visible: help.ctl.pluginVersion !== ""
+          textFormat: Text.PlainText
+          text: help.ctl.t("Omarchyform %1", help.ctl.pluginVersion)
+          color: Kit.Color.textFaint
+          font.family: Kit.Style.font.family
+          font.pixelSize: Kit.Style.font.body
+          height: title.height
+          verticalAlignment: Text.AlignBottom
+        }
       }
       // In groups, the way the shell's panels break a long list: a rule, a
       // section header, then the rows.

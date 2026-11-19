@@ -392,6 +392,24 @@ Item {
 
   property var boardScreen: null
 
+  // The version this checkout was installed at, from its own manifest, so the
+  // help can say which Omarchyform it describes. Empty until read, and if the
+  // manifest cannot be read the help just leaves the number out.
+  property string pluginVersion: ""
+  FileView {
+    path: decodeURIComponent(Qt.resolvedUrl("manifest.json").toString().replace(/^file:\/\//, ""))
+    watchChanges: false
+    printErrors: false
+    onLoaded: {
+      try {
+        var version = Store.parseJson(text()).version
+        root.pluginVersion = typeof version === "string" && /^[0-9A-Za-z.+-]{1,32}$/.test(version) ? version : ""
+      } catch (e) {
+        root.pluginVersion = ""
+      }
+    }
+  }
+
   function toggleWindowMode() {
     // The surface owns the PNG renderer and its completion callback.
     if (root.imageBusy) { root.activePane.flash(root.t("Finishing image export…")); return }

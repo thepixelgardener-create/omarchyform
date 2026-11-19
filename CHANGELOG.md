@@ -7,6 +7,8 @@ since older boards are migrated on load rather than rejected.
 
 ### Added
 
+- The help (`?`) names the installed version beside its title, read from
+  the plugin's own `manifest.json`.
 - The board speaks the language Omarchy is set to (Setup > Language) and
   follows a change while it is open. English and German are complete; any
   other language is English until its catalog in `i18n/` is written, string by

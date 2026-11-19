@@ -123,7 +123,7 @@ async function capture(theme) {
   try {
     const home = path.join(dir, 'home')
     fs.mkdirSync(home)
-    for (const file of fs.readdirSync(repo).filter(f => /\.(qml|js|sh|py)$/.test(f)))
+    for (const file of fs.readdirSync(repo).filter(f => /\.(qml|js|sh|py)$|^manifest\.json$/.test(f)))
       fs.copyFileSync(path.join(repo, file), path.join(dir, file))
     // The Omarchy UI kit the panels are built from, as the plugin carries it.
     fs.cpSync(path.join(repo, 'kit'), path.join(dir, 'kit'), { recursive: true })

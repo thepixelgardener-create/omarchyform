@@ -115,6 +115,7 @@ Item {
   function t(text, a, b, c) { return root.workspace.t(text, a, b, c) }
   function tn(one, other, count, a, b) { return root.workspace.tn(one, other, count, a, b) }
   function tv(text) { return root.workspace.tv(text) }
+  readonly property string pluginVersion: root.workspace.pluginVersion || ""
   // What the mark beside the name shows; boardState is what it says aloud.
   readonly property string saveMark: Store.saveMark({ opening: root.opening, damaged: root.damaged,
     saveError: root.saveError, diskChanged: root.diskChanged, waiting: root.waiting, saving: root.saving })

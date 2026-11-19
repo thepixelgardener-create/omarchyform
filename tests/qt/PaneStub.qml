@@ -140,6 +140,7 @@ Item {
   property bool findDimming: false
   property bool arranging: false
   property bool helpVisible: false
+  property string pluginVersion: "0.5.5"
   property bool imageBusy: false
   property var activeBoard: null
 

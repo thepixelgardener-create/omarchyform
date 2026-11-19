@@ -34,6 +34,7 @@ TestCase {
     function tn(one, other, count, a, b) { return Store.translatedCount(null, "en", one, other, count, [a, b]) }
     function tv(text) { return text }
     property bool helpVisible: true
+    property string pluginVersion: "0.5.5"
     // The accent the hint lines name their keys in, as markup wants it.
     property string accentMarkup: "#00ffff"
     // What Theme.qml is, at the sizes this suite exists to push against: a
@@ -377,6 +378,21 @@ TestCase {
     compare(keyRows(help).length, Store.KEY_HELP.length, "and every row under one of them")
   }
 
+  // The help says which Omarchyform it describes, beside its title and inside
+  // the card, and leaves the number out when the manifest could not be read.
+  function test_helpSaysTheVersion() {
+    const version = findChild(help, "help-version")
+    verify(version, "a version line")
+    verify(version.visible)
+    compare(version.text, "Omarchyform " + ctl.pluginVersion)
+    const at = version.mapToItem(help, 0, 0)
+    verify(at.x >= 0 && at.x + version.implicitWidth <= help.width, "inside the card")
+    const before = ctl.pluginVersion
+    ctl.pluginVersion = ""
+    verify(!version.visible, "no number, no line")
+    ctl.pluginVersion = before
+  }
+
   // The empty field says what it is for, and says it after the caret: both
   // started at the left edge, and the caret blinked over the first letter.
   function test_thePromptSitsAfterTheCaret() {
@@ -470,6 +486,7 @@ TestCase {
       Item {
         id: c
         property bool helpVisible: true
+        property string pluginVersion: "0.5.5"
         function t(text, a, b, c) { return Store.translated(null, text, [a, b, c]) }
         function tv(text) { return text }
         // The suite's own palette at this rig's text size. Only the sizes are
