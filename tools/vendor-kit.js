@@ -66,6 +66,12 @@ function rewriteUi(text, name) {
     .replace(/^import Omarchy\.Theme as (\w+)$/m, 'import "../Theme" as $1')
     .replace(/^import Omarchy\.Theme$/m, 'import "../Theme"')
     .replace(/^import "\.\.\/Theme\/BorderGeometry\.js"/m, 'import "../Theme/BorderGeometry.js"')
+    // Qt 6.6 added Shape's curve renderer. Asked for by name, an older Qt
+    // (the 6.4 CI runs) cannot load the file at all, and with it every kit
+    // border; asked for only where the property exists, a border on 6.4 is
+    // drawn by the default renderer instead.
+    .replace(/^(\s*)preferredRendererType: Shape\.CurveRenderer\n/m,
+      '$1id: curveShape\n$1Component.onCompleted: if ("preferredRendererType" in curveShape) curveShape.preferredRendererType = Shape.CurveRenderer\n')
 }
 function rewriteTheme(text) {
   return text

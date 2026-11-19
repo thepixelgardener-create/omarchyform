@@ -16,6 +16,10 @@ const EXPECTED = [
   // it quiet cost a quarter more time switching a large board; tests/qt/
   // tst_pan.qml, test_eachItemSitsInItsLayerInBoardOrder, has the account.
   /QQuickItem::stack(After|Before): Cannot stack Node_QMLTYPE_\d+\(/,
+  // Qt 6.4 (the CI runners) says so whenever two singletons of one folder
+  // read each other, as the Omarchy UI kit's theme does by design; later Qt
+  // does not. Only the kit's theme folder is let off.
+  /Cyclic dependency detected between "file:\/\/\S*\/kit\/Theme\/\w+\.qml" and "file:\/\/\S*\/kit\/Theme\/\w+\.qml"$/,
 ]
 
 // The lines of a qmltestrunner run that are warnings nobody expected.

@@ -25,7 +25,8 @@ Item {
 
   Shape {
     anchors.fill: parent
-    preferredRendererType: Shape.CurveRenderer
+    id: curveShape
+    Component.onCompleted: if ("preferredRendererType" in curveShape) curveShape.preferredRendererType = Shape.CurveRenderer
 
     ShapePath {
       fillRule: ShapePath.WindingFill
