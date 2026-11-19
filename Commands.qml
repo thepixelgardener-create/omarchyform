@@ -77,13 +77,13 @@ Item {
   // guessed: the theme chooses the font, and a list sized from a number picked
   // here would crop its own rows the moment that font grew. The ruler carries
   // a key and an excuse, the tallest a row gets.
-  O.ListRow {
+  CommandRow {
     id: ruler
     visible: false
     width: list.width
-    glyph: Store.FIT_GLYPH
-    title: "Ag"
-    trailing: Component { Row { KeyLabel { label: "ctrl+shift+s" } } }
+    command: ({ name: "Ag", key: "ctrl+shift+s", needs: "" })
+    ready: false
+    excuse: "Ag"
   }
   readonly property int rowHeight: Math.ceil(ruler.implicitHeight)
 
@@ -182,51 +182,22 @@ Item {
         // Keep the cursor in view when the list is longer than the panel: the
         // rest are reached by typing, but walking to them has to work too.
         onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
-        delegate: O.ListRow {
+        delegate: CommandRow {
           id: row
           required property var modelData
           required property int index
           width: list.width
           height: panel.rowHeight
           readonly property bool atCursor: row.index === panel.ctl.paletteIndex
+          command: row.modelData
+          name: panel.ctl.tv(row.modelData.name)
           // Dimmed rather than hidden. A command that cannot run now is still
           // one this board has, and hiding it would teach that it does not
           // exist; the excuse beside it says what it is waiting for.
-          readonly property bool ready: panel.ctl.commandReady(row.modelData.needs)
-          readonly property string excuse: row.ready ? "" : panel.ctl.commandExcuse(row.modelData.needs)
+          ready: panel.ctl.commandReady(row.modelData.needs)
+          excuse: row.ready ? "" : panel.ctl.commandExcuse(row.modelData.needs)
           // The kit's keyboard cursor: one highlight, the row's fill and edge.
           hasCursor: row.atCursor
-          // Dimmed by its colour and not by the kit's `disabled`, which would
-          // take the click: a click on one still says why it cannot run.
-          foreground: row.ready ? Kit.Color.menu.text : Kit.Color.textFaint
-          glyph: Store.commandIcon(row.modelData)
-          title: panel.ctl.tv(row.modelData.name)
-          // A family's entry leads somewhere rather than doing something. The
-          // others keep the slot empty, so every row's keys line up.
-          trailingGlyph: row.modelData.opens ? "›" : " "
-          // Why it cannot run, where the eye is already going to look for how
-          // to run it; then the key, as key caps.
-          trailing: Component {
-            Row {
-              spacing: Kit.Style.spacing.md
-              Text {
-                textFormat: Text.PlainText
-                objectName: "command-excuse"
-                anchors.verticalCenter: parent.verticalCenter
-                visible: row.excuse !== ""
-                text: row.excuse
-                color: Kit.Color.textFaint
-                font.family: Kit.Style.font.family
-                font.pixelSize: Kit.Style.font.bodySmall
-              }
-              KeyLabel {
-                anchors.verticalCenter: parent.verticalCenter
-                visible: row.modelData.key !== ""
-                label: row.modelData.key
-                opacity: row.ready ? 1 : 0.5
-              }
-            }
-          }
           // Named for anything reading the screen rather than looking at it:
           // what the command is, what it answers to, and why it cannot run.
           Accessible.role: Accessible.Button

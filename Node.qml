@@ -486,16 +486,23 @@ Item {
       node.ctl.pointerSelect(node.index, (mouse.modifiers & Qt.ShiftModifier) !== 0)
     }
     onPositionChanged: function (mouse) {
-      if (node.ipinned || !node.ctl.canEdit || node.ctl.linkingFrom >= 0 || !pressed || mouse.buttons !== Qt.LeftButton) return
+      if (mouse.buttons !== Qt.LeftButton) return
+      drag(mouse.x, mouse.y, (mouse.modifiers & Qt.ShiftModifier) !== 0)
+    }
+    // The drag, apart from the event it came in: x, y in the item, and free
+    // when shift is held. Qt 6.4's test events cannot hold shift through a
+    // move, so its test hands that in here, as it does to a line end's aim.
+    function drag(mx, my, free) {
+      if (node.ipinned || !node.ctl.canEdit || node.ctl.linkingFrom >= 0 || !pressed) return
       if (dragging && !node.ctl.pointerEdit) return
-      var dx = mouse.x - pressX
-      var dy = mouse.y - pressY
+      var dx = mx - pressX
+      var dy = my - pressY
       // A few pixels of slack so a click to select never nudges it.
       if (!dragging && Math.abs(dx) + Math.abs(dy) < 3) return
       if (!dragging) node.ctl.beginPointerEdit()
       dragging = true
       // Magnetic unless shift is held: it lines up with the items it nears.
-      node.ctl.moveTargets(dx, dy, (mouse.modifiers & Qt.ShiftModifier) === 0)
+      node.ctl.moveTargets(dx, dy, !free)
     }
     onReleased: {
       if (dragging) node.ctl.finishPointerEdit(false)

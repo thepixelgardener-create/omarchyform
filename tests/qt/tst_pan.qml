@@ -799,9 +799,12 @@ TestCase {
         : row.open === "conflict" ? "conflict-panel"
         : row.open === "browser" ? "browser-panel" : "help-panel")
       verify(panel !== null && panel.visible, row.tag + " is on screen")
-      var at = panel.mapFromItem(surface, row.x, row.y)
-      verify(at.x >= 0 && at.y >= 0 && at.x <= panel.width && at.y <= panel.height,
-             row.tag + " is under the press at " + row.x + "," + row.y)
+      // Waited for, not read at once: the header's keys are a Flow, laid out
+      // a frame later, and a panel is placed under the header.
+      tryVerify(function () {
+        var at = panel.mapFromItem(surface, row.x, row.y)
+        return at.x >= 0 && at.y >= 0 && at.x <= panel.width && at.y <= panel.height
+      }, 1000, row.tag + " is under the press at " + row.x + "," + row.y)
     }
 
     drag(Qt.MiddleButton, row.x, row.y, 70, 50)

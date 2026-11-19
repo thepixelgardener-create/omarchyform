@@ -104,7 +104,17 @@ TestCase {
     var node = findChild(surface, "board-item-" + ctl.items.get(index).iid)
     var at = node.mapToItem(test, node.width / 2, node.height / 2)
     mousePress(test, at.x, at.y, Qt.LeftButton, modifiers)
-    for (var i = 1; i <= 8; i++) mouseMove(test, at.x + dx * i / 8, at.y + dy * i / 8, 5, Qt.LeftButton, modifiers)
+    var body = findChild(node, "node-drag")
+    for (var i = 1; i <= 8; i++) {
+      var x = at.x + dx * i / 8, y = at.y + dy * i / 8
+      if (modifiers & Qt.ShiftModifier) {
+        // Qt's test events cannot hold shift through a move; the item takes
+        // it in as its own drag would, with the button really held.
+        mouseMove(test, x, y, 5, Qt.LeftButton)
+        var local = body.mapFromItem(test, x, y)
+        body.drag(local.x, local.y, true)
+      } else mouseMove(test, x, y, 5, Qt.LeftButton, modifiers)
+    }
     if (during) during()
     mouseRelease(test, at.x + dx, at.y + dy, Qt.LeftButton, modifiers)
     wait(20)
