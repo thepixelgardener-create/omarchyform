@@ -91,26 +91,33 @@ useful regressions, but the live suite verifies the host integration.
 | `Omarchyform.qml` | The workspace: settings and state, the library and file exchange, the open boards, and the two surfaces |
 | `BoardPane.qml` | One view of a board and the controller its views read: camera, selection, modes and every command |
 | `BoardDocument.qml` | One open board: its items and connectors, ids, undo history and the session saving it |
-| `Board.qml` | The canvas surface — grid, connectors, keys, cheat sheet |
-| `BoardToolbar.qml` | The header: the board's name and save mark, where the status line goes, fit, and the menu |
-| `Theme.qml` | Colours, fonts, sizes and weights, all read from the shell's theme with fallbacks |
-| `Surface.qml` | The card a panel is drawn on, in the shell's menu colours and the theme's border for them |
-| `Node.qml` | One item: note, box, ellipse, diamond or picture. Shapes are `QtQuick.Shapes` geometry, so they stay sharp at any zoom |
+| `BoardSplit.qml` | Side-by-side and stacked split-view layout and divider |
+| `Board.qml` | The canvas surface — grid, connectors, keys, clickable hint line and panels |
+| `BoardToolbar.qml` | The header: the board's name, save mark, where the status line goes, fit, and the unboxed menu |
+| `HintButton.qml` | Clickable icon-and-key button in the header's hint line, with a tooltip on hover |
+| `Theme.qml` | Colours, fonts, sizes and weights, read from the shell's theme and fed to the UI kit's `ThemeSource` |
+| `kit/` | Pinned Qt Quick components and theme resolver copied from `omacom/omarchy-ui` by `tools/vendor-kit.js` |
+| `Node.qml` | One item: note, box, ellipse, diamond, picture or standalone line/arrow. Shapes use `QtQuick.Shapes` geometry |
 | `BoardPalette.qml` | Shared canvas and export colours, including Paper and Ink |
-| `Commands.qml` | The command list on `:`, `ctrl+p` and `.` |
+| `Commands.qml` | The command list on `:`, `ctrl+p` and `.` (`CommandRow.qml` draws each row) |
 | `Conflict.qml` | The question asked when a board has two versions |
 | `Browser.qml` | The board browser: draws the library |
 | `BoardBar.qml` | The bar widget: the board's presence in the shell |
-| `Help.qml` | Scrollable keyboard help |
+| `Help.qml` | Scrollable keyboard help (`KeyCap.qml` and `KeyLabel.qml` draw the key caps) |
+| `LineField.qml` | Plain-text one-line `TextEdit` with bounded paste and middle-click guard |
 | `ScrollHint.qml` | The mark that says a panel has more below |
-| `BoardStore.js` | Pure logic: parsing, marshalling, geometry. No QML |
-| `BoardSession.qml` | Loading, autosave state, and board-switch coordination |
+| `BoardLanguage.qml` | Watches `~/.config/omarchy/language` and loads `i18n/<code>.json` catalogs |
+| `BoardStore.js` | Pure logic: parsing, marshalling, geometry, glue and translation tables. No QML |
+| `BoardSession.qml` | Loading, autosave state, earlier-version restore and board-switch coordination |
 | `BoardLibrary.qml` | The boards folder: browsing, naming, folders and the trash, with no controller of its own |
-| `BoardPersistence.qml` | Serialized backup and atomic write, with completion/failure signals |
+| `BoardPersistence.qml` | Serialized backup, earlier versions and atomic write, with completion/failure signals |
 | `BoardExchange.qml` | Saving a copy to share and opening one, apart from the open board's saves |
 | `BoardImage.qml` | The read-only scene a PNG export is drawn from: no grid, grips or selection |
-| `BoardFiles.sh` | Confined filesystem operations and exact-path moves |
-| `bin/omarchyform` | The board, headless: build, read and change one with no display |
+| `BoardRender.qml` | Offscreen Quickshell entry point driven by `bin/omarchyform render` |
+| `BoardFileProcess.qml` | Stdin-based NUL-delimited transport to `BoardFiles.py` |
+| `BoardFiles.py` | Private in-process filesystem helper (locking, commits, backups, versions, moves, purge) |
+| `BoardFiles.sh` | Image, clipboard and compatibility helper |
+| `bin/omarchyform` | The board, headless: build, read, change, render and link the agent skill with no display |
 | `bin/store.js` | Loading `BoardStore.js` outside QML, shared by the CLI and the tests |
 
 ## Tests

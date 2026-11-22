@@ -513,9 +513,10 @@ deleted from a note, stays in the file, so any edit is enough to remove it. The
 backup of the version before that save keeps it until the save after. A copy
 saved to share never included it.
 
-A board with item textures is format version 7, which Omarchyform 0.4.6 and
-older open read-only rather than lose the textures. Any other board is
-version 5.
+A board with standalone lines or arrows is format version 8, which releases
+before 0.6.0 open read-only. A board with item textures (and no lines) is
+format version 7, which Omarchyform 0.4.6 and older open read-only rather than
+lose the textures. Any other board is version 5.
 
 ## It looks like Omarchy, because it asks Omarchy
 
@@ -532,13 +533,16 @@ the weights its own surfaces use. Switch your theme and the board switches with
 it. `c` cycles the role.
 
 The board's panels — the command list, the browser, the shortcut list and the
-question asked when a board has two versions — are drawn the way the shell draws
-its own menu: a solid card in the menu's colours and font, inside the theme's
-border for it (a gradient, where the theme has one), with the board dimmed
-behind. Their lists have the menu's rows — a glyph, a name at heading size, and
-the keyboard cursor as a soft fill with its label in the accent, which the shell
-keeps for that row alone. The shortcut list is in labelled sections, as the
-shell's panels are, and the header's controls are its soft-filled buttons.
+question asked when a board has two versions — are drawn with the Omarchy UI
+kit, the same way the shell draws its own menu: a solid card in the menu's
+colours and font, inside the theme's border for it (a gradient, where the theme
+has one), with the board dimmed behind. Their lists use the kit's rows — a
+glyph, a name at heading size, and the keyboard cursor as a soft fill with its
+label in the accent, which the shell keeps for that row alone. The shortcut
+list (`?`) is in labelled sections with key caps and names the installed
+version beside its title. In the header, the key icons are clickable buttons
+with tooltips on hover, the save mark explains its state on hover, and the
+menu's entries sit unboxed until pointed at or walked to.
 
 **Theme**, **Lighter**, and **Darker** follow the desktop’s light or dark mode.
 Omarchy themes declare `mode` in `colors.toml`; a theme without it falls back

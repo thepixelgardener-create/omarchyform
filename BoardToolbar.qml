@@ -114,6 +114,19 @@ Rectangle {
           anchors.verticalCenter: title.verticalCenter
           Accessible.role: Accessible.StaticText
           Accessible.name: toolbar.ctl.boardState
+          readonly property alias tooltip: saveMarkTip
+          MouseArea {
+            id: saveMarkMouse
+            anchors.fill: parent
+            hoverEnabled: true
+          }
+          O.Tooltip {
+            id: saveMarkTip
+            objectName: "save-mark-tooltip"
+            visible: saveMarkMouse.containsMouse && toolbar.ctl.boardState !== ""
+            text: toolbar.ctl.boardState
+            y: saveMark.height + Kit.Style.spacing.sm
+          }
         }
       }
 
