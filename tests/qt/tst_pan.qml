@@ -324,6 +324,8 @@ TestCase {
   function test_wheelStillZoomsAtThePointer() {
     var at = onTheNote()
     var worldX = ctl.toWorldX(at[0])
+    mouseWheel(surface, at[0], at[1], 120, 0)
+    compare(ctl.zoom, 1, "a horizontal-only wheel event does not zoom out")
     mouseWheel(surface, at[0], at[1], 0, 120)
     verify(ctl.zoom > 1, "the wheel still zooms over an item")
     fuzzyCompare(ctl.toWorldX(at[0]), worldX, 0.5, "and keeps the point under the pointer")
@@ -483,6 +485,12 @@ TestCase {
       verify(button && button.visible, word + " is on the line")
       verify(button.clickable, word + " takes a click")
       verify(button.tip !== "", word + " says what it does")
+      button.tooltip.delay = 0
+      button.tooltip.open()
+      tryVerify(function () { return button.tooltip.visible }, 500, word + " tooltip opens")
+      verify(button.tooltip.y >= button.height, word + " tooltip opens below the header bar")
+      button.tooltip.close()
+      button.tooltip.delay = 400
       mouseClick(button)
     }
     compare(ctl.hintsRun, ["note", "find", "keys", "close"], "each click ran its own key's command")
@@ -745,6 +753,13 @@ TestCase {
   // board that is not in its file says the next ask closes all the same.
   function test_theMarkSaysWhetherTheBoardIsInItsFile() {
     var mark = findChild(surface, "save-mark")
+    mark.tooltip.delay = 0
+    mark.tooltip.open()
+    tryVerify(function () { return mark.tooltip.visible }, 500, "save mark tooltip opens")
+    compare(mark.tooltip.text, ctl.boardState)
+    verify(mark.tooltip.y >= mark.height, "the save mark's tooltip opens below the header bar")
+    mark.tooltip.close()
+    mark.tooltip.delay = 400
     compare(mark.text, Store.SAVE_GLYPHS.saved)
     ctl.saveMark = "unsaved"
     compare(mark.text, Store.SAVE_GLYPHS.unsaved)

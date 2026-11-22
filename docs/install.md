@@ -24,7 +24,7 @@ The sticky-note icon opens and closes the board, and carries the accent colour w
 open. Its defaults — autosave delay, keyboard step, canvas pattern, and whether the
 board opens windowed — live on the bar entry and are handed to the board when
 it opens, then remembered, so opening from the keyboard uses the same values.
-The board opens as a tiled window unless that setting is turned off. Press `w`
+The board opens as a tiled window unless that setting is turned off. Press `F11`
 to switch to fullscreen and back; the board remembers your choice.
 Choose the canvas appearance inside the board with **Menu → Background**;
 that choice takes precedence over the bar's canvas defaults.
@@ -77,10 +77,11 @@ they live outside the plugin directory, in `~/.local/share/omarchyform/`. A
 board written by a newer version than the one you are running opens read-only
 rather than losing what it does not understand, so downgrading is safe too.
 
-A board with item textures is written as format 7, which Omarchyform 0.4.6 and
-older open read-only. To take a board back to one, set its item textures to
-Plain; the next save writes it as format 5. Boards 0.4.7 to 0.4.10 wrote with
-an edit history lose it at their next save (see
+A board with standalone lines or arrows is written as format 8, which releases
+before 0.6.0 open read-only. A board with item textures (and no lines) is
+format 7, which Omarchyform 0.4.6 and older open read-only; setting its item
+textures to Plain writes it as format 5 at the next save. Boards 0.4.7 to
+0.4.10 wrote with an edit history lose it at their next save (see
 [Boards with an old history](guide.md#boards-with-an-old-history)).
 
 If you installed the desktop entry, re-run its installer,
@@ -175,23 +176,21 @@ and is invoked as a separate process, not linked or redistributed here.
 
 | | |
 |---|---|
-| Omarchy | `omarchy-dev 4.0.0.r6863.ga15636b-1`, Quattro shell |
+| Omarchy | `omarchy-dev 4.0.0.r8160.gaf101a6-1`, Quattro shell |
 | Qt | 6.12.0 |
-| Quickshell | 0.3.2 |
-| Compositor | Hyprland `0.56.2`, Wayland |
-| Displays attached | 1920×1080 at scale 1.6 and 3840×2160 at scale 2 |
+| Quickshell | 0.3.2 (`0.3.2.r7.g2b4501a-11`) |
+| Compositor | Hyprland `0.57.2`, Wayland |
+| Displays attached | 1920×1080 at scale 1.6 and 3840×2160 at scale 1.6 |
 | Clipboard | `wl-clipboard` 1:2.3.0 |
 
-The 0.4.8 and 0.4.7 automated and live smoke checks passed on this
-configuration on 2026-10-10. Two of five live runs that day stopped waiting for
-a synthesized key to reach the test window; the same commits passed when run
-again. 0.4.9 passed `npm test` and its UI tests on Qt 6.4.2 and 6.12.0 on
-2026-10-12, away from Omarchy; its smoke checks have not been run on this
-configuration yet. 0.4.6 was tested on `omarchy-dev 4.0.0.r6720.g8e02fc8-1` with Qt 6.11.2,
-Quickshell 0.3.1 and a single 1920×1080 output at scale 1.6, 0.4.5 on
-`omarchy-dev 4.0.0.r6713.ga85e29a-1`, and earlier releases on Omarchy
-`4.0.0.r2158.gd174d4a-1`. Omarchy 4's plugin contract is still moving; these
-results do not establish compatibility with every version.
+The 0.6.0 automated, security, hostile, Wayland clipboard streaming and live
+smoke suites (`test:omarchy`, `test:windowmode`, `test:paste`) passed on this
+configuration on 2026-11-22 (the first `test:omarchy` run stopped at keyboard
+stage 42 waiting for a synthesized key; the next completed). Earlier 0.4.x
+releases were tested on Qt 6.4.2, Qt 6.11.2 and Qt 6.12.0 against earlier
+Omarchy 4 builds; CI also checks the Node, Qt UI and hostile suites on Qt 6.4.
+Omarchy 4's plugin contract is still moving; these results do not establish
+compatibility with every version.
 
 The live plugin and clipboard fixtures use isolated board data.
 [Performance results](performance.md) record the display configuration and

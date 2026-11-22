@@ -77,9 +77,16 @@ Item {
     onClicked: hint.activated()
   }
 
+  readonly property alias tooltip: tooltipPopup
+
   O.Tooltip {
+    id: tooltipPopup
+    objectName: "hint-tooltip"
     visible: mouse.containsMouse && hint.tip !== ""
     text: hint.tip
+    // The header sits at the top edge of the window, so the default position
+    // above the button runs into the window margin and drops back over it.
+    y: hint.height + Kit.Style.spacing.sm
   }
 
   Accessible.role: hint.clickable ? Accessible.Button : Accessible.StaticText

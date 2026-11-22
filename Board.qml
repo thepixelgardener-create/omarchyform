@@ -380,6 +380,7 @@ FocusScope {
       board.ctl.addItem("note", board.ctl.toWorldX(mouse.x), board.ctl.toWorldY(mouse.y))
     }
     onWheel: function (wheel) {
+      if (wheel.angleDelta.y === 0) return
       board.ctl.zoomAt(wheel.x, wheel.y, wheel.angleDelta.y > 0 ? 1.12 : 1 / 1.12)
     }
   }
@@ -931,6 +932,7 @@ FocusScope {
 
   Rectangle {
     id: banner
+    objectName: "backgrounds-banner"
     anchors { left: parent.left; right: parent.right; top: toolbar.bottom; topMargin: board.theme.sp(8); margins: board.theme.sp(16) }
     height: board.theme.sp(36)
     visible: board.ctl.showPinned
@@ -941,7 +943,7 @@ FocusScope {
       // Names the mode only: the keys live on the line below, where they live
       // for every other mode. Saying them twice, differently, was worse than
       // saying them once.
-      text: "BACKGROUNDS"
+      text: board.ctl.t("BACKGROUNDS")
       color: board.theme.canvasBackground
       font.family: board.theme.fontFamily
       font.pixelSize: board.theme.fontBody

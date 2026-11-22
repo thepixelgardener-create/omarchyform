@@ -3,7 +3,7 @@
 Notable changes, newest first. Board file versions are noted where they moved,
 since older boards are migrated on load rather than rejected.
 
-## 0.6.0 — 2026-11-19
+## 0.6.0 — 2026-11-22
 
 ### Added
 
@@ -92,6 +92,15 @@ since older boards are migrated on load rather than rejected.
 - The `?` list starts with making and moving things; files come later.
 - The bar's key hints are icons with their keys, and `:` replaces `ctrl+p`
   there (both still open the command list).
+
+### Fixed
+
+- Horizontal-only wheel and trackpad scroll events no longer zoom the board
+  out.
+- Tooltips on the header's key icons and save mark open below the header bar
+  rather than running into the top edge of the window, and resting the pointer
+  on the save mark says what state the board is in.
+- The backgrounds-mode banner is translated with the rest of the interface.
 
 ## 0.5.5 — 2026-11-04
 

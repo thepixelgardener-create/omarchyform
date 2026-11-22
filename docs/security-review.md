@@ -975,3 +975,43 @@ code a reviewer reads. What it is held to:
 - **It stays the kit.** A fix belongs upstream, not in `kit/`, where the next
   copy would undo it; `node tools/vendor-kit.js <checkout> --check` shows what
   a newer kit changes before it is taken.
+
+## 0.6.0 release screen — 2026-11-22
+
+Reviewed every runtime change since the last verified marketplace snapshot
+(`e87a7a27`, 0.5.0): standalone lines and glue (`Node.qml`, `BoardStore.js`,
+`BoardPane.qml`), Omarchy language catalogs (`BoardLanguage.qml`, `i18n/`),
+earlier versions (`BoardFiles.py`, `BoardSession.qml`, `BoardLibrary.qml`),
+headless PNG rendering (`BoardRender.qml`, `bin/omarchyform render`), agent
+skill linking (`bin/omarchyform skill`), the vendored Omarchy UI kit (`kit/`
+at `2f35eae`), clickable header hints (`HintButton.qml`), save-mark tooltip,
+horizontal-wheel guard, and `manifest.json` version display in `Help.qml`.
+
+Every `FileView` and `Process` in runtime QML was audited: board filesystem
+operations continue to run over stdin through `BoardFileProcess.qml` to the
+child-free Python helper; `manifest.json` and `i18n/` catalogs are parsed via
+`Store.parseJson`; the vendored kit contains no `TextInput`, `TextEdit`,
+`Process`, network imports or styled text; no new runtime dependencies,
+listening sockets or network calls were added.
+
+Validation on `omarchy-dev 4.0.0.r8160.gaf101a6-1`, Qt 6.12.0, Quickshell
+0.3.2, Hyprland 0.57.2:
+
+- `OMARCHYFORM_STRICT=1 ./tests/run` (with `shellcheck 0.11.0`): passed
+  (172 unit tests, all controller/split/windowmode/exchange/editing/keyboard/
+  contract/filesystem/desktop/cli/i18n/render/export/security suites,
+  `lint:qml` ratchet 33/33, 252 Qt UI tests, 13 QML suites).
+- `npm run test:clipboard`: passed (0 unasked clipboard reads on Qt 6.12.0).
+- `npm run test:drop`: passed (0 payload reads in single and split views).
+- `TMPDIR=/tmp npm run test:wayland`: passed (all 6 streaming cases).
+- `npm run test:omarchy`, `npm run test:windowmode`, `npm run test:paste`:
+  passed on live Wayland (first `test:omarchy` run hit the known Hyprland
+  synthesized-key flake at stage 42; the next run completed).
+- `npm run test:hostile`: passed (all 36 hostile boards within budget, and all
+  36 drawn or refused cleanly by `omarchyform render` with no leftover stage).
+- `omarchy plugin validate .`: passed.
+- `npm run review:marketplace` (pinned `05b8c42`) and `-- --latest`
+  (`e4a3588`): passed with 0 findings and only the documented `installer`
+  capability (`desktop/install.sh`).
+- Second-UID filesystem ownership check remains skipped without a second
+  account; manual IME composition remains unverified beyond synthetic events.

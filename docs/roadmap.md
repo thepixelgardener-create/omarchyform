@@ -1,6 +1,6 @@
 # Roadmap
 
-Updated 2026-11-04. This is the current release direction. The dated
+Updated 2026-11-22. This is the current release direction. The dated
 [architecture review](architecture-review-0.4.5.md) and
 [competitor analysis](competitor-analysis-0.4.5.md) explain the findings behind it.
 

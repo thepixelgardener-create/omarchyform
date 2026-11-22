@@ -74,6 +74,7 @@
   "Apr": "Apr",
   "Arrow": "Arrow",
   "Aug": "Aug",
+  "BACKGROUNDS": "BACKGROUNDS",
   "Back": "Back",
   "Background": "Background",
   "Board %1": "Board %1",
@@ -115,6 +116,7 @@
   "Clipboard image is invalid or could not be read": "Clipboard image is invalid or could not be read",
   "Clipboard text exceeds 1 MiB": "Clipboard text exceeds 1 MiB",
   "Close board menu": "Close board menu",
+  "Close, or step back": "Close, or step back",
   "Command to run": "Command to run",
   "Commands": "Commands",
   "Connect": "Connect",
@@ -217,6 +219,7 @@
   "Note": "Note",
   "Nov": "Nov",
   "Oct": "Oct",
+  "Omarchyform %1": "Omarchyform %1",
   "Omarchyform board": "Omarchyform board",
   "Omarchyform — open": "Omarchyform — open",
   "Open board menu": "Open board menu",
@@ -572,7 +575,5 @@
   "z glues an arrow to a shape, or joins two shapes": "z glues an arrow to a shape, or joins two shapes",
   "z, move, z": "z, move, z",
   "zoom": "zoom",
-  "zoom at the pointer": "zoom at the pointer",
-  "Omarchyform %1": "Omarchyform %1",
-  "Close, or step back": "Close, or step back"
+  "zoom at the pointer": "zoom at the pointer"
 }
